@@ -1,0 +1,15 @@
+Metadata-Version: 1.0
+Name: purehuff
+Version: 0.2
+Summary: A puristic Huffman encoding module for Python
+Home-page: http://grrrr.org
+Author: Thomas Grill
+Author-email: gr@grrrr.org
+License: GPL
+Description: UNKNOWN
+Keywords: compression huffman
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Topic :: Utilities
+Classifier: License :: OSI Approved :: GNU General Public License (GPL)
+Classifier: Programming Language :: Python
