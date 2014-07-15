@@ -1,0 +1,12 @@
+MANIFEST.in
+README.txt
+gpl.txt
+setup.cfg
+setup.py
+purehuff/__init__.py
+purehuff/bitarray.py
+purehuff/histogram.py
+purehuff.egg-info/PKG-INFO
+purehuff.egg-info/SOURCES.txt
+purehuff.egg-info/dependency_links.txt
+purehuff.egg-info/top_level.txt
