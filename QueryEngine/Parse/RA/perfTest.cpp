@@ -19,12 +19,12 @@ int main(int argc, char ** argv) {
     */
     string sql;
     do {
-        cout << "Enter sql statement: ";
+        cout << "mapd> ";
         getline(cin,sql);
         if (sql == "q")
             break;
         string lastParsed;
-        Parser parser;
+        RAParser parser;
         const boost::timer::nanosecond_type oneSecond(1000000000LL);
         boost::timer::cpu_timer cpuTimer;
         for (int i = 0; i != 100000; ++i) {
