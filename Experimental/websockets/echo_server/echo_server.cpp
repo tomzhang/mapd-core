@@ -1,14 +1,16 @@
 #include <websocketpp/config/asio_no_tls.hpp>
-
 #include <websocketpp/server.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include <iostream>
+
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
+using namespace std;
 
 // pull out the type of messages sent by our config
 typedef server::message_ptr message_ptr;
@@ -18,9 +20,18 @@ void on_message(server* s, websocketpp::connection_hdl hdl, message_ptr msg) {
     std::cout << "on_message called with hdl: " << hdl.lock().get()
               << " and message: " << msg->get_payload()
               << std::endl;
+    string strMsg (msg->get_payload());
 
     try {
-        s->send(hdl, msg->get_payload(), msg->get_opcode());
+        size_t semiColonPos = strMsg.find(';');
+        if (semiColonPos == string::npos)
+            throw 1;
+        int msgId = boost::lexical_cast<int>(strMsg.substr(0,semiColonPos));
+        cout << msgId << endl;
+        char outBuffer[4];
+        memcpy(outBuffer, static_cast<void *> (&msgId), 4);
+        //s->send(hdl, msg->get_payload(), msg->get_opcode());
+        s->send(hdl, outBuffer, 4, websocketpp::frame::opcode::binary);
     } catch (const websocketpp::lib::error_code& e) {
         std::cout << "Echo failed because: " << e
                   << "(" << e.message() << ")" << std::endl;
