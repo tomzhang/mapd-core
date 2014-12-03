@@ -1,0 +1,32 @@
+CFLAGS = -Wall
+ifeq ($(DEBUG),1)
+	CXX=g++-4.8
+	CFLAGS += -g 
+	NVCCFLAGS = -g -G
+else
+	CXX=g++
+	NVCC=nvcc
+	CFLAGS += -O3 --std=c++0x
+	NVCCFLAGS= -O3 -use_fast_math -arch=compute_30 -code=sm_30
+endif
+
+all: greptest 
+
+gpu_utils.o: gpu_utils.cu
+	$(NVCC) $(NVCCFLAGS) -c gpu_utils.cu
+
+kernel_wrappers.o: kernel_wrappers.cu
+	$(NVCC) $(NVCCFLAGS) -c kernel_wrappers.cu
+
+#string_kernels.o: string_kernels.cu
+	#$(NVCC) $(NVCCFLAGS) -c string_kernels.cu
+
+greptest.o: greptest.cpp
+	$(NVCC) $(NVCCFLAGS) -c greptest.cpp
+
+
+greptest: greptest.o gpu_utils.o kernel_wrappers.o 
+	$(CXX) -o greptest greptest.o gpu_utils.o kernel_wrappers.o -F/Library/Frameworks -framework CUDA -L/usr/local/cuda/lib -lcudart -L/usr/local/lib -lboost_timer -lboost_system
+
+clean:
+	rm -rf *.o greptest
