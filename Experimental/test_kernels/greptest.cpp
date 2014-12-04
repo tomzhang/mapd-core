@@ -28,7 +28,7 @@ int main (int argc, char **argv) {
     unsigned int *gpuStartIndexPtr = copyToGpu(startIndex);
     if (gpuStartIndexPtr == 0)
         cout << "Start Index copy failed!" << endl;
-    unsigned int *gpuEndIndexPtr = copyToGpu(startIndex);
+    unsigned int *gpuEndIndexPtr = copyToGpu(endIndex);
     if (gpuEndIndexPtr == 0)
         cout << "End Index copy failed!" << endl;
     char *gpuDataPtr = copyToGpu(data);
@@ -37,15 +37,24 @@ int main (int argc, char **argv) {
     unsigned int *devCountPtr;
     allocateGpuMem(devCountPtr,1);
     cout << "Data loaded" << endl;
-    {
-        const boost::timer::nanosecond_type oneSecond(1000000000LL);
-        boost::timer::cpu_timer cpuTimer;
-        cudaVLikeCWarpWrapper (gpuDataPtr,gpuStartIndexPtr,gpuEndIndexPtr,startIndex.size(),2,devCountPtr,multiProcessorCount*2,1024);
-        unsigned int * hostCountPtr = copyFromGpu(devCountPtr,1);
-        double elapsedTime = double(cpuTimer.elapsed().wall) / oneSecond * 1000.0;
-        cout << "Elapsed time: " << elapsedTime << " ms." << endl;
-        cout << "Count: " << *hostCountPtr << endl;
+    string searchString;
+    do {
+        cout << "Enter search string: ";
+        getline(cin,searchString);
+        if (searchString == "q")
+            break;
+
+        {
+            const boost::timer::nanosecond_type oneSecond(1000000000LL);
+            boost::timer::cpu_timer cpuTimer;
+            cudaVLikeCWarpWrapper (gpuDataPtr,gpuStartIndexPtr,gpuEndIndexPtr,startIndex.size(),devCountPtr,multiProcessorCount*2,1024,searchString);
+            unsigned int * hostCountPtr = copyFromGpu(devCountPtr,1);
+            double elapsedTime = double(cpuTimer.elapsed().wall) / oneSecond * 1000.0;
+            cout << "Elapsed time: " << elapsedTime << " ms." << endl;
+            cout << "Count: " << *hostCountPtr << endl;
+        }
     }
+    while (1 == 1);
     cout << "Kernel Finished" << endl;
 
 
