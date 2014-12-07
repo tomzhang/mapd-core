@@ -22,7 +22,7 @@ kernel_wrappers.o: kernel_wrappers.cu
 	#$(NVCC) $(NVCCFLAGS) -c string_kernels.cu
 
 greptest.o: greptest.cpp
-	$(NVCC) $(NVCCFLAGS) -c greptest.cpp
+	$(CXX) $(CFLAGS) -c greptest.cpp
 
 
 greptest: greptest.o gpu_utils.o kernel_wrappers.o 

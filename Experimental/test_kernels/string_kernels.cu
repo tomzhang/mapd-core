@@ -3,6 +3,7 @@
 #include <cuda.h>
 
 __constant__ unsigned int searchData[128];
+__constant__ unsigned int bitmasks[4];
 //__constant__ unsigned int searchData0[8];
 //__constant__ unsigned int searchData1[8];
 //__constant__ unsigned int searchData2[8];
@@ -170,8 +171,8 @@ __global__ void cudaVLikeCWarp(const unsigned int *data, const unsigned int *sta
             }
             unsigned int nextData = 0;
             int found;
-            while (offset < docEnd) {
-                found = 15;
+            int warpFound = 0;
+            while (!warpFound && offset < docEnd) {
                 int iteration = 0;
                 if (offset + WARPSIZE < docEnd) {
                     nextData = data[offset+WARPSIZE];
@@ -179,7 +180,9 @@ __global__ void cudaVLikeCWarp(const unsigned int *data, const unsigned int *sta
                 else {
                     nextData = 0;
                 }
-                while (iteration < searchSlotsLen) {
+                found = 15;
+                warpFound = 1; 
+                while (warpFound && iteration < searchSlotsLen) {
                     if (warpThreadId < iteration) {
                         localData = nextData;
                     }
@@ -190,20 +193,20 @@ __global__ void cudaVLikeCWarp(const unsigned int *data, const unsigned int *sta
                                 unsigned int searchDataLocal = searchData[charOffset*8+iteration];
                                 /*
                                 if (warpId == 0 && i < 32) {
-                                    printf ("Doc: %d Thread: %d CharOffset: %d Iteration: %d SearchData: %u\n",curWarpDoc,i,charOffset,iteration,searchDataLocal); 
+                                    printf ("Doc: %d Thread: %d Offset: %d CharOffset: %d Iteration: %d SearchData: %u\n",curWarpDoc,i,offset,charOffset,iteration,searchDataLocal); 
                                 }
                                 */
-                                unsigned int andVal = localData & searchDataLocal;
+                                unsigned int andVal = localData & bitmasks[charOffset];
                                 /*
                                 if (warpId == 0 && i < 32) {
                                     printf("Anding local: %u => %u\n",localData,andVal);
                                 }
                                 */
-                                if (andVal == searchDataLocal) {
+                                if (andVal == searchDataLocal || searchDataLocal == 0) {
                                      newFound += (1 << charOffset);
                                     /*
                                     if (warpId == 0 && i < 32) {
-                                        printf("Newfound %d: %d\n",charOffset,newFound);
+                                        printf("Newfound Thread: %d Offset: %d: Newfound: %d\n",i,charOffset,newFound);
                                     }
                                     */
                                  }
@@ -216,17 +219,18 @@ __global__ void cudaVLikeCWarp(const unsigned int *data, const unsigned int *sta
                         printf("Doc: %d Thread: %d WarpNeighborId: %d Iteration: %d Found: %d\n", curWarpDoc, i, warpNeighborId , iteration,found);
                     */
                     iteration++;
-                    int warpMoreWork = __any(found);
-                    if (!warpMoreWork)
-                        break;
-                    __shfl(found,warpNeighborId,WARPSIZE);
+                    warpFound = __any(found);
+                    found = __shfl(found,warpNeighborId,WARPSIZE);
                 }
-                int warpFound = __any(found);
                 if (warpThreadId == 0 && warpFound) {
+                    /*
+                    if (i == 0) {
+                        printf("Doc: %d => String FOUND!\n",curWarpDoc);
+                    }
+                    */
+
                     localMatchCount++;
                 }
-                if (warpFound)
-                    break;
                 offset += WARPSIZE;
                 localData = nextData;
             }

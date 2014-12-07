@@ -69,6 +69,15 @@ void cudaVLikeCWarpWrapper(const char *data, const unsigned int *startIndex, con
 
     //unsigned int hostSearchData = 1701603616;
     //cudaMemcpyToSymbol(searchData, &hostSearchData, sizeof(unsigned int)); 
+    unsigned int bitmask = 0xFFFFFFFF; 
+    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int)); 
+    bitmask = 0xFFFFFF00; 
+    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int),4); 
+    bitmask = 0xFFFF0000; 
+    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int),8); 
+    bitmask = 0xFF000000; 
+    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int),12); 
+
     cudaMemcpyToSymbol(searchData, &(searchVals[0][0]), sizeof(unsigned int) * searchSize); 
     cudaMemcpyToSymbol(searchData, &(searchVals[1][0]), sizeof(unsigned int) * searchSize,32); 
     cudaMemcpyToSymbol(searchData, &(searchVals[2][0]), sizeof(unsigned int) * searchSize,64); 

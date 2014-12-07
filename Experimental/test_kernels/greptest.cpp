@@ -7,6 +7,22 @@
 
 using namespace std;
 
+size_t getNumMatchesCPU(const vector <string> &docs, const string &searchString) {
+    size_t matchCount = 0;
+    size_t docCounter = 0;
+    for (auto docIt = docs.begin(); docIt != docs.end(); ++docIt) {
+        if (docIt -> find(searchString) != string::npos) {
+            matchCount++;
+            if (docCounter < 32)
+                cout << docCounter << " ";
+        }
+        docCounter++;
+    }
+    cout << endl;
+    return matchCount;
+}
+
+
 int main (int argc, char **argv) {
     string colBaseName (argv[1]); 
     string startIndexFileName (colBaseName + ".indexstart"); 
@@ -25,6 +41,13 @@ int main (int argc, char **argv) {
     cout << "Start Index file length: " << startIndex.size() << endl;
     cout << "End Index file length: " << endIndex.size() << endl;
     cout << "Data file length: " << data.size() << endl;
+    size_t numDocs = startIndex.size();
+    vector <string> docs;
+    for (size_t doc = 0; doc < numDocs; ++doc) {
+        string stringDoc (&data[0]+startIndex[doc],endIndex[doc]-startIndex[doc]);
+        docs.push_back(stringDoc);
+    }
+
     unsigned int *gpuStartIndexPtr = copyToGpu(startIndex);
     if (gpuStartIndexPtr == 0)
         cout << "Start Index copy failed!" << endl;
@@ -52,6 +75,7 @@ int main (int argc, char **argv) {
             double elapsedTime = double(cpuTimer.elapsed().wall) / oneSecond * 1000.0;
             cout << "Elapsed time: " << elapsedTime << " ms." << endl;
             cout << "Count: " << *hostCountPtr << endl;
+            cout << "Cpu count: " << getNumMatchesCPU(docs,searchString) << endl;
         }
     }
     while (1 == 1);
