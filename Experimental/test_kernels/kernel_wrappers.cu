@@ -45,11 +45,13 @@ unsigned int populateSearchVals(const string &searchString, vector<vector<unsign
             maxLen = searchVals[offset].size();
         }
     }
+    /*
     for (int offset = 0; offset < 4; ++offset) {
         if (searchVals[offset].size() < maxLen) { //should only be by 1
             searchVals[offset].push_back(0);
         }
     }
+    */
     return maxLen;
 }
 
@@ -63,33 +65,47 @@ void cudaVLikeCWarpWrapper(const char *data, const unsigned int *startIndex, con
         }
         cout << endl;
     }
+    size_t searchStringSize = searchString.size();
 
 
     //unsigned int hostSearchData = 1701336074;
 
     //unsigned int hostSearchData = 1701603616;
     //cudaMemcpyToSymbol(searchData, &hostSearchData, sizeof(unsigned int)); 
-    unsigned int bitmask = 0xFFFFFFFF; 
-    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int)); 
-    bitmask = 0xFFFFFF00; 
-    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int),4); 
-    bitmask = 0xFFFF0000; 
-    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int),8); 
-    bitmask = 0xFF000000; 
-    cudaMemcpyToSymbol(bitmasks, &bitmask, sizeof(unsigned int),12); 
+    unsigned int startBitmask = 0xFFFFFFFF; 
+    cudaMemcpyToSymbol(startBitmasks, &startBitmask, sizeof(unsigned int)); 
+    startBitmask = 0xFFFFFF00; 
+    cudaMemcpyToSymbol(startBitmasks, &startBitmask, sizeof(unsigned int),4); 
+    startBitmask = 0xFFFF0000; 
+    cudaMemcpyToSymbol(startBitmasks, &startBitmask, sizeof(unsigned int),8); 
+    startBitmask = 0xFF000000; 
+    cudaMemcpyToSymbol(startBitmasks, &startBitmask, sizeof(unsigned int),12); 
 
-    cudaMemcpyToSymbol(searchData, &(searchVals[0][0]), sizeof(unsigned int) * searchSize); 
-    cudaMemcpyToSymbol(searchData, &(searchVals[1][0]), sizeof(unsigned int) * searchSize,32); 
-    cudaMemcpyToSymbol(searchData, &(searchVals[2][0]), sizeof(unsigned int) * searchSize,64); 
-    cudaMemcpyToSymbol(searchData, &(searchVals[3][0]), sizeof(unsigned int) * searchSize,96); 
-    /*
-    cudaMemcpyToSymbol(searchData0, &searchVals[0][0], sizeof(unsigned int)); 
-    cudaMemcpyToSymbol(searchData1, &searchVals[1][0], sizeof(unsigned int)); 
-    cudaMemcpyToSymbol(searchData2, &searchVals[2][0], sizeof(unsigned int)); 
-    cudaMemcpyToSymbol(searchData3, &searchVals[3][0], sizeof(unsigned int)); 
-    */
+    for (int offset = 0; offset < 4; ++offset) {
+        unsigned int vecSize = searchVals[offset].size();
+        cudaMemcpyToSymbol(numSlots, &vecSize, sizeof(unsigned int),offset * sizeof(unsigned int)); 
+        unsigned int modVal = (searchStringSize + offset) % 4;
+        unsigned int endBitmask;
+        switch (modVal) {
+            case 0:
+                endBitmask = 0xFFFFFFFF; 
+                break;
+            case 1:
+                endBitmask = 0x000000FF; 
+                break;
+            case 2:
+                endBitmask = 0x0000FFFF; 
+                break;
+            case 3:
+                endBitmask = 0x00FFFFFF; 
+                break;
+        }
+        cudaMemcpyToSymbol(endBitmasks, &endBitmask,sizeof(unsigned int), offset * sizeof(unsigned int));
+        cudaMemcpyToSymbol(searchData, &(searchVals[offset][0]), sizeof(unsigned int) * vecSize, offset * 8 * sizeof(unsigned int)); 
+    }
+
     cudaMemset(matchCount,0,sizeof(unsigned int));
-    cudaVLikeCWarp <<<numBlocks,numThreads>>> ((unsigned int *) data,startIndex,endIndex,numElements,searchSize,matchCount);
+    cudaVLikeCWarp2 <<<numBlocks,numThreads>>> ((unsigned int *) data,startIndex,endIndex,numElements,searchString.size(),matchCount);
 }
 
 
