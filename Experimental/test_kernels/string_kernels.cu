@@ -309,11 +309,14 @@ __global__ void cudaVLikeCWarp2(const unsigned int *data, const unsigned int *st
                 unsigned int found = 0;
                 unsigned int foundOffset = 1;
                 for (int charOffset = 0; charOffset < 4; ++charOffset) {
-                    unsigned int numSearchSlots = numSlots[charOffset];
-                    for (int iteration = 0; iteration < numSearchSlots; ++iteration) {
-                        unsigned int iterationData = localData;
-                        if (iteration == 0)
-                            iterationData = iterationData & startBitmasks[charOffset]; 
+                    unsigned int numSearchSlots = numSlots[charOffset] - 1;
+                    unsigned int iterationData = localData;
+                    iterationData = iterationData & startBitmasks[charOffset]; 
+                    if (numSearchSlots == 0)
+                        iterationData = iterationData & endBitmasks[charOffset]; 
+                    found += foundOffset * (iterationData == searchData[charOffset*8]);
+                    for (int iteration = 1; iteration <= numSearchSlots; ++iteration) {
+                        iterationData = localData;
                         if (iteration == numSearchSlots)
                             iterationData = iterationData & endBitmasks[charOffset]; 
                         found += foundOffset * (iterationData == searchData[charOffset*8+iteration]);
@@ -330,5 +333,70 @@ __global__ void cudaVLikeCWarp2(const unsigned int *data, const unsigned int *st
     atomicAdd(matchCount, localMatchCount);
 }
 
+__global__ void cudaVLikeCWarp2(const unsigned int *data, const unsigned int *startIndex, const unsigned int *endIndex, const unsigned int numElements, const unsigned int searchLen, unsigned int * matchCount) { 
+    __shared__ unsigned int sharedData [2048]; // 1024 threads / 32 threads/warp = 32 warps * 64 unsigned ints each
+    /*
+    if (threadIdx.x == 0) {
+        sharedMatchCount = 0;
+    }
+    __syncthreads();
+    */
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int stride = blockDim.x * gridDim.x;
+    int warpId = threadIdx.x / WARPSIZE;
+    int warpThreadId = threadIdx.x % WARPSIZE;
+    /*
+    int warpNeighborId = (warpThreadId - 1) % 32;
+    */
+    //int warpStride = 2048 * WARPSIZE / blockDim.x; /64
+    int warpStride = 64;
+    int warpOutOffset = warpId * warpStride;
+    //unsigned int searchSlotsLen = (searchLen + 2) / 4 + 1;
+    unsigned int localMatchCount = 0;
+    unsigned int sharedOffset = warpOutOffset + warpThreadId;
+    while (i - warpThreadId < numElements) {
+        int slotStart;
+        int slotEnd;
+        //int slotMod;
+        if (i < numElements) {
+            slotStart = startIndex[i] / 4; 
+            slotEnd = endIndex[i] / 4; 
+        }
+        else { // ensure that this non-existent doc won't be read
+            slotStart = 1;
+            slotEnd = 0;
+        }
+        for (int curWarpDoc = 0; curWarpDoc != 32; ++curWarpDoc) {
+            int docStart = __shfl(slotStart,curWarpDoc,WARPSIZE);
+            int docEnd = __shfl(slotEnd,curWarpDoc,WARPSIZE);
+            unsigned int offset = docStart + warpThreadId;
+            while (offset < docEnd) {
+                unsigned int localData = data[offset];
+                unsigned int found = 0;
+                unsigned int foundOffset = 1;
+                for (int charOffset = 0; charOffset < 4; ++charOffset) {
+                    unsigned int numSearchSlots = numSlots[charOffset] - 1;
+                    unsigned int iterationData = localData;
+                    iterationData = iterationData & startBitmasks[charOffset]; 
+                    if (numSearchSlots == 0)
+                        iterationData = iterationData & endBitmasks[charOffset]; 
+                    found += foundOffset * (iterationData == searchData[charOffset*8]);
+                    for (int iteration = 1; iteration <= numSearchSlots; ++iteration) {
+                        iterationData = localData;
+                        if (iteration == numSearchSlots)
+                            iterationData = iterationData & endBitmasks[charOffset]; 
+                        found += foundOffset * (iterationData == searchData[charOffset*8+iteration]);
+                        foundOffset *= 2;
+                        localMatchCount++;
+                    }
+                }
+                sharedData[sharedOffset] = found;
+                offset += WARPSIZE;  
+            }
+        }
+        i += stride;
+    }
+    atomicAdd(matchCount, localMatchCount);
+}
 
 
