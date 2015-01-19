@@ -30,6 +30,7 @@ create materialized view moo as select * from skinny where a > 15;
 create materialized view goo with (storage = 'gpu', refresh = 'auto') as select * from skinny where a > 15;
 create materialized view mic (col, avg_b) with (storage = 'mic', refresh = 'manual') as select c, avg(b) from skinny where a > 10 group by c;
 create materialized view fatview with (storage = 'cpu', refresh = 'immediate') as select a, d, g from fat where f > 100 and g is not null or k <= 100000000000 and c = 'xyz';
+refresh materialized view fatview;
 drop view voo;
 drop view moo;
 drop view goo;
