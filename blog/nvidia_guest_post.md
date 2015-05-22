@@ -76,7 +76,7 @@ There is an upper bound for the number of registers a block can use, so the `CU_
 
 Speaking of libraries, general purpose computing on GPUs doesn't mean the C POSIX functions will be available. In our case, we needed `gmtime_r` for the `EXTRACT` family of SQL functions. Fortunately, we've been able to port it from [newlib](https://sourceware.org/newlib/) and compile it with NVCC.
 
-### Performance comments and measurements
+### Performance measurements and comments 
 
 As it's always the case with performance-focused systems, the ideas might be great but the proof is in the pudding. It turns out we're able to get a lot of performance from the GPU.
 
