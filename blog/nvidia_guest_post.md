@@ -1,5 +1,7 @@
 
-At MapD our goal is to build the world's fastest big data analytics and visualization platform that allows for lag-free interactive exploration of multi-billion row datasets.  Although we are fast running on X86, our real advantage stems from our ability to leverage the massive parallelism and memory bandwidth of GPUs. 
+At MapD our goal is to build the world's fastest big data analytics and visualization platform that allows for lag-free interactive exploration of multi-billion row datasets.  Although we are fast running on x64, our real advantage stems from our ability to leverage the massive parallelism and memory bandwidth of GPUs.
+
+![Our dashboard, showing airline data usign Crossfilter interface](./crossfilter.png)
 
 Even the fastest hardware will be slow if it is not targeted properly, so at MapD we have invested heavily in ensuring a wide range of analytic workloads run optimally on GPUs. In particular, we have worked hard so that common SQL analytic operations, such as filter and group by, run as fast as possible.  One of the biggest payoffs in this regard has been moving from the query interpreter used in our prototype to a JIT compilation framework built on LLVM. 
 
