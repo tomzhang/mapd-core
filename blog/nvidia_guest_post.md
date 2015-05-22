@@ -1,4 +1,3 @@
-[TODO: replace this with actual intro]
 
 At MapD our goal is to build the world's fastest big data analytics and visualization platform that allows for lag-free interactive exploration of multi-billion row datasets.  Although we are fast running on X86, our real advantage stems from our ability to leverage the massive parallelism and memory bandwidth of GPUs. 
 
