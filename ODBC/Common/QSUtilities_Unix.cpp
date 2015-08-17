@@ -8,9 +8,6 @@
 
 #include "QSUtilities.h"
 
-#include <sys/stat.h>
-#include <dirent.h>
-
 using namespace Simba::Quickstart;
 using namespace std;
 
