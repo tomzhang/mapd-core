@@ -14,7 +14,7 @@ __constant__ unsigned int numSlots[4];
 #define SEARCH_OFFSET 32
 
 //__global__ void cudaVLikeCWarp(const unsigned int *data, const unsigned int *startIndex, const unsigned int *endIndex,
-//const unsigned int numElements, const unsigned int searchSlotsLen, unsigned int * matchCount) {
+// const unsigned int numElements, const unsigned int searchSlotsLen, unsigned int * matchCount) {
 //    __shared__ unsigned int sharedData [2048]; // 1024 threads / 32 threads/warp = 32 warps * 64 unsigned ints each
 //    /*
 //    if (threadIdx.x == 0) {
@@ -128,7 +128,7 @@ __constant__ unsigned int numSlots[4];
 //}
 
 //__global__ void cudaVLikeCWarp(const unsigned int *data, const unsigned int *startIndex, const unsigned int *endIndex,
-//const unsigned int numElements, const unsigned int searchLen, unsigned int * matchCount) {
+// const unsigned int numElements, const unsigned int searchLen, unsigned int * matchCount) {
 //    //__shared__ unsigned int sharedData [2048]; // 1024 threads / 32 threads/warp = 32 warps * 64 unsigned ints each
 //    /*
 //    if (threadIdx.x == 0) {

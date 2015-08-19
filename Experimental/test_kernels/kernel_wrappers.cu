@@ -11,7 +11,7 @@ unsigned int populateSearchVals(const string& searchString, vector<vector<unsign
   offsetArray.push_back(1);          // 2^0
   offsetArray.push_back(256);        // 2^8
   offsetArray.push_back(65536);      // 2^16
-  offsetArray.push_back(16777216);  // 2^24
+  offsetArray.push_back(16777216);   // 2^24
   unsigned int maxLen = 0;
   for (int offset = 0; offset < 4; ++offset) {
     // int startSize = 4 - offset;
