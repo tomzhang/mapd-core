@@ -50,8 +50,10 @@ QSTable::QSTable(QuickstartSettings* in_settings,
   MapDClientHandle client(9091);
   auto session = client->connect("mapd", "HyperInteractive", "mapd");
   TQueryResult query_result;
-  client->sql_execute(
-      query_result, session, std::string("SELECT * FROM ") + m_tableName.GetAsPlatformString() + std::string(";"));
+  client->sql_execute(query_result,
+                      session,
+                      std::string("SELECT * FROM ") + m_tableName.GetAsPlatformString() + std::string(";"),
+                      false);
   m_rowSet.Attach(new TRowSet(query_result.row_set));
 }
 
