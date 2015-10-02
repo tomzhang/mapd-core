@@ -16,5 +16,6 @@ include_directories(ThirdParty/rapidjson)
 # include_directories("/Users/croot/src/poly2tri/poly2tri")
 
 add_executable(backendrenderer backendrenderer.cpp QueryRenderer.cpp QueryFramebuffer.cpp QueryRendererConfig.cpp ScaleConfig.cpp GeomConfig.cpp Shader.cpp RenderProperty.cpp BufferLayout.cpp)
+add_library(QueryRenderer QueryRenderer.cpp QueryFramebuffer.cpp QueryRendererConfig.cpp ScaleConfig.cpp GeomConfig.cpp Shader.cpp RenderProperty.cpp BufferLayout.cpp)
 target_link_libraries(backendrenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES})
-
+target_link_libraries(QueryRenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES})
