@@ -8,6 +8,8 @@
 #include <utility>  // std::pair
 #include <string>
 
+#include <gd.h>
+
 namespace MapD_Renderer {
 
 struct DataBuffer {
@@ -19,6 +21,13 @@ struct DataBuffer {
 enum QueryRenderType { MAPD_POINTS=0 };
 
 typedef std::array<float, 4> ColorRGBA;
+
+struct PngData {
+    char *pngDataPtr;
+    int pngSize;
+
+    PngData(char *pngDataPtr, int pngSize) : pngDataPtr(pngDataPtr), pngSize(pngSize) {}
+};
 
 struct ColorConfig {
     std::vector<float> domain;
@@ -66,6 +75,9 @@ class QueryRenderer {
 
         // get the row id at a specific pixel
         int getIdAt(int x, int y);
+
+
+        PngData getColorNoisePNG(int width, int height);
 
     private:
         FramebufferTable _framebufferDict;

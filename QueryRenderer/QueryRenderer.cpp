@@ -7,6 +7,11 @@
 #include <iostream>
 #include <assert.h>
 
+
+#include <time.h>
+#include <fstream>
+#include <map>
+
 using namespace MapD_Renderer;
 
 QueryRenderer::QueryRenderer() : _activeFramebuffer(nullptr) {}
@@ -95,3 +100,59 @@ void QueryRenderer::render(const DataTable& dataTable, int numRows, const std::s
 void QueryRenderer::renderToImage(const DataTable& dataTable, int numRows, const std::string& renderConfigJSON) {
     render(dataTable, numRows, renderConfigJSON);
 }
+
+
+
+
+
+
+
+int randColor() {
+    return rand() % 256;
+}
+
+int randAlpha() {
+    return rand() % 128;
+}
+
+
+
+PngData QueryRenderer::getColorNoisePNG(int width, int height) {
+    srand(time(NULL));
+
+    // unsigned char* pixels = new unsigned char[width * height * 4];
+    int r, g, b, a;
+
+    gdImagePtr im = gdImageCreateTrueColor(width, height);
+
+    std::map<unsigned int, int> colorMap;
+
+    for (int i=0; i<width; ++i) {
+        for (int j=0; j<height; ++j) {
+            r = randColor();
+            g = randColor();
+            b = randColor();
+            a = 0;
+
+            unsigned int colorId = 16777216 * a + 65536 * b + 256 * g + r;
+
+            if (colorMap.find(colorId) == colorMap.end()) {
+                colorMap[colorId] = gdImageColorAllocateAlpha(im, r, g, b, a);
+            }
+
+            gdImageSetPixel(im, i, j, colorMap[colorId]);
+        }
+    }
+
+    int pngSize;
+    char* pngPtr = (char*)gdImagePngPtr(im, &pngSize);
+
+    return PngData(pngPtr, pngSize);
+
+    gdImageDestroy(im);
+}
+
+
+
+
+

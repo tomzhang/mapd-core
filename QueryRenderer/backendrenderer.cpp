@@ -3,6 +3,9 @@
 #include <GLFW/glfw3.h>
 #include <assert.h>
 
+#include "gd.h"
+#include <fstream>
+
 using namespace MapD_Renderer;
 
 int main(int argc, char *argv[]) {
@@ -30,6 +33,12 @@ int main(int argc, char *argv[]) {
 
 
     QueryRenderer renderer;
+
+    PngData pngData = renderer.getColorNoisePNG(500, 500);
+    std::ofstream pngFile("out.png", std::ios::binary);
+    pngFile.write(pngData.pngDataPtr, pngData.pngSize);
+    pngFile.close();
+
 
     UserWidgetIdPair userWidgetId1 = std::make_pair(1, 1);
     UserWidgetIdPair userWidgetId2 = std::make_pair(1, 2);
