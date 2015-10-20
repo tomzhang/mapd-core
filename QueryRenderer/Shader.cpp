@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <iostream>
 #include <boost/algorithm/string/predicate.hpp>
 #include "Shader.h"
 
@@ -18,6 +17,11 @@ GLint compileShader(const GLuint& shaderId, const string& shaderSrc, string& err
 		GLchar errLog[1024];
 		glGetShaderInfoLog(shaderId, 1024, NULL, errLog);
 		errStr.assign(string(errLog));
+
+		// std::ofstream shadersrcstream;
+		// shadersrcstream.open("shadersource.vert");
+		// shadersrcstream << shadersrc;
+		// shadersrcstream.close();
 	}
 
 	return compiled;
@@ -56,9 +60,9 @@ GLint linkProgram(const GLuint& programId, string& errStr)
 }
 
 
-AttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint location)
+UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint location)
 {
-	AttrInfo *rtn = NULL;
+	UniformAttrInfo *rtn = NULL;
 
 	switch (type)
 	{
@@ -179,7 +183,7 @@ Shader::Shader(
 
 Shader::~Shader()
 {
-	std::cerr << "IN Shader DESTRUCTOR" << std::endl;
+	// std::cerr << "IN Shader DESTRUCTOR" << std::endl;
 	_cleanupIds();
 }
 
@@ -270,7 +274,7 @@ void Shader::_init(const string& vertSrc, const string& fragSrc)
         _uniformAttrs.insert(
 			make_pair(
 				attrNameStr,
-				unique_ptr<AttrInfo>(createUniformAttrInfoPtr(attrType, attrSz, attrLoc))
+				unique_ptr<UniformAttrInfo>(createUniformAttrInfoPtr(attrType, attrSz, attrLoc))
 			));
     }
 
@@ -282,11 +286,11 @@ void Shader::_init(const string& vertSrc, const string& fragSrc)
         glGetActiveAttrib(_programId, i, 512, NULL, &attrSz, (GLenum *)&attrType, attrName);
         attrLoc = glGetAttribLocation(_programId, attrName);
 
-        // _vertexAttrs.insert(
-        //     make_pair(
-        //         std::string(attrName),
-        //         unique_ptr<AttrInfo>()
-        //     ));
+        _vertexAttrs.insert(
+            make_pair(
+                std::string(attrName),
+                unique_ptr<AttrInfo>(new AttrInfo(attrType, attrSz, attrLoc))
+            ));
     }
 }
 
@@ -301,70 +305,83 @@ string Shader::getFragmentSource() const
 }
 
 
-template <typename T>
-void Shader::setUniformAttribute(const string& attrName, T attrValue) const
-{
-	AttrMap::const_iterator iter = _uniformAttrs.find(attrName);
+// template <typename T>
+// void Shader::setUniformAttribute(const string& attrName, T attrValue)
+// {
+// 	UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
 
-	// TODO: check if bound
+// 	// TODO: check if bound
 
-	if (iter == _uniformAttrs.end())
-	{
-		// TODO: throw a warning/error?
-		cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
-		return;
+// 	if (iter == _uniformAttrs.end())
+// 	{
+// 		// TODO: throw a warning/error?
+// 		cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
+// 		return;
+// 	}
+
+// 	UniformAttrInfo *info = iter->second.get();
+
+// 	GLenum attrType = info->type;
+// 	GLint attrSz = info->size;
+// 	GLuint attrLoc = info->location;
+// 	if (attrSz != 1)
+// 	{
+// 		// TODO: throw a warning/error?
+// 		cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size 1 but should be " << attrSz << endl;
+// 		return;
+// 	}
+
+// 	// TODO: check type mismatch?
+// 	// setUniformByLocation(attrLoc, 1, &attrValue);
+// 	// iter->(*second)();
+// 	info->setAttr(attrValue);
+// }
+
+// template <typename T>
+// void Shader::setUniformAttribute(const string& attrName, const vector<T>& attrValue)
+// {
+// 	UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
+
+// 	// TODO: check if bound
+
+// 	if (iter == _uniformAttrs.end())
+// 	{
+// 		// TODO: throw a warning/error?
+// 		cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
+// 		return;
+// 	}
+
+// 	UniformAttrInfo *info = iter->second.get();
+
+// 	GLuint attrType = info->type;
+// 	GLuint attrSz = info->size;
+// 	GLuint attrLoc = info->location;
+// 	if (attrSz != attrValue.length())
+// 	{
+// 		// TODO: throw a warning/error?
+// 		cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size " << attrValue.length() << " but should be " << attrSz << endl;
+// 		return;
+// 	}
+
+// 	// TODO: check type mismatch?
+// 	info->setAttr(attrValue);
+// 	// setUniformByLocation(attrLoc, attrSz, &attrValue);
+// }
+
+GLuint Shader::getVertexAttributeLocation(const string &attrName) const {
+	AttrMap::const_iterator iter = _vertexAttrs.find(attrName);
+
+	if (iter == _vertexAttrs.end()) {
+		// TODO: throw warning/error
+		assert(false);
 	}
 
 	AttrInfo *info = iter->second.get();
 
-	GLenum attrType = info->type;
-	GLint attrSz = info->size;
-	GLuint attrLoc = info->location;
-	if (attrSz != 1)
-	{
-		// TODO: throw a warning/error?
-		cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size 1 but should be " << attrSz << endl;
-		return;
-	}
-
-	// TODO: check type mismatch?
-	// setUniformByLocation(attrLoc, 1, &attrValue);
-	// iter->(*second)();
-	info->setAttr(attrValue);
+	return info->location;
 }
 
-template <typename T>
-void Shader::setUniformAttribute(const string& attrName, vector<T> attrValue) const
-{
-	AttrMap::const_iterator iter = _uniformAttrs.find(attrName);
-
-	// TODO: check if bound
-
-	if (iter == _uniformAttrs.end())
-	{
-		// TODO: throw a warning/error?
-		cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
-		return;
-	}
-
-	AttrInfo *info = iter->second.get();
-
-	GLuint attrType = info->type;
-	GLuint attrSz = info->size;
-	GLuint attrLoc = info->location;
-	if (attrSz != attrValue.length())
-	{
-		// TODO: throw a warning/error?
-		cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size " << attrValue.length() << " but should be " << attrSz << endl;
-		return;
-	}
-
-	// TODO: check type mismatch?
-	info->setAttr(attrValue);
-	// setUniformByLocation(attrLoc, attrSz, &attrValue);
-}
-
-void Shader::bind() const
+void Shader::bindToRenderer() const
 {
 	// TODO: Throw an error or warning if the program
 	// is invalid?

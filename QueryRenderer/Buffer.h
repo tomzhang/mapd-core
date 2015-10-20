@@ -3,20 +3,26 @@
 
 #include <vector>
 #include <GL/glew.h>
+#include <iostream>
 
 namespace MapD_Renderer {
 
 class Buffer {
     public:
-        Buffer() : _bufferId(0) {}
+        Buffer() : _bufferId(0) {
+            std::cout << "IN buffer CONSTRUCTOR " << _bufferId << std::endl;
+        }
 
         // template <typename T>
         // Buffer(std::vector<T>);
 
         // TODO: Should we make bufferId a shared resource?
-        Buffer(GLuint bufferId) : _bufferId(bufferId) {}
+        Buffer(GLuint bufferId) : _bufferId(bufferId) {
+            std::cout << "IN buffer CONSTRUCTOR " << _bufferId << std::endl;
+        }
 
         virtual ~Buffer() {
+            // std::cout << "IN Buffer DESTRUCTOR" << std::endl;
             if (_bufferId) {
                 glDeleteBuffers(1, &_bufferId);
             }
@@ -26,9 +32,9 @@ class Buffer {
         virtual int size() const = 0;
 
     private:
-        GLuint _bufferId;
 
     protected:
+        GLuint _bufferId;
         void _initBuffer() {
             if (!_bufferId) {
                 glGenBuffers(1, &_bufferId);

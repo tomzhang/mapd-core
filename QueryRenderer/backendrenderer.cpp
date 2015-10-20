@@ -1,85 +1,144 @@
-#include "QueryRenderer.h"
+#include "QueryRenderManager.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <assert.h>
+#include <iostream>
+#include <sstream>
+#include "rapidjson/document.h"
 
 #include "gd.h"
 #include <fstream>
 
+
+
+
 using namespace MapD_Renderer;
 
+int fbwWidthRatio, fbwHeightRatio;
+int windowWidth, windowHeight;
+
+QueryRenderManager renderManager(500000, true);
+// QueryRenderManager renderManager;
+
+UserWidgetPair userWidgetId1 = std::make_pair(1, 1);
+UserWidgetPair userWidgetId2 = std::make_pair(1, 2);
+UserWidgetPair userWidgetId3 = std::make_pair(2, 1);
+
+
+
+
+
+void mouse_btn_click_callback(GLFWwindow *window, int btn, int action, int mods) {
+    double xpos, ypos;
+    if (btn == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        glfwGetCursorPos(window, &xpos, &ypos);
+
+        // invert y
+        ypos = double(windowHeight) - ypos;
+
+        // now compensate for a different-sized framebuffer (i.e. retina displays)
+        xpos *= fbwWidthRatio;
+        ypos *= fbwHeightRatio;
+    }
+}
+
+void mouse_move_callback(GLFWwindow *window, double xpos, double ypos) {
+    if (xpos >= 0 && xpos <= windowWidth && ypos >= 0 && ypos <= windowHeight)
+    {
+        // std::cerr << "CROOT - in mouse move callback: " << xpos << ", " << ypos << std::endl;
+
+        // invert y
+        ypos = double(windowHeight) - ypos;
+
+        // now compensate for a different-sized framebuffer (i.e. retina displays)
+        xpos *= fbwWidthRatio;
+        ypos *= fbwHeightRatio;
+
+        unsigned int id = renderManager.getIdAt(userWidgetId1, xpos, ypos);
+        std::cout << "CROOT - mouse move: (" << xpos << ", " << ypos << ") " << id << std::endl;
+    }
+}
+
+
 int main(int argc, char *argv[]) {
-    GLFWwindow* window;
+    // GLFWwindow* window;
 
-    assert(glfwInit());
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    assert(argc == 2);
 
-    window = glfwCreateWindow(1, 1, "", NULL, NULL);
-    if (window == NULL) {
-        glfwTerminate();
-        assert(false);
+    std::string configJSON;
+
+    std::ifstream inFile(argv[1]);
+    inFile.seekg(0, std::ios::end);
+    configJSON.reserve(inFile.tellg());
+    inFile.seekg(0, std::ios::beg);
+    configJSON.assign((std::istreambuf_iterator<char>(inFile)),
+                std::istreambuf_iterator<char>());
+
+
+    if (!renderManager.hasUserWidget(userWidgetId1)) {
+        renderManager.addUserWidget(userWidgetId1, configJSON, true, false);
+    } else {
+        renderManager.setJSONConfigForUserWidget(userWidgetId1, configJSON);
     }
 
-    glfwMakeContextCurrent(window);
-    assert(!glGetError());
-
-    glewExperimental = GL_TRUE; // needed for core profile
-
-    assert(glewInit() == GLEW_OK);
-    glGetError();  // clear error code - this always throws error but seems to not matter
 
 
-    QueryRenderer renderer;
 
-    PngData pngData = renderer.getColorNoisePNG(500, 500);
-    std::ofstream pngFile("out.png", std::ios::binary);
-    pngFile.write(pngData.pngDataPtr, pngData.pngSize);
-    pngFile.close();
+    if (renderManager.inDebugMode()) {
+        double lastTime = glfwGetTime();
+        unsigned int nbFrames = 0;
 
 
-    UserWidgetIdPair userWidgetId1 = std::make_pair(1, 1);
-    UserWidgetIdPair userWidgetId2 = std::make_pair(1, 2);
-    UserWidgetIdPair userWidgetId3 = std::make_pair(2, 1);
+        // Loop until the user closes the window
+        GLFWwindow *window = renderManager.getWindow();
 
-    renderer.addFramebuffer(userWidgetId1, true, false);
-    renderer.setActiveFramebufferById(userWidgetId1);
-
-    renderer.addFramebuffer(userWidgetId2, true, false);
-    renderer.addFramebuffer(userWidgetId3, true, false);
-    renderer.setActiveFramebufferById(userWidgetId3);
+        // glfwSetMouseButtonCallback(window, mouse_btn_click_callback);
+        glfwSetCursorPosCallback(window, mouse_move_callback);
 
 
-    std::string configJSON =
-"{"
-"    \"width\" : 1000,"
-"    \"height\" : 1500,"
-"    \"scales\": ["
-"        {"
-"            \"name\" : \"x\","
-"            \"type\" : \"linear\","
-"            \"domain\" : [1,2],"
-"            \"range\" : [1.0, 2.0]"
-"        }"
-"    ],"
-"    \"marks\" : ["
-"        {"
-"            \"type\" : \"points\","
-"            \"properties\" : {"
-"                \"x\" : 0.0,"
-"                \"y\" : 0.0,"
-"                \"fillColor\" : \"rgba(255,0,0,1)\","
-"                \"size\" : 50.0"
-"            }"
-"        }"
-"    ]"
-"}";
 
-    DataTable data;
-    renderer.render(data, 0, configJSON);
 
+
+        int framebufferWidth, framebufferHeight;
+
+        // first need to get the true framebuffer size of the window
+        glfwGetWindowSize(window, &windowWidth, &windowHeight);
+        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+
+        fbwWidthRatio = float(framebufferWidth) / float(windowWidth);
+        fbwHeightRatio = float(framebufferHeight) / float(windowHeight);
+
+
+        while (!glfwWindowShouldClose(window))
+        {
+            // Poll for and process events
+            glfwPollEvents();
+
+            renderManager.renderUserWidget(userWidgetId1);
+
+            // Render here
+            // renderManager->render();
+
+            // Measure speed
+            double currentTime = glfwGetTime();
+            nbFrames++;
+            if ( currentTime - lastTime >= 1.0 ){ // If last prinf() was more than 1 sec ago
+                // printf and reset timer
+                printf("%f ms/frame\n", 1000.0/double(nbFrames));
+                nbFrames = 0;
+                lastTime += 1.0;
+            }
+
+
+            // Swap front and back buffers
+            glfwSwapBuffers(window);
+        }
+    } else {
+        PngData pngData = renderManager.renderToPng(userWidgetId1);
+        pngData.writeToFile("out.png");
+
+        std::cout << "DONE with render" << std::endl;
+    }
 
     return 0;
 }

@@ -4,8 +4,6 @@ find_package(GLEW REQUIRED)
 find_package(GD REQUIRED)
 find_package(GLFW3 REQUIRED)
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L/Users/croot/src/poly2tri/lib")
-
 include_directories(${Boost_INCLUDE_DIR})
 include_directories(${GL_INCLUDE_DIR})
 include_directories(${GLEW_INCLUDE_DIR})
@@ -13,9 +11,8 @@ include_directories(${GD_INCLUDE_DIR})
 include_directories(${GLFW3_INCLUDE_DIR})
 include_directories(ThirdParty/rapidjson)
 
-# include_directories("/Users/croot/src/poly2tri/poly2tri")
+add_executable(backendrenderer backendrenderer.cpp QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp)
+add_library(QueryRenderer QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp)
 
-add_executable(backendrenderer backendrenderer.cpp QueryRenderer.cpp QueryFramebuffer.cpp QueryRendererConfig.cpp ScaleConfig.cpp GeomConfig.cpp Shader.cpp RenderProperty.cpp BufferLayout.cpp)
-add_library(QueryRenderer QueryRenderer.cpp QueryFramebuffer.cpp QueryRendererConfig.cpp ScaleConfig.cpp GeomConfig.cpp Shader.cpp RenderProperty.cpp BufferLayout.cpp)
 target_link_libraries(backendrenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES})
 target_link_libraries(QueryRenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES})

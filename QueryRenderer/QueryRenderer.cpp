@@ -1,158 +1,200 @@
 #include "QueryRenderer.h"
-#include "QueryRendererConfig.h"
-// #include "QueryRendererConfigJSONHandler.h"
-// #include "rapidjson/reader.h"
-// #include "rapidjson/error/en.h"
-#include "rapidjson/document.h"
-#include <iostream>
-#include <assert.h>
+#include <utility> // std::pair
 
-
-#include <time.h>
-#include <fstream>
-#include <map>
 
 using namespace MapD_Renderer;
 
-QueryRenderer::QueryRenderer() : _activeFramebuffer(nullptr) {}
+QueryRenderer::QueryRenderer(const std::string& configJSON, bool doHitTest, bool doDepthTest, GLFWwindow *win) : _doHitTest(doHitTest), _doDepthTest(doDepthTest), _ctx(new QueryRendererContext()), _framebufferPtr(nullptr) {
+    _initFromJSON(configJSON, win);
+}
+
 QueryRenderer::~QueryRenderer() {
-    std::cerr << "IN QueryRenderer DESTRUCTOR" << std::endl;
+    _clear();
 }
 
-void QueryRenderer::addFramebuffer(const UserWidgetIdPair& userWidgetIdPair, bool doHitTest, bool doDepthTest) {
-    WidgetFramebufferMap *wfMap;
-    int userId = userWidgetIdPair.first;
-    int widgetId = userWidgetIdPair.second;
+void QueryRenderer::_clear() {
+    _ctx->_clear();
+}
 
-    auto userIter = _framebufferDict.find(userId);
-
-    if (userIter == _framebufferDict.end()) {
-        wfMap = new WidgetFramebufferMap();
-        _framebufferDict[userId] = std::unique_ptr<WidgetFramebufferMap>(wfMap);
+void QueryRenderer::_initFramebuffer(int width, int height) {
+    if (_framebufferPtr == nullptr) {
+        _framebufferPtr.reset(new QueryFramebuffer(width, height, _doHitTest, _doDepthTest));
     } else {
-        wfMap = userIter->second.get();
+        _framebufferPtr->resize(width, height);
+    }
+}
 
-        if (wfMap->find(widgetId) != wfMap->end()) {
-            // a framebuffer already exists! Throw an error.
-            // TODO: How should we handle errors?
-            std::cerr << "The user id " << userId << " and widget id " << widgetId << " already exists." << std::endl;
-            assert(false);
+void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow *win) {
+
+    // clear out the previous state? Or do we want to maintain the previous state in case of an error?
+    _clear();
+
+    rapidjson::Document obj;
+    obj.Parse(configJSON.c_str());
+
+    if (obj.HasParseError()) {
+        // TODO: throw an error and gracefully deal
+        // with an un-initialized renderer object
+        //
+        // Use the following to get the error type
+        // for useful error info & logging:
+        // rapidjson::ParseErrorCode obj.GetParseError();
+        // see http://rapidjson.org/md_doc_dom.html#ParseError for more
+        assert(false);
+    }
+
+    // TODO: throw exceptions instead of asserts
+    assert(obj.IsObject());
+
+    rapidjson::Value::ConstMemberIterator mitr;
+    rapidjson::Value::ConstValueIterator vitr;
+
+    assert((mitr = obj.FindMember("width")) != obj.MemberEnd() &&
+           mitr->value.IsInt());
+    int width = mitr->value.GetInt();
+
+    assert((mitr = obj.FindMember("height")) != obj.MemberEnd() &&
+           mitr->value.IsInt());
+    int height = mitr->value.GetInt();
+
+
+    setWidthHeight(width, height, win);
+
+
+    mitr = obj.FindMember("data");
+    if (mitr != obj.MemberEnd()) {
+        assert(mitr->value.IsArray());
+
+        DataTableShPtr dataTablePtr;
+
+        for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
+            dataTablePtr.reset(new DataTable(*vitr, _doHitTest)); // NOTE: uses a SEQUENTIAL vbo by default
+            _ctx->_dataTableMap.insert(std::make_pair(dataTablePtr->getName(), dataTablePtr));
         }
     }
 
-    (*wfMap)[widgetId] = std::unique_ptr<QueryFramebuffer>(new QueryFramebuffer(1, 1, doHitTest, doDepthTest));
-}
+    mitr = obj.FindMember("scales");
+    if (mitr != obj.MemberEnd()) {
+        assert(mitr->value.IsArray());
 
-void QueryRenderer::setActiveFramebufferById(const UserWidgetIdPair& userWidgetIdPair) {
-    WidgetFramebufferMap *wfMap;
-    int userId = userWidgetIdPair.first;
-    int widgetId = userWidgetIdPair.second;
-
-    auto userIter = _framebufferDict.find(userId);
-
-    if (userIter == _framebufferDict.end()) {
-        // throw an error
-    }
-
-    wfMap = userIter->second.get();
-    auto widgetIter = wfMap->find(widgetId);
-    if (widgetIter == wfMap->end()) {
-        // throw an error
-    }
-
-    _activeFramebuffer = widgetIter->second.get();
-    _activeFramebufferIds = userWidgetIdPair;
-}
-
-int QueryRenderer::getActiveUserId() const {
-    if (_activeFramebuffer) {
-        return _activeFramebufferIds.first;
-    }
-
-    return -1;
-}
-
-int QueryRenderer::getActiveWidgetId() const {
-    if (_activeFramebuffer) {
-        return _activeFramebufferIds.second;
-    }
-
-    return -1;
-}
-
-void QueryRenderer::render(const DataTable& dataTable, int numRows, const std::string& renderConfigJSON) {
-    // rapidjson::Reader reader;
-    // QueryRendererConfigJSONHandler handler;
-    // rapidjson::StringStream ss(renderConfigJSON.c_str());
-
-    // if (!reader.Parse(ss, handler)) {
-    //     // TODO: throw a warning
-    //     std::cerr << "Got an error parsing the json config: " << rapidjson::GetParseError_En(reader.GetParseErrorCode()) << std::endl;
-    // }
-
-    rapidjson::Document document;
-    document.Parse(renderConfigJSON.c_str());
-
-    // QueryRendererConfig config = buildRendererConfigObjFromJSONObject(document);
-    QueryRendererConfig config(document);
-}
-
-void QueryRenderer::renderToImage(const DataTable& dataTable, int numRows, const std::string& renderConfigJSON) {
-    render(dataTable, numRows, renderConfigJSON);
-}
-
-
-
-
-
-
-
-int randColor() {
-    return rand() % 256;
-}
-
-int randAlpha() {
-    return rand() % 128;
-}
-
-
-
-PngData QueryRenderer::getColorNoisePNG(int width, int height) {
-    srand(time(NULL));
-
-    // unsigned char* pixels = new unsigned char[width * height * 4];
-    int r, g, b, a;
-
-    gdImagePtr im = gdImageCreateTrueColor(width, height);
-
-    std::map<unsigned int, int> colorMap;
-
-    for (int i=0; i<width; ++i) {
-        for (int j=0; j<height; ++j) {
-            r = randColor();
-            g = randColor();
-            b = randColor();
-            a = 0;
-
-            unsigned int colorId = 16777216 * a + 65536 * b + 256 * g + r;
-
-            if (colorMap.find(colorId) == colorMap.end()) {
-                colorMap[colorId] = gdImageColorAllocateAlpha(im, r, g, b, a);
-            }
-
-            gdImageSetPixel(im, i, j, colorMap[colorId]);
+        for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
+            ScaleShPtr scaleConfig = createScale(*vitr, _ctx);
+            _ctx->_scaleConfigMap.insert(std::make_pair(scaleConfig->name, scaleConfig));
         }
     }
 
-    int pngSize;
-    char* pngPtr = (char*)gdImagePngPtr(im, &pngSize);
+    mitr = obj.FindMember("marks");
+    if (mitr != obj.MemberEnd()) {
+        assert(mitr->value.IsArray());
 
-    return PngData(pngPtr, pngSize);
+        for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
+            GeomConfigShPtr geomConfigPtr = createMark(*vitr, _ctx);
 
-    gdImageDestroy(im);
+            _ctx->_geomConfigs.push_back(geomConfigPtr);
+        }
+    }
+}
+
+
+int QueryRenderer::getWidth() {
+    return _ctx->_width;
+}
+
+int QueryRenderer::getHeight() {
+    return _ctx->_height;
+}
+
+void QueryRenderer::setWidthHeight(int width, int height, GLFWwindow *win) {
+    _ctx->_width = width;
+    _ctx->_height = height;
+
+    if (win) {
+        // pass a window in debug mode
+
+        // resize the window
+        glfwSetWindowSize(win, width, height);
+
+        // now get the actual framebuffer dimensions
+        glfwGetFramebufferSize(win, &_ctx->_width, &_ctx->_height);
+    }
+
+    _initFramebuffer(_ctx->_width, _ctx->_height);
+}
+
+const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer() {
+    return _framebufferPtr;
+}
+
+void QueryRenderer::setJSONConfig(const std::string& configJSON, GLFWwindow *win) {
+    _initFromJSON(configJSON);
+}
+
+void QueryRenderer::render() {
+    assert(_framebufferPtr != nullptr);
+
+    _framebufferPtr->bindToRenderer();
+
+    glClearColor(0,0,0,0);
+    glViewport(0, 0, _ctx->_width, _ctx->_height);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    for (int i=0; i<_ctx->_geomConfigs.size(); ++i) {
+        _ctx->_geomConfigs[i]->draw();
+    }
+}
+
+unsigned int QueryRenderer::getIdAt(int x, int y) {
+    // TODO: develop an API for reading from specific fbo buffers
+    _framebufferPtr->bindToRenderer();
+    glReadBuffer(GL_COLOR_ATTACHMENT1);
+
+    unsigned int id;
+    glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id);
+
+    return id;
 }
 
 
 
 
 
+
+
+
+
+bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
+    return (_dataTableMap.find(tableName) != _dataTableMap.end());
+}
+
+DataTableShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
+    DataTableShPtr rtn(nullptr);
+
+    auto itr = _dataTableMap.find(tableName);
+    if (itr != _dataTableMap.end()) {
+        rtn = itr->second;
+    }
+
+    return rtn;
+}
+
+
+
+
+bool QueryRendererContext::hasScale(const std::string& scaleConfigName) const {
+    return (_scaleConfigMap.find(scaleConfigName) != _scaleConfigMap.end());
+}
+
+ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) const {
+    ScaleShPtr rtn(nullptr);
+
+    auto itr = _scaleConfigMap.find(scaleConfigName);
+    if (itr != _scaleConfigMap.end()) {
+        rtn = itr->second;
+    }
+
+    return rtn;
+}
+
+// void QueryRenderer::_buildShaderFromGeomConfig(const GeomConfigPtr& geomConfigPtr) {
+
+// }

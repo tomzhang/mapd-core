@@ -1,90 +1,138 @@
 #ifndef QUERY_RENDERER_H_
 #define QUERY_RENDERER_H_
 
-#include "QueryFramebuffer.h"
-#include <unordered_map>
-#include <vector>
-#include <array>
-#include <utility>  // std::pair
 #include <string>
+#include <vector>
+#include <unordered_map>
 
-#include <gd.h>
+#include "QueryFramebuffer.h"
+#include "QueryRendererObjects.h"
+#include "QueryFramebuffer.h"
+// #include "QueryRenderManager.h"
+#include "DataTable.h"
+
+#include "rapidjson/document.h"
+// #include <utility>  // std::pair
+#include <memory>   // std::unique_ptr
+#include <GLFW/glfw3.h>
 
 namespace MapD_Renderer {
 
-struct DataBuffer {
-    GLuint dataType;
-    GLuint bufferId;
-    // void *data;
-};
+    class QueryRendererContext;
+    class BaseMark;
+    class BaseScale;
 
-enum QueryRenderType { MAPD_POINTS=0 };
+    class QueryRenderer {
+        public:
+            QueryRenderer(const std::string& configJSON, bool doHitTest=false, bool doDepthTest=false, GLFWwindow *win=nullptr);
 
-typedef std::array<float, 4> ColorRGBA;
-
-struct PngData {
-    char *pngDataPtr;
-    int pngSize;
-
-    PngData(char *pngDataPtr, int pngSize) : pngDataPtr(pngDataPtr), pngSize(pngSize) {}
-};
-
-struct ColorConfig {
-    std::vector<float> domain;
-    std::vector<ColorRGBA> range;
-    ColorRGBA defaultColor;
-};
-
-struct SizeConfig {
-    std::vector<float> domain;
-    std::vector<float> range;
-    float defaultSize;
-};
-
-struct PointRenderConfig {
-    SizeConfig sizeConfig;
-    ColorConfig colorConfig;
-};
+            ~QueryRenderer();
 
 
-struct QueryRenderConfig {
-    int width;
-    int height;
-    float bounds[4];
-    QueryRenderType renderType;
-    PointRenderConfig renderConfig;
-};
+            int getWidth();
+            int getHeight();
+            void setWidthHeight(int width, int height, GLFWwindow *win=nullptr);
 
-typedef std::pair<int, int> UserWidgetIdPair;
-typedef std::unordered_map<int, std::unique_ptr<QueryFramebuffer>> WidgetFramebufferMap;
-typedef std::unordered_map<int, std::unique_ptr<WidgetFramebufferMap>> FramebufferTable;
-typedef std::unordered_map<std::string, DataBuffer> DataTable;
+            const QueryFramebufferUqPtr& getFramebuffer();
 
-class QueryRenderer {
-    public:
-        QueryRenderer();
-        ~QueryRenderer();
+            void setJSONConfig(const std::string& configJSON, GLFWwindow *win=nullptr);
 
-        void render(const DataTable& dataTable, int numRows, const std::string& renderConfigJSON);
-        void renderToImage(const DataTable& dataTable, int numRows, const std::string& renderConfigJSON);
+            void render();
 
-        void addFramebuffer(const UserWidgetIdPair& userWidgetIdPair, bool doHitTest=false, bool doDepthTest=false);
-        void setActiveFramebufferById(const UserWidgetIdPair& userWidgetIdPair);
-        int getActiveUserId() const;
-        int getActiveWidgetId() const;
-
-        // get the row id at a specific pixel
-        int getIdAt(int x, int y);
+            unsigned int getIdAt(int x, int y);
 
 
-        PngData getColorNoisePNG(int width, int height);
 
-    private:
-        FramebufferTable _framebufferDict;
-        QueryFramebuffer *_activeFramebuffer;
-        UserWidgetIdPair _activeFramebufferIds;
-};
+        private:
+            bool _doHitTest;
+            bool _doDepthTest;
 
-} // namespace MapD_Renderer
+            std::shared_ptr<QueryRendererContext> _ctx;
+            QueryFramebufferUqPtr _framebufferPtr;
 
-#endif // QUERY_RENDERER_H
+            void _clear();
+            void _initFromJSON(const std::string& configJSON, GLFWwindow *win=nullptr);
+            void _initFramebuffer(int width, int height);
+    };
+
+    typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
+    typedef std::shared_ptr<QueryRenderer> QueryRendererShPtr;
+
+
+
+
+    class QueryRendererContext {
+        public:
+            typedef std::shared_ptr<BaseScale> ScaleShPtr;
+
+            QueryRendererContext() : _width(0), _height(0) {}
+            QueryRendererContext(int width, int height) : _width(width), _height(height) {}
+            ~QueryRendererContext() {
+                _clear();
+            }
+
+            int getWidth() {
+                return _width;
+            }
+
+            int getHeight() {
+                return _height;
+            }
+
+            bool hasDataTable(const std::string& tableName) const;
+            DataTableShPtr getDataTable(const std::string& tableName) const;
+
+            bool hasScale(const std::string& scaleConfigName) const;
+            ScaleShPtr getScale(const std::string& scaleConfigName) const;
+
+            // bool hasMark(const std::string& geomConfigName) const {
+            //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
+            // }
+
+            // GeomConfigShPtr getMark(const std::string& geomConfigName) {
+            //     GeomConfigShPtr rtn(nullptr);
+
+            //     auto itr = _geomConfigMap.find(geomConfigName);
+            //     if (itr != _geomConfigMap.end()) {
+            //         rtn = itr->second;
+            //     }
+
+            //     return rtn;
+            // }
+
+            friend class QueryRenderer;
+
+        private:
+            typedef std::unordered_map<std::string, ScaleShPtr> ScaleConfigMap;
+
+            typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
+
+            typedef std::vector<GeomConfigShPtr> GeomConfigVector;
+            typedef std::unordered_map<std::string, DataTableShPtr> DataTableMap;
+
+            DataTableMap _dataTableMap;
+            ScaleConfigMap _scaleConfigMap;
+            GeomConfigVector _geomConfigs;
+
+            int _width;
+            int _height;
+
+            void _clear() {
+                _width = 0;
+                _height = 0;
+                _dataTableMap.clear();
+                _scaleConfigMap.clear();
+                _geomConfigs.clear();
+            }
+    };
+
+    typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;
+    typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
+
+
+
+
+
+}; // MapD_Renderer namespace
+
+#endif // QUERY_RENDERER_H_

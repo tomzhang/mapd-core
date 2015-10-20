@@ -1,7 +1,11 @@
 #ifndef BUFFER_LAYOUT_H_
 #define BUFFER_LAYOUT_H_
 
-#include <unordered_map>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/random_access_index.hpp>
+#include <boost/multi_index/member.hpp>
+
 #include <array>
 #include <vector>
 #include <string>
@@ -9,8 +13,21 @@
 #include <utility> // std::pair, std::make_pair
 #include <memory>  // std::unique_ptr
 #include <GL/glew.h>
+#include "TypeGL.h"
+#include "Shader.h"
+#include <cstdint>
+
+using namespace ::boost;
+using namespace ::boost::multi_index;
 
 namespace MapD_Renderer {
+
+enum LayoutType {
+    INTERLEAVED = 0,
+    SEQUENTIAL,
+    CUSTOM
+};
+
 
 enum class BufferAttrType {
     UINT = 0,
@@ -29,7 +46,42 @@ enum class BufferAttrType {
     VEC2D,
     VEC3D,
     VEC4D
+
+    // COLOR_R,
+    // COLOR_RG,
+    // COLOR_RGB,
+    // COLOR_RGBA
 };
+
+static std::array<TypeGLUqPtr, 17> attrTypeInfo = {
+    {
+        TypeGLUqPtr(new TypeGL<unsigned int, 1>()), // UINT
+
+        TypeGLUqPtr(new TypeGL<int, 1>()),          // INT
+        TypeGLUqPtr(new TypeGL<int, 2>()),          // VEC2I
+        TypeGLUqPtr(new TypeGL<int, 3>()),          // VEC3I
+        TypeGLUqPtr(new TypeGL<int, 4>()),          // VEC4I
+
+        TypeGLUqPtr(new TypeGL<float, 1>()),      // FLOAT
+        TypeGLUqPtr(new TypeGL<float, 2>()),      // VEC2F
+        TypeGLUqPtr(new TypeGL<float, 3>()),      // VEC3F
+        TypeGLUqPtr(new TypeGL<float, 4>()),      // VEC4F
+
+        TypeGLUqPtr(new TypeGL<double, 1>()),    // DOUBLE
+        TypeGLUqPtr(new TypeGL<double, 2>()),    // VEC2D
+        TypeGLUqPtr(new TypeGL<double, 3>()),    // VEC3D
+        TypeGLUqPtr(new TypeGL<double, 4>())     // VEC4D
+
+        // TypeGLUqPtr(new TypeGL<uint8_t, 1>(true, true)),   // COLOR_R
+        // TypeGLUqPtr(new TypeGL<uint8_t, 2>(true, true)),   // COLOR_RG
+        // TypeGLUqPtr(new TypeGL<uint8_t, 3>(true, true)),   // COLOR_RGB
+        // TypeGLUqPtr(new TypeGL<uint8_t, 4>(true, true))    // COLOR_RGBA
+    }
+
+};
+
+
+
 
 
 BufferAttrType getBufferAttrType(unsigned int a, int numComponents=1);
@@ -37,94 +89,29 @@ BufferAttrType getBufferAttrType(int a, int numComponents=1);
 BufferAttrType getBufferAttrType(float a, int numComponents=1);
 BufferAttrType getBufferAttrType(double a, int numComponents=1);
 
-struct BaseTypeInfo {
-    virtual ~BaseTypeInfo() {}
 
-    virtual int numComponents() = 0;
-    virtual int numBytes() = 0;
-    virtual int glType() = 0;
-};
 
-template <typename T, int componentCnt, int typeGL>
-struct AttrTypeInfo : BaseTypeInfo {
-    AttrTypeInfo() {}
 
-    int numComponents() {
-        return componentCnt;
-    }
-
-    int numBytes() {
-        return sizeof(T)*numComponents();
-    }
-
-    int glType() {
-        return typeGL;
-    }
-};
 
 struct BufferAttrInfo {
+    std::string name;
     BufferAttrType type;
-    BaseTypeInfo *typeInfo;
+    BaseTypeGL *typeInfo;
     int stride;
     int offset;
 
-    BufferAttrInfo(BufferAttrType type, BaseTypeInfo *typeInfo, int stride, int offset) : type(type), typeInfo(typeInfo), stride(stride), offset(offset) {}
+    BufferAttrInfo(const std::string& name, BufferAttrType type, BaseTypeGL *typeInfo, int stride, int offset) : name(name), type(type), typeInfo(typeInfo), stride(stride), offset(offset) {}
 };
 
+// tags for boost::multi_index_container
+struct name{};
 
-
-typedef std::unique_ptr<BaseTypeInfo> BaseTypeInfoPtr;
 typedef std::unique_ptr<BufferAttrInfo> BufferAttrInfoPtr;
-typedef std::unordered_map<std::string, BufferAttrInfoPtr> AttrMap;
-
-static std::array<BaseTypeInfoPtr, 13> attrTypeInfo = {
-    {BaseTypeInfoPtr(new AttrTypeInfo<unsigned int, 1, GL_UNSIGNED_INT>()), // UINT
-
-     BaseTypeInfoPtr(new AttrTypeInfo<int, 1, GL_INT>()),          // INT
-     BaseTypeInfoPtr(new AttrTypeInfo<int, 2, GL_INT>()),          // VEC2I
-     BaseTypeInfoPtr(new AttrTypeInfo<int, 3, GL_INT>()),          // VEC3I
-     BaseTypeInfoPtr(new AttrTypeInfo<int, 4, GL_INT>()),          // VEC4I
-
-     BaseTypeInfoPtr(new AttrTypeInfo<float, 1, GL_FLOAT>()),      // FLOAT
-     BaseTypeInfoPtr(new AttrTypeInfo<float, 2, GL_FLOAT>()),      // VEC2F
-     BaseTypeInfoPtr(new AttrTypeInfo<float, 3, GL_FLOAT>()),      // VEC3F
-     BaseTypeInfoPtr(new AttrTypeInfo<float, 4, GL_FLOAT>()),      // VEC4F
-
-     BaseTypeInfoPtr(new AttrTypeInfo<double, 1, GL_DOUBLE>()),    // DOUBLE
-     BaseTypeInfoPtr(new AttrTypeInfo<double, 2, GL_DOUBLE>()),    // VEC2D
-     BaseTypeInfoPtr(new AttrTypeInfo<double, 3, GL_DOUBLE>()),    // VEC3D
-     BaseTypeInfoPtr(new AttrTypeInfo<double, 4, GL_DOUBLE>())}    // VEC4D
-
-};
-
-// static std::vector<BaseTypeInfoPtr> attrTypeInfo = {
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<unsigned int, 1, GL_UNSIGNED_INT>())), // UINT
-
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<int, 1, GL_INT>())),          // INT
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<int, 2, GL_INT>())),          // VEC2I
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<int, 3, GL_INT>())),          // VEC3I
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<int, 4, GL_INT>())),          // VEC4I
-
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<int, 1, GL_FLOAT>())),        // FLOAT
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<float, 2, GL_FLOAT>())),      // VEC2F
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<float, 3, GL_FLOAT>())),      // VEC3F
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<float, 4, GL_FLOAT>())),      // VEC4F
-
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<int, 1, GL_DOUBLE>())),       // DOUBLE
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<double, 2, GL_DOUBLE>())),    // VEC2D
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<double, 3, GL_DOUBLE>())),    // VEC3D
-//     std::move(BaseTypeInfoPtr(new AttrTypeInfo<double, 4, GL_DOUBLE>())),    // VEC4D
-// };
 
 
 
 
 
-enum LayoutType {
-    INTERLEAVED = 0,
-    SEQUENTIAL,
-    CUSTOM
-};
 
 
 
@@ -133,15 +120,41 @@ class BaseBufferLayout {
         BaseBufferLayout(LayoutType layoutType) : _layoutType(layoutType) {}
         virtual ~BaseBufferLayout() {}
 
-        bool hasAttr(const std::string& attrName) {
-            return (_attrMap.find(attrName) != _attrMap.end());
+        bool hasAttribute(const std::string& attrName) {
+            BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
+            return (nameLookup.find(attrName) != nameLookup.end());
+            // return (_attrMap.find(attrName) != _attrMap.end());
         }
 
-        virtual void bindToRenderer() = 0;
+        TypeGLShPtr getAttributeTypeGL(const std::string& attrName) {
+            BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
+            BufferAttrMap_by_name::iterator itr;
+
+            // TODO: throw an exception instead of an assert
+            assert((itr = nameLookup.find(attrName)) != nameLookup.end());
+
+            return (*itr)->typeInfo->clone();
+        }
+
+        virtual void bindToRenderer(Shader *activeShader, int numActiveBufferItems, const std::string& attr="", const std::string& shaderAttr="") = 0;
 
     protected:
+        // typedef std::unordered_map<std::string, BufferAttrInfoPtr> BufferAttrMap;
+
+        typedef multi_index_container<
+                    BufferAttrInfoPtr,
+                    indexed_by<
+                        random_access<>,
+
+                        // hashed on name
+                        hashed_unique<tag<name>, member<BufferAttrInfo,std::string,&BufferAttrInfo::name> >
+                    >
+                > BufferAttrMap;
+
+        typedef BufferAttrMap::index<name>::type BufferAttrMap_by_name;
+
         LayoutType _layoutType;
-        AttrMap _attrMap;
+        BufferAttrMap _attrMap;
 };
 
 class CustomBufferLayout : public BaseBufferLayout {
@@ -150,12 +163,15 @@ class CustomBufferLayout : public BaseBufferLayout {
 
         void addAttribute(const std::string& attrName, BufferAttrType type, int stride, int offset) {
             // TODO: throw exception instead
-            assert(!hasAttr(attrName) && attrName.length());
+            assert(!hasAttribute(attrName) && attrName.length());
 
-            _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(type, attrTypeInfo[static_cast<int>(type)].get(), stride, offset));
+            // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[static_cast<int>(type)].get(), stride, offset));
+
+            // _attrMap.emplace_back(new BufferAttrInfo(attrName, type, attrTypeInfo[static_cast<int>(type)].get(), stride, offset));
+            _attrMap.push_back(BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[static_cast<int>(type)].get(), stride, offset)));
         }
 
-        void bindToRenderer() {}
+        void bindToRenderer(Shader *activeShader, int numActiveBufferItems, const std::string& attr="", const std::string& shaderAttr="") {}
 };
 
 
@@ -165,17 +181,21 @@ class InterleavedBufferLayout : public BaseBufferLayout {
 
         void addAttribute(const std::string& attrName, BufferAttrType type) {
             // TODO: throw exception instead
-            assert(!hasAttr(attrName) && attrName.length());
+            assert(!hasAttribute(attrName) && attrName.length());
 
             // TODO, set the stride of all currently existing attrs, or leave
             // that for when the layout is bound to the renderer/shader/VAO
 
             int enumVal = static_cast<int>(type);
-            _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(type, attrTypeInfo[enumVal].get(), -1, _vertexByteSize));
+            // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, _vertexByteSize));
+
+            // _attrMap.emplace_back(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, _vertexByteSize));
+            _attrMap.push_back(BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, _vertexByteSize)));
+
             _vertexByteSize += attrTypeInfo[enumVal]->numBytes();
         }
 
-        void bindToRenderer() {}
+        void bindToRenderer(Shader *activeShader, int numActiveBufferItems, const std::string& attr="", const std::string& shaderAttr="") {}
 
     private:
         int _vertexByteSize;
@@ -188,23 +208,74 @@ class SequentialBufferLayout : public BaseBufferLayout {
 
         void addAttribute(const std::string& attrName, BufferAttrType type) {
             // TODO: throw exception instead
-            assert(!hasAttr(attrName) && attrName.length());
+            assert(!hasAttribute(attrName) && attrName.length());
 
             int enumVal = static_cast<int>(type);
-            _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1));
+            // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1));
+            // _attrMap.emplace_back(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1));
+            _attrMap.push_back(BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1)));
         }
 
         template <typename T, int numComponents=1>
         void addAttribute(const std::string& attrName) {
             // TODO: throw exception
-            assert(!hasAttr(attrName) && attrName.length());
+            assert(!hasAttribute(attrName) && attrName.length());
 
             BufferAttrType type = getBufferAttrType(T(0), numComponents);
             int enumVal = static_cast<int>(type);
-            _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1));
+            // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1));
+            // _attrMap.emplace_back(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1));
+            _attrMap.push_back(BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1)));
         }
 
-        void bindToRenderer() {}
+        void bindToRenderer(Shader *activeShader, int numActiveBufferItems, const std::string& attr="", const std::string& shaderAttr="") {
+            GLuint attrLoc;
+            BaseTypeGL *attrPtr;
+            int offset = 0;
+
+            BufferAttrInfo *bufAttrPtr;
+
+            BufferAttrMap::iterator itr;
+
+            if (!attr.length()) {
+                for (itr = _attrMap.begin(); itr != _attrMap.end(); ++itr) {
+                    bufAttrPtr = itr->get();
+                    attrLoc = activeShader->getVertexAttributeLocation(bufAttrPtr->name);
+                    attrPtr = bufAttrPtr->typeInfo;
+                    // glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE, bufAttrPtr->stride, (GLvoid*) offset);
+                    attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
+                    glEnableVertexAttribArray(attrLoc);
+                    offset += attrPtr->numBytes() * numActiveBufferItems;
+                }
+            } else {
+                // TODO: throw an exception
+                assert(hasAttribute(attr));
+
+                for (itr = _attrMap.begin(); itr != _attrMap.end(); ++itr) {
+                    bufAttrPtr = itr->get();
+                    attrPtr = bufAttrPtr->typeInfo;
+
+                    if (bufAttrPtr->name == attr) {
+                        attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
+                        // glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE, bufAttrPtr->stride, (GLvoid*) offset);
+                        attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
+                        glEnableVertexAttribArray(attrLoc);
+                        break;
+                    }
+
+                    offset += attrPtr->numBytes() * numActiveBufferItems;
+                }
+            }
+
+
+            // for (const auto& itr : _attrMap) {
+            //     attrLoc = activeShader->getVertexAttributeLocation(itr.first);
+            //     attrPtr = itr.second->typeInfo;
+            //     glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE, itr.second->stride, (GLvoid*) offset);
+            //     glEnableVertexAttribArray(attrLoc);
+            //     offset += attrPtr->numBytes() * numActiveBufferItems;
+            // }
+        }
 };
 
 

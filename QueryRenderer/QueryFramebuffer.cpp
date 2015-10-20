@@ -36,12 +36,16 @@ GLuint generateTexture2D(GLint width, GLint height, GLint internalFormat, GLenum
     return tex;
 }
 
+void resizeRenderbuffer(GLuint rbo, GLint width, GLint height, GLint internalFormat) {
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height);
+}
+
 GLuint generateRenderBuffer(GLint width, GLint height, GLint internalFormat) {
     GLuint rbo;
 
     glGenRenderbuffers(1, &rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height);
+    resizeRenderbuffer(rbo, width, height, internalFormat);
 
     return rbo;
 }
@@ -57,7 +61,7 @@ AttachmentContainer::AttachmentContainer() {
 }
 
 AttachmentContainer::~AttachmentContainer() {
-    std::cerr << "IN AttachmentContainer DESTRUCTOR" << std::endl;
+    // std::cerr << "IN AttachmentContainer DESTRUCTOR" << std::endl;
 }
 
 inline bool AttachmentContainer::isColorAttachment(GLenum attachment) {
@@ -67,7 +71,8 @@ inline bool AttachmentContainer::isColorAttachment(GLenum attachment) {
 void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) {
     glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, tex, 0);
 
-    _attachmentMap[attachment] = tex;
+    AttachmentData data = {attachment, tex};
+    _attachmentMap.insert(data);
 
     if (isColorAttachment(attachment)) {
         _dirty = true;
@@ -77,7 +82,8 @@ void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) 
 void AttachmentContainer::addRenderbufferAttachment(GLenum attachment, GLuint rbo) {
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, rbo);
 
-    _attachmentMap[attachment] = rbo;
+    AttachmentData data = {attachment, rbo};
+    _attachmentMap.insert(data);
 
     if (isColorAttachment(attachment)) {
         _dirty = true;
@@ -94,11 +100,15 @@ void AttachmentContainer::removeAttachment(GLenum attachment) {
 void AttachmentContainer::enableAttachments() {
     if (_dirty) {
         _activeAttachments.clear();
-        for (auto iter : _attachmentMap) {
-            if (isColorAttachment(iter.first)) {
-                _activeAttachments.push_back(iter.first);
+
+        AttachmentMap_in_order& inOrder = _attachmentMap.get<inorder>();
+        AttachmentMap_in_order::iterator itr;
+        for (itr = inOrder.begin(); itr != inOrder.end(); ++itr) {
+            if (isColorAttachment(itr->attachmentType)) {
+                _activeAttachments.push_back(itr->attachmentType);
             }
         }
+
         _dirty = false;
     }
 
@@ -123,12 +133,15 @@ QueryFramebuffer::~QueryFramebuffer() {
     glDeleteFramebuffers(1, &_fbo);
     glDeleteTextures(MAX_TEXTURE_BUFFERS+1, &_textureBuffers[0]);
     glDeleteRenderbuffers(MAX_RENDER_BUFFERS+1, &_renderBuffers[0]);
-    std::cerr << "IN QueryFramebuffer DESTRUCTOR" << std::endl;
+    // std::cerr << "IN QueryFramebuffer DESTRUCTOR" << std::endl;
 }
 
 void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
     GLint currFramebuffer, currTexture, currRbo;
     GLuint tex, rbo;
+
+    _doHitTest = doHitTest;
+    _doDepthTest = _doDepthTest;
 
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currFramebuffer);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTexture);
@@ -137,17 +150,18 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
     glGenFramebuffers(1, &_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
 
+    // TODO: Make a texture wrapper
     tex = generateTexture2D(_width, _height, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
     _attachmentManager.addTexture2dAttachment(GL_COLOR_ATTACHMENT0, tex);
     _textureBuffers[COLOR_BUFFER] = tex;
 
-    if (doHitTest) {
+    if (_doHitTest) {
         tex = generateTexture2D(_width, _height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT);
         _attachmentManager.addTexture2dAttachment(GL_COLOR_ATTACHMENT1, tex);
         _textureBuffers[ID_BUFFER] = tex;
     }
 
-    if (doDepthTest) {
+    if (_doDepthTest) {
         rbo = generateRenderBuffer(_width, _height, GL_DEPTH_COMPONENT);
         _attachmentManager.addRenderbufferAttachment(GL_DEPTH_ATTACHMENT, rbo);
         _renderBuffers[DEPTH_BUFFER] = rbo;
@@ -170,16 +184,24 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
 }
 
 void QueryFramebuffer::resize(int width, int height) {
-    _width = width;
-    _height = height;
+    if (width != _width || height != _height) {
+        resizeTexture2D(_textureBuffers[COLOR_BUFFER], width, height, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
 
-    if (_textureBuffers[COLOR_BUFFER]) {
+        if (_doHitTest) {
+            resizeTexture2D(_textureBuffers[ID_BUFFER], width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT);
+        }
 
+        if (_doDepthTest) {
+            resizeRenderbuffer(_renderBuffers[DEPTH_BUFFER], width, height, GL_DEPTH_COMPONENT);
+        }
+
+        _width = width;
+        _height = height;
     }
 }
 
-void QueryFramebuffer::bindToRenderer() {
-    glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+void QueryFramebuffer::bindToRenderer(BindType bindType) {
+    glBindFramebuffer(static_cast<int>(bindType), _fbo);
     // _attachmentManager.enableAttachments();
 
     // TODO: How do we properly deal with the state machine
