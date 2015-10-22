@@ -116,6 +116,21 @@ class ScaleDomainRangeData {
 template <>
 inline TypeGLShPtr ScaleDomainRangeData<ColorRGBA>::getTypeGL();
 
+template <>
+void MapD_Renderer::ScaleDomainRangeData<unsigned int>::_pushItem(const rapidjson::Value& obj);
+
+template <>
+void MapD_Renderer::ScaleDomainRangeData<int>::_pushItem(const rapidjson::Value& obj);
+
+template <>
+void MapD_Renderer::ScaleDomainRangeData<float>::_pushItem(const rapidjson::Value& obj);
+
+template <>
+void MapD_Renderer::ScaleDomainRangeData<double>::_pushItem(const rapidjson::Value& obj);
+
+template <>
+void MapD_Renderer::ScaleDomainRangeData<ColorRGBA>::_pushItem(const rapidjson::Value& obj);
+
 // template <>
 // TypeGLShPtr ScaleDomainRangeData<ColorRGBA>::getTypeGL() {
 //     // TODO: combine all the different types into a utility file somewhere.
