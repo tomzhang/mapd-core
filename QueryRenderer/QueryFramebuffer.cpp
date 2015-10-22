@@ -146,7 +146,7 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
   GLuint tex, rbo;
 
   _doHitTest = doHitTest;
-  _doDepthTest = _doDepthTest;
+  _doDepthTest = doDepthTest;
 
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currFramebuffer);
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTexture);
