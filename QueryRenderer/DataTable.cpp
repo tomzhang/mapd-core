@@ -69,56 +69,56 @@ DataTable::DataTable(const rapidjson::Value& obj, bool buildIdColumn, VboType vb
 }
 
 void DataTable::_readFromCsvFile(const std::string& filename) {
-  // typedef boost::escaped_list_separator<char> char_separator;
-  // typedef boost::tokenizer<char_separator> tokenizer;
+  // // typedef boost::escaped_list_separator<char> char_separator;
+  // // typedef boost::tokenizer<char_separator> tokenizer;
 
-  typedef std::regex_token_iterator<std::string::iterator> tokenizer;
+  // typedef std::regex_token_iterator<std::string::iterator> tokenizer;
 
-  // static const std::regex sep("\\b\\s*,*\\s*\\b");
-  static const std::regex sep("\\b[\\s,]+");
-  // static const std::regex sep("\\s+");
+  // // static const std::regex sep("\\b\\s*,*\\s*\\b");
+  // static const std::regex sep("\\b[\\s,]+");
+  // // static const std::regex sep("\\s+");
 
-  std::string line;
-  std::ifstream inFile(filename.c_str());
+  // std::string line;
+  // std::ifstream inFile(filename.c_str());
 
-  // TODO: check for errors and throw exceptions on bad reads, eofs, etc.
+  // // TODO: check for errors and throw exceptions on bad reads, eofs, etc.
 
-  // get the first line. There needs to be header info in the first line:
-  std::getline(inFile, line);
+  // // get the first line. There needs to be header info in the first line:
+  // std::getline(inFile, line);
 
-  tokenizer tok_itr, tok_end;
+  // tokenizer tok_itr, tok_end;
 
-  // TODO: use a set in order to error on same column name
-  std::vector<std::string> colNames;
+  // // TODO: use a set in order to error on same column name
+  // std::vector<std::string> colNames;
 
-  for (tok_itr = tokenizer(line.begin(), line.end(), sep, -1); tok_itr != tok_end; ++tok_itr) {
-    colNames.push_back(*tok_itr);
-  }
+  // for (tok_itr = tokenizer(line.begin(), line.end(), sep, -1); tok_itr != tok_end; ++tok_itr) {
+  //   colNames.push_back(*tok_itr);
+  // }
 
-  // Now iterate through the first line of data to determine types
-  std::getline(inFile, line);
+  // // Now iterate through the first line of data to determine types
+  // std::getline(inFile, line);
 
-  int idx = 0;
-  for (idx = 0, tok_itr = tokenizer(line.begin(), line.end(), sep, -1); tok_itr != tok_end; ++tok_itr, ++idx) {
-    // TODO: what if there are not enough or too many tokens in this line?
-    _columns.push_back(createDataColumnFromString(colNames[idx], *tok_itr));
-  }
+  // int idx = 0;
+  // for (idx = 0, tok_itr = tokenizer(line.begin(), line.end(), sep, -1); tok_itr != tok_end; ++tok_itr, ++idx) {
+  //   // TODO: what if there are not enough or too many tokens in this line?
+  //   _columns.push_back(createDataColumnFromString(colNames[idx], *tok_itr));
+  // }
 
-  // now get the rest of the data
-  int linecnt = 2;
-  while (std::getline(inFile, line)) {
-    for (idx = 0, tok_itr = tokenizer(line.begin(), line.end(), sep, -1); tok_itr != tok_end; ++tok_itr, ++idx) {
-      // TODO: what if there are not enough or too many tokens in this line?
-      _columns[idx]->push_back(*tok_itr);
-    }
-    ++linecnt;
+  // // now get the rest of the data
+  // int linecnt = 2;
+  // while (std::getline(inFile, line)) {
+  //   for (idx = 0, tok_itr = tokenizer(line.begin(), line.end(), sep, -1); tok_itr != tok_end; ++tok_itr, ++idx) {
+  //     // TODO: what if there are not enough or too many tokens in this line?
+  //     _columns[idx]->push_back(*tok_itr);
+  //   }
+  //   ++linecnt;
 
-    if (linecnt % 5000 == 0) {
-      std::cout << "line cnt update: " << linecnt << std::endl;
-    }
-  }
+  //   if (linecnt % 5000 == 0) {
+  //     std::cout << "line cnt update: " << linecnt << std::endl;
+  //   }
+  // }
 
-  inFile.close();
+  // inFile.close();
 }
 
 void DataTable::_readDataFromFile(const std::string& filename) {
