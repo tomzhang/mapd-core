@@ -13,126 +13,113 @@
 
 #include "rapidjson/document.h"
 // #include <utility>  // std::pair
-#include <memory>   // std::unique_ptr
+#include <memory>  // std::unique_ptr
 #include <GLFW/glfw3.h>
 
 namespace MapD_Renderer {
 
-    class QueryRendererContext;
-    class BaseMark;
-    class BaseScale;
+class QueryRendererContext;
+class BaseMark;
+class BaseScale;
 
-    class QueryRenderer {
-        public:
-            QueryRenderer(const std::string& configJSON, bool doHitTest=false, bool doDepthTest=false, GLFWwindow *win=nullptr);
+class QueryRenderer {
+ public:
+  QueryRenderer(const std::string& configJSON,
+                bool doHitTest = false,
+                bool doDepthTest = false,
+                GLFWwindow* win = nullptr);
 
-            ~QueryRenderer();
+  ~QueryRenderer();
 
+  int getWidth();
+  int getHeight();
+  void setWidthHeight(int width, int height, GLFWwindow* win = nullptr);
 
-            int getWidth();
-            int getHeight();
-            void setWidthHeight(int width, int height, GLFWwindow *win=nullptr);
+  const QueryFramebufferUqPtr& getFramebuffer();
 
-            const QueryFramebufferUqPtr& getFramebuffer();
+  void setJSONConfig(const std::string& configJSON, GLFWwindow* win = nullptr);
 
-            void setJSONConfig(const std::string& configJSON, GLFWwindow *win=nullptr);
+  void render();
 
-            void render();
+  unsigned int getIdAt(int x, int y);
 
-            unsigned int getIdAt(int x, int y);
+ private:
+  bool _doHitTest;
+  bool _doDepthTest;
 
+  std::shared_ptr<QueryRendererContext> _ctx;
+  QueryFramebufferUqPtr _framebufferPtr;
 
+  void _clear();
+  void _initFromJSON(const std::string& configJSON, GLFWwindow* win = nullptr);
+  void _initFramebuffer(int width, int height);
+};
 
-        private:
-            bool _doHitTest;
-            bool _doDepthTest;
+typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
+typedef std::shared_ptr<QueryRenderer> QueryRendererShPtr;
 
-            std::shared_ptr<QueryRendererContext> _ctx;
-            QueryFramebufferUqPtr _framebufferPtr;
+class QueryRendererContext {
+ public:
+  typedef std::shared_ptr<BaseScale> ScaleShPtr;
 
-            void _clear();
-            void _initFromJSON(const std::string& configJSON, GLFWwindow *win=nullptr);
-            void _initFramebuffer(int width, int height);
-    };
+  QueryRendererContext() : _width(0), _height(0) {}
+  QueryRendererContext(int width, int height) : _width(width), _height(height) {}
+  ~QueryRendererContext() { _clear(); }
 
-    typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
-    typedef std::shared_ptr<QueryRenderer> QueryRendererShPtr;
+  int getWidth() { return _width; }
 
+  int getHeight() { return _height; }
 
+  bool hasDataTable(const std::string& tableName) const;
+  DataTableShPtr getDataTable(const std::string& tableName) const;
 
+  bool hasScale(const std::string& scaleConfigName) const;
+  ScaleShPtr getScale(const std::string& scaleConfigName) const;
 
-    class QueryRendererContext {
-        public:
-            typedef std::shared_ptr<BaseScale> ScaleShPtr;
+  // bool hasMark(const std::string& geomConfigName) const {
+  //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
+  // }
 
-            QueryRendererContext() : _width(0), _height(0) {}
-            QueryRendererContext(int width, int height) : _width(width), _height(height) {}
-            ~QueryRendererContext() {
-                _clear();
-            }
+  // GeomConfigShPtr getMark(const std::string& geomConfigName) {
+  //     GeomConfigShPtr rtn(nullptr);
 
-            int getWidth() {
-                return _width;
-            }
+  //     auto itr = _geomConfigMap.find(geomConfigName);
+  //     if (itr != _geomConfigMap.end()) {
+  //         rtn = itr->second;
+  //     }
 
-            int getHeight() {
-                return _height;
-            }
+  //     return rtn;
+  // }
 
-            bool hasDataTable(const std::string& tableName) const;
-            DataTableShPtr getDataTable(const std::string& tableName) const;
+  friend class QueryRenderer;
 
-            bool hasScale(const std::string& scaleConfigName) const;
-            ScaleShPtr getScale(const std::string& scaleConfigName) const;
+ private:
+  typedef std::unordered_map<std::string, ScaleShPtr> ScaleConfigMap;
 
-            // bool hasMark(const std::string& geomConfigName) const {
-            //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
-            // }
+  typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
 
-            // GeomConfigShPtr getMark(const std::string& geomConfigName) {
-            //     GeomConfigShPtr rtn(nullptr);
+  typedef std::vector<GeomConfigShPtr> GeomConfigVector;
+  typedef std::unordered_map<std::string, DataTableShPtr> DataTableMap;
 
-            //     auto itr = _geomConfigMap.find(geomConfigName);
-            //     if (itr != _geomConfigMap.end()) {
-            //         rtn = itr->second;
-            //     }
+  DataTableMap _dataTableMap;
+  ScaleConfigMap _scaleConfigMap;
+  GeomConfigVector _geomConfigs;
 
-            //     return rtn;
-            // }
+  int _width;
+  int _height;
 
-            friend class QueryRenderer;
+  void _clear() {
+    _width = 0;
+    _height = 0;
+    _dataTableMap.clear();
+    _scaleConfigMap.clear();
+    _geomConfigs.clear();
+  }
+};
 
-        private:
-            typedef std::unordered_map<std::string, ScaleShPtr> ScaleConfigMap;
+typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;
+typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 
-            typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
+};  // MapD_Renderer namespace
 
-            typedef std::vector<GeomConfigShPtr> GeomConfigVector;
-            typedef std::unordered_map<std::string, DataTableShPtr> DataTableMap;
-
-            DataTableMap _dataTableMap;
-            ScaleConfigMap _scaleConfigMap;
-            GeomConfigVector _geomConfigs;
-
-            int _width;
-            int _height;
-
-            void _clear() {
-                _width = 0;
-                _height = 0;
-                _dataTableMap.clear();
-                _scaleConfigMap.clear();
-                _geomConfigs.clear();
-            }
-    };
-
-    typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;
-    typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
-
-
-
-
-
-}; // MapD_Renderer namespace
-
-#endif // QUERY_RENDERER_H_
+#endif  // QUERY_RENDERER_H_

@@ -7,6 +7,6 @@ namespace MapD_Renderer {
 
 std::string getShaderCodeFromFile(const std::string& shaderFilename);
 
-} // namespace MapD_Renderer
+}  // namespace MapD_Renderer
 
-#endif // SHADER_UTILS_H_
+#endif  // SHADER_UTILS_H_

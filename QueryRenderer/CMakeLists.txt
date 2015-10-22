@@ -11,8 +11,8 @@ include_directories(${GD_INCLUDE_DIR})
 include_directories(${GLFW3_INCLUDE_DIR})
 include_directories(ThirdParty/rapidjson)
 
-add_executable(backendrenderer backendrenderer.cpp QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp)
-add_library(QueryRenderer QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp)
+add_executable(backendrenderer backendrenderer.cpp QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp MapDGL.cpp)
+add_library(QueryRenderer QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp MapDGL.cpp)
 
 target_link_libraries(backendrenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES})
 target_link_libraries(QueryRenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES})

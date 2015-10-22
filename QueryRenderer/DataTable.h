@@ -4,65 +4,62 @@
 #include "VertexBuffer.h"
 #include "TypeGL.h"
 #include "Color.h"
-#include "rapidjson/document.h"
-#include <string>
-#include <memory>
-#include <algorithm> // minmax_element
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
 
-namespace MapD_Renderer {
+#include <string>
+#include <memory>
+#include <algorithm>  // minmax_element
 
+#include "rapidjson/document.h"
+
+namespace MapD_Renderer {
 
 enum class DataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR };
 
 class BaseDataVBO {
-    public:
-        BaseDataVBO() : _vbo(nullptr) {}
-        BaseDataVBO(const VertexBufferShPtr& vbo) : _vbo(vbo) {}
-        virtual ~BaseDataVBO() {}
+ public:
+  BaseDataVBO() : _vbo(nullptr) {}
+  explicit BaseDataVBO(const VertexBufferShPtr& vbo) : _vbo(vbo) {}
+  virtual ~BaseDataVBO() {}
 
-        virtual bool hasColumn(const std::string& columnName) = 0;
-        virtual VertexBufferShPtr getColumnDataVBO(const std::string& columnName) = 0;
-        virtual int numRows() = 0;
+  virtual bool hasColumn(const std::string& columnName) = 0;
+  virtual VertexBufferShPtr getColumnDataVBO(const std::string& columnName) = 0;
+  virtual int numRows() = 0;
 
-    protected:
-        VertexBufferShPtr _vbo;
+ protected:
+  VertexBufferShPtr _vbo;
 };
 
 typedef std::unique_ptr<BaseDataVBO> DataVBOUqPtr;
 typedef std::shared_ptr<BaseDataVBO> DataVBOShPtr;
 
-
-
-
 struct TypelessColumnData {
-    void *data;
-    size_t numItems;
-    size_t numBytesPerItem;
+  void* data;
+  size_t numItems;
+  size_t numBytesPerItem;
 };
 
-
 class DataColumn {
-    public:
-        enum class InitType { ROW_MAJOR=0, COLUMN_MAJOR };
+ public:
+  enum class InitType { ROW_MAJOR = 0, COLUMN_MAJOR };
 
-        std::string columnName;
+  std::string columnName;
 
-        DataColumn(const std::string& name) : columnName(name) {}
-        virtual ~DataColumn() {}
+  explicit DataColumn(const std::string& name) : columnName(name) {}
+  virtual ~DataColumn() {}
 
-        virtual int size() = 0;
+  virtual int size() = 0;
 
-        virtual DataType getColumnType() = 0;
-        virtual TypelessColumnData getTypelessColumnData() = 0;
-        virtual void push_back(const std::string& val) = 0;
+  virtual DataType getColumnType() = 0;
+  virtual TypelessColumnData getTypelessColumnData() = 0;
+  virtual void push_back(const std::string& val) = 0;
 
-        // for multi_index_container tag
-        struct ColumnName {};
+  // for multi_index_container tag
+  struct ColumnName {};
 };
 
 typedef std::unique_ptr<DataColumn> DataColumnUqPtr;
@@ -70,113 +67,114 @@ typedef std::shared_ptr<DataColumn> DataColumnShPtr;
 
 template <typename T>
 class TDataColumn : public DataColumn {
+ public:
+  TDataColumn(const std::string& name, int size = 0);
+  TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType);
+  ~TDataColumn() {}
 
-    public:
-        TDataColumn(const std::string& name, int size=0);
-        TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType);
-        ~TDataColumn() {}
+  T& operator[](unsigned int i) { return (*_columnDataPtr)[i]; }
 
-        T& operator[](unsigned int i) { return (*_columnDataPtr)[i]; }
+  void push_back(const T& val) { _columnDataPtr->push_back(val); }
 
-        void push_back(const T& val) { _columnDataPtr->push_back(val); }
+  void push_back(const std::string& val);
 
-        void push_back(const std::string& val);
+  DataType getColumnType();
 
-        DataType getColumnType();
+  std::shared_ptr<vector<T>> getColumnData() { return _columnDataPtr; }
+  TypelessColumnData getTypelessColumnData() {
+    return TypelessColumnData({static_cast<void*>(&(*_columnDataPtr)[0]), _columnDataPtr->size(), sizeof(T)});
+  };
 
-        std::shared_ptr<vector<T>> getColumnData() { return _columnDataPtr; }
-        TypelessColumnData getTypelessColumnData() {
-            return TypelessColumnData({
-                static_cast<void *>(&(*_columnDataPtr)[0]),
-                _columnDataPtr->size(),
-                sizeof(T)
-            });
-        };
+  std::pair<T, T> getExtrema() {
+    auto result = std::minmax_element(_columnDataPtr->begin(), _columnDataPtr->end());
 
+    assert(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end());
 
-        std::pair<T, T> getExtrema() {
-            auto result = std::minmax_element(_columnDataPtr->begin(), _columnDataPtr->end());
+    return std::make_pair(*result.first, *result.second);
+  }
 
-            assert(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end());
+  int size() { return _columnDataPtr->size(); }
 
-            return std::make_pair(*result.first, *result.second);
-        }
+ private:
+  std::shared_ptr<std::vector<T>> _columnDataPtr;
+  // TypeGL<T> _typeGL;
 
-        int size() {
-            return _columnDataPtr->size();
-        }
-
-    private:
-        std::shared_ptr<std::vector<T>> _columnDataPtr;
-        // TypeGL<T> _typeGL;
-
-        void _initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
-        void _initFromColMajorJSONObj(const rapidjson::Value& dataArrayObj);
+  void _initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
+  void _initFromColMajorJSONObj(const rapidjson::Value& dataArrayObj);
 };
+
+template <>
+DataType TDataColumn<unsigned int>::getColumnType();
+
+template <>
+DataType TDataColumn<int>::getColumnType();
+
+template <>
+DataType TDataColumn<float>::getColumnType();
+
+template <>
+DataType TDataColumn<double>::getColumnType();
+
+template <>
+DataType TDataColumn<ColorRGBA>::getColumnType();
+
+template <>
+void TDataColumn<ColorRGBA>::push_back(const std::string& val);
 
 template <>
 void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
 
-
 class DataTable : public BaseDataVBO {
-    public:
-        enum class VboType { SEQUENTIAL = 0, INTERLEAVED, INDIVIDUAL };
-        static const std::string defaultIdColumnName;
+ public:
+  enum class VboType { SEQUENTIAL = 0, INTERLEAVED, INDIVIDUAL };
+  static const std::string defaultIdColumnName;
 
-        DataTable(const rapidjson::Value& obj, bool buildIdColumn=false, VboType vboType=VboType::SEQUENTIAL);
-        ~DataTable() {}
+  DataTable(const rapidjson::Value& obj, bool buildIdColumn = false, VboType vboType = VboType::SEQUENTIAL);
+  ~DataTable() {}
 
-        template <typename C1, typename C2>
-        std::pair<C1, C2> getExtrema(const std::string& column);
+  template <typename C1, typename C2>
+  std::pair<C1, C2> getExtrema(const std::string& column);
 
-        std::string getName() {
-            return _name;
-        }
+  std::string getName() { return _name; }
 
-        bool hasColumn(const std::string& columnName) {
-            ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
-            return (nameLookup.find(columnName) != nameLookup.end());
-        }
+  bool hasColumn(const std::string& columnName) {
+    ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
+    return (nameLookup.find(columnName) != nameLookup.end());
+  }
 
-        DataType getColumnType(const std::string& columnName);
-        DataColumnShPtr getColumn(const std::string& columnName);
+  DataType getColumnType(const std::string& columnName);
+  DataColumnShPtr getColumn(const std::string& columnName);
 
-        VertexBufferShPtr getColumnDataVBO(const std::string& columnName);
+  VertexBufferShPtr getColumnDataVBO(const std::string& columnName);
 
+  int numRows() { return _numRows; }
 
-        int numRows() {
-            return _numRows;
-        }
+ private:
+  std::string _name;
+  VboType _vboType;
+  int _numRows;
 
-    private:
-        std::string _name;
-        VboType _vboType;
-        int _numRows;
+  typedef multi_index_container<
+      DataColumnShPtr,
+      indexed_by<random_access<>,
 
-        typedef multi_index_container<
-                    DataColumnShPtr,
-                    indexed_by<
-                        random_access<>,
+                 // hashed on name
+                 hashed_unique<tag<DataColumn::ColumnName>, member<DataColumn, std::string, &DataColumn::columnName>>>>
+      ColumnMap;
 
-                        // hashed on name
-                        hashed_unique<tag<DataColumn::ColumnName>, member<DataColumn,std::string,&DataColumn::columnName> >
-                    >
-                > ColumnMap;
+  typedef ColumnMap::index<DataColumn::ColumnName>::type ColumnMap_by_name;
 
-        typedef ColumnMap::index<DataColumn::ColumnName>::type ColumnMap_by_name;
+  ColumnMap _columns;
 
-        ColumnMap _columns;
-
-        void _buildColumnsFromJSONObj(const rapidjson::Value& obj, bool buildIdColumn);
-        void _populateColumnsFromJSONObj(const rapidjson::Value& obj);
-        void _readDataFromFile(const std::string& filename);
-        void _readFromCsvFile(const std::string& filename);
+  void _buildColumnsFromJSONObj(const rapidjson::Value& obj, bool buildIdColumn);
+  void _populateColumnsFromJSONObj(const rapidjson::Value& obj);
+  void _readDataFromFile(const std::string& filename);
+  void _readFromCsvFile(const std::string& filename);
 };
 
 typedef std::unique_ptr<DataTable> DataTableUqPtr;
 typedef std::shared_ptr<DataTable> DataTableShPtr;
 
-
 }  // namespace MapD_Renderer
 
-#endif // DATA_TABLE_H_
+#endif  // DATA_TABLE_H_

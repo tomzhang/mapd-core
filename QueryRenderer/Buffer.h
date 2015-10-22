@@ -8,40 +8,35 @@
 namespace MapD_Renderer {
 
 class Buffer {
-    public:
-        Buffer() : _bufferId(0) {
-            std::cout << "IN buffer CONSTRUCTOR " << _bufferId << std::endl;
-        }
+ public:
+  Buffer() : _bufferId(0) { std::cout << "IN buffer CONSTRUCTOR " << _bufferId << std::endl; }
 
-        // template <typename T>
-        // Buffer(std::vector<T>);
+  // template <typename T>
+  // Buffer(std::vector<T>);
 
-        // TODO: Should we make bufferId a shared resource?
-        Buffer(GLuint bufferId) : _bufferId(bufferId) {
-            std::cout << "IN buffer CONSTRUCTOR " << _bufferId << std::endl;
-        }
+  // TODO: Should we make bufferId a shared resource?
+  Buffer(GLuint bufferId) : _bufferId(bufferId) { std::cout << "IN buffer CONSTRUCTOR " << _bufferId << std::endl; }
 
-        virtual ~Buffer() {
-            // std::cout << "IN Buffer DESTRUCTOR" << std::endl;
-            if (_bufferId) {
-                glDeleteBuffers(1, &_bufferId);
-            }
-        }
+  virtual ~Buffer() {
+    // std::cout << "IN Buffer DESTRUCTOR" << std::endl;
+    if (_bufferId) {
+      glDeleteBuffers(1, &_bufferId);
+    }
+  }
 
-        virtual void bufferData(void *data, int numItems, int numBytesPerItem) = 0;
-        virtual int size() const = 0;
+  virtual void bufferData(void* data, int numItems, int numBytesPerItem) = 0;
+  virtual int size() const = 0;
 
-    private:
-
-    protected:
-        GLuint _bufferId;
-        void _initBuffer() {
-            if (!_bufferId) {
-                glGenBuffers(1, &_bufferId);
-            }
-        }
+ private:
+ protected:
+  GLuint _bufferId;
+  void _initBuffer() {
+    if (!_bufferId) {
+      glGenBuffers(1, &_bufferId);
+    }
+  }
 };
 
-} // namespace MapD_Renderer
+}  // namespace MapD_Renderer
 
 #endif  // BUFFER_H_
