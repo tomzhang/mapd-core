@@ -80,7 +80,7 @@ class TDataColumn : public DataColumn {
 
   DataType getColumnType();
 
-  std::shared_ptr<vector<T>> getColumnData() { return _columnDataPtr; }
+  std::shared_ptr<std::vector<T>> getColumnData() { return _columnDataPtr; }
   TypelessColumnData getTypelessColumnData() {
     return TypelessColumnData({static_cast<void*>(&(*_columnDataPtr)[0]), _columnDataPtr->size(), sizeof(T)});
   };

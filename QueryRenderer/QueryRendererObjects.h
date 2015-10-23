@@ -99,7 +99,7 @@ class ScaleDomainRangeData {
 
   int size() { return (_vectorPtr == nullptr ? 0 : _vectorPtr->size()); }
 
-  vector<T>& getVectorData() { return *_vectorPtr; }
+  std::vector<T>& getVectorData() { return *_vectorPtr; }
 
   inline TypeGLShPtr getTypeGL();
 

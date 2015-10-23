@@ -8,8 +8,6 @@
 #include <memory>
 #include <iostream>
 
-using namespace std;
-
 namespace MapD_Renderer {
 
 // typedef vector<GLuint> AttrInfo;
@@ -103,8 +101,8 @@ enum { ATTR_TYPE = 0, ATTR_SIZE, ATTR_LOC };
 
 class Shader {
  private:
-  typedef unordered_map<string, unique_ptr<AttrInfo>> AttrMap;
-  typedef unordered_map<string, unique_ptr<UniformAttrInfo>> UniformAttrMap;
+  typedef std::unordered_map<std::string, std::unique_ptr<AttrInfo>> AttrMap;
+  typedef std::unordered_map<std::string, std::unique_ptr<UniformAttrInfo>> UniformAttrMap;
 
   GLuint _vertShaderId;
   GLuint _fragShaderId;
@@ -112,25 +110,25 @@ class Shader {
   UniformAttrMap _uniformAttrs;
   AttrMap _vertexAttrs;
 
-  void _init(const string& vertSrc, const string& fragSrc);
+  void _init(const std::string& vertSrc, const std::string& fragSrc);
   void _cleanupIds();
 
  public:
-  Shader(const string& vertexShaderSrc, const string& fragmentShaderSrc);
+  Shader(const std::string& vertexShaderSrc, const std::string& fragmentShaderSrc);
   ~Shader();
 
-  string getVertexSource() const;
-  string getFragmentSource() const;
+  std::string getVertexSource() const;
+  std::string getFragmentSource() const;
 
   template <typename T>
-  void setUniformAttribute(const string& attrName, T attrValue) {
+  void setUniformAttribute(const std::string& attrName, T attrValue) {
     UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
 
     // TODO: check if bound
 
     if (iter == _uniformAttrs.end()) {
       // TODO: throw a warning/error?
-      cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
+      std::cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << std::endl;
       return;
     }
 
@@ -139,8 +137,8 @@ class Shader {
     GLint attrSz = info->size;
     if (attrSz != 1) {
       // TODO: throw a warning/error?
-      cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size 1 but should be " << attrSz
-           << endl;
+      std::cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size 1 but should be "
+                << attrSz << std::endl;
       return;
     }
 
@@ -151,14 +149,14 @@ class Shader {
   }
 
   template <typename T>
-  void setUniformAttribute(const string& attrName, const vector<T>& attrValue) {
+  void setUniformAttribute(const std::string& attrName, const std::vector<T>& attrValue) {
     UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
 
     // TODO: check if bound
 
     if (iter == _uniformAttrs.end()) {
       // TODO: throw a warning/error?
-      cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
+      std::cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << std::endl;
       return;
     }
 
@@ -167,8 +165,8 @@ class Shader {
     GLuint attrSz = info->size;
     if (attrSz != attrValue.size()) {
       // TODO: throw a warning/error?
-      cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size " << attrValue.size()
-           << " but should be " << attrSz << endl;
+      std::cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size " << attrValue.size()
+                << " but should be " << attrSz << std::endl;
       return;
     }
 
@@ -177,7 +175,7 @@ class Shader {
     // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
 
-  GLuint getVertexAttributeLocation(const string& attrName) const;
+  GLuint getVertexAttributeLocation(const std::string& attrName) const;
 
   void bindToRenderer() const;
 };
