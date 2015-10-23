@@ -74,7 +74,7 @@ AttachmentContainer::~AttachmentContainer() {
 }
 
 inline bool AttachmentContainer::isColorAttachment(GLenum attachment) {
-  return (attachment - GL_COLOR_ATTACHMENT0 < numColorAttachments);
+  return static_cast<int>(attachment - GL_COLOR_ATTACHMENT0) < numColorAttachments;
 }
 
 void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) {

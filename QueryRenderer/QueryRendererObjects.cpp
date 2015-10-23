@@ -1288,11 +1288,9 @@ GeomConfigShPtr MapD_Renderer::createMark(const rapidjson::Value& obj, const Que
   rapidjson::Value::ConstMemberIterator itr;
   assert((itr = obj.FindMember("type")) != obj.MemberEnd() && itr->value.IsString());
 
-  BaseMark::GeomType geomType;
   std::string strGeomType(itr->value.GetString());
 
   if (strGeomType == "points") {
-    geomType = BaseMark::POINTS;
     return GeomConfigShPtr(new PointMark(obj, ctx));
   } else {
     assert(false);

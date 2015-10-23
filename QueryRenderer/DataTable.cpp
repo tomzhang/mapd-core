@@ -36,31 +36,6 @@ DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnNa
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 }
 
-DataColumnUqPtr createDataColumnFromString(const std::string& columnName, const std::string& strVal) {
-  int ival;
-  float fval;
-
-  DataColumnUqPtr rtn;
-
-  if (boost::conversion::try_lexical_convert(strVal, ival)) {
-    // int
-    rtn.reset(new TDataColumn<int>(columnName));
-  } else if (boost::conversion::try_lexical_convert(strVal, fval)) {
-    // float
-    rtn.reset(new TDataColumn<float>(columnName));
-  } else if (ColorRGBA::isColorString(strVal)) {
-    rtn.reset(new TDataColumn<float>(columnName));
-  } else {
-    // TODO: What about other strings? Need to do some kind of string-to-num mapping
-    // TODO: throw an exceptions
-    assert(false);
-  }
-
-  rtn->push_back(strVal);
-
-  return rtn;
-}
-
 const std::string DataTable::defaultIdColumnName = "__id__";
 
 DataTable::DataTable(const rapidjson::Value& obj, bool buildIdColumn, VboType vboType)
@@ -192,7 +167,7 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool build
   if (buildIdColumn) {
     TDataColumn<unsigned int>* idColumn = new TDataColumn<unsigned int>(defaultIdColumnName, _numRows);
 
-    for (unsigned int i = 0; i < _numRows; ++i) {
+    for (int i = 0; i < _numRows; ++i) {
       (*idColumn)[i] = i + 1;
     }
 

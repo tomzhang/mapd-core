@@ -233,7 +233,7 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
   // setup the uniform attributes
   _uniformAttrs.clear();
   glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &numAttrs);
-  for (GLuint i = 0; i < numAttrs; ++i) {
+  for (GLuint i = 0; i < static_cast<GLuint>(numAttrs); ++i) {
     glGetActiveUniformName(_programId, i, 512, NULL, attrName);
     std::string attrNameStr(attrName);
 

@@ -132,7 +132,7 @@ void QueryRenderer::render() {
   glViewport(0, 0, _ctx->_width, _ctx->_height);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  for (int i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+  for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
     _ctx->_geomConfigs[i]->draw();
   }
 }
