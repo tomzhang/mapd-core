@@ -3,7 +3,6 @@
 #include <limits>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/lexical_cast.hpp>
 #include <fstream>
 #include <regex>
 
@@ -328,11 +327,6 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
 }
 
 template <typename T>
-TDataColumn<T>::TDataColumn(const std::string& name, int size)
-    : DataColumn(name), _columnDataPtr(new std::vector<T>(size)) {
-}
-
-template <typename T>
 TDataColumn<T>::TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType)
     : DataColumn(name), _columnDataPtr(new std::vector<T>()) {
   if (initType == DataColumn::InitType::ROW_MAJOR) {
@@ -340,14 +334,6 @@ TDataColumn<T>::TDataColumn(const std::string& name, const rapidjson::Value& dat
   } else {
     _initFromColMajorJSONObj(dataArrayObj);
   }
-}
-
-template <typename T>
-void TDataColumn<T>::push_back(const std::string& val) {
-  // TODO: this would throw a boost::bad_lexical_cast error
-  // if the conversion can't be done.. I may need to throw
-  // a MapD-compliant exception
-  _columnDataPtr->push_back(boost::lexical_cast<T>(val));
 }
 
 template <>

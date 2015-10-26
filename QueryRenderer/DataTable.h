@@ -5,6 +5,7 @@
 #include "TypeGL.h"
 #include "Color.h"
 
+#include <boost/lexical_cast.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
@@ -114,7 +115,7 @@ typedef std::shared_ptr<DataColumn> DataColumnShPtr;
 template <typename T>
 class TDataColumn : public DataColumn {
  public:
-  TDataColumn(const std::string& name, int size = 0);
+  TDataColumn(const std::string& name, int size = 0) : DataColumn(name), _columnDataPtr(new std::vector<T>(size)) {}
   TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType);
   ~TDataColumn() {}
 
@@ -122,7 +123,12 @@ class TDataColumn : public DataColumn {
 
   void push_back(const T& val) { _columnDataPtr->push_back(val); }
 
-  void push_back(const std::string& val);
+  void push_back(const std::string& val) {
+    // TODO: this would throw a boost::bad_lexical_cast error
+    // if the conversion can't be done.. I may need to throw
+    // a MapD-compliant exception
+    _columnDataPtr->push_back(boost::lexical_cast<T>(val));
+  }
 
   DataType getColumnType();
 
