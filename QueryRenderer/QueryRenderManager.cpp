@@ -1,6 +1,6 @@
 #include "QueryRenderManager.h"
 #include "QueryFramebuffer.h"
-#include <assert.h>
+#include <glog/logging.h>
 #include <time.h>
 #include <iostream>
 #include <stdexcept>
@@ -15,16 +15,22 @@ using ::MapD_Renderer::QueryRenderer;
 using ::MapD_Renderer::PngData;
 
 void glfwErrorCallback(int error, const char* errstr) {
-  // TODO(croot): log these errors instead of putting on stderr?
-  std::cerr << "GLFW error: 0x" << std::hex << error << ": " << errstr << std::endl;
+  // TODO(croot): should we throw an exception?
+  // NOTE: There are cases when an error is caught here, but
+  // is not fatal -- i.e. putting GLFW in headless mode.
+  LOG(ERROR) << "GLFW error: 0x" << std::hex << error << ": " << errstr << std::endl;
 }
 
 // QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode) : _debugMode(debugMode),
-// _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultBuffer(nullptr) {
-QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode)
-    : _debugMode(debugMode), _activeRenderer(nullptr), _windowPtr(nullptr), _queryResultBuffer(nullptr) {
+// _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultVBOPtr(nullptr) {
+QueryRenderManager::QueryRenderManager(unsigned int queryResultBufferSize, bool debugMode)
+    : _debugMode(debugMode),
+      _activeRenderer(nullptr),
+      _windowPtr(nullptr),
+      _queryResultVBOPtr(new QueryResultVertexBuffer(queryResultBufferSize)),
+      _queryResultBufferSize(queryResultBufferSize) {
   _initGLFW();
-  _initQueryResultBuffer(queryResultBufferSize);
+  _initQueryResultBuffer();
 }
 
 QueryRenderManager::~QueryRenderManager() {
@@ -36,7 +42,9 @@ void QueryRenderManager::_initGLFW() {
   glfwSetErrorCallback(glfwErrorCallback);
 
   if (!glfwInit()) {
-    throw std::runtime_error("GLFW error: Couldn't initialize GLFW");
+    std::runtime_error err("GLFW error: Couldn't initialize GLFW");
+    LOG(ERROR) << err.what();
+    throw err;
   }
 
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -49,7 +57,9 @@ void QueryRenderManager::_initGLFW() {
   if (_windowPtr == nullptr) {
     // TODO(croot): is this necessary? Will the error callback catch
     // all possible errors?
-    throw std::runtime_error("GLFW error: Couldn\'t create a window.");
+    std::runtime_error err("GLFW error: Couldn\'t create a window.");
+    LOG(ERROR) << err.what();
+    throw err;
   }
 
   glfwMakeContextCurrent(_windowPtr);
@@ -59,7 +69,9 @@ void QueryRenderManager::_initGLFW() {
   if (err != 0) {
     char errstr[512];
     snprintf(errstr, sizeof(errstr), "%s", glewGetErrorString(err));
-    throw std::runtime_error(std::string("GLEW error: Couldn\'t initialize glew. ") + errstr);
+    std::runtime_error err(std::string("GLEW error: Couldn\'t initialize glew. ") + errstr);
+    LOG(ERROR) << err.what();
+    throw err;
   }
 
   // glGetError();  // clear error code - this always throws error but seems to not matter
@@ -68,7 +80,19 @@ void QueryRenderManager::_initGLFW() {
   glfwSwapInterval(1);
 }
 
-void QueryRenderManager::_initQueryResultBuffer(int queryResultBufferSize) {
+void QueryRenderManager::_initQueryResultBuffer() {
+  // TODO(croot): Using GL_PIXEL_UNPACK_BUFFER for the target in the following
+  // constructor causes the framebuffer to fail with an incomplete attachment error.
+  // The following opengl wiki: https://www.opengl.org/wiki/GLAPI/glBindBuffer
+  // states that: "While a non-zero buffer object is bound to the GL_PIXEL_UNPACK_BUFFER target, the following commands
+  // are affected: glCompressedTexImage1D​, glCompressedTexImage2D​, glCompressedTexImage3D​,
+  // glCompressedTexSubImage1D​, glCompressedTexSubImage2D​, glCompressedTexSubImage3D​, glTexImage1D​,
+  // glTexImage2D​, glTexImage3D​, glTexSubImage1D​, glTexSubImage2D​, and glTexSubImage3D​. The pointer
+  // parameter is interpreted as an offset within the buffer object measured in basic machine units."
+  //
+  // So if GL_PIXEL_UNPACK_BUFFER is needed for CUDA interoperability, this could be a problem.
+  // _queryResultVBOPtr.reset(new VertexBuffer(_queryResultBufferSize, GL_ARRAY_BUFFER, GL_DYNAMIC_COPY));
+  // _queryResultVBOPtr.reset(new VertexBuffer(_queryResultBufferSize, GL_PIXEL_UNPACK_BUFFER, GL_DYNAMIC_COPY));
 }
 
 void QueryRenderManager::_setActiveUserWidget(int userId, int widgetId) const {
@@ -139,7 +163,6 @@ void QueryRenderManager::addUserWidget(int userId,
 
     if (wfMap->find(widgetId) != wfMap->end()) {
       // a framebuffer already exists! Throw an error.
-      // TODO(croot): How should we handle errors?
       throw std::runtime_error("User id: " + std::to_string(userId) + " with widget id: " + std::to_string(widgetId) +
                                " already exists.");
     }
@@ -147,8 +170,8 @@ void QueryRenderManager::addUserWidget(int userId,
 
   // (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(configJSON, doHitTest, doDepthTest, (_debugMode ?
   // _windowPtr.get() : nullptr)));
-  (*wfMap)[widgetId] =
-      QueryRendererUqPtr(new QueryRenderer(configJSON, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
+  (*wfMap)[widgetId] = QueryRendererUqPtr(
+      new QueryRenderer(configJSON, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
 
   _setActiveUserWidget(userId, widgetId);
 }

@@ -97,6 +97,26 @@ struct Uniform4fAttr : UniformAttrInfo {
   void setAttr(const void* data) { glUniform4fv(location, size, static_cast<const GLfloat*>(data)); }
 };
 
+struct Uniform1dAttr : UniformAttrInfo {
+  Uniform1dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data) { glUniform1dv(location, size, static_cast<const GLdouble*>(data)); }
+};
+
+struct Uniform2dAttr : UniformAttrInfo {
+  Uniform2dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data) { glUniform2dv(location, size, static_cast<const GLdouble*>(data)); }
+};
+
+struct Uniform3dAttr : UniformAttrInfo {
+  Uniform3dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data) { glUniform3dv(location, size, static_cast<const GLdouble*>(data)); }
+};
+
+struct Uniform4dAttr : UniformAttrInfo {
+  Uniform4dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data) { glUniform4dv(location, size, static_cast<const GLdouble*>(data)); }
+};
+
 enum { ATTR_TYPE = 0, ATTR_SIZE, ATTR_LOC };
 
 class Shader {

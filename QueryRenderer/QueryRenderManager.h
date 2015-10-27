@@ -3,7 +3,7 @@
 
 #include "QueryRenderer.h"
 #include "Shader.h"
-#include "VertexBuffer.h"
+#include "QueryResultVertexBuffer.h"
 
 #include <GLFW/glfw3.h>
 #include <gd.h>
@@ -37,7 +37,7 @@ typedef std::unordered_map<int, std::unique_ptr<WidgetRendererMap>> RendererTabl
 
 class QueryRenderManager {
  public:
-  explicit QueryRenderManager(int queryResultBufferSize = 500000, bool debugMode = false);
+  explicit QueryRenderManager(unsigned int queryResultBufferSize = 500000, bool debugMode = false);
   ~QueryRenderManager();
 
   bool inDebugMode() const;
@@ -92,10 +92,11 @@ class QueryRenderManager {
 
   // std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> _windowPtr;
   GLFWwindow* _windowPtr;
-  VertexBufferUqPtr _queryResultBuffer;
+  QueryResultVertexBufferShPtr _queryResultVBOPtr;
+  unsigned int _queryResultBufferSize;
 
   void _initGLFW();
-  void _initQueryResultBuffer(int queryResultBufferSize);
+  void _initQueryResultBuffer();
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
 };

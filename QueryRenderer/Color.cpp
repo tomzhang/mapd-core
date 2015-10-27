@@ -210,7 +210,7 @@ bool initFromHexString(const std::string& colorStr, ColorRGBA::ColorArray& color
     val = std::min(std::stoul(matches[3], nullptr, 16), 255ul);
     colorArray[static_cast<int>(ColorChannel::BLUE)] = convertToColorChannel(val);
 
-    colorArray[static_cast<int>(ColorChannel::ALPHA)] = 255;
+    colorArray[static_cast<int>(ColorChannel::ALPHA)] = 1.0;
 
     return true;
   }

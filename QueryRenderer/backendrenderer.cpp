@@ -14,8 +14,8 @@ using namespace MapD_Renderer;
 int fbwWidthRatio, fbwHeightRatio;
 int windowWidth, windowHeight;
 
-// QueryRenderManager renderManager(500000, true);
-QueryRenderManager renderManager;
+QueryRenderManager renderManager(500000, true);
+// QueryRenderManager renderManager;
 
 UserWidgetPair userWidgetId1 = std::make_pair(1, 1);
 UserWidgetPair userWidgetId2 = std::make_pair(1, 2);

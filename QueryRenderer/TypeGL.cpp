@@ -2,6 +2,10 @@
 
 using namespace MapD_Renderer;
 
+/*****************
+ * UNSIGNED INT
+ *****************/
+
 template <>
 std::string TypeGL<unsigned int, 1>::glslType() {
   return "uint";
@@ -11,6 +15,10 @@ template <>
 int TypeGL<unsigned int, 1>::baseGLType() {
   return GL_UNSIGNED_INT;
 }
+
+/*****************
+ * INT
+ *****************/
 
 template <>
 std::string TypeGL<int, 1>::glslType() {
@@ -52,6 +60,10 @@ int TypeGL<int, 4>::baseGLType() {
   return GL_INT;
 }
 
+/*****************
+ * FLOAT
+ *****************/
+
 template <>
 std::string TypeGL<float, 1>::glslType() {
   return "float";
@@ -66,8 +78,6 @@ template <>
 void TypeGL<float, 1>::setUseAsFloat(bool bindAsFloat, bool normalize) {
   _useAsFloat = true;
   _normalize = false;
-  // _bindFunc = std::bind(glVertexAttribPointer, std::placeholders::_1, 1, GL_FLOAT, GL_FALSE, std::placeholders::_2,
-  // std::placeholders::_3);
 }
 
 template <>
@@ -120,9 +130,11 @@ template <>
 void TypeGL<float, 4>::setUseAsFloat(bool bindAsFloat, bool normalize) {
   _useAsFloat = true;
   _normalize = false;
-  // _bindFunc = std::bind(glVertexAttribPointer, std::placeholders::_1, 4, GL_FLOAT, GL_FALSE, std::placeholders::_2,
-  // std::placeholders::_3);
 }
+
+/*****************
+ * DOUBLE
+ *****************/
 
 template <>
 std::string TypeGL<double, 1>::glslType() {
@@ -184,6 +196,10 @@ TypeGL<double, 4>::VertexAttribPtrFunc TypeGL<double, 4>::_getAltVertexAttribPoi
   return glVertexAttribLPointer;
 }
 
+/*****************
+ * UINT8
+ *****************/
+
 template <>
 std::string TypeGL<uint8_t, 1>::glslType() {
   return "uint";
@@ -222,3 +238,249 @@ template <>
 int TypeGL<uint8_t, 4>::baseGLType() {
   return GL_UNSIGNED_BYTE;
 }
+
+/*****************
+ * UINT64
+ *****************/
+
+template <>
+std::string TypeGL<uint64_t, 1>::glslType() {
+  // TODO(croot): make a specific class
+  // for these types and check for the
+  // existence of the extension at construction,
+  // or better yet, make it a static const
+  // member variable, if possible to reduce the
+  // if/else ? Not sure this is doable. Even
+  // with the static const variable, you still
+  // would need to do an if/else unless we're
+  // able to create an additional template
+  // specialization somehow, but i'm not sure
+  // how to do that.
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "uint64_t";
+  } else {
+    return "uint";
+  }
+}
+
+template <>
+int TypeGL<uint64_t, 1>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_UNSIGNED_INT64_NV;
+  } else {
+    return GL_UNSIGNED_INT;
+  }
+}
+
+// template <>
+// int TypeGL<uint64_t, 1>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(unsigned int) * numComponents();
+//   }
+// }
+
+template <>
+std::string TypeGL<uint64_t, 2>::glslType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "u64vec2";
+  } else {
+    return "uvec2";
+  }
+}
+
+template <>
+int TypeGL<uint64_t, 2>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_UNSIGNED_INT64_NV;
+  } else {
+    return GL_UNSIGNED_INT;
+  }
+}
+
+// template <>
+// int TypeGL<uint64_t, 2>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(unsigned int) * numComponents();
+//   }
+// }
+
+template <>
+std::string TypeGL<uint64_t, 3>::glslType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "u64vec3";
+  } else {
+    return "uvec3";
+  }
+}
+
+template <>
+int TypeGL<uint64_t, 3>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_UNSIGNED_INT64_NV;
+  } else {
+    return GL_UNSIGNED_INT;
+  }
+}
+
+// template <>
+// int TypeGL<uint64_t, 3>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(unsigned int) * numComponents();
+//   }
+// }
+
+template <>
+std::string TypeGL<uint64_t, 4>::glslType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "u64vec4";
+  } else {
+    return "uvec4";
+  }
+}
+
+template <>
+int TypeGL<uint64_t, 4>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_UNSIGNED_INT64_NV;
+  } else {
+    return GL_UNSIGNED_INT;
+  }
+}
+
+// template <>
+// int TypeGL<uint64_t, 4>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(unsigned int) * numComponents();
+//   }
+// }
+
+/*****************
+ * INT64
+ *****************/
+
+template <>
+std::string TypeGL<int64_t, 1>::glslType() {
+  // TODO(croot): make a specific class
+  // for these types and check for the
+  // existence of the extension at construction,
+  // or better yet, make it a static const
+  // member variable, if possible to reduce the
+  // if/else ? Not sure this is doable. Even
+  // with the static const variable, you still
+  // would need to do an if/else unless we're
+  // able to create an additional template
+  // specialization somehow, but i'm not sure
+  // how to do that.
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "int64_t";
+  } else {
+    return "iint";
+  }
+}
+
+template <>
+int TypeGL<int64_t, 1>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_INT64_NV;
+  } else {
+    return GL_INT;
+  }
+}
+
+// template <>
+// int TypeGL<int64_t, 1>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(int) * numComponents();
+//   }
+// }
+
+template <>
+std::string TypeGL<int64_t, 2>::glslType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "i64vec2";
+  } else {
+    return "ivec2";
+  }
+}
+
+template <>
+int TypeGL<int64_t, 2>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_INT64_NV;
+  } else {
+    return GL_INT;
+  }
+}
+
+// template <>
+// int TypeGL<int64_t, 2>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(int) * numComponents();
+//   }
+// }
+
+template <>
+std::string TypeGL<int64_t, 3>::glslType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "i64vec3";
+  } else {
+    return "ivec3";
+  }
+}
+
+template <>
+int TypeGL<int64_t, 3>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_INT64_NV;
+  } else {
+    return GL_INT;
+  }
+}
+
+// template <>
+// int TypeGL<int64_t, 3>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(int) * numComponents();
+//   }
+// }
+
+template <>
+std::string TypeGL<int64_t, 4>::glslType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return "i64vec4";
+  } else {
+    return "ivec4";
+  }
+}
+
+template <>
+int TypeGL<int64_t, 4>::baseGLType() {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    return GL_INT64_NV;
+  } else {
+    return GL_INT;
+  }
+}
+
+// template <>
+// int TypeGL<int64_t, 4>::numGLSLBytes() {
+//   if (GLEW_NV_vertex_attrib_integer_64bit) {
+//     return numBytes();
+//   } else {
+//     return sizeof(int) * numComponents();
+//   }
+// }

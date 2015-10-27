@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include "Shader.h"
+#include <stdexcept>
 
 using namespace MapD_Renderer;
 
@@ -93,6 +94,19 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
       rtn = new Uniform3fAttr(type, size, location);
       break;
     case GL_FLOAT_VEC4:
+      rtn = new Uniform4fAttr(type, size, location);
+      break;
+
+    case GL_DOUBLE:
+      rtn = new Uniform1fAttr(type, size, location);
+      break;
+    case GL_DOUBLE_VEC2:
+      rtn = new Uniform2fAttr(type, size, location);
+      break;
+    case GL_DOUBLE_VEC3:
+      rtn = new Uniform3fAttr(type, size, location);
+      break;
+    case GL_DOUBLE_VEC4:
       rtn = new Uniform4fAttr(type, size, location);
       break;
 
@@ -339,8 +353,7 @@ GLuint Shader::getVertexAttributeLocation(const std::string& attrName) const {
   AttrMap::const_iterator iter = _vertexAttrs.find(attrName);
 
   if (iter == _vertexAttrs.end()) {
-    // TODO: throw warning/error
-    assert(false);
+    throw std::runtime_error("Attribute \"" + attrName + "\" does not exist in shader. Cannot get attribute location.");
   }
 
   AttrInfo* info = iter->second.get();

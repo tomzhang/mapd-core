@@ -4,11 +4,13 @@
 // #include "Buffer.h"
 #include "BufferLayout.h"
 #include "Shader.h"
+#include <GL/glew.h>
 #include <vector>
 #include <memory>
 #include <iostream>
-#include <GL/glew.h>
 #include <unordered_map>
+#include <string>
+#include <stdexcept>
 
 namespace MapD_Renderer {
 
@@ -16,12 +18,18 @@ class VertexBuffer {
  public:
   typedef std::shared_ptr<BaseBufferLayout> BufferLayoutShPtr;
 
-  VertexBuffer(const BufferLayoutShPtr& layoutPtr) : _size(0), _bufferId(0), _layoutPtr(layoutPtr) {}
+  explicit VertexBuffer(const BufferLayoutShPtr& layoutPtr,
+                        GLenum target = GL_ARRAY_BUFFER,
+                        GLenum usage = GL_STATIC_DRAW)
+      : _size(0), _bufferId(0), _target(target), _usage(usage), _layoutPtr(layoutPtr) {}
 
   template <typename T>
-  VertexBuffer(const std::vector<T>& data, const BufferLayoutShPtr& layoutPtr)
-      : _size(0), _bufferId(0), _layoutPtr(layoutPtr) {
-    // TODO: validate that the data and the layout align
+  VertexBuffer(const std::vector<T>& data,
+               const BufferLayoutShPtr& layoutPtr,
+               GLenum target = GL_ARRAY_BUFFER,
+               GLenum usage = GL_STATIC_DRAW)
+      : _size(0), _bufferId(0), _target(target), _usage(usage), _layoutPtr(layoutPtr) {
+    // TODO(croot): validate that the data and the layout align
 
     // _size will be set in the bufferData() call
     bufferData((void*)&data[0], data.size(), sizeof(T));
@@ -44,26 +52,20 @@ class VertexBuffer {
   //     _layoutPtr = layoutPtr;
   // }
 
-  void bufferData(void* data,
-                  int numItems,
-                  int numBytesPerItem,
-                  GLenum target = GL_ARRAY_BUFFER,
-                  GLenum usage = GL_STATIC_DRAW) {
+  void bufferData(void* data, int numItems, int numBytesPerItem) {
     _initBuffer();
     // glGenBuffers(1, &_bufferId);
 
     // don't mess with the current state
-    // TODO: Apply some kind of push-pop state system
+    // TODO(croot): Apply some kind of push-pop state system
     GLint currArrayBuf;
-    glGetIntegerv(_getBufferBinding(target), &currArrayBuf);
+    glGetIntegerv(_getBufferBinding(_target), &currArrayBuf);
 
-    glBindBuffer(target, _bufferId);
+    glBindBuffer(_target, _bufferId);
+    glBufferData(_target, numItems * numBytesPerItem, data, _usage);
 
-    // TODO: what about the last usage parameter? Should the buffer's constructor
-    // handle the different usage types?
-    glBufferData(target, numItems * numBytesPerItem, data, usage);
-
-    glBindBuffer(target, currArrayBuf);
+    // restore the state
+    glBindBuffer(_target, currArrayBuf);
 
     _size = numItems;
   }
@@ -71,7 +73,11 @@ class VertexBuffer {
   int size() const { return _size; }
 
   void bindToRenderer(Shader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "") {
-    assert(_bufferId && _layoutPtr);
+    if (!_bufferId) {
+      throw std::runtime_error("Cannot bind vertex buffer. It has not been initialized with data.");
+    } else if (!_layoutPtr) {
+      throw std::runtime_error("Cannot bind vertex buffer. It does not have a defined layout.");
+    }
     glBindBuffer(GL_ARRAY_BUFFER, _bufferId);
     _layoutPtr->bindToRenderer(activeShader, size(), attr, shaderAttr);
   }
@@ -85,8 +91,7 @@ class VertexBuffer {
     BufferBindingMap::const_iterator itr;
 
     if ((itr = bufferBindings.find(target)) == bufferBindings.end()) {
-      // TODO: throw exception
-      assert(false);
+      throw std::runtime_error(std::to_string(target) + " is not a valid opengl buffer target");
     }
 
     return itr->first;
@@ -94,6 +99,8 @@ class VertexBuffer {
 
   int _size;
   GLuint _bufferId;
+  GLenum _target;
+  GLenum _usage;
 
   std::shared_ptr<BaseBufferLayout> _layoutPtr;
 

@@ -233,7 +233,8 @@ VertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName) {
         // now cpy the column data into one big buffer, sequentially, and
         // buffer it all to the gpu via the VBO.
         // char byteData[numBytes];
-        char* byteData = new char[numBytes];
+        std::unique_ptr<char[]> byteDataPtr(new char[numBytes]);
+        char* byteData = byteDataPtr.get();
 
         // float byteData[numBytes/sizeof(float)];
         // memset(byteData, 0x0, numBytes);
@@ -256,12 +257,63 @@ VertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName) {
         vbo->bufferData(byteData, _numRows, numBytesPerItem);
         _vbo.reset(vbo);
 
-        delete[] byteData;
       } break;
 
-      case VboType::INTERLEAVED:
-        // TODO:
-        break;
+      case VboType::INTERLEAVED: {
+        InterleavedBufferLayout* vboLayout = new InterleavedBufferLayout();
+
+        ColumnMap::iterator itr;
+        int numBytes = 0;
+
+        std::vector<TypelessColumnData> columnData(_columns.size());
+
+        // build up the layout of the vertex buffer
+        for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
+          switch ((*itr)->getColumnType()) {
+            case DataType::UINT:
+              vboLayout->addAttribute((*itr)->columnName, BufferAttrType::UINT);
+              break;
+            case DataType::INT:
+              vboLayout->addAttribute((*itr)->columnName, BufferAttrType::INT);
+              break;
+            case DataType::FLOAT:
+              vboLayout->addAttribute((*itr)->columnName, BufferAttrType::FLOAT);
+              break;
+            case DataType::DOUBLE:
+              vboLayout->addAttribute((*itr)->columnName, BufferAttrType::DOUBLE);
+              break;
+            case DataType::COLOR:
+              vboLayout->addAttribute((*itr)->columnName, BufferAttrType::VEC4F);
+              break;
+          }
+
+          int idx = itr - _columns.begin();
+          columnData[idx] = (*itr)->getTypelessColumnData();
+          numBytes += columnData[idx].numItems * columnData[idx].numBytesPerItem;
+        }
+
+        // now cpy the column data into one big buffer, interleaving the data, and
+        // buffer it all to the gpu via the VBO.
+        // char byteData[numBytes];
+        std::unique_ptr<char[]> byteDataPtr(new char[numBytes]);
+        char* byteData = byteDataPtr.get();
+        memset(byteData, 0x0, numBytes);
+
+        int startIdx = 0;
+        for (size_t i = 0; i < _numRows; ++i) {
+          for (size_t j = 0; j < columnData.size(); ++j) {
+            int bytesPerItem = columnData[j].numBytesPerItem;
+            memcpy(&byteData[startIdx], static_cast<char*>(columnData[j].data) + (i * bytesPerItem), bytesPerItem);
+            startIdx += bytesPerItem;
+          }
+        }
+
+        vboLayoutPtr.reset(vboLayout);
+        VertexBuffer* vbo = new VertexBuffer(vboLayoutPtr);
+        vbo->bufferData(byteData, _numRows, vboLayout->getBytesPerVertex());
+        _vbo.reset(vbo);
+
+      } break;
       case VboType::INDIVIDUAL:
         // TODO: What kind of data structure should we do in this case? Should we do
         // one big unordered map, but there's only one item in the SEQUENTIAL &

@@ -1,9 +1,8 @@
 #include "QueryFramebuffer.h"
 #include <iostream>
-#include <assert.h>
+#include <stdexcept>
 
 using namespace MapD_Renderer;
-using namespace std;
 
 struct Texture2DSamplingProperties {
   GLint minFilter;
@@ -130,7 +129,9 @@ QueryFramebuffer::QueryFramebuffer(int width, int height, bool doHitTest, bool d
       _fbo(0),
       _textureBuffers(MAX_TEXTURE_BUFFERS + 1, 0),
       _renderBuffers(MAX_RENDER_BUFFERS + 1, 0) {
-  assert(width > 0 && height > 0);
+  if (width <= 0 || height <= 0) {
+    throw std::runtime_error("Invalid dimensions for the framebuffer. Dimensions are <= 0.");
+  }
   _init(doHitTest, doDepthTest);
 }
 
@@ -177,10 +178,43 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
   GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
   if (status != GL_FRAMEBUFFER_COMPLETE) {
-    // TODO - throw error?
-    std::cerr << "FB error status: 0x" << status << std::endl;
+    std::stringstream ss;
+    ss << "Framebuffer error: 0x" << std::hex << status << ".";
+
+    switch (status) {
+      case GL_FRAMEBUFFER_UNDEFINED:
+        ss << " The default framebuffer does not exist.";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        ss << " One or more of the framebuffer attachments are incomplete.";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        ss << " The framebuffer does not have any images attached to it.";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+        ss << " The framebuffer has an undefined type for one or more of the color attachments for drawing.";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+        ss << " The framebuffer has an undefined type for one or more of the color attachments for reading.";
+        break;
+      case GL_FRAMEBUFFER_UNSUPPORTED:
+        ss << " The combination of internal formats for the attachments is unsupported.";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+        ss << " The value of GL_RENDERBUFFER_SAMPLES, GL_TEXTURE_SAMPLES, GL_TEXTURE_FIXED_SAMPLE_LOCATIONS, and/or "
+              "GL_TEXTURE_FIXED_SAMPLE_LOCATIONS is not the same for all attached "
+              "renderbuffers and textures.";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+        ss << " A framebuffer attachment is layered, or all color attachments are not from textures of the same target";
+        break;
+      default:
+        ss << " Encountered an undefined framebuffer error.";
+        break;
+    }
+
+    throw std::runtime_error(ss.str());
   }
-  assert(status == GL_FRAMEBUFFER_COMPLETE);
 
   glBindFramebuffer(GL_FRAMEBUFFER, currFramebuffer);
   glBindTexture(GL_TEXTURE_2D, currTexture);

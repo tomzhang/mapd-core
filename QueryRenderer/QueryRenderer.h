@@ -1,20 +1,22 @@
 #ifndef QUERY_RENDERER_H_
 #define QUERY_RENDERER_H_
 
-#include <string>
-#include <vector>
-#include <unordered_map>
-
+#include "QueryResultVertexBuffer.h"
 #include "QueryFramebuffer.h"
 #include "QueryRendererObjects.h"
 #include "QueryFramebuffer.h"
 // #include "QueryRenderManager.h"
 #include "DataTable.h"
 
+#include <GLFW/glfw3.h>
+
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <memory>  // std::unique_ptr
+
 #include "rapidjson/document.h"
 // #include <utility>  // std::pair
-#include <memory>  // std::unique_ptr
-#include <GLFW/glfw3.h>
 
 namespace MapD_Renderer {
 
@@ -25,6 +27,7 @@ class BaseScale;
 class QueryRenderer {
  public:
   QueryRenderer(const std::string& configJSON,
+                const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                 bool doHitTest = false,
                 bool doDepthTest = false,
                 GLFWwindow* win = nullptr);
@@ -62,8 +65,10 @@ class QueryRendererContext {
  public:
   typedef std::shared_ptr<BaseScale> ScaleShPtr;
 
-  QueryRendererContext() : _width(0), _height(0) {}
-  QueryRendererContext(int width, int height) : _width(width), _height(height) {}
+  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr)
+      : _queryResultVBOPtr(queryResultVBOPtr), _width(0), _height(0) {}
+  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr, int width, int height)
+      : _queryResultVBOPtr(queryResultVBOPtr), _width(width), _height(height) {}
   ~QueryRendererContext() { _clear(); }
 
   int getWidth() { return _width; }
@@ -104,6 +109,7 @@ class QueryRendererContext {
   DataTableMap _dataTableMap;
   ScaleConfigMap _scaleConfigMap;
   GeomConfigVector _geomConfigs;
+  QueryResultVertexBufferShPtr _queryResultVBOPtr;
 
   int _width;
   int _height;

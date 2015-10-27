@@ -28,6 +28,7 @@ rangeType_<name> getLinearScale_<name>(in domainType_<name> domainVal) {
     #else
         int startIdx = 0;
         int endIdx = numDomains_<name> - 1;
+        domainType_<name> midVal;
 
         if (domainVal == uDomains_<name>[startIdx]) {
             idx1 = startIdx;
@@ -44,11 +45,11 @@ rangeType_<name> getLinearScale_<name>(in domainType_<name> domainVal) {
                     break;
                 } else {
                     midVal = uDomains_<name>[midIdx];
-                    if (inSz == midVal) {
+                    if (domainVal == midVal) {
                         idx1 = midIdx;
                         idx2 = midIdx+1;
                         break;
-                    } else if (inSz > midVal) {
+                    } else if (domainVal > midVal) {
                         startIdx = midIdx;
                     } else {
                         endIdx = midIdx;

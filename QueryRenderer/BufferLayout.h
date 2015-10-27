@@ -40,15 +40,27 @@ enum class BufferAttrType {
   DOUBLE,
   VEC2D,
   VEC3D,
-  VEC4D
+  VEC4D,
+
+  UINT64,
+  VEC2UI64,
+  VEC3UI64,
+  VEC4UI64,
+
+  INT64,
+  VEC2I64,
+  VEC3I64,
+  VEC4I64,
 
   // COLOR_R,
   // COLOR_RG,
   // COLOR_RGB,
-  // COLOR_RGBA
+  // COLOR_RGBA,
+
+  MAX_BUFFER_ATTR_TYPE  // ALWAYS LEAVE THIS LAST, AND DO NOT USE
 };
 
-static std::array<TypeGLUqPtr, 17> attrTypeInfo = {{
+static std::array<TypeGLUqPtr, static_cast<size_t>(BufferAttrType::MAX_BUFFER_ATTR_TYPE)> attrTypeInfo = {{
     TypeGLUqPtr(new TypeGL<unsigned int, 1>()),  // UINT
 
     TypeGLUqPtr(new TypeGL<int, 1>()),  // INT
@@ -64,7 +76,17 @@ static std::array<TypeGLUqPtr, 17> attrTypeInfo = {{
     TypeGLUqPtr(new TypeGL<double, 1>()),  // DOUBLE
     TypeGLUqPtr(new TypeGL<double, 2>()),  // VEC2D
     TypeGLUqPtr(new TypeGL<double, 3>()),  // VEC3D
-    TypeGLUqPtr(new TypeGL<double, 4>())   // VEC4D
+    TypeGLUqPtr(new TypeGL<double, 4>()),  // VEC4D
+
+    TypeGLUqPtr(new TypeGL<uint64_t, 1>()),  // UINT64
+    TypeGLUqPtr(new TypeGL<uint64_t, 2>()),  // VEC2UI64
+    TypeGLUqPtr(new TypeGL<uint64_t, 3>()),  // VEC3UI64
+    TypeGLUqPtr(new TypeGL<uint64_t, 4>()),  // VEC4UI64
+
+    TypeGLUqPtr(new TypeGL<int64_t, 1>()),  // INT64
+    TypeGLUqPtr(new TypeGL<int64_t, 2>()),  // VEC2I64
+    TypeGLUqPtr(new TypeGL<int64_t, 3>()),  // VEC3I64
+    TypeGLUqPtr(new TypeGL<int64_t, 4>()),  // VEC4I64
 
     // TypeGLUqPtr(new TypeGL<uint8_t, 1>(true, true)),   // COLOR_R
     // TypeGLUqPtr(new TypeGL<uint8_t, 2>(true, true)),   // COLOR_RG
@@ -137,6 +159,12 @@ class BaseBufferLayout {
   BufferAttrMap _attrMap;
 };
 
+
+typedef std::shared_ptr<BaseBufferLayout> BufferLayoutShPtr;
+typedef std::unique_ptr<BaseBufferLayout> BufferLayoutUqPtr;
+
+
+
 class CustomBufferLayout : public BaseBufferLayout {
  public:
   CustomBufferLayout() : BaseBufferLayout(CUSTOM) {}
@@ -164,6 +192,8 @@ class InterleavedBufferLayout : public BaseBufferLayout {
  public:
   InterleavedBufferLayout() : BaseBufferLayout(INTERLEAVED), _vertexByteSize(0) {}
 
+  int getBytesPerVertex() { return _vertexByteSize; }
+
   void addAttribute(const std::string& attrName, BufferAttrType type) {
     // TODO: throw exception instead
     assert(!hasAttribute(attrName) && attrName.length());
@@ -182,10 +212,50 @@ class InterleavedBufferLayout : public BaseBufferLayout {
     _vertexByteSize += attrTypeInfo[enumVal]->numBytes();
   }
 
+  template <typename T, int numComponents = 1>
+  void addAttribute(const std::string& attrName) {
+    // TODO(croot): throw exception
+    assert(!hasAttribute(attrName) && attrName.length());
+
+    BufferAttrType type = getBufferAttrType(T(0), numComponents);
+    int enumVal = static_cast<int>(type);
+
+    _attrMap.push_back(
+        BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, _vertexByteSize)));
+
+    _vertexByteSize += attrTypeInfo[enumVal]->numBytes();
+  }
+
   void bindToRenderer(Shader* activeShader,
                       int numActiveBufferItems,
                       const std::string& attr = "",
-                      const std::string& shaderAttr = "") {}
+                      const std::string& shaderAttr = "") {
+    GLuint attrLoc;
+    BaseTypeGL* attrPtr;
+
+    BufferAttrInfo* bufAttrPtr;
+
+    if (!attr.length()) {
+      BufferAttrMap::iterator itr;
+      for (itr = _attrMap.begin(); itr != _attrMap.end(); ++itr) {
+        bufAttrPtr = itr->get();
+        attrLoc = activeShader->getVertexAttributeLocation(bufAttrPtr->name);
+        attrPtr = bufAttrPtr->typeInfo;
+        attrPtr->bind(attrLoc, _vertexByteSize, bufAttrPtr->offset);
+      }
+    } else {
+      // TODO(croot): throw an exception
+      BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
+      BufferAttrMap_by_name::iterator itr;
+
+      // TODO(croot): throw an exception instead of an assert
+      assert((itr = nameLookup.find(attr)) != nameLookup.end());
+      bufAttrPtr = itr->get();
+      attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
+      attrPtr = bufAttrPtr->typeInfo;
+      attrPtr->bind(attrLoc, _vertexByteSize, bufAttrPtr->offset);
+    }
+  }
 
  private:
   int _vertexByteSize;

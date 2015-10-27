@@ -1,7 +1,16 @@
 #ifndef RAPID_JSON_UTILS_H_
 #define RAPID_JSON_UTILS_H_
 
+#include <stdexcept>
+#include <string>
+#include "rapidjson/document.h"
+
 namespace MapD_Renderer {
+
+class RJMapDException : public std::runtime_error {
+ public:
+  explicit RJMapDException(const std::string& what_arg) : std::runtime_error("Invalid json config: " + what_arg) {}
+};
 
 template <typename T>
 T getNumValFromJSONObj(const rapidjson::Value& obj) {

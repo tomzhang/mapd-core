@@ -37,7 +37,7 @@ class ColorRGBA {
   static const boost::regex rgbaRegex;
   static const boost::regex hexRegex;
 
-  ColorRGBA() : _colorArray({{0, 0, 0, 255}}) {}
+  ColorRGBA() : _colorArray({{0, 0, 0, 1}}) {}
   ColorRGBA(const std::string& colorStr) { initFromCSSString(colorStr); }
   ColorRGBA(uint8_t r, uint8_t g, uint8_t b)
       : _colorArray({{convertToColorChannel(r), convertToColorChannel(g), convertToColorChannel(b), 1.0}}) {}

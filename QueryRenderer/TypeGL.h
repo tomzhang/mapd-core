@@ -20,6 +20,7 @@ struct BaseTypeGL {
 
   virtual int numComponents() = 0;
   virtual int numBytes() = 0;
+  // virtual int numGLSLBytes() = 0;
   virtual int baseGLType() = 0;
   virtual std::string glslType() = 0;
 
@@ -44,6 +45,8 @@ struct TypeGL : BaseTypeGL {
   int numComponents() { return componentCnt; }
 
   int numBytes() { return sizeof(T) * numComponents(); }
+
+  // int numGLSLBytes() { return numBytes(); }
 
   int baseGLType();
   std::string glslType();
@@ -75,6 +78,7 @@ struct TypeGL : BaseTypeGL {
     } else {
       _getAltVertexAttribPointerFunc()(shaderAttrLoc, numComponents(), baseGLType(), stride, BUFFER_OFFSET(offset));
     }
+    glEnableVertexAttribArray(shaderAttrLoc);
   }
 
   // void bind(GLuint shaderAttrLoc, int stride, int offset) {
@@ -101,11 +105,15 @@ struct TypeGL : BaseTypeGL {
 
 // SPECIALIZATIONS
 
+// UNSIGNED INT:
+
 template <>
 std::string TypeGL<unsigned int, 1>::glslType();
 
 template <>
 int TypeGL<unsigned int, 1>::baseGLType();
+
+// INT:
 
 template <>
 std::string TypeGL<int, 1>::glslType();
@@ -130,6 +138,8 @@ std::string TypeGL<int, 4>::glslType();
 
 template <>
 int TypeGL<int, 4>::baseGLType();
+
+// FLOAT
 
 template <>
 std::string TypeGL<float, 1>::glslType();
@@ -167,6 +177,8 @@ int TypeGL<float, 4>::baseGLType();
 template <>
 void TypeGL<float, 4>::setUseAsFloat(bool bindAsFloat, bool normalize);
 
+// DOUBLE
+
 template <>
 std::string TypeGL<double, 1>::glslType();
 
@@ -203,6 +215,8 @@ int TypeGL<double, 4>::baseGLType();
 template <>
 TypeGL<double, 4>::VertexAttribPtrFunc TypeGL<double, 4>::_getAltVertexAttribPointerFunc();
 
+// UINT8
+
 template <>
 std::string TypeGL<uint8_t, 1>::glslType();
 
@@ -225,6 +239,82 @@ std::string TypeGL<uint8_t, 4>::glslType();
 
 template <>
 int TypeGL<uint8_t, 4>::baseGLType();
+
+// UINT64
+
+template <>
+std::string TypeGL<uint64_t, 1>::glslType();
+
+template <>
+int TypeGL<uint64_t, 1>::baseGLType();
+
+// template <>
+// int TypeGL<uint64_t, 1>::numGLSLBytes();
+
+template <>
+std::string TypeGL<uint64_t, 2>::glslType();
+
+template <>
+int TypeGL<uint64_t, 2>::baseGLType();
+
+// template <>
+// int TypeGL<uint64_t, 2>::numGLSLBytes();
+
+template <>
+std::string TypeGL<uint64_t, 3>::glslType();
+
+template <>
+int TypeGL<uint64_t, 3>::baseGLType();
+
+// template <>
+// int TypeGL<uint64_t, 3>::numGLSLBytes();
+
+template <>
+std::string TypeGL<uint64_t, 4>::glslType();
+
+template <>
+int TypeGL<uint64_t, 4>::baseGLType();
+
+// template <>
+// int TypeGL<uint64_t, 4>::numGLSLBytes();
+
+// INT64
+
+template <>
+std::string TypeGL<int64_t, 1>::glslType();
+
+template <>
+int TypeGL<int64_t, 1>::baseGLType();
+
+// template <>
+// int TypeGL<int64_t, 1>::numGLSLBytes();
+
+template <>
+std::string TypeGL<int64_t, 2>::glslType();
+
+template <>
+int TypeGL<int64_t, 2>::baseGLType();
+
+// template <>
+// int TypeGL<int64_t, 2>::numGLSLBytes();
+
+template <>
+std::string TypeGL<int64_t, 3>::glslType();
+
+template <>
+int TypeGL<int64_t, 3>::baseGLType();
+
+// template <>
+// int TypeGL<int64_t, 3>::numGLSLBytes();
+
+template <>
+std::string TypeGL<int64_t, 4>::glslType();
+
+template <>
+int TypeGL<int64_t, 4>::baseGLType();
+
+// template <>
+// int TypeGL<int64_t, 4>::numGLSLBytes();
 
 }  // namespace MapD_renderer
 

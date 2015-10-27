@@ -1,10 +1,21 @@
 #include "QueryRenderer.h"
+#include "RapidJSONUtils.h"
+#include <glog/logging.h>
 #include <utility>  // std::pair
+#include <stdexcept>
+#include "rapidjson/error/en.h"
 
 using namespace MapD_Renderer;
 
-QueryRenderer::QueryRenderer(const std::string& configJSON, bool doHitTest, bool doDepthTest, GLFWwindow* win)
-    : _doHitTest(doHitTest), _doDepthTest(doDepthTest), _ctx(new QueryRendererContext()), _framebufferPtr(nullptr) {
+QueryRenderer::QueryRenderer(const std::string& configJSON,
+                             const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                             bool doHitTest,
+                             bool doDepthTest,
+                             GLFWwindow* win)
+    : _doHitTest(doHitTest),
+      _doDepthTest(doDepthTest),
+      _ctx(new QueryRendererContext(queryResultVBOPtr)),
+      _framebufferPtr(nullptr) {
   _initFromJSON(configJSON, win);
 }
 
@@ -31,46 +42,57 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow* win
   rapidjson::Document obj;
   obj.Parse(configJSON.c_str());
 
+  // TODO(croot): this can be removed if the executor will handle the initial parse.
   if (obj.HasParseError()) {
-    // TODO: throw an error and gracefully deal
-    // with an un-initialized renderer object
-    //
-    // Use the following to get the error type
-    // for useful error info & logging:
-    // rapidjson::ParseErrorCode obj.GetParseError();
-    // see http://rapidjson.org/md_doc_dom.html#ParseError for more
-    assert(false);
+    throw RJMapDException("Error parsing the json config: offset: " + std::to_string(obj.GetErrorOffset()) +
+                          ", error: " + rapidjson::GetParseError_En(obj.GetParseError()));
   }
 
-  // TODO: throw exceptions instead of asserts
-  assert(obj.IsObject());
+  if (!obj.IsObject()) {
+    throw RJMapDException("Root object is not a JSON object.");
+  }
 
   rapidjson::Value::ConstMemberIterator mitr;
   rapidjson::Value::ConstValueIterator vitr;
 
-  assert((mitr = obj.FindMember("width")) != obj.MemberEnd() && mitr->value.IsInt());
+  if ((mitr = obj.FindMember("width")) == obj.MemberEnd()) {
+    throw RJMapDException("\"width\" is not defined.");
+  } else if (!mitr->value.IsInt()) {
+    throw RJMapDException("\"width\" is not an integer.");
+  }
   int width = mitr->value.GetInt();
 
-  assert((mitr = obj.FindMember("height")) != obj.MemberEnd() && mitr->value.IsInt());
+  if ((mitr = obj.FindMember("height")) == obj.MemberEnd()) {
+    throw RJMapDException("\"height\" is not defined.");
+  } else if (!mitr->value.IsInt()) {
+    throw RJMapDException("\"width\" is not an integer.");
+  }
   int height = mitr->value.GetInt();
 
   setWidthHeight(width, height, win);
 
   mitr = obj.FindMember("data");
   if (mitr != obj.MemberEnd()) {
-    assert(mitr->value.IsArray());
+    if (!mitr->value.IsArray()) {
+      throw RJMapDException("the \"data\" member must be an array.");
+    }
 
     DataTableShPtr dataTablePtr;
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      dataTablePtr.reset(new DataTable(*vitr, _doHitTest));  // NOTE: uses a SEQUENTIAL vbo by default
+      dataTablePtr.reset(
+          new DataTable(*vitr, _doHitTest, DataTable::VboType::INTERLEAVED));  // NOTE: uses a SEQUENTIAL vbo by
+                                                                               // default
+      // new DataTable(*vitr, _doHitTest, DataTable::VboType::SEQUENTIAL));  // NOTE: uses a SEQUENTIAL vbo by default
       _ctx->_dataTableMap.insert(std::make_pair(dataTablePtr->getName(), dataTablePtr));
     }
   }
 
   mitr = obj.FindMember("scales");
   if (mitr != obj.MemberEnd()) {
-    assert(mitr->value.IsArray());
+    if (!mitr->value.IsArray()) {
+      throw RJMapDException("the \"scales\" member must be an array.");
+    }
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
       ScaleShPtr scaleConfig = createScale(*vitr, _ctx);
@@ -80,7 +102,9 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow* win
 
   mitr = obj.FindMember("marks");
   if (mitr != obj.MemberEnd()) {
-    assert(mitr->value.IsArray());
+    if (!mitr->value.IsArray()) {
+      throw RJMapDException("the \"marks\" member must be an array");
+    }
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
       GeomConfigShPtr geomConfigPtr = createMark(*vitr, _ctx);
@@ -124,7 +148,9 @@ void QueryRenderer::setJSONConfig(const std::string& configJSON, GLFWwindow* win
 }
 
 void QueryRenderer::render() {
-  assert(_framebufferPtr != nullptr);
+  if (!_framebufferPtr) {
+    throw std::runtime_error("QueryRenderer: The framebuffer is not defined. Cannot render.");
+  }
 
   _framebufferPtr->bindToRenderer();
 
