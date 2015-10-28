@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include "rapidjson/document.h"
+#include "rapidjson/error/en.h"
 
 #include "gd.h"
 #include <fstream>
@@ -46,7 +47,7 @@ void mouse_move_callback(GLFWwindow* window, double xpos, double ypos) {
     xpos *= fbwWidthRatio;
     ypos *= fbwHeightRatio;
 
-    unsigned int id = renderManager.getIdAt(userWidgetId1, xpos, ypos);
+    unsigned int id = renderManager.getIdAt(xpos, ypos);
     std::cout << "CROOT - mouse move: (" << xpos << ", " << ypos << ") " << id << std::endl;
   }
 }
@@ -64,11 +65,19 @@ int main(int argc, char* argv[]) {
   inFile.seekg(0, std::ios::beg);
   configJSON.assign((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
 
-  if (!renderManager.hasUserWidget(userWidgetId1)) {
-    renderManager.addUserWidget(userWidgetId1, configJSON, true, false);
-  } else {
-    renderManager.setJSONConfigForUserWidget(userWidgetId1, configJSON);
+  renderManager.addUserWidget(userWidgetId1, true, false);
+  renderManager.setActiveUserWidget(userWidgetId1);
+
+  rapidjson::Document jsonDoc;
+  jsonDoc.Parse(configJSON.c_str());
+  if (jsonDoc.HasParseError()) {
+    throw std::runtime_error("Error parsing the json config: offset: " + std::to_string(jsonDoc.GetErrorOffset()) +
+                             ", error: " + rapidjson::GetParseError_En(jsonDoc.GetParseError()));
   }
+
+  renderManager.configureRender(jsonDoc);
+
+  // CudaHandle cudaHandle = renderManager.getCudaHandle();
 
   if (renderManager.inDebugMode()) {
     double lastTime = glfwGetTime();
@@ -93,10 +102,7 @@ int main(int argc, char* argv[]) {
       // Poll for and process events
       glfwPollEvents();
 
-      renderManager.renderUserWidget(userWidgetId1);
-
-      // Render here
-      // renderManager->render();
+      renderManager.render();
 
       // Measure speed
       double currentTime = glfwGetTime();
@@ -112,7 +118,7 @@ int main(int argc, char* argv[]) {
       glfwSwapBuffers(window);
     }
   } else {
-    PngData pngData = renderManager.renderToPng(userWidgetId1);
+    PngData pngData = renderManager.renderToPng();
     pngData.writeToFile("out.png");
 
     std::cout << "DONE with render" << std::endl;

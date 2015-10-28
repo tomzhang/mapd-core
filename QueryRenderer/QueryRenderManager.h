@@ -16,6 +16,8 @@
 #include <memory>
 #include <fstream>
 
+#include "rapidjson/document.h"
+
 namespace MapD_Renderer {
 
 struct PngData {
@@ -40,40 +42,30 @@ class QueryRenderManager {
   explicit QueryRenderManager(unsigned int queryResultBufferSize = 500000, bool debugMode = false);
   ~QueryRenderManager();
 
+  CudaHandle getCudaHandle();
+
   bool inDebugMode() const;
 
   bool hasUser(int userId) const;
   bool hasUserWidget(int userId, int widgetId) const;
   bool hasUserWidget(const UserWidgetPair& userWidgetPair) const;
 
-  void addUserWidget(int userId,
-                     int widgetId,
-                     const std::string& configJSON,
-                     bool doHitTest = false,
-                     bool doDepthTest = false);
-  void addUserWidget(const UserWidgetPair& userWidgetPair,
-                     const std::string& configJSON,
-                     bool doHitTest = false,
-                     bool doDepthTest = false);
+  void addUserWidget(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
+  void addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest = false, bool doDepthTest = false);
 
-  void setJSONConfigForUserWidget(int userId, int widgetId, const std::string& configJSON);
-  void setJSONConfigForUserWidget(const UserWidgetPair& userWidgetPair, const std::string& configJSON);
+  void setActiveUserWidget(int userId, int widgetId);
+  void setActiveUserWidget(const UserWidgetPair& userWidgetPair);
 
-  void setUserWidgetWidthHeight(int userId, int widgetId, int width, int height);
-  void setUserWidgetWidthHeight(const UserWidgetPair& userWidgetPair, int width, int height);
+  void setWidthHeight(int width, int height);
 
-  void renderUserWidget(int userId, int widgetId) const;
-  void renderUserWidget(const UserWidgetPair& userWidgetPair) const;
+  // TODO(croot): add result buffer layout object
+  void configureRender(const rapidjson::Document& jsonDocument);
 
-  PngData renderToPng(int userId, int widgetId) const;
-  PngData renderToPng(const UserWidgetPair& userWidgetPair) const;
-
-  // int getActiveUser() const;
-  // int getActiveWidgetId() const;
+  void render() const;
+  PngData renderToPng() const;
 
   // get the id at a specific pixel
-  unsigned int getIdAt(int userId, int widgetId, int x, int y) const;
-  unsigned int getIdAt(const UserWidgetPair& userWidgetPair, int x, int y) const;
+  unsigned int getIdAt(int x, int y) const;
 
   PngData getColorNoisePNG(int width, int height);
 

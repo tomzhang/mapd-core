@@ -7,6 +7,28 @@
 
 using namespace MapD_Renderer;
 
+QueryRenderer::QueryRenderer(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                             bool doHitTest,
+                             bool doDepthTest,
+                             GLFWwindow* win)
+    : _doHitTest(doHitTest),
+      _doDepthTest(doDepthTest),
+      _ctx(new QueryRendererContext(queryResultVBOPtr)),
+      _framebufferPtr(nullptr) {
+}
+
+QueryRenderer::QueryRenderer(const rapidjson::Document& jsonDocument,
+                             const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                             bool doHitTest,
+                             bool doDepthTest,
+                             GLFWwindow* win)
+    : _doHitTest(doHitTest),
+      _doDepthTest(doDepthTest),
+      _ctx(new QueryRendererContext(queryResultVBOPtr)),
+      _framebufferPtr(nullptr) {
+  _initFromJSON(jsonDocument, win);
+}
+
 QueryRenderer::QueryRenderer(const std::string& configJSON,
                              const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                              bool doHitTest,
@@ -36,9 +58,6 @@ void QueryRenderer::_initFramebuffer(int width, int height) {
 }
 
 void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow* win) {
-  // clear out the previous state? Or do we want to maintain the previous state in case of an error?
-  _clear();
-
   rapidjson::Document obj;
   obj.Parse(configJSON.c_str());
 
@@ -47,6 +66,13 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow* win
     throw RJMapDException("Error parsing the json config: offset: " + std::to_string(obj.GetErrorOffset()) +
                           ", error: " + rapidjson::GetParseError_En(obj.GetParseError()));
   }
+
+  _initFromJSON(obj, win);
+}
+
+void QueryRenderer::_initFromJSON(const rapidjson::Value& obj, GLFWwindow* win) {
+  // clear out the previous state? Or do we want to maintain the previous state in case of an error?
+  _clear();
 
   if (!obj.IsObject()) {
     throw RJMapDException("Root object is not a JSON object.");
@@ -144,7 +170,11 @@ const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer() {
 }
 
 void QueryRenderer::setJSONConfig(const std::string& configJSON, GLFWwindow* win) {
-  _initFromJSON(configJSON);
+  _initFromJSON(configJSON, win);
+}
+
+void QueryRenderer::setJSONDocument(const rapidjson::Document& jsonDocument, GLFWwindow* win) {
+  _initFromJSON(jsonDocument, win);
 }
 
 void QueryRenderer::render() {
@@ -164,10 +194,16 @@ void QueryRenderer::render() {
 }
 
 unsigned int QueryRenderer::getIdAt(int x, int y) {
-  // TODO: develop an API for reading from specific fbo buffers
+  if (!_framebufferPtr) {
+    throw std::runtime_error("QueryRenderer: The framebuffer is not defined. Cannot render.");
+  }
+
+  // TODO(croot): develop an API for reading from specific fbo buffers
   _framebufferPtr->bindToRenderer();
   glReadBuffer(GL_COLOR_ATTACHMENT1);
 
+  // TODO(croot): support a wider pixel check for a hit test and take a weighted avg
+  // of the results to get a more stable result at boundaries
   unsigned int id;
   glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id);
 

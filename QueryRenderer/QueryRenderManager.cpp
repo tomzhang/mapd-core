@@ -10,6 +10,7 @@
 #include "rapidjson/document.h"
 
 // using namespace MapD_Renderer;
+using ::MapD_Renderer::CudaHandle;
 using ::MapD_Renderer::QueryRenderManager;
 using ::MapD_Renderer::QueryRenderer;
 using ::MapD_Renderer::PngData;
@@ -95,14 +96,24 @@ void QueryRenderManager::_initQueryResultBuffer() {
   // _queryResultVBOPtr.reset(new VertexBuffer(_queryResultBufferSize, GL_PIXEL_UNPACK_BUFFER, GL_DYNAMIC_COPY));
 }
 
-void QueryRenderManager::_setActiveUserWidget(int userId, int widgetId) const {
+CudaHandle QueryRenderManager::getCudaHandle() {
+  if (!_queryResultVBOPtr) {
+    LOG(FATAL) << "The query render manager is in a corrupt state.";
+  }
+
+  return _queryResultVBOPtr->getCudaHandlePreQuery();
+}
+
+void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   UserWidgetPair userWidget = std::make_pair(userId, widgetId);
 
   if (userWidget != _activeUserWidget) {
     auto userIter = _rendererDict.find(userId);
 
     if (userIter == _rendererDict.end()) {
-      throw std::runtime_error("User id: " + std::to_string(userId) + " does not exist.");
+      std::runtime_error err("User id: " + std::to_string(userId) + " does not exist.");
+      LOG(ERROR) << err.what();
+      throw err;
     }
 
     WidgetRendererMap* wfMap = userIter->second.get();
@@ -110,8 +121,10 @@ void QueryRenderManager::_setActiveUserWidget(int userId, int widgetId) const {
     auto widgetIter = wfMap->find(widgetId);
 
     if (widgetIter == wfMap->end()) {
-      throw std::runtime_error("Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) +
-                               " does not exist.");
+      std::runtime_error err("Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) +
+                             " does not exist.");
+      LOG(ERROR) << err.what();
+      throw err;
     }
 
     _activeRenderer = widgetIter->second.get();
@@ -119,9 +132,8 @@ void QueryRenderManager::_setActiveUserWidget(int userId, int widgetId) const {
   }
 }
 
-QueryRenderer* QueryRenderManager::_getRendererForUserWidget(int userId, int widgetId) const {
-  _setActiveUserWidget(userId, widgetId);
-  return _activeRenderer;
+void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPair) {
+  setActiveUserWidget(userWidgetPair.first, userWidgetPair.second);
 }
 
 bool QueryRenderManager::inDebugMode() const {
@@ -146,11 +158,7 @@ bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) con
   return hasUserWidget(userWidgetPair.first, userWidgetPair.second);
 }
 
-void QueryRenderManager::addUserWidget(int userId,
-                                       int widgetId,
-                                       const std::string& configJSON,
-                                       bool doHitTest,
-                                       bool doDepthTest) {
+void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
   WidgetRendererMap* wfMap;
 
   auto userIter = _rendererDict.find(userId);
@@ -163,36 +171,47 @@ void QueryRenderManager::addUserWidget(int userId,
 
     if (wfMap->find(widgetId) != wfMap->end()) {
       // a framebuffer already exists! Throw an error.
-      throw std::runtime_error("User id: " + std::to_string(userId) + " with widget id: " + std::to_string(widgetId) +
-                               " already exists.");
+      std::runtime_error err("User id: " + std::to_string(userId) + " with widget id: " + std::to_string(widgetId) +
+                             " already exists.");
+      LOG(ERROR) << err.what();
+      throw err;
     }
   }
 
   // (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(configJSON, doHitTest, doDepthTest, (_debugMode ?
   // _windowPtr.get() : nullptr)));
   (*wfMap)[widgetId] = QueryRendererUqPtr(
-      new QueryRenderer(configJSON, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
+      new QueryRenderer(_queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
 
-  _setActiveUserWidget(userId, widgetId);
+  // TODO: should we set this as active the newly added ids as active?
+  // setActiveUserWidget(userId, widgetId);
 }
 
-void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair,
-                                       const std::string& configJSON,
-                                       bool doHitTest,
-                                       bool doDepthTest) {
-  addUserWidget(userWidgetPair.first, userWidgetPair.second, configJSON, doHitTest, doDepthTest);
+void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
+  addUserWidget(userWidgetPair.first, userWidgetPair.second, doHitTest, doDepthTest);
 }
 
-void QueryRenderManager::setJSONConfigForUserWidget(int userId, int widgetId, const std::string& configJSON) {
-  QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-  // renderer->setJSONConfig(configJSON, (_debugMode ? _windowPtr.get() : nullptr));
-  renderer->setJSONConfig(configJSON, (_debugMode ? _windowPtr : nullptr));
+void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument) {
+  if (!_activeRenderer) {
+    std::runtime_error err(
+        "There is no active user/widget id. Must set a user/widget id active before configuring the render.");
+    LOG(ERROR) << err.what();
+    throw err;
+  }
+
+  _activeRenderer->setJSONDocument(jsonDocument, (_debugMode ? _windowPtr : nullptr));
 }
 
-void QueryRenderManager::setJSONConfigForUserWidget(const UserWidgetPair& userWidgetPair,
-                                                    const std::string& configJSON) {
-  setJSONConfigForUserWidget(userWidgetPair.first, userWidgetPair.second, configJSON);
-}
+// void QueryRenderManager::setJSONConfigForUserWidget(int userId, int widgetId, const std::string& configJSON) {
+//   QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
+//   // renderer->setJSONConfig(configJSON, (_debugMode ? _windowPtr.get() : nullptr));
+//   renderer->setJSONConfig(configJSON, (_debugMode ? _windowPtr : nullptr));
+// }
+
+// void QueryRenderManager::setJSONConfigForUserWidget(const UserWidgetPair& userWidgetPair,
+//                                                     const std::string& configJSON) {
+//   setJSONConfigForUserWidget(userWidgetPair.first, userWidgetPair.second, configJSON);
+// }
 
 // int QueryRenderManager::getActiveUserId() const {
 //     if (_activeRenderer) {
@@ -210,26 +229,41 @@ void QueryRenderManager::setJSONConfigForUserWidget(const UserWidgetPair& userWi
 //     return -1;
 // }
 
-void QueryRenderManager::setUserWidgetWidthHeight(int userId, int widgetId, int width, int height) {
-  QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-  // renderer->setWidthHeight(width, height, (_debugMode ? _windowPtr.get() : nullptr));
-  renderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
+// void QueryRenderManager::setUserWidgetWidthHeight(int userId, int widgetId, int width, int height) {
+//   QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
+//   // renderer->setWidthHeight(width, height, (_debugMode ? _windowPtr.get() : nullptr));
+//   renderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
+// }
+
+// void QueryRenderManager::setUserWidgetWidthHeight(const UserWidgetPair& userWidgetPair, int width, int height) {
+//   setUserWidgetWidthHeight(userWidgetPair.first, userWidgetPair.second, width, height);
+// }
+
+void QueryRenderManager::setWidthHeight(int width, int height) {
+  if (!_activeRenderer) {
+    std::runtime_error err(
+        "There is no active user/widget id. Must set a user/widget id active before setting width/height.");
+    LOG(ERROR) << err.what();
+    throw err;
+  }
+  _activeRenderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
 }
 
-void QueryRenderManager::setUserWidgetWidthHeight(const UserWidgetPair& userWidgetPair, int width, int height) {
-  setUserWidgetWidthHeight(userWidgetPair.first, userWidgetPair.second, width, height);
-}
+void QueryRenderManager::render() const {
+  if (!_activeRenderer) {
+    std::runtime_error err("There is no active user/widget id. Must set a user/widget id active before rendering.");
+    LOG(ERROR) << err.what();
+    throw err;
+  }
 
-void QueryRenderManager::renderUserWidget(int userId, int widgetId) const {
-  QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-  renderer->render();
+  _activeRenderer->render();
 
   if (_debugMode) {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glDrawBuffer(GL_BACK);
 
     // TODO(croot): need an API to set the framebuffer's read buffer
-    renderer->getFramebuffer()->bindToRenderer(BindType::READ);
+    _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
 
     int framebufferWidth, framebufferHeight;
@@ -249,17 +283,18 @@ void QueryRenderManager::renderUserWidget(int userId, int widgetId) const {
   }
 }
 
-void QueryRenderManager::renderUserWidget(const UserWidgetPair& userWidgetPair) const {
-  renderUserWidget(userWidgetPair.first, userWidgetPair.second);
-}
+PngData QueryRenderManager::renderToPng() const {
+  if (!_activeRenderer) {
+    std::runtime_error err("There is no active user/widget id. Must set a user/widget id active before rendering.");
+    LOG(ERROR) << err.what();
+    throw err;
+  }
 
-PngData QueryRenderManager::renderToPng(int userId, int widgetId) const {
-  QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-  renderer->render();
+  _activeRenderer->render();
 
   // unsigned char* pixels = new unsigned char[width * height * 4];
-  int width = renderer->getWidth();
-  int height = renderer->getHeight();
+  int width = _activeRenderer->getWidth();
+  int height = _activeRenderer->getHeight();
   int r, g, b, a;
 
   gdImagePtr im = gdImageCreateTrueColor(width, height);
@@ -267,8 +302,8 @@ PngData QueryRenderManager::renderToPng(int userId, int widgetId) const {
   unsigned char* pixels = new unsigned char[width * height * 4];
 
   // TODO(croot): Make an improved read-pixels API for framebuffers
-  // renderer->getFramebuffer()->bindToRenderer(BindType::READ);
-  renderer->getFramebuffer()->bindToRenderer(BindType::READ);
+  // _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
+  _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
   glReadBuffer(GL_COLOR_ATTACHMENT0);
   glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
@@ -295,17 +330,14 @@ PngData QueryRenderManager::renderToPng(int userId, int widgetId) const {
   return PngData(pngPtr, pngSize);
 }
 
-PngData QueryRenderManager::renderToPng(const UserWidgetPair& userWidgetPair) const {
-  return renderToPng(userWidgetPair.first, userWidgetPair.second);
-}
-
-unsigned int QueryRenderManager::getIdAt(int userId, int widgetId, int x, int y) const {
-  QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-  return renderer->getIdAt(x, y);
-}
-
-unsigned int QueryRenderManager::getIdAt(const UserWidgetPair& userWidgetPair, int x, int y) const {
-  return getIdAt(userWidgetPair.first, userWidgetPair.second, x, y);
+unsigned int QueryRenderManager::getIdAt(int x, int y) const {
+  if (!_activeRenderer) {
+    std::runtime_error err(
+        "There is no active user/widget id. Must set a user/widget id active before requesting pixel data.");
+    LOG(ERROR) << err.what();
+    throw err;
+  }
+  return _activeRenderer->getIdAt(x, y);
 }
 
 int randColor() {

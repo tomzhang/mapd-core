@@ -4,6 +4,7 @@
 #include "BufferLayout.h"
 #include "Shader.h"
 #include <GL/glew.h>
+#include <glog/logging.h>
 
 // CUDA libs
 #include <cuda_runtime.h>
@@ -19,7 +20,10 @@
 namespace MapD_Renderer {
 
 struct CudaHandle {
+  void* handle;
   unsigned int numBytes;
+
+  CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
 };
 
 // TODO(croot): create a base VBO class that both the QueryResultVertexBuffer and VertexBuffer classes can
@@ -31,7 +35,8 @@ class QueryResultVertexBuffer {
   explicit QueryResultVertexBuffer(unsigned int numBytes,
                                    GLenum target = GL_ARRAY_BUFFER,
                                    GLenum usage = GL_DYNAMIC_COPY)
-      : _numTotalBytes(numBytes),
+      : _isActive(false),
+        _numTotalBytes(numBytes),
         _numRows(0),
         _bufferId(0),
         _cudaResource(nullptr),
@@ -42,7 +47,10 @@ class QueryResultVertexBuffer {
   ~QueryResultVertexBuffer() {
     if (_bufferId) {
       // TODO(croot): check for cuda errors?
-      cudaGraphicsUnregisterResource(_cudaResource);
+      if (_isActive) {
+        checkCudaErrors(cudaGraphicsUnmapResources(1, &_cudaResource, 0));
+      }
+      checkCudaErrors(cudaGraphicsUnregisterResource(_cudaResource));
       glDeleteBuffers(1, &_bufferId);
     }
   }
@@ -65,28 +73,54 @@ class QueryResultVertexBuffer {
 
   void setBufferLayout(const std::shared_ptr<BaseBufferLayout>& layoutPtr) { _layoutPtr = layoutPtr; }
 
-  CudaHandle prepForQuery() {
+  CudaHandle getCudaHandlePreQuery() {
+    // Handling the state of the buffer since the GL VBO needs to be mapped/unmapped to/from a CUDA buffer.
+    // Managing the state ensures that the mapping/unmapping is done in the appropriate order.
+    if (_isActive) {
+      std::runtime_error err("Query result buffer is already in use. Cannot access cuda handle.");
+      LOG(ERROR) << err.what();
+      throw err;
+    }
+
     // lazy load
     _initBuffer();
 
     // now map the buffer for cuda
     // TODO(croot) - check for cuda errors
-    cudaGraphicsMapResources(1, &_cudaResource, 0);
+    checkCudaErrors(cudaGraphicsMapResources(1, &_cudaResource, 0));
 
     void* cudaPtr;
     size_t num_bytes;
-    cudaGraphicsResourceGetMappedPointer(&cudaPtr, &num_bytes, _cudaResource);
+    checkCudaErrors(cudaGraphicsResourceGetMappedPointer(&cudaPtr, &num_bytes, _cudaResource));
 
-    return CudaHandle();
+    if (num_bytes != _numTotalBytes) {
+      std::runtime_error err("QueryResultVertexBuffer: couldn't successfully map all " +
+                             std::to_string(_numTotalBytes) + " bytes. Was only able to map " +
+                             std::to_string(num_bytes) + " bytes.");
+      LOG(ERROR) << err.what();
+      throw err;
+    }
+
+    _isActive = true;
+
+    return CudaHandle(cudaPtr, _numTotalBytes);
   }
 
-  void initializeLayoutPostQuery() {
+  void setLayoutPostQuery() {
     // TODO(croot): fill this function in. Should be called after the query is completed
     // and this buffer is filled with data. We just need to know what's in that data.
 
+    if (!_isActive) {
+      std::runtime_error err("Query result buffer has not been prepped for a query. Cannot set data post query.");
+      LOG(ERROR) << err.what();
+      throw err;
+    }
+
+    _isActive = false;
+
     // unmap buffer object
     // TODO(croot) check for cuda errors
-    cudaGraphicsUnmapResources(1, &_cudaResource, 0);
+    checkCudaErrors(cudaGraphicsUnmapResources(1, &_cudaResource, 0));
 
     // assuming interleaved right now
     _layoutPtr.reset(new InterleavedBufferLayout());
@@ -119,6 +153,14 @@ class QueryResultVertexBuffer {
     return itr->first;
   }
 
+  static void checkCudaErrors(cudaError_t result) {
+    if (result) {
+      fprintf(stderr, "CUDA error code=%d\n", static_cast<unsigned int>(result));
+      assert(false);
+    }
+  }
+
+  bool _isActive;
   unsigned int _numTotalBytes;
   unsigned int _numRows;
   GLuint _bufferId;
@@ -138,6 +180,8 @@ class QueryResultVertexBuffer {
 
       glBindBuffer(_target, _bufferId);
       glBufferData(_target, _numTotalBytes, 0, _usage);
+
+      checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, cudaGraphicsRegisterFlagsWriteDiscard));
 
       // restore the state
       // glBindBuffer(_target, currArrayBuf);

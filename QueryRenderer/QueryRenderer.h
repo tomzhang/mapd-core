@@ -26,11 +26,22 @@ class BaseScale;
 
 class QueryRenderer {
  public:
-  QueryRenderer(const std::string& configJSON,
-                const QueryResultVertexBufferShPtr& queryResultVBOPtr,
-                bool doHitTest = false,
-                bool doDepthTest = false,
-                GLFWwindow* win = nullptr);
+  explicit QueryRenderer(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                         bool doHitTest = false,
+                         bool doDepthTest = false,
+                         GLFWwindow* win = nullptr);
+
+  explicit QueryRenderer(const rapidjson::Document& jsonDocument,
+                         const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                         bool doHitTest = false,
+                         bool doDepthTest = false,
+                         GLFWwindow* win = nullptr);
+
+  explicit QueryRenderer(const std::string& configJSON,
+                         const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                         bool doHitTest = false,
+                         bool doDepthTest = false,
+                         GLFWwindow* win = nullptr);
 
   ~QueryRenderer();
 
@@ -41,6 +52,7 @@ class QueryRenderer {
   const QueryFramebufferUqPtr& getFramebuffer();
 
   void setJSONConfig(const std::string& configJSON, GLFWwindow* win = nullptr);
+  void setJSONDocument(const rapidjson::Document& jsonDocument, GLFWwindow* win = nullptr);
 
   void render();
 
@@ -54,6 +66,7 @@ class QueryRenderer {
   QueryFramebufferUqPtr _framebufferPtr;
 
   void _clear();
+  void _initFromJSON(const rapidjson::Value& obj, GLFWwindow* win = nullptr);
   void _initFromJSON(const std::string& configJSON, GLFWwindow* win = nullptr);
   void _initFramebuffer(int width, int height);
 };
