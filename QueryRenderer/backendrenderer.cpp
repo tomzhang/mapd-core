@@ -194,8 +194,8 @@ typedef struct {
 
 bool cudaInitialized = false;
 QueryDataLayout runCuda(CudaHandle cudaHandle, int numPts = 100) {
-  int sz = sizeof(Row);
-  int fullSz = numPts * sz;
+  size_t sz = sizeof(Row);
+  size_t fullSz = numPts * sz;
 
   assert(fullSz <= cudaHandle.numBytes);
 

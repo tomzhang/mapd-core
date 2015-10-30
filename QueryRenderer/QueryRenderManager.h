@@ -74,7 +74,7 @@ struct QueryDataLayout {
         // And support adding the attrnames and types in a constructor of
         // that base class?
         InterleavedBufferLayout* layout = new InterleavedBufferLayout();
-        for (int i = 0; i < attrNames.size(); ++i) {
+        for (size_t i = 0; i < attrNames.size(); ++i) {
           switch (attrTypes[i]) {
             case AttrType::UINT:
               layout->addAttribute(attrNames[i], BufferAttrType::UINT);
@@ -102,7 +102,7 @@ struct QueryDataLayout {
       }
       case LayoutType::SEQUENTIAL: {
         SequentialBufferLayout* layout = new SequentialBufferLayout();
-        for (int i = 0; i < attrNames.size(); ++i) {
+        for (size_t i = 0; i < attrNames.size(); ++i) {
           switch (attrTypes[i]) {
             case AttrType::UINT:
               layout->addAttribute(attrNames[i], BufferAttrType::UINT);
@@ -128,6 +128,9 @@ struct QueryDataLayout {
         }
         return BufferLayoutShPtr(layout);
       }
+      default:
+        assert(false);
+        return nullptr;
     }
   }
 };

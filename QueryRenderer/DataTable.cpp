@@ -17,8 +17,6 @@ DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
   } else if (rowItem.IsUint()) {
     return DataColumnUqPtr(new TDataColumn<unsigned int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
   } else if (rowItem.IsDouble()) {
-    double val = rowItem.GetDouble();
-
     // TODO(croot): How do we properly handle floats?
     return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 
@@ -302,7 +300,7 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
         memset(byteData, 0x0, numBytes);
 
         int startIdx = 0;
-        for (size_t i = 0; i < _numRows; ++i) {
+        for (int i = 0; i < _numRows; ++i) {
           for (size_t j = 0; j < columnData.size(); ++j) {
             int bytesPerItem = columnData[j].numBytesPerItem;
             memcpy(&byteData[startIdx], static_cast<char*>(columnData[j].data) + (i * bytesPerItem), bytesPerItem);
