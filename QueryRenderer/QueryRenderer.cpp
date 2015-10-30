@@ -11,10 +11,7 @@ QueryRenderer::QueryRenderer(const QueryResultVertexBufferShPtr& queryResultVBOP
                              bool doHitTest,
                              bool doDepthTest,
                              GLFWwindow* win)
-    : _doHitTest(doHitTest),
-      _doDepthTest(doDepthTest),
-      _ctx(new QueryRendererContext(queryResultVBOPtr)),
-      _framebufferPtr(nullptr) {
+    : _ctx(new QueryRendererContext(queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
 }
 
 QueryRenderer::QueryRenderer(const rapidjson::Document& jsonDocument,
@@ -22,10 +19,7 @@ QueryRenderer::QueryRenderer(const rapidjson::Document& jsonDocument,
                              bool doHitTest,
                              bool doDepthTest,
                              GLFWwindow* win)
-    : _doHitTest(doHitTest),
-      _doDepthTest(doDepthTest),
-      _ctx(new QueryRendererContext(queryResultVBOPtr)),
-      _framebufferPtr(nullptr) {
+    : _ctx(new QueryRendererContext(queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
   _initFromJSON(jsonDocument, win);
 }
 
@@ -34,10 +28,7 @@ QueryRenderer::QueryRenderer(const std::string& configJSON,
                              bool doHitTest,
                              bool doDepthTest,
                              GLFWwindow* win)
-    : _doHitTest(doHitTest),
-      _doDepthTest(doDepthTest),
-      _ctx(new QueryRendererContext(queryResultVBOPtr)),
-      _framebufferPtr(nullptr) {
+    : _ctx(new QueryRendererContext(queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
   _initFromJSON(configJSON, win);
 }
 
@@ -51,7 +42,7 @@ void QueryRenderer::_clear() {
 
 void QueryRenderer::_initFramebuffer(int width, int height) {
   if (_framebufferPtr == nullptr) {
-    _framebufferPtr.reset(new QueryFramebuffer(width, height, _doHitTest, _doDepthTest));
+    _framebufferPtr.reset(new QueryFramebuffer(width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
   } else {
     _framebufferPtr->resize(width, height);
   }
@@ -103,13 +94,16 @@ void QueryRenderer::_initFromJSON(const rapidjson::Value& obj, GLFWwindow* win) 
       throw RJMapDException("the \"data\" member must be an array.");
     }
 
-    DataTableShPtr dataTablePtr;
+    DataVBOShPtr dataTablePtr;
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      dataTablePtr.reset(
-          new DataTable(*vitr, _doHitTest, DataTable::VboType::INTERLEAVED));  // NOTE: uses a SEQUENTIAL vbo by
-                                                                               // default
+      // dataTablePtr.reset(
+      //     new DataTable(*vitr, _doHitTest, DataTable::VboType::INTERLEAVED));  // NOTE: uses a SEQUENTIAL vbo by
+      // default
       // new DataTable(*vitr, _doHitTest, DataTable::VboType::SEQUENTIAL));  // NOTE: uses a SEQUENTIAL vbo by default
+
+      dataTablePtr = createDataTable(*vitr, _ctx);
+
       _ctx->_dataTableMap.insert(std::make_pair(dataTablePtr->getName(), dataTablePtr));
     }
   }
@@ -177,12 +171,33 @@ void QueryRenderer::setJSONDocument(const rapidjson::Document& jsonDocument, GLF
   _initFromJSON(jsonDocument, win);
 }
 
+void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
+                                                     const int numRows,
+                                                     const int64_t invalid_key) {
+  _ctx->_queryResultBufferLayout = layoutPtr;
+  _ctx->_queryResultVBOPtr->updatePostQuery(layoutPtr, numRows);
+  _ctx->_invalidKey = invalid_key;
+
+  // TODO(croot): Should each mark have its own invalid key? Probably, if we support
+  // multiple sqls.
+  // But if we deal with multiple sqls, then the context probably shouldn't
+  // hold onto the invalidKey - the QueryResultVertexBuffer probably should, but
+  // then how do we deal with setting that uniform?
+  for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+    _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
+  }
+}
+
 void QueryRenderer::render() {
   if (!_framebufferPtr) {
     throw std::runtime_error("QueryRenderer: The framebuffer is not defined. Cannot render.");
   }
 
   _framebufferPtr->bindToRenderer();
+
+  glEnable(GL_BLEND);
+  glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
   glClearColor(0, 0, 0, 0);
   glViewport(0, 0, _ctx->_width, _ctx->_height);
@@ -214,8 +229,8 @@ bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
   return (_dataTableMap.find(tableName) != _dataTableMap.end());
 }
 
-DataTableShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
-  DataTableShPtr rtn(nullptr);
+DataVBOShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
+  DataVBOShPtr rtn(nullptr);
 
   auto itr = _dataTableMap.find(tableName);
   if (itr != _dataTableMap.end()) {
@@ -243,3 +258,24 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
 // void QueryRenderer::_buildShaderFromGeomConfig(const GeomConfigPtr& geomConfigPtr) {
 
 // }
+
+DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
+  // TODO(croot): change asserts to throwing/logging runtime errors
+  assert(obj.IsObject());
+
+  rapidjson::Value::ConstMemberIterator itr;
+
+  assert((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString());
+  std::string tableName = itr->value.GetString();
+
+  if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
+    assert(itr->value.IsString());
+    return DataVBOShPtr(new SqlQueryDataTable(tableName, ctx->getQueryResultVertexBuffer(), itr->value.GetString()));
+  } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
+    return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+  } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
+    return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+  } else {
+    assert(false);
+  }
+}

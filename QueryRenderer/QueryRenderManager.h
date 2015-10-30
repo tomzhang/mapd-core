@@ -4,6 +4,7 @@
 #include "QueryRenderer.h"
 #include "Shader.h"
 #include "QueryResultVertexBuffer.h"
+#include "BufferLayout.h"
 
 #include <GLFW/glfw3.h>
 #include <gd.h>
@@ -15,6 +16,8 @@
 #include <string>
 #include <memory>
 #include <fstream>
+#include <cstdint>
+#include <limits>
 
 #include "rapidjson/document.h"
 
@@ -30,6 +33,102 @@ struct PngData {
     std::ofstream pngFile(filename, std::ios::binary);
     pngFile.write(pngDataPtr, pngSize);
     pngFile.close();
+  }
+};
+
+struct QueryDataLayout {
+  enum class AttrType { UINT = 0, INT, FLOAT, DOUBLE, INT64 };
+  enum class LayoutType { INTERLEAVED = 0, SEQUENTIAL };
+
+  size_t numRows;
+  size_t keySz;
+  int64_t invalidKey;
+  std::vector<std::string> attrNames;
+  std::vector<AttrType> attrTypes;
+  LayoutType layoutType;
+
+  QueryDataLayout(size_t numRows,
+                  std::initializer_list<std::string> attrNames,
+                  std::initializer_list<AttrType> attrTypes,
+                  size_t keySz = 0,
+                  int64_t invalidKey = std::numeric_limits<int64_t>::max(),
+                  LayoutType layoutType = LayoutType::INTERLEAVED)
+      : numRows(numRows),
+        keySz(keySz),
+        invalidKey(invalidKey),
+        attrNames(attrNames),
+        attrTypes(attrTypes),
+        layoutType(layoutType) {
+    // TODO(croot): throw an error instead and quit gracefully?
+    assert(attrNames.size() == attrTypes.size());
+  }
+
+  BufferLayoutShPtr convertToBufferLayout() {
+    static const std::string dummyPrefix = "___dummy___";
+    int dummyCnt = 0;
+    switch (layoutType) {
+      case LayoutType::INTERLEAVED: {
+        // TODO(croot): make a base interleaved/sequential buffer class
+        // perhaps called BaseIntSeqBufferLayout
+        // so we don't have to duplicate code here.
+        // And support adding the attrnames and types in a constructor of
+        // that base class?
+        InterleavedBufferLayout* layout = new InterleavedBufferLayout();
+        for (int i = 0; i < attrNames.size(); ++i) {
+          switch (attrTypes[i]) {
+            case AttrType::UINT:
+              layout->addAttribute(attrNames[i], BufferAttrType::UINT);
+              break;
+            case AttrType::INT:
+              layout->addAttribute(attrNames[i], BufferAttrType::INT);
+              break;
+            case AttrType::FLOAT:
+              layout->addAttribute(attrNames[i], BufferAttrType::FLOAT);
+              break;
+            case AttrType::DOUBLE:
+              layout->addAttribute(attrNames[i], BufferAttrType::DOUBLE);
+              break;
+            case AttrType::INT64:
+              // TODO(croot): support 64-bit ints
+              // So for the time being, add a dummy attr for the first
+              // 32bits of the attr, and then the real attr for the
+              // last 32bits.
+              layout->addAttribute(attrNames[i], BufferAttrType::INT);
+              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::INT);
+              break;
+          }
+        }
+        return BufferLayoutShPtr(layout);
+      }
+      case LayoutType::SEQUENTIAL: {
+        SequentialBufferLayout* layout = new SequentialBufferLayout();
+        for (int i = 0; i < attrNames.size(); ++i) {
+          switch (attrTypes[i]) {
+            case AttrType::UINT:
+              layout->addAttribute(attrNames[i], BufferAttrType::UINT);
+              break;
+            case AttrType::INT:
+              layout->addAttribute(attrNames[i], BufferAttrType::INT);
+              break;
+            case AttrType::FLOAT:
+              layout->addAttribute(attrNames[i], BufferAttrType::FLOAT);
+              break;
+            case AttrType::DOUBLE:
+              layout->addAttribute(attrNames[i], BufferAttrType::DOUBLE);
+              break;
+            case AttrType::INT64:
+              // TODO(croot): support 64-bit ints
+              // So for the time being, add a dummy attr for the first
+              // 32bits of the attr, and then the real attr for the
+              // last 32bits.
+              layout->addAttribute(attrNames[i], BufferAttrType::INT);
+              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::INT);
+              break;
+          }
+        }
+        return BufferLayoutShPtr(layout);
+      }
+    }
   }
 };
 
@@ -59,7 +158,7 @@ class QueryRenderManager {
   void setWidthHeight(int width, int height);
 
   // TODO(croot): add result buffer layout object
-  void configureRender(const rapidjson::Document& jsonDocument);
+  void configureRender(const rapidjson::Document& jsonDocument, QueryDataLayout* dataLayoutPtr = nullptr);
 
   void render() const;
   PngData renderToPng() const;

@@ -98,16 +98,16 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
       break;
 
     case GL_DOUBLE:
-      rtn = new Uniform1fAttr(type, size, location);
+      rtn = new Uniform1dAttr(type, size, location);
       break;
     case GL_DOUBLE_VEC2:
-      rtn = new Uniform2fAttr(type, size, location);
+      rtn = new Uniform2dAttr(type, size, location);
       break;
     case GL_DOUBLE_VEC3:
-      rtn = new Uniform3fAttr(type, size, location);
+      rtn = new Uniform3dAttr(type, size, location);
       break;
     case GL_DOUBLE_VEC4:
-      rtn = new Uniform4fAttr(type, size, location);
+      rtn = new Uniform4dAttr(type, size, location);
       break;
 
     default:

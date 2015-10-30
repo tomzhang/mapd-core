@@ -15,6 +15,7 @@
 #include "RapidJSONUtils.h"
 #include "DataTable.h"
 #include "Color.h"
+#include <cstdint>
 
 namespace MapD_Renderer {
 
@@ -192,8 +193,8 @@ class BaseRenderProperty {
     // std::cerr << "IN BaseRenderProperty DESTRUCTOR " << _name << std::endl;
   }
 
-  void initializeFromJSONObj(const rapidjson::Value& obj, const DataTableShPtr& dataPtr);
-  void initializeFromData(const std::string& columnName, const DataTableShPtr& dataPtr);
+  void initializeFromJSONObj(const rapidjson::Value& obj, const DataVBOShPtr& dataPtr);
+  void initializeFromData(const std::string& columnName, const DataVBOShPtr& dataPtr);
 
   int size() const {
     if (_vboPtr) {
@@ -214,6 +215,9 @@ class BaseRenderProperty {
 
   std::string getOutGLSLType() const;
 
+  bool hasVboPtr() { return (_vboPtr != nullptr); }
+  BaseVertexBufferShPtr getVboPtr() const { return _vboPtr; }
+
   bool usesScaleConfig() { return (_scaleConfigPtr != nullptr); }
 
   ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
@@ -229,7 +233,7 @@ class BaseRenderProperty {
   bool _useScale;
 
   std::string _vboAttrName;
-  VertexBufferShPtr _vboPtr;
+  BaseVertexBufferShPtr _vboPtr;
 
   QueryRendererContextShPtr _ctx;
 
@@ -255,6 +259,7 @@ class RenderProperty : public BaseRenderProperty {
   }
 
   void initializeValue(const T& val, int numItems = 1);
+  void initializeEmpty();
 
  private:
   T _mult;
@@ -293,15 +298,25 @@ class BaseMark {
   // virtual std::pair<std::string, std::string> buildShaderSource() = 0;
   virtual void draw() = 0;
 
+  void setInvalidKey(const int64_t invalidKey) { _invalidKey = invalidKey; }
+
  protected:
-  DataTableShPtr _dataPtr;
+  // all query-based shaders should have a "key"
+
+  // TODO(croot): Should we use this as a "property"? Or should we
+  // just always include it as an int/int64? My feeling is it should
+  // always be present and should be an int/int64
+  RenderProperty<int> key;
+  int64_t _invalidKey;
+
+  DataVBOShPtr _dataPtr;
   ShaderUqPtr _shaderPtr;
+  QueryRendererContextShPtr _ctx;
 
   void _bindToRenderer(Shader* activeShader);
 
  private:
   GLuint _vao;  // opengl vertex array object id
-  QueryRendererContextShPtr _ctx;
 
   void _initFromJSONObj(const rapidjson::Value& obj);
   void _buildVertexArrayObjectFromProperties(Shader* activeShader);
@@ -328,10 +343,10 @@ class PointMark : public BaseMark {
   void draw();
 
  private:
-  RenderProperty<float> x;
-  RenderProperty<float> y;
-  RenderProperty<float> z;
-  RenderProperty<float> size;
+  RenderProperty<double> x;
+  RenderProperty<double> y;
+  RenderProperty<double> z;
+  RenderProperty<double> size;
   RenderProperty<unsigned int> id;
   RenderProperty<ColorRGBA> fillColor;
 

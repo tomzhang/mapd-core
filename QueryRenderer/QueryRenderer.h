@@ -7,6 +7,7 @@
 #include "QueryFramebuffer.h"
 // #include "QueryRenderManager.h"
 #include "DataTable.h"
+#include "BufferLayout.h"
 
 #include <GLFW/glfw3.h>
 
@@ -14,6 +15,8 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>  // std::unique_ptr
+#include <cstdint>
+#include <limits>
 
 #include "rapidjson/document.h"
 // #include <utility>  // std::pair
@@ -54,14 +57,15 @@ class QueryRenderer {
   void setJSONConfig(const std::string& configJSON, GLFWwindow* win = nullptr);
   void setJSONDocument(const rapidjson::Document& jsonDocument, GLFWwindow* win = nullptr);
 
+  void updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
+                                        const int numRows,
+                                        const int64_t invalid_key);
+
   void render();
 
   unsigned int getIdAt(int x, int y);
 
  private:
-  bool _doHitTest;
-  bool _doDepthTest;
-
   std::shared_ptr<QueryRendererContext> _ctx;
   QueryFramebufferUqPtr _framebufferPtr;
 
@@ -78,10 +82,26 @@ class QueryRendererContext {
  public:
   typedef std::shared_ptr<BaseScale> ScaleShPtr;
 
-  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr)
-      : _queryResultVBOPtr(queryResultVBOPtr), _width(0), _height(0) {}
-  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr, int width, int height)
-      : _queryResultVBOPtr(queryResultVBOPtr), _width(width), _height(height) {}
+  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                                bool doHitTest = false,
+                                bool doDepthTest = false)
+      : _queryResultVBOPtr(queryResultVBOPtr),
+        _width(0),
+        _height(0),
+        _doHitTest(doHitTest),
+        _doDepthTest(doDepthTest),
+        _invalidKey(std::numeric_limits<int64_t>::max()) {}
+  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                                int width,
+                                int height,
+                                bool doHitTest = false,
+                                bool doDepthTest = false)
+      : _queryResultVBOPtr(queryResultVBOPtr),
+        _width(width),
+        _height(height),
+        _doHitTest(doHitTest),
+        _doDepthTest(doDepthTest),
+        _invalidKey(std::numeric_limits<int64_t>::max()) {}
   ~QueryRendererContext() { _clear(); }
 
   int getWidth() { return _width; }
@@ -89,10 +109,17 @@ class QueryRendererContext {
   int getHeight() { return _height; }
 
   bool hasDataTable(const std::string& tableName) const;
-  DataTableShPtr getDataTable(const std::string& tableName) const;
+  DataVBOShPtr getDataTable(const std::string& tableName) const;
 
   bool hasScale(const std::string& scaleConfigName) const;
   ScaleShPtr getScale(const std::string& scaleConfigName) const;
+
+  QueryResultVertexBufferShPtr getQueryResultVertexBuffer() const { return _queryResultVBOPtr; }
+
+  bool doHitTest() { return _doHitTest; }
+  bool doDepthTest() { return _doDepthTest; }
+
+  int64_t getInvalidKey() { return _invalidKey; }
 
   // bool hasMark(const std::string& geomConfigName) const {
   //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
@@ -117,15 +144,19 @@ class QueryRendererContext {
   typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
 
   typedef std::vector<GeomConfigShPtr> GeomConfigVector;
-  typedef std::unordered_map<std::string, DataTableShPtr> DataTableMap;
+  typedef std::unordered_map<std::string, DataVBOShPtr> DataTableMap;
 
   DataTableMap _dataTableMap;
   ScaleConfigMap _scaleConfigMap;
   GeomConfigVector _geomConfigs;
   QueryResultVertexBufferShPtr _queryResultVBOPtr;
+  BufferLayoutShPtr _queryResultBufferLayout;
 
   int _width;
   int _height;
+  bool _doHitTest;
+  bool _doDepthTest;
+  int64_t _invalidKey;
 
   void _clear() {
     _width = 0;
@@ -138,6 +169,8 @@ class QueryRendererContext {
 
 typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
+
+DataVBOShPtr createDataTable(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
 
 };  // MapD_Renderer namespace
 

@@ -165,8 +165,8 @@ bool initFromRGBAString(const std::string& colorStr, ColorRGBA::ColorArray& colo
     val = std::min(std::stoul(matches[3]), 255ul);
     colorArray[static_cast<int>(ColorChannel::BLUE)] = convertToColorChannel(val);
 
-    val = std::max(std::min(std::stof(matches[4]), 1.0f), 0.0f);
-    colorArray[static_cast<int>(ColorChannel::ALPHA)] = val;
+    float valf = std::max(std::min(std::stof(matches[4]), 1.0f), 0.0f);
+    colorArray[static_cast<int>(ColorChannel::ALPHA)] = valf;
 
     return true;
   }

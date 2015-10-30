@@ -7,6 +7,7 @@
 #include <GL/glew.h>
 #include <memory>
 #include <iostream>
+#include <assert.h>
 
 namespace MapD_Renderer {
 
@@ -140,6 +141,22 @@ class Shader {
   std::string getVertexSource() const;
   std::string getFragmentSource() const;
 
+  bool hasUniformAttribute(const std::string& attrName) {
+    UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
+    return (iter != _uniformAttrs.end());
+  }
+
+  GLint getUniformAttributeGLType(const std::string& attrName) {
+    UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
+
+    // TODO(croot): throw/log exceptions
+    if (iter == _uniformAttrs.end()) {
+      assert(false);
+    }
+
+    return iter->second->type;
+  }
+
   template <typename T>
   void setUniformAttribute(const std::string& attrName, T attrValue) {
     UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
@@ -165,7 +182,7 @@ class Shader {
     // TODO: check type mismatch?
     // setUniformByLocation(attrLoc, 1, &attrValue);
     // iter->(*second)();
-    info->setAttr(attrValue);
+    info->setAttr((void*)&attrValue);
   }
 
   template <typename T>

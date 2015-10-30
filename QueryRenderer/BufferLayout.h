@@ -138,6 +138,18 @@ class BaseBufferLayout {
     return (*itr)->typeInfo->clone();
   }
 
+  BufferAttrType getAttributeType(const std::string& attrName) {
+    // TODO(croot): consolidate this code and the one in getAttributeTypeGL()
+    // into a single getBufferAttrInfo func or something.
+    BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
+    BufferAttrMap_by_name::iterator itr;
+
+    // TODO(croot): throw an exception instead of an assert
+    assert((itr = nameLookup.find(attrName)) != nameLookup.end());
+
+    return (*itr)->type;
+  }
+
   virtual void bindToRenderer(Shader* activeShader,
                               int numActiveBufferItems,
                               const std::string& attr = "",
@@ -159,11 +171,8 @@ class BaseBufferLayout {
   BufferAttrMap _attrMap;
 };
 
-
 typedef std::shared_ptr<BaseBufferLayout> BufferLayoutShPtr;
 typedef std::unique_ptr<BaseBufferLayout> BufferLayoutUqPtr;
-
-
 
 class CustomBufferLayout : public BaseBufferLayout {
  public:

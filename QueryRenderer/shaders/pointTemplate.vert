@@ -2,6 +2,9 @@
 
 #version 410 core
 
+#define inTkey <inTkeyType>
+#define outTkey <outTkeyType>
+
 #define inTx <inTxType>
 #define outTx <outTxType>
 
@@ -19,6 +22,7 @@
 
 
 
+in inTkey key;
 in inTx x;
 in inTy y;
 // in inTz z;
@@ -29,6 +33,10 @@ in inTfillColor fillColor;
 // in vec4 color;
 
 in uint id;
+
+
+uniform int invalidKey;
+uniform int useKey;
 
 
 outTx getx(in inTx x) {
@@ -60,13 +68,17 @@ flat out uint fPrimitiveId;  // the id of the primitive
 flat out vec4 fColor;        // the output color of the primitive
 
 void main() {
-    // gl_Position = vec4(float(getx(x)), float(gety(y)), float(getz(z)), 1.0);
-    gl_Position = vec4(float(getx(x)), float(gety(y)), 0.5, 1.0);
-    gl_PointSize = float(getsize(size));
 
-    // fColor = vec4(1,0,0,1); // getcolor(color);
-    fColor = getfillColor(fillColor);
+    if (useKey == 0 || int(key) != invalidKey) {
+        gl_Position = vec4(float(getx(x)), float(gety(y)), 0.5, 1.0);
+        gl_PointSize = float(getsize(size));
 
-    // fColor = color;
+        fColor = getfillColor(fillColor);
+    }
+    else {
+        gl_Position = vec4(0,0,0,0);
+        gl_PointSize = 0.0;
+        fColor = vec4(0,0,0,0);
+    }
     fPrimitiveId = id;
 }

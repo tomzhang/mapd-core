@@ -191,12 +191,19 @@ void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, boo
   addUserWidget(userWidgetPair.first, userWidgetPair.second, doHitTest, doDepthTest);
 }
 
-void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument) {
+void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument, QueryDataLayout* dataLayoutPtr) {
   if (!_activeRenderer) {
     std::runtime_error err(
         "There is no active user/widget id. Must set a user/widget id active before configuring the render.");
     LOG(ERROR) << err.what();
     throw err;
+  }
+
+  // need to update the data layout of the query result buffer before building up
+  // from the json obj
+  if (dataLayoutPtr) {
+    _activeRenderer->updateQueryResultBufferPostQuery(
+        dataLayoutPtr->convertToBufferLayout(), dataLayoutPtr->numRows, dataLayoutPtr->invalidKey);
   }
 
   _activeRenderer->setJSONDocument(jsonDocument, (_debugMode ? _windowPtr : nullptr));
@@ -298,6 +305,13 @@ PngData QueryRenderManager::renderToPng() const {
   int r, g, b, a;
 
   gdImagePtr im = gdImageCreateTrueColor(width, height);
+  // the above gdImageCreateTrueColor() constructs a default image
+  // with an black opaque background color. This is the only way
+  // i've found to make a fully transparent background --- extracting
+  // the black background color index and setting it fully transparent
+  // with the gdImageColorTransparent() call.
+  int black = gdImageColorExact(im, 0, 0, 0);
+  gdImageColorTransparent(im, black);
 
   unsigned char* pixels = new unsigned char[width * height * 4];
 
@@ -355,8 +369,8 @@ PngData QueryRenderManager::getColorNoisePNG(int width, int height) {
   int r, g, b, a;
 
   gdImagePtr im = gdImageCreateTrueColor(width, height);
-
-  std::map<unsigned int, int> colorMap;
+  int black = gdImageColorExact(im, 0, 0, 0);
+  gdImageColorTransparent(im, black);
 
   for (int i = 0; i < width; ++i) {
     for (int j = 0; j < height; ++j) {
@@ -365,13 +379,7 @@ PngData QueryRenderManager::getColorNoisePNG(int width, int height) {
       b = randColor();
       a = 0;
 
-      unsigned int colorId = 16777216 * a + 65536 * b + 256 * g + r;
-
-      if (colorMap.find(colorId) == colorMap.end()) {
-        colorMap[colorId] = gdImageColorAllocateAlpha(im, r, g, b, a);
-      }
-
-      gdImageSetPixel(im, i, j, colorMap[colorId]);
+      gdImageSetPixel(im, i, j, gdTrueColorAlpha(r, g, b, a));
     }
   }
 

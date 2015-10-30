@@ -18,11 +18,15 @@ DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
     return DataColumnUqPtr(new TDataColumn<unsigned int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
   } else if (rowItem.IsDouble()) {
     double val = rowItem.GetDouble();
-    if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
-      return DataColumnUqPtr(new TDataColumn<float>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-    } else {
-      return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-    }
+
+    // TODO(croot): How do we properly handle floats?
+    return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+
+    // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
+    //   return DataColumnUqPtr(new TDataColumn<float>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+    // } else {
+    //   return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+    // }
   } else {
     assert(false);
   }
@@ -38,8 +42,8 @@ DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnNa
 
 const std::string DataTable::defaultIdColumnName = "__id__";
 
-DataTable::DataTable(const rapidjson::Value& obj, bool buildIdColumn, VboType vboType)
-    : _vboType(vboType), _numRows(0) {
+DataTable::DataTable(const std::string& name, const rapidjson::Value& obj, bool buildIdColumn, VboType vboType)
+    : BaseDataTableVBO(name, BaseDataTableVBO::DataTableType::OTHER), _vboType(vboType), _numRows(0) {
   _buildColumnsFromJSONObj(obj, buildIdColumn);
 }
 
@@ -121,8 +125,6 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool build
   assert(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator mitr1, mitr2;
-  assert((mitr1 = obj.FindMember("name")) != obj.MemberEnd() && mitr1->value.IsString());
-  _name = mitr1->value.GetString();
 
   bool isObject;
 
@@ -194,7 +196,7 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
   return *itr;
 }
 
-VertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName) {
+BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName) {
   if (_vbo == nullptr) {
     VertexBuffer::BufferLayoutShPtr vboLayoutPtr;
     switch (_vboType) {

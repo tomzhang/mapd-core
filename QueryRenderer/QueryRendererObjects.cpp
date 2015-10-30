@@ -10,6 +10,9 @@
 #include <boost/algorithm/string/find_iterator.hpp>
 #include <boost/algorithm/string/regex_find_format.hpp>
 
+// CROOT - remote the following includes -- only used for debugging
+// #include <fstream>
+
 using namespace MapD_Renderer;
 
 typedef std::string::iterator str_itr;
@@ -83,12 +86,15 @@ DataType getDataTypeFromJSONObj(const rapidjson::Value& obj) {
       } else if (obj.IsUint()) {
         rtn = DataType::UINT;
       } else if (obj.IsDouble()) {
-        double val = obj.GetDouble();
-        if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
-          rtn = DataType::FLOAT;
-        } else {
-          rtn = DataType::DOUBLE;
-        }
+        rtn = DataType::DOUBLE;
+
+        // double val = obj.GetDouble();
+        // TODO(croot): how do we handle floats?
+        // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
+        //   rtn = DataType::FLOAT;
+        // } else {
+        //   rtn = DataType::DOUBLE;
+        // }
       } else {
         assert(false);
       }
@@ -114,7 +120,7 @@ DataType getDataTypeFromDataRefJSONObj(const rapidjson::Value& obj, const QueryR
 
   rapidjson::Value::ConstMemberIterator mitr;
   assert((mitr = obj.FindMember("data")) != obj.MemberEnd() && mitr->value.IsString());
-  DataTableShPtr tablePtr = ctx->getDataTable(mitr->value.GetString());
+  DataVBOShPtr tablePtr = ctx->getDataTable(mitr->value.GetString());
 
   assert(tablePtr != nullptr);
 
@@ -195,7 +201,7 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
   rapidjson::Value::ConstValueIterator vitr;
 
   bool isObject, isString = false;
-  DataTableShPtr tablePtr;
+  DataVBOShPtr tablePtr;
   DataColumnShPtr columnPtr;
 
   if (_useString) {
@@ -214,7 +220,17 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
     tablePtr = ctx->getDataTable(mitr->value.GetString());
 
     assert((mitr = jsonObj.FindMember("field")) != jsonObj.MemberEnd() && mitr->value.IsString());
-    columnPtr = tablePtr->getColumn(mitr->value.GetString());
+
+    // Only supports hand-written data right now.
+    // TODO(croot): Support query result vbo -- this is somewhat
+    // tricky, because in order to do so we'd have to use compute
+    // shaders to do min/max/other math stuff, and uniform buffers or
+    // shared buffers to send the values as uniforms
+    assert(tablePtr->getType() == BaseDataTableVBO::DataTableType::OTHER);
+
+    DataTable* dataTablePtr = dynamic_cast<DataTable*>(tablePtr.get());
+
+    columnPtr = dataTablePtr->getColumn(mitr->value.GetString());
 
     TDataColumn<T>* dataColumnPtr = dynamic_cast<TDataColumn<T>*>(columnPtr.get());
 
@@ -855,7 +871,7 @@ void setRenderPropertyTypeInShaderSrc(const BaseRenderProperty& prop, std::strin
   boost::replace_first(shaderSrc, out_ss.str(), outtype);
 }
 
-void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, const DataTableShPtr& dataPtr) {
+void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, const DataVBOShPtr& dataPtr) {
   if (obj.IsObject()) {
     rapidjson::Value::ConstMemberIterator mitr;
 
@@ -889,16 +905,18 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, cons
   }
 }
 
-void BaseRenderProperty::initializeFromData(const std::string& columnName, const DataTableShPtr& dataPtr) {
+void BaseRenderProperty::initializeFromData(const std::string& columnName, const DataVBOShPtr& dataPtr) {
   // TODO: throw exception instead
   assert(dataPtr != nullptr);
 
   _vboAttrName = columnName;
   _vboPtr = dataPtr->getColumnDataVBO(columnName);
 
-  if (_scaleConfigPtr == nullptr) {
-    _initTypeFromVbo();
-  }
+  _initTypeFromVbo();
+
+  // if (_scaleConfigPtr == nullptr) {
+  //   _initTypeFromVbo();
+  // }
 }
 
 void BaseRenderProperty::_initScaleFromJSONObj(const rapidjson::Value& obj) {
@@ -911,14 +929,17 @@ void BaseRenderProperty::_initScaleFromJSONObj(const rapidjson::Value& obj) {
 }
 
 std::string BaseRenderProperty::getInGLSLType() const {
+  assert(_inType != nullptr);
+
   if (_scaleConfigPtr != nullptr) {
-    return _scaleConfigPtr->getDomainType()->glslType();
+    std::string glslType = _scaleConfigPtr->getDomainType()->glslType();
+    assert(glslType == _inType->glslType());
+    return glslType;
   }
 
   // TODO: bug here if no scale is defined, but
   // a data ref is defined.
 
-  assert(_inType != nullptr);
   return _inType->glslType();
 }
 
@@ -955,6 +976,7 @@ template <typename T, int numComponents>
 void RenderProperty<T, numComponents>::initializeValue(const T& val, int numItems) {
   // TODO: this is a public function.. should I protect from already existing data?
 
+  // TODO(croot): should I initialize the _inType/_outType regardless?
   _inType.reset(new TypeGL<T, numComponents>());
   _outType.reset(new TypeGL<T, numComponents>());
 
@@ -968,6 +990,15 @@ void RenderProperty<T, numComponents>::initializeValue(const T& val, int numItem
 
   VertexBuffer* vbo = new VertexBuffer(data, vboLayoutPtr);
   _vboPtr.reset(vbo);
+}
+
+template <typename T, int numComponents>
+void RenderProperty<T, numComponents>::initializeEmpty() {
+  // TODO(croot): should I initialize the _inType/_outType regardless?
+  _inType.reset(new TypeGL<T, numComponents>());
+  _outType.reset(new TypeGL<T, numComponents>());
+
+  _vboPtr = nullptr;
 }
 
 template <typename T, int numComponents>
@@ -1027,7 +1058,9 @@ void RenderProperty<ColorRGBA, 1>::_initTypeFromVbo() {
 
   // colors need to be a specific type
   // TODO: Throw an exception instead of an assert
-  assert(ColorRGBA::isValidTypeGL(vboType));
+  if (!_scaleConfigPtr) {
+    assert(ColorRGBA::isValidTypeGL(vboType));
+  }
 
   _inType = vboType;
   _outType = vboType;
@@ -1049,7 +1082,13 @@ void RenderProperty<ColorRGBA, 1>::_verifyScale() {
 }
 
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
-    : type(geomType), _dataPtr(nullptr), _shaderPtr(nullptr), _vao(0), _ctx(ctx) {
+    : type(geomType),
+      key("key", ctx),
+      _invalidKey(ctx->getInvalidKey()),
+      _dataPtr(nullptr),
+      _shaderPtr(nullptr),
+      _ctx(ctx),
+      _vao(0) {
 }
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx, const rapidjson::Value& obj)
     : BaseMark(geomType, ctx) {
@@ -1150,14 +1189,32 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj) {
          (mitr->value.IsObject() || mitr->value.IsString()));
   fillColor.initializeFromJSONObj(mitr->value, _dataPtr);
 
-  if ((mitr = propObj.FindMember("id")) != propObj.MemberEnd()) {
-    assert(mitr->value.IsObject());
-    id.initializeFromJSONObj(mitr->value, _dataPtr);
-  } else if (_dataPtr != nullptr) {
-    id.initializeFromData(DataTable::defaultIdColumnName, _dataPtr);
+  if (_ctx->doHitTest()) {
+    if ((mitr = propObj.FindMember("id")) != propObj.MemberEnd()) {
+      assert(mitr->value.IsObject());
+      id.initializeFromJSONObj(mitr->value, _dataPtr);
+    } else if (_dataPtr != nullptr) {
+      id.initializeFromData(DataTable::defaultIdColumnName, _dataPtr);
+    } else {
+      id.initializeValue(1);  // reaching here "should" guarantee that there's only
+                              // 1 row of data
+    }
+  }
+
+  // TODO(croot): put the following in the BaseMark class somewhere so that all
+  // future marks (lines, polys) will pick up this code.
+  BaseVertexBufferShPtr vboPtr;
+  static const BaseVertexBuffer::VertexBufferType resultVBO =
+      BaseVertexBuffer::VertexBufferType::QUERY_RESULT_VERTEX_BUFFER;
+  if ((((vboPtr = x.getVboPtr()) && vboPtr->type() == resultVBO) ||
+       ((vboPtr = y.getVboPtr()) && vboPtr->type() == resultVBO) ||
+       ((vboPtr = size.getVboPtr()) && vboPtr->type() == resultVBO) ||
+       // TODO(croot): what if we have multiple sqls? How do we handle the "key" value then?
+       ((vboPtr = fillColor.getVboPtr()) && vboPtr->type() == resultVBO)) &&
+      vboPtr->hasAttribute(key.getName())) {
+    key.initializeFromData(key.getName(), _dataPtr);
   } else {
-    id.initializeValue(1);  // reaching here "should" guarantee that there's only
-                            // 1 row of data
+    key.initializeEmpty();
   }
 }
 
@@ -1169,7 +1226,11 @@ void PointMark::_initShader() {
 
   std::string vertSrc = getShaderCodeFromFile(pointVertexShaderFilename);
 
-  std::vector<BaseRenderProperty*> props = {&x, &y, &size, &id, &fillColor};  // TODO: add z & fillColor
+  std::vector<BaseRenderProperty*> props = {&key, &x, &y, &size, &fillColor};  // TODO: add z & fillColor
+
+  if (_ctx->doHitTest()) {
+    props.push_back(&id);
+  }
 
   // update all the types first
   for (auto prop : props) {
@@ -1218,16 +1279,13 @@ void PointMark::_initShader() {
 
   std::string fragSrc = getShaderCodeFromFile(pointFragmentShaderFilename);
 
-  // CROOT - remote the following includes -- only used for debugging
-  // #include <fstream>
-
   // static int CROOTcnt = 0;
   // CROOTcnt++;
   // if (CROOTcnt == 1) {
-  //     std::ofstream shadersrcstream;
-  //     shadersrcstream.open("shadersource.vert");
-  //     shadersrcstream << vertSrc;
-  //     shadersrcstream.close();
+  //   std::ofstream shadersrcstream;
+  //   shadersrcstream.open("shadersource.vert");
+  //   shadersrcstream << vertSrc;
+  //   shadersrcstream.close();
   // }
 
   // now build the shader object
@@ -1237,19 +1295,51 @@ void PointMark::_initShader() {
 }
 
 void PointMark::_initPropertiesForRendering(Shader* activeShader) {
-  assert(x.size() == y.size() && x.size() == size.size() && x.size() == fillColor.size() && x.size() == id.size());
+  // TODO(croot): only do "key" check if it exists...
+  assert(!key.hasVboPtr() || key.size() == x.size());
+  assert(x.size() == y.size() && x.size() == size.size() && x.size() == fillColor.size() &&
+         (!_ctx->doHitTest() || x.size() == id.size()));
+
+  // TODO(croot): only bind key if found? also, move this into base class?
+  if (key.hasVboPtr()) {
+    key.bindToRenderer(activeShader);
+  }
 
   x.bindToRenderer(activeShader);
   y.bindToRenderer(activeShader);
   // z.bindToRenderer(activeShader);
   size.bindToRenderer(activeShader);
-  id.bindToRenderer(activeShader);
   fillColor.bindToRenderer(activeShader);
+
+  if (_ctx->doHitTest()) {
+    id.bindToRenderer(activeShader);
+  }
 }
 
 void PointMark::_bindPropertiesToRenderer(Shader* activeShader) {
   std::unordered_map<std::string, BaseScale*> visitedScales;
   std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
+
+  // TODO(croot): create a static invalidKeyAttrName string on the class
+  static const std::string invalidKeyAttrName = "invalidKey";
+  if (key.hasVboPtr()) {
+    if (activeShader->hasUniformAttribute(invalidKeyAttrName)) {
+      GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
+      if (type == GL_INT) {
+        activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(_invalidKey));
+      } else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
+        // TODO(croot) - do we need to do the glew extension check above or
+        // would there be an error at shader compilation if the extension
+        // didn't exist?
+
+        // TODO(croot) fill this out
+      }
+    }
+  }
+
+  static const std::string useKeyAttrName = "useKey";
+  activeShader->setUniformAttribute<int>(useKeyAttrName, key.hasVboPtr());
+
   for (auto prop : props) {
     ScaleShPtr& scalePtr = prop->getScaleConfig();
     if (scalePtr != nullptr) {
