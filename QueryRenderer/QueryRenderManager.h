@@ -60,7 +60,7 @@ struct QueryDataLayout {
         attrTypes(attrTypes),
         layoutType(layoutType) {
     // TODO(croot): throw an error instead and quit gracefully?
-    assert(attrNames.size() == attrTypes.size());
+    CHECK(attrNames.size() == attrTypes.size());
   }
 
   BufferLayoutShPtr convertToBufferLayout() {
@@ -129,7 +129,7 @@ struct QueryDataLayout {
         return BufferLayoutShPtr(layout);
       }
       default:
-        assert(false);
+        CHECK(false);
         return nullptr;
     }
   }

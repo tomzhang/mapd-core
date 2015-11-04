@@ -7,7 +7,7 @@
 #include <GL/glew.h>
 #include <memory>
 #include <iostream>
-#include <assert.h>
+#include <glog/logging.h>
 
 namespace MapD_Renderer {
 
@@ -151,7 +151,7 @@ class Shader {
 
     // TODO(croot): throw/log exceptions
     if (iter == _uniformAttrs.end()) {
-      assert(false);
+      CHECK(false);
     }
 
     return iter->second->type;

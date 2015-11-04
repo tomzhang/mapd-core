@@ -57,7 +57,7 @@ class SqlQueryDataTable : public BaseDataTableVBO {
   bool hasColumn(const std::string& columnName) { return _vbo->hasAttribute(columnName); }
   BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName) {
     // TODO(croot): throw/log error instead of assert
-    assert(_vbo->hasAttribute(columnName));
+    CHECK(_vbo->hasAttribute(columnName));
     return _vbo;
   }
   DataType getColumnType(const std::string& columnName) {
@@ -75,7 +75,7 @@ class SqlQueryDataTable : public BaseDataTableVBO {
         return DataType::COLOR;
       default:
         // TODO(croot): throw/log error
-        assert(false);
+        CHECK(false);
     }
   }
   int numRows() { return _vbo->size(); }
@@ -140,7 +140,7 @@ class TDataColumn : public DataColumn {
   std::pair<T, T> getExtrema() {
     auto result = std::minmax_element(_columnDataPtr->begin(), _columnDataPtr->end());
 
-    assert(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end());
+    CHECK(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end());
 
     return std::make_pair(*result.first, *result.second);
   }

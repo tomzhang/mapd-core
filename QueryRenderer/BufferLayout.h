@@ -5,6 +5,7 @@
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
+#include <glog/logging.h>
 
 #include <array>
 #include <vector>
@@ -133,7 +134,7 @@ class BaseBufferLayout {
     BufferAttrMap_by_name::iterator itr;
 
     // TODO: throw an exception instead of an assert
-    assert((itr = nameLookup.find(attrName)) != nameLookup.end());
+    CHECK((itr = nameLookup.find(attrName)) != nameLookup.end());
 
     return (*itr)->typeInfo->clone();
   }
@@ -145,7 +146,7 @@ class BaseBufferLayout {
     BufferAttrMap_by_name::iterator itr;
 
     // TODO(croot): throw an exception instead of an assert
-    assert((itr = nameLookup.find(attrName)) != nameLookup.end());
+    CHECK((itr = nameLookup.find(attrName)) != nameLookup.end());
 
     return (*itr)->type;
   }
@@ -180,7 +181,7 @@ class CustomBufferLayout : public BaseBufferLayout {
 
   void addAttribute(const std::string& attrName, BufferAttrType type, int stride, int offset) {
     // TODO: throw exception instead
-    assert(!hasAttribute(attrName) && attrName.length());
+    CHECK(!hasAttribute(attrName) && attrName.length());
 
     // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type,
     // attrTypeInfo[static_cast<int>(type)].get(), stride, offset));
@@ -205,7 +206,7 @@ class InterleavedBufferLayout : public BaseBufferLayout {
 
   void addAttribute(const std::string& attrName, BufferAttrType type) {
     // TODO: throw exception instead
-    assert(!hasAttribute(attrName) && attrName.length());
+    CHECK(!hasAttribute(attrName) && attrName.length());
 
     // TODO, set the stride of all currently existing attrs, or leave
     // that for when the layout is bound to the renderer/shader/VAO
@@ -224,7 +225,7 @@ class InterleavedBufferLayout : public BaseBufferLayout {
   template <typename T, int numComponents = 1>
   void addAttribute(const std::string& attrName) {
     // TODO(croot): throw exception
-    assert(!hasAttribute(attrName) && attrName.length());
+    CHECK(!hasAttribute(attrName) && attrName.length());
 
     BufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
@@ -258,7 +259,7 @@ class InterleavedBufferLayout : public BaseBufferLayout {
       BufferAttrMap_by_name::iterator itr;
 
       // TODO(croot): throw an exception instead of an assert
-      assert((itr = nameLookup.find(attr)) != nameLookup.end());
+      CHECK((itr = nameLookup.find(attr)) != nameLookup.end());
       bufAttrPtr = itr->get();
       attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
       attrPtr = bufAttrPtr->typeInfo;
@@ -276,7 +277,7 @@ class SequentialBufferLayout : public BaseBufferLayout {
 
   void addAttribute(const std::string& attrName, BufferAttrType type) {
     // TODO: throw exception instead
-    assert(!hasAttribute(attrName) && attrName.length());
+    CHECK(!hasAttribute(attrName) && attrName.length());
 
     int enumVal = static_cast<int>(type);
     // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(),
@@ -290,7 +291,7 @@ class SequentialBufferLayout : public BaseBufferLayout {
   template <typename T, int numComponents = 1>
   void addAttribute(const std::string& attrName) {
     // TODO: throw exception
-    assert(!hasAttribute(attrName) && attrName.length());
+    CHECK(!hasAttribute(attrName) && attrName.length());
 
     BufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
@@ -327,7 +328,7 @@ class SequentialBufferLayout : public BaseBufferLayout {
       }
     } else {
       // TODO: throw an exception
-      assert(hasAttribute(attr));
+      CHECK(hasAttribute(attr));
 
       for (itr = _attrMap.begin(); itr != _attrMap.end(); ++itr) {
         bufAttrPtr = itr->get();

@@ -197,7 +197,7 @@ QueryDataLayout runCuda(CudaHandle cudaHandle, int numPts = 100) {
   size_t sz = sizeof(Row);
   size_t fullSz = numPts * sz;
 
-  assert(fullSz <= cudaHandle.numBytes);
+  CHECK(fullSz <= cudaHandle.numBytes);
 
   std::cout << "CROOT - bytes check - " << fullSz << "<" << cudaHandle.numBytes << std::endl;
 
@@ -354,7 +354,7 @@ QueryDataLayout runCuda(CudaHandle cudaHandle, int numPts = 100) {
 int main(int argc, char* argv[]) {
   // GLFWwindow* window;
 
-  assert(argc == 3);
+  CHECK(argc == 3);
 
   // CROOT: CUDA COMMENT
   // cudaGLSetGLDevice(gpuGetMaxGflopsDeviceId());
@@ -377,7 +377,7 @@ int main(int argc, char* argv[]) {
                              ", error: " + rapidjson::GetParseError_En(jsonDoc.GetParseError()));
   }
 
-  assert(jsonDoc.IsObject());
+  CHECK(jsonDoc.IsObject());
 
   rapidjson::Value::ConstMemberIterator mitr1, mitr2;
   rapidjson::Value::ConstValueIterator vitr;

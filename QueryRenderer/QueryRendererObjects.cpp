@@ -96,7 +96,7 @@ DataType getDataTypeFromJSONObj(const rapidjson::Value& obj) {
         //   rtn = DataType::DOUBLE;
         // }
       } else {
-        assert(false);
+        CHECK(false);
       }
       break;
     case rapidjson::kStringType: {
@@ -105,26 +105,26 @@ DataType getDataTypeFromJSONObj(const rapidjson::Value& obj) {
         rtn = DataType::COLOR;
       } else {
         // TODO: throw exception instead of assert
-        assert(false);
+        CHECK(false);
       }
     } break;
     default:
-      assert(false);
+      CHECK(false);
   }
 
   return rtn;
 }
 
 DataType getDataTypeFromDataRefJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
-  assert(obj.IsObject());
+  CHECK(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator mitr;
-  assert((mitr = obj.FindMember("data")) != obj.MemberEnd() && mitr->value.IsString());
+  CHECK((mitr = obj.FindMember("data")) != obj.MemberEnd() && mitr->value.IsString());
   DataVBOShPtr tablePtr = ctx->getDataTable(mitr->value.GetString());
 
-  assert(tablePtr != nullptr);
+  CHECK(tablePtr != nullptr);
 
-  assert((mitr = obj.FindMember("field")) != obj.MemberEnd() && mitr->value.IsString());
+  CHECK((mitr = obj.FindMember("field")) != obj.MemberEnd() && mitr->value.IsString());
   return tablePtr->getColumnType(mitr->value.GetString());
 }
 
@@ -147,28 +147,28 @@ BaseScale::~BaseScale() {
 
 void BaseScale::_initFromJSONObj(const rapidjson::Value& obj) {
   // TODO: throw exceptions instead of asserts
-  assert(obj.IsObject());
+  CHECK(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator itr;
-  assert((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString());
+  CHECK((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString());
 
   name = itr->value.GetString();
 
-  assert((itr = obj.FindMember("type")) != obj.MemberEnd() && itr->value.IsString());
+  CHECK((itr = obj.FindMember("type")) != obj.MemberEnd() && itr->value.IsString());
   std::string strScaleType(itr->value.GetString());
 
   if (strScaleType == "linear") {
     type = ScaleType::LINEAR;
 
     if ((itr = obj.FindMember("clamp")) != obj.MemberEnd()) {
-      assert(itr->value.IsBool());
+      CHECK(itr->value.IsBool());
 
       _useClamp = itr->value.GetBool();
     }
   } else if (strScaleType == "ordinal") {
     type = ScaleType::ORDINAL;
   } else {
-    assert(false);
+    CHECK(false);
   }
 }
 
@@ -183,7 +183,7 @@ std::string BaseScale::getScaleGLSLFuncName() {
       scaleName = "Ordinal";
       break;
     default:
-      assert(false);
+      CHECK(false);
   }
 
   std::ostringstream ss;
@@ -205,28 +205,28 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
   DataColumnShPtr columnPtr;
 
   if (_useString) {
-    assert((mitr = obj.FindMember(_name.c_str())) != obj.MemberEnd() &&
+    CHECK((mitr = obj.FindMember(_name.c_str())) != obj.MemberEnd() &&
            ((isObject = mitr->value.IsObject()) || (isString = mitr->value.IsString()) ||
             (mitr->value.IsArray() && mitr->value.Size())));
   } else {
-    assert((mitr = obj.FindMember(_name.c_str())) != obj.MemberEnd() &&
+    CHECK((mitr = obj.FindMember(_name.c_str())) != obj.MemberEnd() &&
            ((isObject = mitr->value.IsObject()) || (mitr->value.IsArray() && mitr->value.Size())));
   }
 
   const rapidjson::Value& jsonObj = mitr->value;
 
   if (isObject) {
-    assert((mitr = jsonObj.FindMember("data")) != jsonObj.MemberEnd() && mitr->value.IsString());
+    CHECK((mitr = jsonObj.FindMember("data")) != jsonObj.MemberEnd() && mitr->value.IsString());
     tablePtr = ctx->getDataTable(mitr->value.GetString());
 
-    assert((mitr = jsonObj.FindMember("field")) != jsonObj.MemberEnd() && mitr->value.IsString());
+    CHECK((mitr = jsonObj.FindMember("field")) != jsonObj.MemberEnd() && mitr->value.IsString());
 
     // Only supports hand-written data right now.
     // TODO(croot): Support query result vbo -- this is somewhat
     // tricky, because in order to do so we'd have to use compute
     // shaders to do min/max/other math stuff, and uniform buffers or
     // shared buffers to send the values as uniforms
-    assert(tablePtr->getType() == BaseDataTableVBO::DataTableType::OTHER);
+    CHECK(tablePtr->getType() == BaseDataTableVBO::DataTableType::OTHER);
 
     DataTable* dataTablePtr = dynamic_cast<DataTable*>(tablePtr.get());
 
@@ -248,7 +248,7 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
       itemType = getDataTypeFromJSONObj(*vitr);
 
       // TODO: Throw an exception
-      assert(itemType == dataType);
+      CHECK(itemType == dataType);
 
       _pushItem(*vitr);
     }
@@ -324,14 +324,14 @@ void ScaleDomainRangeData<T>::_setFromStringValue(const std::string& strVal, Bas
     (*_vectorPtr)[0] -= 1;
   } else {
     // TODO: throw an exception
-    assert(false);
+    CHECK(false);
   }
 }
 
 template <>
 void ScaleDomainRangeData<ColorRGBA>::_setFromStringValue(const std::string& strVal, BaseScale::ScaleType type) {
   // TODO: throw an exception
-  assert(false);
+  CHECK(false);
 }
 
 template <typename T>
@@ -349,7 +349,7 @@ void ScaleDomainRangeData<ColorRGBA>::_updateVectorDataByType(TDataColumn<ColorR
   if (type == BaseScale::ScaleType::LINEAR) {
     // TODO: throw an exception, or update ColorRGBA to be supported by the <,>,etc. operators
     // so that the getExtrema() call will work to get the min and max colors
-    assert(false);
+    CHECK(false);
   }
 }
 
@@ -546,7 +546,7 @@ Scale<DomainType, RangeType>::~Scale() {
 // template <typename DomainType, typename RangeType>
 // void Scale<DomainType, RangeType>::_pushDomainItem(const rapidjson::Value& item) {
 //     DataType type = getDataTypeFromJSONObj(item);
-//     assert(type == domainType);
+//     CHECK(type == domainType);
 
 //     // _domainPtr.pushItem(item);
 
@@ -567,7 +567,7 @@ Scale<DomainType, RangeType>::~Scale() {
 //     //     //     _domainPtr->push_back(ColorRGBA(item.GetString()));
 //     //     //     break;
 //     //     default:
-//     //         assert(false);
+//     //         CHECK(false);
 //     //         break;
 //     // }
 // }
@@ -575,7 +575,7 @@ Scale<DomainType, RangeType>::~Scale() {
 // template <typename DomainType, typename RangeType>
 // void Scale<DomainType, RangeType>::_pushRangeItem(const rapidjson::Value& item) {
 //     DataType type = getDataTypeFromJSONObj(item);
-//     assert(type == rangeType);
+//     CHECK(type == rangeType);
 
 //     // _rangePtr.pushItem(item);
 
@@ -599,7 +599,7 @@ Scale<DomainType, RangeType>::~Scale() {
 //     //         }
 //     //         break;
 //     //     default:
-//     //         assert(false);
+//     //         CHECK(false);
 //     //         break;
 //     // }
 // }
@@ -616,16 +616,16 @@ void Scale<DomainType, RangeType>::_initFromJSONObj(const rapidjson::Value& obj)
   // DataTableShPtr tablePtr;
   // DataColumnShPtr columnPtr;
 
-  // assert((mitr = obj.FindMember("domain")) != obj.MemberEnd() &&
+  // CHECK((mitr = obj.FindMember("domain")) != obj.MemberEnd() &&
   //        ((isObject = mitr->value.IsObject()) || (mitr->value.IsArray() && mitr->value.Size())));
 
   // const rapidjson::Value& domainObj = mitr->value;
 
   // if (isObject) {
-  //     assert((mitr = domainObj.FindMember("data")) != domainObj.MemberEnd() && mitr->value.IsString());
+  //     CHECK((mitr = domainObj.FindMember("data")) != domainObj.MemberEnd() && mitr->value.IsString());
   //     tablePtr = _ctx->getDataTable(mitr->value.GetString());
 
-  //     assert((mitr = domainObj.FindMember("field")) != domainObj.MemberEnd() && mitr->value.IsString());
+  //     CHECK((mitr = domainObj.FindMember("field")) != domainObj.MemberEnd() && mitr->value.IsString());
   //     columnPtr = tablePtr->getColumn(mitr->value.GetString());
 
   //     TDataColumn<DomainType> *domainColumnPtr = dynamic_cast<TDataColumn<DomainType> *>(columnPtr.get());
@@ -649,17 +649,17 @@ void Scale<DomainType, RangeType>::_initFromJSONObj(const rapidjson::Value& obj)
   //     }
   // }
 
-  // assert((mitr = obj.FindMember("range")) != obj.MemberEnd() &&
+  // CHECK((mitr = obj.FindMember("range")) != obj.MemberEnd() &&
   //        ((isObject = mitr->value.IsObject()) || (isString = mitr->value.IsString()) ||
   //         (mitr->value.IsArray() && mitr->value.Size())));
 
   // const rapidjson::Value& rangeObj = mitr->value;
 
   // if (isObject) {
-  //     assert((mitr = rangeObj.FindMember("data")) != rangeObj.MemberEnd() && mitr->value.IsString());
+  //     CHECK((mitr = rangeObj.FindMember("data")) != rangeObj.MemberEnd() && mitr->value.IsString());
   //     tablePtr = _ctx->getDataTable(mitr->value.GetString());
 
-  //     assert((mitr = rangeObj.FindMember("field")) != rangeObj.MemberEnd() && mitr->value.IsString());
+  //     CHECK((mitr = rangeObj.FindMember("field")) != rangeObj.MemberEnd() && mitr->value.IsString());
   //     columnPtr = tablePtr->getColumn(mitr->value.GetString());
 
   //     TDataColumn<RangeType> *rangeColumnPtr = dynamic_cast<TDataColumn<RangeType> *>(columnPtr.get());
@@ -706,8 +706,8 @@ void Scale<DomainType, RangeType>::_initGLTypes() {
 
 template <typename DomainType, typename RangeType>
 std::string Scale<DomainType, RangeType>::getGLSLCode() {
-  // assert(_domainPtr->size() > 0 && _rangePtr->size() > 0);
-  assert(_domainPtr.size() > 0 && _rangePtr.size() > 0);
+  // CHECK(_domainPtr->size() > 0 && _rangePtr->size() > 0);
+  CHECK(_domainPtr.size() > 0 && _rangePtr.size() > 0);
 
   std::string shaderCode = getShaderCodeFromFile(scaleVertexShaderFilenames[static_cast<int>(type)]);
   std::ostringstream ss;
@@ -749,7 +749,7 @@ ScaleShPtr MapD_Renderer::createScale(const rapidjson::Value& obj, const QueryRe
   rapidjson::Value::ConstMemberIterator itr;
 
   bool isObject;
-  assert((itr = obj.FindMember("domain")) != obj.MemberEnd() &&
+  CHECK((itr = obj.FindMember("domain")) != obj.MemberEnd() &&
          ((isObject = itr->value.IsObject()) || (itr->value.IsArray() && itr->value.Size())));
 
   DataType domainType;
@@ -761,7 +761,7 @@ ScaleShPtr MapD_Renderer::createScale(const rapidjson::Value& obj, const QueryRe
   }
 
   bool isString;
-  assert((itr = obj.FindMember("range")) != obj.MemberEnd() &&
+  CHECK((itr = obj.FindMember("range")) != obj.MemberEnd() &&
          ((isObject = itr->value.IsObject()) || (isString = itr->value.IsString()) ||
           (itr->value.IsArray() && itr->value.Size())));
 
@@ -770,7 +770,7 @@ ScaleShPtr MapD_Renderer::createScale(const rapidjson::Value& obj, const QueryRe
     rangeType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
   } else if (isString) {
     std::string strVal = itr->value.GetString();
-    assert(strVal == "width" || strVal == "height");
+    CHECK(strVal == "width" || strVal == "height");
 
     // TODO: should we actually use width/height values in the scale?
     // The easy way is just to use the -1 to 1 NDC range, but what
@@ -849,7 +849,7 @@ ScaleShPtr MapD_Renderer::createScale(const rapidjson::Value& obj, const QueryRe
           return ScaleShPtr(new Scale<ColorRGBA, ColorRGBA>(obj, ctx));
       }
     default:
-      assert(false);
+      CHECK(false);
   }
 }
 
@@ -877,7 +877,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, cons
 
     if ((mitr = obj.FindMember("scale")) != obj.MemberEnd()) {
       // TODO: throw exception instead
-      assert(_useScale);
+      CHECK(_useScale);
 
       _initScaleFromJSONObj(mitr->value);
       _verifyScale();
@@ -885,9 +885,9 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, cons
 
     if ((mitr = obj.FindMember("field")) != obj.MemberEnd()) {
       // TODO: check for an object here
-      assert(dataPtr != nullptr);
-      assert(mitr->value.IsString());
-      // assert(_dataPtr->hasColumn(mitr->value.GetString()));
+      CHECK(dataPtr != nullptr);
+      CHECK(mitr->value.IsString());
+      // CHECK(_dataPtr->hasColumn(mitr->value.GetString()));
 
       initializeFromData(mitr->value.GetString(), dataPtr);
     } else if ((mitr = obj.FindMember("value")) != obj.MemberEnd()) {
@@ -895,7 +895,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, cons
     } else {
       // TODO: throw error -- need some value source, either
       // by "field" or by "value"
-      assert(false);
+      CHECK(false);
     }
 
     _initFromJSONObj(obj);
@@ -907,7 +907,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj, cons
 
 void BaseRenderProperty::initializeFromData(const std::string& columnName, const DataVBOShPtr& dataPtr) {
   // TODO: throw exception instead
-  assert(dataPtr != nullptr);
+  CHECK(dataPtr != nullptr);
 
   _vboAttrName = columnName;
   _vboPtr = dataPtr->getColumnDataVBO(columnName);
@@ -920,20 +920,20 @@ void BaseRenderProperty::initializeFromData(const std::string& columnName, const
 }
 
 void BaseRenderProperty::_initScaleFromJSONObj(const rapidjson::Value& obj) {
-  // assert(obj.IsObject() || obj.IsString());
-  assert(obj.IsString());
+  // CHECK(obj.IsObject() || obj.IsString());
+  CHECK(obj.IsString());
 
-  assert(_ctx != nullptr && _scaleConfigPtr == nullptr);
+  CHECK(_ctx != nullptr && _scaleConfigPtr == nullptr);
 
   _scaleConfigPtr = _ctx->getScale(obj.GetString());
 }
 
 std::string BaseRenderProperty::getInGLSLType() const {
-  assert(_inType != nullptr);
+  CHECK(_inType != nullptr);
 
   if (_scaleConfigPtr != nullptr) {
     std::string glslType = _scaleConfigPtr->getDomainType()->glslType();
-    assert(glslType == _inType->glslType());
+    CHECK(glslType == _inType->glslType());
     return glslType;
   }
 
@@ -951,7 +951,7 @@ std::string BaseRenderProperty::getOutGLSLType() const {
   // TODO: bug here if no scale is defined, but
   // a data ref is defined.
 
-  assert(_outType != nullptr);
+  CHECK(_outType != nullptr);
   return (_outType->glslType());
 }
 
@@ -1016,7 +1016,7 @@ void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj)
 template <>
 void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj, int numItems) {
   // TODO: throw exception
-  assert(obj.IsString());
+  CHECK(obj.IsString());
 
   ColorRGBA color(obj.GetString());
 
@@ -1042,7 +1042,7 @@ void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value&
 
 template <typename T, int numComponents>
 void RenderProperty<T, numComponents>::_initTypeFromVbo() {
-  assert(_vboPtr != nullptr);
+  CHECK(_vboPtr != nullptr);
 
   TypeGLShPtr vboType = _vboPtr->getAttributeTypeGL(_vboAttrName);
 
@@ -1052,14 +1052,14 @@ void RenderProperty<T, numComponents>::_initTypeFromVbo() {
 
 template <>
 void RenderProperty<ColorRGBA, 1>::_initTypeFromVbo() {
-  assert(_vboPtr != nullptr);
+  CHECK(_vboPtr != nullptr);
 
   TypeGLShPtr vboType = _vboPtr->getAttributeTypeGL(_vboAttrName);
 
   // colors need to be a specific type
   // TODO: Throw an exception instead of an assert
   if (!_scaleConfigPtr) {
-    assert(ColorRGBA::isValidTypeGL(vboType));
+    CHECK(ColorRGBA::isValidTypeGL(vboType));
   }
 
   _inType = vboType;
@@ -1072,13 +1072,13 @@ void RenderProperty<T, numComponents>::_verifyScale() {
 
 template <>
 void RenderProperty<ColorRGBA, 1>::_verifyScale() {
-  assert(_scaleConfigPtr != nullptr);
+  CHECK(_scaleConfigPtr != nullptr);
 
   TypeGLShPtr vboType = _scaleConfigPtr->getRangeType();
 
   // colors need to be a specific type
   // TODO: Throw an exception instead of an assert
-  assert(ColorRGBA::isValidTypeGL(vboType));
+  CHECK(ColorRGBA::isValidTypeGL(vboType));
 }
 
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
@@ -1104,17 +1104,17 @@ BaseMark::~BaseMark() {
 }
 
 void BaseMark::_initFromJSONObj(const rapidjson::Value& obj) {
-  assert(obj.IsObject());
+  CHECK(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator mitr;
-  assert((mitr = obj.FindMember("properties")) != obj.MemberEnd() && mitr->value.IsObject());
+  CHECK((mitr = obj.FindMember("properties")) != obj.MemberEnd() && mitr->value.IsObject());
 
   if ((mitr = obj.FindMember("from")) != obj.MemberEnd()) {
     const rapidjson::Value& fromObj = mitr->value;
 
-    assert(fromObj.IsObject());
+    CHECK(fromObj.IsObject());
 
-    assert((mitr = fromObj.FindMember("data")) != fromObj.MemberEnd() && mitr->value.IsString());
+    CHECK((mitr = fromObj.FindMember("data")) != fromObj.MemberEnd() && mitr->value.IsString());
 
     _dataPtr = _ctx->getDataTable(mitr->value.GetString());
   }
@@ -1170,28 +1170,28 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj) {
   const rapidjson::Value& propObj = obj["properties"];
   rapidjson::Value::ConstMemberIterator mitr;
 
-  assert((mitr = propObj.FindMember("x")) != propObj.MemberEnd() && (mitr->value.IsObject() || mitr->value.IsNumber()));
+  CHECK((mitr = propObj.FindMember("x")) != propObj.MemberEnd() && (mitr->value.IsObject() || mitr->value.IsNumber()));
   x.initializeFromJSONObj(mitr->value, _dataPtr);
 
-  assert((mitr = propObj.FindMember("y")) != propObj.MemberEnd() && (mitr->value.IsObject() || mitr->value.IsNumber()));
+  CHECK((mitr = propObj.FindMember("y")) != propObj.MemberEnd() && (mitr->value.IsObject() || mitr->value.IsNumber()));
   y.initializeFromJSONObj(mitr->value, _dataPtr);
 
   if ((mitr = propObj.FindMember("z")) != propObj.MemberEnd()) {
-    assert(mitr->value.IsObject() || mitr->value.IsNumber());
+    CHECK(mitr->value.IsObject() || mitr->value.IsNumber());
     z.initializeFromJSONObj(mitr->value, _dataPtr);
   }
 
-  assert((mitr = propObj.FindMember("size")) != propObj.MemberEnd() &&
+  CHECK((mitr = propObj.FindMember("size")) != propObj.MemberEnd() &&
          (mitr->value.IsObject() || mitr->value.IsNumber()));
   size.initializeFromJSONObj(mitr->value, _dataPtr);
 
-  assert((mitr = propObj.FindMember("fillColor")) != propObj.MemberEnd() &&
+  CHECK((mitr = propObj.FindMember("fillColor")) != propObj.MemberEnd() &&
          (mitr->value.IsObject() || mitr->value.IsString()));
   fillColor.initializeFromJSONObj(mitr->value, _dataPtr);
 
   if (_ctx->doHitTest()) {
     if ((mitr = propObj.FindMember("id")) != propObj.MemberEnd()) {
-      assert(mitr->value.IsObject());
+      CHECK(mitr->value.IsObject());
       id.initializeFromJSONObj(mitr->value, _dataPtr);
     } else if (_dataPtr != nullptr) {
       id.initializeFromData(DataTable::defaultIdColumnName, _dataPtr);
@@ -1258,7 +1258,7 @@ void PointMark::_initShader() {
         funcRange = getGLSLFunctionBounds(vertSrc, propFuncName);
 
         // TODO: throw an exception here? Not sure....
-        assert(!funcRange.empty());
+        CHECK(!funcRange.empty());
 
         boost::replace_range(vertSrc, funcRange, scaleCode);
 
@@ -1296,8 +1296,8 @@ void PointMark::_initShader() {
 
 void PointMark::_initPropertiesForRendering(Shader* activeShader) {
   // TODO(croot): only do "key" check if it exists...
-  assert(!key.hasVboPtr() || key.size() == x.size());
-  assert(x.size() == y.size() && x.size() == size.size() && x.size() == fillColor.size() &&
+  CHECK(!key.hasVboPtr() || key.size() == x.size());
+  CHECK(x.size() == y.size() && x.size() == size.size() && x.size() == fillColor.size() &&
          (!_ctx->doHitTest() || x.size() == id.size()));
 
   // TODO(croot): only bind key if found? also, move this into base class?
@@ -1373,16 +1373,16 @@ void PointMark::draw() {
 }
 
 GeomConfigShPtr MapD_Renderer::createMark(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
-  assert(obj.IsObject());
+  CHECK(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator itr;
-  assert((itr = obj.FindMember("type")) != obj.MemberEnd() && itr->value.IsString());
+  CHECK((itr = obj.FindMember("type")) != obj.MemberEnd() && itr->value.IsString());
 
   std::string strGeomType(itr->value.GetString());
 
   if (strGeomType == "points") {
     return GeomConfigShPtr(new PointMark(obj, ctx));
   } else {
-    assert(false);
+    CHECK(false);
   }
 }

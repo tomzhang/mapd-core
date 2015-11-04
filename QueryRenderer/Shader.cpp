@@ -112,7 +112,7 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
 
     default:
       // TODO: throw error?
-      assert(1);
+      CHECK(1);
       break;
   }
 
@@ -209,7 +209,7 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
     // TODO: throw an error
     _cleanupIds();
     printf("Error compiling vertex shader: %s\n", errStr.c_str());
-    assert(1);
+    CHECK(1);
   }
 
   _fragShaderId = glCreateShader(GL_FRAGMENT_SHADER);
@@ -217,7 +217,7 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
     // TODO: throw an error
     _cleanupIds();
     printf("Error compiling fragment shader: %s\n", errStr.c_str());
-    assert(1);
+    CHECK(1);
   }
 
   _programId = glCreateProgram();
@@ -229,7 +229,7 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
     // clean out the shader references
     _cleanupIds();
     printf("Error linking the shader: %s\n", errStr.c_str());
-    assert(1);
+    CHECK(1);
   }
 
   GLint numAttrs;

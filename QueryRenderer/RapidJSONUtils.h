@@ -14,7 +14,7 @@ class RJMapDException : public std::runtime_error {
 
 template <typename T>
 T getNumValFromJSONObj(const rapidjson::Value& obj) {
-  assert(obj.IsNumber());
+  CHECK(obj.IsNumber());
 
   T rtn(0);
 

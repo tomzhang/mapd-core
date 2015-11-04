@@ -261,21 +261,21 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
 
 DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
   // TODO(croot): change asserts to throwing/logging runtime errors
-  assert(obj.IsObject());
+  CHECK(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator itr;
 
-  assert((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString());
+  CHECK((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString());
   std::string tableName = itr->value.GetString();
 
   if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
-    assert(itr->value.IsString());
+    CHECK(itr->value.IsString());
     return DataVBOShPtr(new SqlQueryDataTable(tableName, ctx->getQueryResultVertexBuffer(), itr->value.GetString()));
   } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
   } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
   } else {
-    assert(false);
+    CHECK(false);
   }
 }

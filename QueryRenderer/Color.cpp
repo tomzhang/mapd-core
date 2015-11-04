@@ -2,6 +2,8 @@
 #include <iostream>
 #include <algorithm>
 
+#include <glog/logging.h>
+
 using namespace MapD_Renderer;
 
 const std::unordered_map<std::string, std::string> ColorRGBA::colorKeywords = {{"aliceblue", "#F0F8FF"},
@@ -229,7 +231,7 @@ ColorRGBA& ColorRGBA::initFromCSSString(const std::string& colorStr) {
       ((itr = colorKeywords.find(lowerColorStr)) == colorKeywords.end() ||
        !initFromHexString(itr->second, _colorArray))) {
     // TODO: throw exception instead of assert
-    assert(false);
+    CHECK(false);
   }
 
   return *this;

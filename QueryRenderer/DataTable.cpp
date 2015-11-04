@@ -25,14 +25,14 @@ DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
     //   return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
     // }
   } else {
-    assert(false);
+    CHECK(false);
   }
 }
 
 DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnName,
                                                      const rapidjson::Value& rowItem,
                                                      const rapidjson::Value& dataArray) {
-  assert(rowItem.IsString());
+  CHECK(rowItem.IsString());
 
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 }
@@ -101,11 +101,11 @@ void DataTable::_readDataFromFile(const std::string& filename) {
   boost::filesystem::path p(filename);  // avoid repeated path construction below
 
   // TODO: throw exceptions instead of asserts
-  assert(boost::filesystem::exists(p));
+  CHECK(boost::filesystem::exists(p));
 
-  assert(boost::filesystem::is_regular_file(p));
+  CHECK(boost::filesystem::is_regular_file(p));
 
-  assert(p.has_extension());
+  CHECK(p.has_extension());
 
   std::string ext = p.extension().string();
   boost::to_lower(ext);
@@ -113,31 +113,31 @@ void DataTable::_readDataFromFile(const std::string& filename) {
   if (ext == ".csv") {
     _readFromCsvFile(filename);
   } else {
-    assert(false);
+    CHECK(false);
   }
 }
 
 void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool buildIdColumn) {
   // TODO: Throw exception in place of asserts
-  assert(obj.IsObject());
+  CHECK(obj.IsObject());
 
   rapidjson::Value::ConstMemberIterator mitr1, mitr2;
 
   bool isObject;
 
   if ((mitr1 = obj.FindMember("values")) != obj.MemberEnd()) {
-    assert((isObject = mitr1->value.IsObject()) || mitr1->value.IsArray());
+    CHECK((isObject = mitr1->value.IsObject()) || mitr1->value.IsArray());
 
     if (isObject) {
       // in column format
       // TODO: fill out
     } else {
       // in row format in an array
-      assert(!mitr1->value.Empty());
+      CHECK(!mitr1->value.Empty());
 
       const rapidjson::Value& item = mitr1->value[0];
 
-      assert(item.IsObject());
+      CHECK(item.IsObject());
 
       for (mitr2 = item.MemberBegin(); mitr2 != item.MemberEnd(); ++mitr2) {
         // TODO: Support strings? bools? Anything else?
@@ -153,14 +153,14 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool build
       }
     }
   } else if ((mitr1 = obj.FindMember("url")) != obj.MemberEnd()) {
-    assert(mitr1->value.IsString());
+    CHECK(mitr1->value.IsString());
 
     _readDataFromFile(mitr1->value.GetString());
   } else {
-    assert(false);
+    CHECK(false);
   }
 
-  assert(_columns.size());
+  CHECK(_columns.size());
   _numRows = (*_columns.begin())->size();
 
   if (buildIdColumn) {
@@ -179,7 +179,7 @@ DataType DataTable::getColumnType(const std::string& columnName) {
   ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
 
   ColumnMap_by_name::iterator itr;
-  assert((itr = nameLookup.find(columnName)) != nameLookup.end());
+  CHECK((itr = nameLookup.find(columnName)) != nameLookup.end());
 
   return (*itr)->getColumnType();
 }
@@ -188,7 +188,7 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
   ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
 
   ColumnMap_by_name::iterator itr;
-  assert((itr = nameLookup.find(columnName)) != nameLookup.end());
+  CHECK((itr = nameLookup.find(columnName)) != nameLookup.end());
 
   return *itr;
 }
@@ -321,7 +321,7 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
     }
   }
 
-  assert(_vbo->hasAttribute(columnName));
+  CHECK(_vbo->hasAttribute(columnName));
 
   return _vbo;
 }
@@ -343,14 +343,14 @@ void TDataColumn<ColorRGBA>::push_back(const std::string& val) {
 
 template <typename T>
 void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  assert(dataArrayObj.IsArray());
+  CHECK(dataArrayObj.IsArray());
 
   rapidjson::Value::ConstValueIterator vitr;
   rapidjson::Value::ConstMemberIterator mitr;
 
   for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    assert(vitr->IsObject());
-    assert((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd());
+    CHECK(vitr->IsObject());
+    CHECK((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd());
 
     _columnDataPtr->push_back(getNumValFromJSONObj<T>(mitr->value));
   }
@@ -358,7 +358,7 @@ void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayO
 
 template <>
 void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  assert(dataArrayObj.IsArray());
+  CHECK(dataArrayObj.IsArray());
 
   rapidjson::Value::ConstValueIterator vitr;
   rapidjson::Value::ConstMemberIterator mitr;
@@ -366,8 +366,8 @@ void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& da
   ColorRGBA color;
 
   for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    assert(vitr->IsObject());
-    assert((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd());
+    CHECK(vitr->IsObject());
+    CHECK((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd());
 
     _columnDataPtr->push_back(color.initFromCSSString(mitr->value.GetString()));
     // _columnDataPtr->push_back(color);

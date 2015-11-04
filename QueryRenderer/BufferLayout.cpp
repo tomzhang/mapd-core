@@ -3,7 +3,7 @@
 using namespace MapD_Renderer;
 
 BufferAttrType MapD_Renderer::getBufferAttrType(unsigned int a, int numComponents) {
-  assert(numComponents == 1);
+  CHECK(numComponents == 1);
 
   return BufferAttrType::UINT;
 }
@@ -19,7 +19,7 @@ BufferAttrType MapD_Renderer::getBufferAttrType(int a, int numComponents) {
     case 4:
       return BufferAttrType::VEC4I;
     default:
-      assert(false);
+      CHECK(false);
   }
 }
 
@@ -34,7 +34,7 @@ BufferAttrType MapD_Renderer::getBufferAttrType(float a, int numComponents) {
     case 4:
       return BufferAttrType::VEC4F;
     default:
-      assert(false);
+      CHECK(false);
   }
 }
 
@@ -49,6 +49,6 @@ BufferAttrType MapD_Renderer::getBufferAttrType(double a, int numComponents) {
     case 4:
       return BufferAttrType::VEC4D;
     default:
-      assert(false);
+      CHECK(false);
   }
 }

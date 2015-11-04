@@ -39,12 +39,12 @@ class BaseScale {
   virtual ~BaseScale();
 
   TypeGLShPtr& getDomainType() {
-    assert(_domainType != nullptr);
+    CHECK(_domainType != nullptr);
     return _domainType;
   }
 
   TypeGLShPtr& getRangeType() {
-    assert(_rangeType != nullptr);
+    CHECK(_rangeType != nullptr);
     return _rangeType;
   }
 
@@ -223,7 +223,7 @@ class BaseRenderProperty {
   ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
 
   void bindToRenderer(Shader* activeShader) const {
-    assert(_vboPtr != nullptr);
+    CHECK(_vboPtr != nullptr);
 
     _vboPtr->bindToRenderer(activeShader, _vboAttrName, _name);
   }

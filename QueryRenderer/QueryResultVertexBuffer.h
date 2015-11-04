@@ -148,7 +148,7 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
   static void checkCudaErrors(cudaError_t result) {
     if (result) {
       fprintf(stderr, "CUDA error code=%d\n", static_cast<unsigned int>(result));
-      assert(false);
+      CHECK(false);
     }
   }
 
