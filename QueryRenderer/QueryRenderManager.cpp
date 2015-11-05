@@ -107,7 +107,9 @@ CudaHandle QueryRenderManager::getCudaHandle() {
   }
 
   glfwMakeContextCurrent(_windowPtr);
-  return _queryResultVBOPtr->getCudaHandlePreQuery();
+  CudaHandle rtn = _queryResultVBOPtr->getCudaHandlePreQuery();
+  glfwMakeContextCurrent(nullptr);
+  return rtn;
 }
 
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
@@ -215,6 +217,7 @@ void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument
   }
 
   _activeRenderer->setJSONDocument(jsonDocument, (_debugMode ? _windowPtr : nullptr));
+  glfwMakeContextCurrent(nullptr);
 }
 
 // void QueryRenderManager::setJSONConfigForUserWidget(int userId, int widgetId, const std::string& configJSON) {
@@ -264,6 +267,7 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
 
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
+  glfwMakeContextCurrent(nullptr);
 }
 
 void QueryRenderManager::render() const {
@@ -299,6 +303,7 @@ void QueryRenderManager::render() const {
                       GL_COLOR_BUFFER_BIT,
                       GL_NEAREST);
   }
+  glfwMakeContextCurrent(nullptr);
 }
 
 PngData QueryRenderManager::renderToPng() const {
@@ -353,6 +358,8 @@ PngData QueryRenderManager::renderToPng() const {
   gdImageDestroy(im);
   delete[] pixels;
 
+  glfwMakeContextCurrent(nullptr);
+
   return PngData(pngPtr, pngSize);
 }
 
@@ -366,6 +373,7 @@ unsigned int QueryRenderManager::getIdAt(int x, int y) const {
 
   glfwMakeContextCurrent(_windowPtr);
   return _activeRenderer->getIdAt(x, y);
+  glfwMakeContextCurrent(nullptr);
 }
 
 int randColor() {
