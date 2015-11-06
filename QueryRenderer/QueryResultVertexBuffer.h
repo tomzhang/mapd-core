@@ -71,8 +71,7 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       // checkCudaErrors(cudaGraphicsUnregisterResource(_cudaResource));
       // checkCudaErrors(cuGraphicsUnregisterResource(_cudaResource));
 
-      // glDeleteBuffers(1, &_bufferId);
-      BaseVertexBuffer::~BaseVertexBuffer();
+      glDeleteBuffers(1, &_bufferId);
     }
   }
 

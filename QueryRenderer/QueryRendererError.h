@@ -17,6 +17,6 @@
 
 #define THROW_RUNTIME_EX(errstr) \
   LOG(ERROR) << errstr;          \
-  throw std::runtime_error(errstr);
+  throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " " + errstr);
 
 #endif  // QUERY_RENDERER_ERROR_H_
