@@ -275,7 +275,7 @@ DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj, const Q
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
   } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
-  } else {
-    CHECK(false);
   }
+  CHECK(false);
+  return nullptr;
 }

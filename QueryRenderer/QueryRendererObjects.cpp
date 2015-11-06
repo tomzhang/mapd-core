@@ -1382,7 +1382,8 @@ GeomConfigShPtr MapD_Renderer::createMark(const rapidjson::Value& obj, const Que
 
   if (strGeomType == "points") {
     return GeomConfigShPtr(new PointMark(obj, ctx));
-  } else {
-    CHECK(false);
   }
+
+  CHECK(false);
+  return nullptr;
 }
