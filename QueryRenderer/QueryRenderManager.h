@@ -37,7 +37,7 @@ struct PngData {
 };
 
 struct QueryDataLayout {
-  enum class AttrType { UINT = 0, INT, FLOAT, DOUBLE, INT64 };
+  enum class AttrType { UINT = 0, INT, FLOAT, DOUBLE, UINT64, INT64 };
   enum class LayoutType { INTERLEAVED = 0, SEQUENTIAL };
 
   size_t numRows;
@@ -88,11 +88,16 @@ struct QueryDataLayout {
             case AttrType::DOUBLE:
               layout->addAttribute(attrNames[i], BufferAttrType::DOUBLE);
               break;
-            case AttrType::INT64:
+            case AttrType::UINT64:
               // TODO(croot): support 64-bit ints
               // So for the time being, add a dummy attr for the first
               // 32bits of the attr, and then the real attr for the
               // last 32bits.
+              layout->addAttribute(attrNames[i], BufferAttrType::UINT);
+              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::UINT);
+              break;
+            case AttrType::INT64:
+              // TODO(croot): support 64-bit ints (see UINT64)
               layout->addAttribute(attrNames[i], BufferAttrType::INT);
               layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::INT);
               break;
@@ -115,6 +120,14 @@ struct QueryDataLayout {
               break;
             case AttrType::DOUBLE:
               layout->addAttribute(attrNames[i], BufferAttrType::DOUBLE);
+              break;
+            case AttrType::UINT64:
+              // TODO(croot): support 64-bit ints
+              // So for the time being, add a dummy attr for the first
+              // 32bits of the attr, and then the real attr for the
+              // last 32bits.
+              layout->addAttribute(attrNames[i], BufferAttrType::UINT);
+              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::UINT);
               break;
             case AttrType::INT64:
               // TODO(croot): support 64-bit ints

@@ -37,7 +37,7 @@ DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnNa
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 }
 
-const std::string DataTable::defaultIdColumnName = "__id__";
+const std::string DataTable::defaultIdColumnName = "rowid";
 
 DataTable::DataTable(const std::string& name, const rapidjson::Value& obj, bool buildIdColumn, VboType vboType)
     : BaseDataTableVBO(name, BaseDataTableVBO::DataTableType::OTHER), _vboType(vboType), _numRows(0) {
