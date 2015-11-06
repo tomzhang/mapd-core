@@ -1,3 +1,4 @@
+#include "QueryRendererError.h"
 #include "ShaderUtils.h"
 #include <boost/filesystem.hpp>
 #include <glog/logging.h>
@@ -7,7 +8,9 @@ using namespace MapD_Renderer;
 
 std::string MapD_Renderer::getShaderCodeFromFile(const std::string& shaderFilename) {
   boost::filesystem::path path(shaderFilename);
-  CHECK(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path));
+  RUNTIME_EX_ASSERT(boost::filesystem::exists(path), "Shader \"" + shaderFilename + "\" does not exist.");
+  RUNTIME_EX_ASSERT(boost::filesystem::is_regular_file(path),
+                    "Shader \"" + shaderFilename + "\" is not an appropriate shader file.");
 
   // Read the Vertex Shader code from the file
   std::string shaderCode;
@@ -20,9 +23,7 @@ std::string MapD_Renderer::getShaderCodeFromFile(const std::string& shaderFilena
     }
     shaderStream.close();
   } else {
-    printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n",
-           shaderFilename.c_str());
-    CHECK(false);
+    THROW_RUNTIME_EX("Cannot open shader file \"" + shaderFilename + "\".");
   }
 
   return shaderCode;

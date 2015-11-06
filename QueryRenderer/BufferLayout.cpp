@@ -3,7 +3,7 @@
 using namespace MapD_Renderer;
 
 BufferAttrType MapD_Renderer::getBufferAttrType(unsigned int a, int numComponents) {
-  CHECK(numComponents == 1);
+  RUNTIME_EX_ASSERT(numComponents == 1, "Only 1 component of unsigned ints are currently supported.");
 
   return BufferAttrType::UINT;
 }
@@ -19,8 +19,10 @@ BufferAttrType MapD_Renderer::getBufferAttrType(int a, int numComponents) {
     case 4:
       return BufferAttrType::VEC4I;
     default:
-      CHECK(false);
+      THROW_RUNTIME_EX("Invalid number of components " + std::to_string(numComponents) + ". Need 1-4 components.");
   }
+
+  return BufferAttrType::INT;
 }
 
 BufferAttrType MapD_Renderer::getBufferAttrType(float a, int numComponents) {
@@ -34,8 +36,10 @@ BufferAttrType MapD_Renderer::getBufferAttrType(float a, int numComponents) {
     case 4:
       return BufferAttrType::VEC4F;
     default:
-      CHECK(false);
+      THROW_RUNTIME_EX("Invalid number of components " + std::to_string(numComponents) + ". Need 1-4 components.");
   }
+
+  return BufferAttrType::FLOAT;
 }
 
 BufferAttrType MapD_Renderer::getBufferAttrType(double a, int numComponents) {
@@ -49,6 +53,8 @@ BufferAttrType MapD_Renderer::getBufferAttrType(double a, int numComponents) {
     case 4:
       return BufferAttrType::VEC4D;
     default:
-      CHECK(false);
+      THROW_RUNTIME_EX("Invalid number of components " + std::to_string(numComponents) + ". Need 1-4 components.");
   }
+
+  return BufferAttrType::DOUBLE;
 }

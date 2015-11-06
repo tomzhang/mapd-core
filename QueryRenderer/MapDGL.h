@@ -8,11 +8,6 @@ namespace MapD_GL {
 
 #define BUFFER_OFFSET(i) ((char*)NULL + (i))
 
-struct GLError : std::runtime_error {
-  GLError(GLenum err, const std::string& errstr) : ::std::runtime_error(errstr), code(err){};
-  const GLenum code;
-};
-
 void checkGLError(const char* cmd, const char* file, int line);
 
 #if defined(DEBUG)

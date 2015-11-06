@@ -230,8 +230,7 @@ ColorRGBA& ColorRGBA::initFromCSSString(const std::string& colorStr) {
       !initFromHexString(lowerColorStr, _colorArray) &&
       ((itr = colorKeywords.find(lowerColorStr)) == colorKeywords.end() ||
        !initFromHexString(itr->second, _colorArray))) {
-    // TODO: throw exception instead of assert
-    CHECK(false);
+    THROW_RUNTIME_EX("ColorRGBA::initFromCSSString(): Invalid color css string \"" + colorStr + "\".");
   }
 
   return *this;

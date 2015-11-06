@@ -1,6 +1,7 @@
 #ifndef DATA_TABLE_H_
 #define DATA_TABLE_H_
 
+#include "QueryRendererError.h"
 #include "VertexBuffer.h"
 #include "TypeGL.h"
 #include "Color.h"
@@ -56,8 +57,8 @@ class SqlQueryDataTable : public BaseDataTableVBO {
 
   bool hasColumn(const std::string& columnName) { return _vbo->hasAttribute(columnName); }
   BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName) {
-    // TODO(croot): throw/log error instead of assert
-    CHECK(_vbo->hasAttribute(columnName));
+    RUNTIME_EX_ASSERT(_vbo->hasAttribute(columnName),
+                      "SqlQueryDataTable::hasColumn(): column \"" + columnName + "\" does not exist.");
     return _vbo;
   }
   DataType getColumnType(const std::string& columnName) {
@@ -74,9 +75,11 @@ class SqlQueryDataTable : public BaseDataTableVBO {
       case BufferAttrType::VEC4F:
         return DataType::COLOR;
       default:
-        // TODO(croot): throw/log error
-        CHECK(false);
+        THROW_RUNTIME_EX("SqlQueryDataTable::getColumnType(): Vertex buffer attribute type: " +
+                         std::to_string(static_cast<int>(attrType)) + " is not a supported type.");
     }
+
+    return DataType::INT;
   }
   int numRows() { return _vbo->size(); }
 
@@ -140,7 +143,8 @@ class TDataColumn : public DataColumn {
   std::pair<T, T> getExtrema() {
     auto result = std::minmax_element(_columnDataPtr->begin(), _columnDataPtr->end());
 
-    CHECK(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end());
+    RUNTIME_EX_ASSERT(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end(),
+                      "TDataColumn::getExtrema(): cannot find the extrema of the column.");
 
     return std::make_pair(*result.first, *result.second);
   }

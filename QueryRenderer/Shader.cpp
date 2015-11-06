@@ -1,7 +1,5 @@
-#include <assert.h>
-#include <boost/algorithm/string/predicate.hpp>
 #include "Shader.h"
-#include <stdexcept>
+#include <boost/algorithm/string/predicate.hpp>
 
 using namespace MapD_Renderer;
 
@@ -111,8 +109,7 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
       break;
 
     default:
-      // TODO: throw error?
-      CHECK(1);
+      THROW_RUNTIME_EX("createUniformAttrPtr(): GL type " + std::to_string(type) + " is not yet a supported type.");
       break;
   }
 
@@ -206,30 +203,23 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
   // build and compile the vertex shader
   _vertShaderId = glCreateShader(GL_VERTEX_SHADER);
   if (!compileShader(_vertShaderId, vertSrc, errStr)) {
-    // TODO: throw an error
     _cleanupIds();
-    printf("Error compiling vertex shader: %s\n", errStr.c_str());
-    CHECK(1);
+    THROW_RUNTIME_EX("Error compiling vertex shader: " + errStr + ".\n\nVertex shader src:\n\n" + vertSrc);
   }
 
   _fragShaderId = glCreateShader(GL_FRAGMENT_SHADER);
   if (!compileShader(_fragShaderId, fragSrc, errStr)) {
-    // TODO: throw an error
     _cleanupIds();
-    printf("Error compiling fragment shader: %s\n", errStr.c_str());
-    CHECK(1);
+    THROW_RUNTIME_EX("Error compiling fragment shader: " + errStr + ".\n\nFragment shader src:\n\n" + fragSrc);
   }
 
   _programId = glCreateProgram();
   glAttachShader(_programId, _vertShaderId);
   glAttachShader(_programId, _fragShaderId);
   if (!linkProgram(_programId, errStr)) {
-    // TODO: throw an error
-
     // clean out the shader references
     _cleanupIds();
-    printf("Error linking the shader: %s\n", errStr.c_str());
-    CHECK(1);
+    THROW_RUNTIME_EX("Error linking the shader: " + errStr);
   }
 
   GLint numAttrs;
@@ -283,78 +273,11 @@ std::string Shader::getFragmentSource() const {
   return getShaderSource(_fragShaderId);
 }
 
-// template <typename T>
-// void Shader::setUniformAttribute(const std::string& attrName, T attrValue)
-// {
-//  UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
-
-//  // TODO: check if bound
-
-//  if (iter == _uniformAttrs.end())
-//  {
-//    // TODO: throw a warning/error?
-//    cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
-//    return;
-//  }
-
-//  UniformAttrInfo *info = iter->second.get();
-
-//  GLenum attrType = info->type;
-//  GLint attrSz = info->size;
-//  GLuint attrLoc = info->location;
-//  if (attrSz != 1)
-//  {
-//    // TODO: throw a warning/error?
-//    cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size 1 but should be "
-// <<
-// attrSz << endl;
-//    return;
-//  }
-
-//  // TODO: check type mismatch?
-//  // setUniformByLocation(attrLoc, 1, &attrValue);
-//  // iter->(*second)();
-//  info->setAttr(attrValue);
-// }
-
-// template <typename T>
-// void Shader::setUniformAttribute(const std::string& attrName, const vector<T>& attrValue)
-// {
-//  UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
-
-//  // TODO: check if bound
-
-//  if (iter == _uniformAttrs.end())
-//  {
-//    // TODO: throw a warning/error?
-//    cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << endl;
-//    return;
-//  }
-
-//  UniformAttrInfo *info = iter->second.get();
-
-//  GLuint attrType = info->type;
-//  GLuint attrSz = info->size;
-//  GLuint attrLoc = info->location;
-//  if (attrSz != attrValue.length())
-//  {
-//    // TODO: throw a warning/error?
-//    cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size " <<
-// attrValue.length() << " but should be " << attrSz << endl;
-//    return;
-//  }
-
-//  // TODO: check type mismatch?
-//  info->setAttr(attrValue);
-//  // setUniformByLocation(attrLoc, attrSz, &attrValue);
-// }
-
 GLuint Shader::getVertexAttributeLocation(const std::string& attrName) const {
   AttrMap::const_iterator iter = _vertexAttrs.find(attrName);
 
-  if (iter == _vertexAttrs.end()) {
-    throw std::runtime_error("Attribute \"" + attrName + "\" does not exist in shader. Cannot get attribute location.");
-  }
+  RUNTIME_EX_ASSERT(iter != _vertexAttrs.end(),
+                    "Attribute \"" + attrName + "\" does not exist in shader. Cannot get attribute location.");
 
   AttrInfo* info = iter->second.get();
 

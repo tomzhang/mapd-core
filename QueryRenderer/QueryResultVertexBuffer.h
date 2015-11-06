@@ -1,6 +1,7 @@
 #ifndef QUERY_RESULT_VERTEX_BUFFER_H_
 #define QUERY_RESULT_VERTEX_BUFFER_H_
 
+#include "QueryRendererError.h"
 #include "BufferLayout.h"
 #include "Shader.h"
 #include "VertexBuffer.h"
@@ -63,12 +64,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       //   or
       //   b) we somehow have an api to access the current context, and change the
       //      resource to be an unordered_map by context.
-      
-
-      // CROOT: CUDA COMMENT
-      // if (_isActive) {
-      //   checkCudaErrors(cudaGraphicsUnmapResources(1, &_cudaResource, 0));
-      // }
 
       // TODO(croot)
       // this keeps erroring out and I'm not sure why
@@ -76,38 +71,17 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       // checkCudaErrors(cudaGraphicsUnregisterResource(_cudaResource));
       // checkCudaErrors(cuGraphicsUnregisterResource(_cudaResource));
 
-      // NOTE: let the base class destroy _bufferId
-      glDeleteBuffers(1, &_bufferId);
+      // glDeleteBuffers(1, &_bufferId);
+      BaseVertexBuffer::~BaseVertexBuffer();
     }
   }
-
-  // bool hasAttribute(const std::string& attrName) {
-  //   if (!_layoutPtr) {
-  //     return false;
-  //   }
-  //   return _layoutPtr->hasAttribute(attrName);
-  // }
-
-  // TypeGLShPtr getAttributeTypeGL(const std::string& attrName) {
-  //   if (!_layoutPtr) {
-  //     throw std::runtime_error(
-  //         "The query buffer has not been properly initialized. Cannot retrieve the Attribute GL Type of " + attrName
-  //         +
-  //         ".");
-  //   }
-  //   return _layoutPtr->getAttributeTypeGL(attrName);
-  // }
 
   void setBufferLayout(const BufferLayoutShPtr& layoutPtr) { _layoutPtr = layoutPtr; }
 
   CudaHandle getCudaHandlePreQuery() {
     // Handling the state of the buffer since the GL VBO needs to be mapped/unmapped to/from a CUDA buffer.
     // Managing the state ensures that the mapping/unmapping is done in the appropriate order.
-    if (_isActive) {
-      std::runtime_error err("Query result buffer is already in use. Cannot access cuda handle.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(!_isActive, "Query result buffer is already in use. Cannot access cuda handle.");
 
     // lazy load
     _initBuffer();
@@ -120,23 +94,20 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     checkCudaErrors(cuGraphicsMapResources(1, &_cudaResource, 0));
 
     size_t num_bytes;
+    // void* cudaPtr;
     // checkCudaErrors(cudaGraphicsResourceGetMappedPointer(&cudaPtr, &num_bytes, _cudaResource));
 
     CUdeviceptr devPtr;
     checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
 
-    if (num_bytes != _numTotalBytes) {
-      std::runtime_error err("QueryResultVertexBuffer: couldn't successfully map all " +
-                             std::to_string(_numTotalBytes) + " bytes. Was only able to map " +
-                             std::to_string(num_bytes) + " bytes.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(num_bytes == _numTotalBytes,
+                      "QueryResultVertexBuffer: couldn't successfully map all " + std::to_string(_numTotalBytes) +
+                          " bytes. Was only able to map " + std::to_string(num_bytes) + " bytes.");
 
     _isActive = true;
 
     // return CudaHandle(_bufferId, _numTotalBytes);
-    //return CudaHandle(cudaPtr, _numTotalBytes);
+    // return CudaHandle(cudaPtr, _numTotalBytes);
     return CudaHandle(reinterpret_cast<void*>(devPtr), _numTotalBytes);
   }
 
@@ -144,11 +115,7 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     // TODO(croot): fill this function in. Should be called after the query is completed
     // and this buffer is filled with data. We just need to know what's in that data.
 
-    if (!_isActive) {
-      std::runtime_error err("Query result buffer has not been prepped for a query. Cannot set data post query.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(_isActive, "Query result buffer has not been prepped for a query. Cannot set data post query.");
 
     _isActive = false;
 
@@ -167,14 +134,11 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
  private:
   // CROOT: CUDA COMMENT
   static void checkCudaErrors(cudaError_t result) {
-    if (result) {
-      fprintf(stderr, "CUDA error code=%d\n", static_cast<unsigned int>(result));
-      CHECK(false);
-    }
+    RUNTIME_EX_ASSERT(result == cudaSuccess, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
   }
 
   static void checkCudaErrors(CUresult result) {
-    CHECK(result == CUDA_SUCCESS) << "CUDA error code = " << static_cast<unsigned int>(result);
+    RUNTIME_EX_ASSERT(result == CUDA_SUCCESS, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
   }
 
   bool _isActive;
@@ -199,7 +163,8 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       glBufferData(_target, _numTotalBytes, 0, _usage);
 
       // CROOT: CUDA COMMENT
-      // checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, cudaGraphicsRegisterFlagsWriteDiscard));
+      // checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cudaResource, _bufferId,
+      // cudaGraphicsRegisterFlagsWriteDiscard));
       checkCudaErrors(cuGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
 
       // restore the state

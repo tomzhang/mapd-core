@@ -1,6 +1,7 @@
 #ifndef QUERY_RENDERER_OBJECTS_H_
 #define QUERY_RENDERER_OBJECTS_H_
 
+#include "QueryRendererError.h"
 #include "rapidjson/document.h"
 #include <memory>  // std::unique_ptr
 #include "Shader.h"
@@ -25,7 +26,7 @@ typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 class BaseScale {
  public:
   enum class ScaleType { LINEAR = 0, ORDINAL };
-  const static std::vector<std::string> scaleVertexShaderFilenames;
+  const static std::vector<std::string> scaleVertexShaderSource;
 
   std::string name;
   ScaleType type;
@@ -39,12 +40,13 @@ class BaseScale {
   virtual ~BaseScale();
 
   TypeGLShPtr& getDomainType() {
-    CHECK(_domainType != nullptr);
+    RUNTIME_EX_ASSERT(_domainType != nullptr, "BaseScale::getDomainType(): the domain type is uninitialized.");
     return _domainType;
   }
 
   TypeGLShPtr& getRangeType() {
-    CHECK(_rangeType != nullptr);
+    RUNTIME_EX_ASSERT(_rangeType != nullptr, "BaseScale::getRangeType(): the range type is uninitialized.");
+
     return _rangeType;
   }
 
@@ -179,7 +181,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj, const QueryRendererContextSh
 
 class BaseRenderProperty {
  public:
-  BaseRenderProperty(const std::string& name, const QueryRendererContextShPtr& ctx, bool useScale = true)
+  BaseRenderProperty(const std::string& name,
+                     const QueryRendererContextShPtr& ctx,
+                     bool useScale = true,
+                     bool flexibleType = true)
       : _name(name),
         _useScale(useScale),
         _vboAttrName(""),
@@ -187,7 +192,8 @@ class BaseRenderProperty {
         _ctx(ctx),
         _inType(nullptr),
         _outType(nullptr),
-        _scaleConfigPtr(nullptr){};
+        _scaleConfigPtr(nullptr),
+        _flexibleType(flexibleType) {}
 
   virtual ~BaseRenderProperty() {
     // std::cerr << "IN BaseRenderProperty DESTRUCTOR " << _name << std::endl;
@@ -223,7 +229,8 @@ class BaseRenderProperty {
   ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
 
   void bindToRenderer(Shader* activeShader) const {
-    CHECK(_vboPtr != nullptr);
+    RUNTIME_EX_ASSERT(_vboPtr != nullptr,
+                      "BaseRenderProperty::bindToRenderer(): A vertex buffer is not defined. Cannot bind to renderer.");
 
     _vboPtr->bindToRenderer(activeShader, _vboAttrName, _name);
   }
@@ -242,6 +249,8 @@ class BaseRenderProperty {
 
   ScaleShPtr _scaleConfigPtr;
 
+  bool _flexibleType;
+
   void _initScaleFromJSONObj(const rapidjson::Value& obj);
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj, int numItems = 1) = 0;
@@ -252,14 +261,17 @@ class BaseRenderProperty {
 template <typename T, int numComponents = 1>
 class RenderProperty : public BaseRenderProperty {
  public:
-  RenderProperty(const std::string& name, const QueryRendererContextShPtr& ctx, bool useScale = true)
-      : BaseRenderProperty(name, ctx, useScale), _mult(), _offset() {}
-  ~RenderProperty() {
-    // std::cerr << "IN RenderProperty DESTRUCTOR " << _name << std::endl;
+  RenderProperty(const std::string& name,
+                 const QueryRendererContextShPtr& ctx,
+                 bool useScale = true,
+                 bool flexibleType = true)
+      : BaseRenderProperty(name, ctx, useScale, flexibleType), _mult(), _offset() {
+    _inType.reset(new TypeGL<T, numComponents>());
+    _outType.reset(new TypeGL<T, numComponents>());
   }
+  ~RenderProperty() {}
 
   void initializeValue(const T& val, int numItems = 1);
-  void initializeEmpty();
 
  private:
   T _mult;
@@ -270,6 +282,15 @@ class RenderProperty : public BaseRenderProperty {
   void _initTypeFromVbo();
   void _verifyScale();
 };
+
+template <>
+RenderProperty<ColorRGBA, 1>::RenderProperty(const std::string& name,
+                                             const QueryRendererContextShPtr& ctx,
+                                             bool useScale,
+                                             // TODO(croot): perhaps remove flexibleType? it ultimately is saying
+                                             // whether or not we can use a scale, right, which we have defined
+                                             // with useScale?
+                                             bool flexibleType);
 
 template <>
 void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj);

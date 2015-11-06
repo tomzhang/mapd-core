@@ -1,13 +1,13 @@
 #ifndef SHADER_H_
 #define SHADER_H_
 
+#include "QueryRendererError.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <GL/glew.h>
 #include <memory>
 #include <iostream>
-#include <glog/logging.h>
 
 namespace MapD_Renderer {
 
@@ -149,10 +149,9 @@ class Shader {
   GLint getUniformAttributeGLType(const std::string& attrName) {
     UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
 
-    // TODO(croot): throw/log exceptions
-    if (iter == _uniformAttrs.end()) {
-      CHECK(false);
-    }
+    RUNTIME_EX_ASSERT(
+        iter != _uniformAttrs.end(),
+        "Shader::getUniformAttributeGLType(): uniform attribute \"" + attrName + "\" does not exist in shader.");
 
     return iter->second->type;
   }
@@ -163,21 +162,15 @@ class Shader {
 
     // TODO: check if bound
 
-    if (iter == _uniformAttrs.end()) {
-      // TODO: throw a warning/error?
-      std::cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << std::endl;
-      return;
-    }
+    RUNTIME_EX_ASSERT(iter != _uniformAttrs.end(),
+                      "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
 
     UniformAttrInfo* info = iter->second.get();
 
     GLint attrSz = info->size;
-    if (attrSz != 1) {
-      // TODO: throw a warning/error?
-      std::cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size 1 but should be "
-                << attrSz << std::endl;
-      return;
-    }
+    RUNTIME_EX_ASSERT(attrSz == 1,
+                      "Uniform attribute \"" + attrName +
+                          "\" is not the appropriate size. It is size 1 but should be " + std::to_string(attrSz) + ".");
 
     // TODO: check type mismatch?
     // setUniformByLocation(attrLoc, 1, &attrValue);
@@ -191,21 +184,15 @@ class Shader {
 
     // TODO: check if bound
 
-    if (iter == _uniformAttrs.end()) {
-      // TODO: throw a warning/error?
-      std::cerr << "Uniform attribute: " << attrName << " is not defined in the shader." << std::endl;
-      return;
-    }
+    RUNTIME_EX_ASSERT(iter != _uniformAttrs.end(),
+                      "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
 
     UniformAttrInfo* info = iter->second.get();
 
     GLuint attrSz = info->size;
-    if (attrSz != attrValue.size()) {
-      // TODO: throw a warning/error?
-      std::cerr << "Uniform attribute: " << attrName << " is not the appropriate size. It is size " << attrValue.size()
-                << " but should be " << attrSz << std::endl;
-      return;
-    }
+    RUNTIME_EX_ASSERT(attrSz == attrValue.size(),
+                      "Uniform attribute: " + attrName + " is not the appropriate size. It is size " +
+                          std::to_string(attrValue.size()) + " but should be " + std::to_string(attrSz) + ".");
 
     // TODO: check type mismatch?
     info->setAttr((void*)(&attrValue[0]));

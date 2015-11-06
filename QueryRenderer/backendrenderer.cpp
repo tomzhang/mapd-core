@@ -4,6 +4,8 @@
 #include "backendrendererSetup.h"
 #include <cuda.h>
 
+#include <glog/logging.h>
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <curand.h>
@@ -356,8 +358,15 @@ int main(int argc, char* argv[]) {
 
   CHECK(argc == 3);
 
+  // setup google logging
+  // google::InitGoogleLogging(argv[0]);
+  // FLAGS_log_dir = "./LOGS";
+
   // CROOT: CUDA COMMENT
-  // cudaGLSetGLDevice(gpuGetMaxGflopsDeviceId());
+  CUcontext cudaCtx;
+  int deviceId = gpuGetMaxGflopsDeviceId();
+  cuCtxCreate(&cudaCtx, 0, deviceId);
+  cuCtxSetCurrent(cudaCtx);
 
   std::string configJSON;
 

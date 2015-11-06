@@ -1,17 +1,18 @@
 #ifndef COLOR_H_
 #define COLOR_H_
 
+#include "QueryRendererError.h"
+#include "TypeGL.h"
+
+#include <boost/regex.hpp>
+#include <boost/static_assert.hpp>
+#include <boost/type_traits/is_floating_point.hpp>
+
 #include <array>
 #include <string>
 #include <sstream>
 #include <cstdint>
 #include <unordered_map>
-#include <boost/regex.hpp>
-
-#include <boost/static_assert.hpp>
-#include <boost/type_traits/is_floating_point.hpp>
-
-#include "TypeGL.h"
 
 namespace MapD_Renderer {
 
@@ -54,10 +55,6 @@ class ColorRGBA {
   }
 
   ColorRGBA& initFromCSSString(const std::string& colorStr);
-  // void initFromCSSString(const std::string& colorStr) {
-  //     // TODO: throw exception instead of assert
-  //     _colorArray = { {255,255,0,255} };
-  // }
 
   operator std::string() const {
     std::ostringstream s("[");

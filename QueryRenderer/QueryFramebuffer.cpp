@@ -1,3 +1,4 @@
+#include "QueryRendererError.h"
 #include "QueryFramebuffer.h"
 #include <iostream>
 #include <stdexcept>
@@ -129,9 +130,7 @@ QueryFramebuffer::QueryFramebuffer(int width, int height, bool doHitTest, bool d
       _fbo(0),
       _textureBuffers(MAX_TEXTURE_BUFFERS + 1, 0),
       _renderBuffers(MAX_RENDER_BUFFERS + 1, 0) {
-  if (width <= 0 || height <= 0) {
-    throw std::runtime_error("Invalid dimensions for the framebuffer. Dimensions are <= 0.");
-  }
+  RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the framebuffer. Dimensions must be > 0");
   _init(doHitTest, doDepthTest);
 }
 
@@ -213,7 +212,7 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
         break;
     }
 
-    throw std::runtime_error(ss.str());
+    THROW_RUNTIME_EX(ss.str());
   }
 
   glBindFramebuffer(GL_FRAMEBUFFER, currFramebuffer);

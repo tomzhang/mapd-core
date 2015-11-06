@@ -3,8 +3,15 @@ find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(GD REQUIRED)
 find_package(GLFW3 REQUIRED)
-find_package(CUDA REQUIRED)
 find_package(Glog REQUIRED)
+find_package(CUDA REQUIRED)
+if(ENABLE_CUDA)
+  find_library(CUDA_NVVM_LIBRARY
+    NAMES nvvm
+    PATHS "${CUDA_TOOLKIT_TARGET_DIR}/nvvm" "${CUDA_TOOLKIT_ROOT_DIR}/nvvm"
+    PATH_SUFFIXES "lib64" "lib")
+  list(APPEND CUDA_LIBRARIES ${CUDA_CUDA_LIBRARY} ${CUDA_NVVM_LIBRARY})
+endif()
 
 include_directories(${Boost_INCLUDE_DIR})
 include_directories(${GL_INCLUDE_DIR})
@@ -23,9 +30,6 @@ add_custom_command(
     ARGS -DEXECUTOR_RT -O3 -arch sm_30 -c ${CMAKE_CURRENT_SOURCE_DIR}/backendrendererSetup.cu)
 
 
-
-# add_executable(backendrenderer backendrenderer.cpp QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp MapDGL.cpp ${CMAKE_CURRENT_BINARY_DIR}/backendrendererSetup.o)
-# add_executable(backendrenderer backendrenderer.cpp QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp MapDGL.cpp)
 add_library(QueryRenderer QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp Shader.cpp BufferLayout.cpp TypeGL.cpp ShaderUtils.cpp DataTable.cpp Color.cpp MapDGL.cpp)
 
 # target_link_libraries(backendrenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${GD_LIBRARIES} ${GLFW3_LIBRARIES} ${CUDA_LIBRARIES} ${Glog_LIBRARIES})

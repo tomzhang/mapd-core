@@ -2,6 +2,7 @@
 #define VERTEX_BUFFER_H_
 
 // #include "Buffer.h"
+#include "QueryRendererError.h"
 #include "BufferLayout.h"
 #include "Shader.h"
 #include <GL/glew.h>
@@ -43,44 +44,28 @@ class BaseVertexBuffer {
   }
 
   TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const {
-    if (!_layoutPtr) {
-      std::runtime_error err(
-          "The vertex buffer has not been properly initialized. Cannot retrieve the Attribute GL Type of " + attrName +
-          ".");
+    RUNTIME_EX_ASSERT(_layoutPtr != nullptr,
+                      "The vertex buffer has not been properly initialized. Cannot retrieve the Attribute GL Type of " +
+                          attrName + ".");
 
-      LOG(ERROR) << err.what();
-      throw err;
-    }
     return _layoutPtr->getAttributeTypeGL(attrName);
   }
 
   BufferAttrType getAttributeType(const std::string& attrName) const {
-    if (!_layoutPtr) {
-      std::runtime_error err(
-          "The vertex buffer has not been properly initialized. Cannot retrieve the Attribute Type of " + attrName +
-          ".");
-
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(
+        _layoutPtr != nullptr,
+        "The vertex buffer has not been properly initialized. Cannot retrieve the Attribute Type of " + attrName + ".");
 
     return _layoutPtr->getAttributeType(attrName);
   }
 
   BufferLayoutShPtr getBufferLayout() const { return BufferLayoutShPtr(_layoutPtr); }
 
-  virtual void setBufferLayout() {
-    std::runtime_error err("Cannot set the buffer layout of a vertex buffer.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  virtual void setBufferLayout() { THROW_RUNTIME_EX("Cannot set the buffer layout of a vertex buffer."); }
 
   void bindToRenderer(Shader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "") {
-    if (!_bufferId) {
-      throw std::runtime_error("Cannot bind vertex buffer. It has not been initialized with data.");
-    } else if (!_layoutPtr) {
-      throw std::runtime_error("Cannot bind vertex buffer. It does not have a defined layout.");
-    }
+    RUNTIME_EX_ASSERT(_bufferId != 0, "Cannot bind vertex buffer. It has not been initialized with data.");
+    RUNTIME_EX_ASSERT(_layoutPtr != nullptr, "Cannot bind vertex buffer. It does not have a defined layout.");
     glBindBuffer(GL_ARRAY_BUFFER, _bufferId);
     _layoutPtr->bindToRenderer(activeShader, size(), attr, shaderAttr);
   }
@@ -93,9 +78,8 @@ class BaseVertexBuffer {
 
     BufferBindingMap::const_iterator itr;
 
-    if ((itr = bufferBindings.find(target)) == bufferBindings.end()) {
-      throw std::runtime_error(std::to_string(target) + " is not a valid opengl buffer target");
-    }
+    RUNTIME_EX_ASSERT((itr = bufferBindings.find(target)) != bufferBindings.end(),
+                      std::to_string(target) + " is not a valid opengl buffer target.");
 
     return itr->first;
   }
@@ -172,45 +156,7 @@ class VertexBuffer : public BaseVertexBuffer {
     _size = numItems;
   }
 
-  // int size() const { return _size; }
-
-  // void bindToRenderer(Shader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "") {
-  //   if (!_bufferId) {
-  //     throw std::runtime_error("Cannot bind vertex buffer. It has not been initialized with data.");
-  //   } else if (!_layoutPtr) {
-  //     throw std::runtime_error("Cannot bind vertex buffer. It does not have a defined layout.");
-  //   }
-  //   glBindBuffer(GL_ARRAY_BUFFER, _bufferId);
-  //   _layoutPtr->bindToRenderer(activeShader, size(), attr, shaderAttr);
-  // }
-
  private:
-  // static GLenum _getBufferBinding(GLenum target) {
-  //   typedef std::unordered_map<GLenum, GLenum> BufferBindingMap;
-  //   static const BufferBindingMap bufferBindings = {{GL_ARRAY_BUFFER, GL_ARRAY_BUFFER_BINDING},
-  //                                                   {GL_PIXEL_UNPACK_BUFFER, GL_PIXEL_UNPACK_BUFFER_BINDING}};
-
-  //   BufferBindingMap::const_iterator itr;
-
-  //   if ((itr = bufferBindings.find(target)) == bufferBindings.end()) {
-  //     throw std::runtime_error(std::to_string(target) + " is not a valid opengl buffer target");
-  //   }
-
-  //   return itr->first;
-  // }
-
-  // int _size;
-  // GLuint _bufferId;
-  // GLenum _target;
-  // GLenum _usage;
-
-  // BufferLayoutShPtr _layoutPtr;
-
-  // void _initBuffer() {
-  //   if (!_bufferId) {
-  //     glGenBuffers(1, &_bufferId);
-  //   }
-  // }
 };
 
 typedef std::unique_ptr<VertexBuffer> VertexBufferUqPtr;

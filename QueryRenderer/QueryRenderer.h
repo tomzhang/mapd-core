@@ -1,6 +1,7 @@
 #ifndef QUERY_RENDERER_H_
 #define QUERY_RENDERER_H_
 
+#include "QueryRendererError.h"
 #include "QueryResultVertexBuffer.h"
 #include "QueryFramebuffer.h"
 #include "QueryRendererObjects.h"

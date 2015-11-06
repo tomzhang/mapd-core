@@ -1,6 +1,7 @@
 #ifndef QUERY_RENDER_MANAGER_H_
 #define QUERY_RENDER_MANAGER_H_
 
+#include "QueryRendererError.h"
 #include "QueryRenderer.h"
 #include "Shader.h"
 #include "QueryResultVertexBuffer.h"
@@ -41,7 +42,13 @@ struct QueryDataLayout {
   enum class LayoutType { INTERLEAVED = 0, SEQUENTIAL };
 
   size_t numRows;
-  size_t keySz;
+
+  // TODO(croot): add size_t numKeys --- each row can have
+  // multiple keys. This value would indicate how many.
+  // We can default it to use one, and the invalid key
+  // would only match against the very first key. None of the
+  // others would concern me.
+  size_t numKeys;
   int64_t invalidKey;
   std::vector<std::string> attrNames;
   std::vector<AttrType> attrTypes;
@@ -50,17 +57,18 @@ struct QueryDataLayout {
   QueryDataLayout(const size_t numRows,
                   const std::vector<std::string>& attrNames,
                   const std::vector<AttrType>& attrTypes,
-                  const size_t keySz = 0,
+                  const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant except the first key, which would be the one to check the invalid key against.
                   const int64_t invalidKey = std::numeric_limits<int64_t>::max(),
                   const LayoutType layoutType = LayoutType::INTERLEAVED)
       : numRows(numRows),
-        keySz(keySz),
+        numKeys(numKeys),
         invalidKey(invalidKey),
         attrNames(attrNames),
         attrTypes(attrTypes),
         layoutType(layoutType) {
-    // TODO(croot): throw an error instead and quit gracefully?
-    CHECK(attrNames.size() == attrTypes.size());
+    RUNTIME_EX_ASSERT(
+        attrNames.size() == attrTypes.size(),
+        "QueryDataLayout constructor: The number of attribute names must match the number of attribute types.");
   }
 
   BufferLayoutShPtr convertToBufferLayout() {

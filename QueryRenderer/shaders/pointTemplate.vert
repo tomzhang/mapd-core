@@ -2,9 +2,6 @@
 
 #version 410 core
 
-#define inTkey <inTkeyType>
-#define outTkey <outTkeyType>
-
 #define inTx <inTxType>
 #define outTx <outTxType>
 
@@ -20,9 +17,9 @@
 #define inTfillColor <inTfillColorType>
 #define outTfillColor <outTfillColorType>
 
+#define useKey <useKey>
 
 
-in inTkey key;
 in inTx x;
 in inTy y;
 // in inTz z;
@@ -35,8 +32,11 @@ in inTfillColor fillColor;
 in uint id;
 
 
+#if useKey==1
+// TODO(croot): use the NV_vertex_attrib_integer_64bit extension to use an int64 for the key and invalidKey.
+in int key;
 uniform int invalidKey;
-uniform int useKey;
+#endif
 
 
 outTx getx(in inTx x) {
@@ -69,7 +69,8 @@ flat out vec4 fColor;        // the output color of the primitive
 
 void main() {
 
-    if (useKey == 0 || int(key) != invalidKey) {
+    #if useKey==1
+    if (key != invalidKey) {
         gl_Position = vec4(float(getx(x)), float(gety(y)), 0.5, 1.0);
         gl_PointSize = float(getsize(size));
 
@@ -80,5 +81,11 @@ void main() {
         gl_PointSize = 0.0;
         fColor = vec4(0,0,0,0);
     }
+    #else
+    gl_Position = vec4(float(getx(x)), float(gety(y)), 0.5, 1.0);
+    gl_PointSize = float(getsize(size));
+
+    fColor = getfillColor(fillColor);
+    #endif
     fPrimitiveId = id;
 }

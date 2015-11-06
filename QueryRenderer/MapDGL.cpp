@@ -1,5 +1,5 @@
 #include "MapDGL.h"
-#include <stdexcept>
+#include "QueryRendererError.h"
 #include <string>
 
 void checkGLError(const char* cmd, const char* file, int line) {
@@ -33,8 +33,6 @@ void checkGLError(const char* cmd, const char* file, int line) {
         break;
     }
 
-    // TODO(croot): create own exception class
-    throw MapD_GL::GLError(err, std::string(cmd) + ": Error GL_" + error + " - " + file + ":" + std::to_string(line));
-    // throw std::runtime_error(std::string(cmd) + ": Error GL_" + error + " _ " + file + ":" + std::to_string(line));
+    RUNTIME_EX_ASSERT(false, std::string(cmd) + ": Error GL_" + error + " - " + file + ":" + std::to_string(line));
   }
 }

@@ -1,0 +1,80 @@
+#ifndef ORDINALSCALETEMPLATE_VERT_H_
+#define ORDINALSCALETEMPLATE_VERT_H_
+
+#include <string>
+
+namespace MapD_Renderer {
+struct OrdinalScaleTemplate_vert {
+  static const std::string source;
+};
+
+const std::string OrdinalScaleTemplate_vert::source =
+    "#define domainType_<name> <domainType>\n"
+    "#define rangeType_<name> <rangeType>\n"
+    "\n"
+    "#define numDomains_<name> <numDomains>\n"
+    "#define numRanges_<name> <numRanges>\n"
+    "\n"
+    "uniform domainType_<name> uDomains_<name>[numDomains_<name>];\n"
+    "uniform rangeType_<name> uRanges_<name>[numRanges_<name>];\n"
+    "\n"
+    "rangeType_<name> uDefault_<name>;\n"
+    "\n"
+    "\n"
+    "rangeType_<name> getOrdinalScale_<name>(in domainType_<name> category) {\n"
+    "    int idx = -1;\n"
+    "    rangeType_<name> val = uDefault_<name>;\n"
+    "\n"
+    "    #if numDomains_<name> == 1 || numRanges_<name> == 1\n"
+    "        if (category == uDomains_<name>[0]) {\n"
+    "            val = uRanges_<name>[0];\n"
+    "        }\n"
+    "    // #elif numDomains_<name> == 2 || numRanges_<name> == 2\n"
+    "    //     if (category == uDomains_<name>[0]) {\n"
+    "    //         val = uRanges_<name>[0];\n"
+    "    //     } else if (category == uDomains_<name>[1]) {\n"
+    "    //         val = uRanges_<name>[1];\n"
+    "    //     }\n"
+    "    #else\n"
+    "        // performs a binary search so domain needs to be\n"
+    "        // properly sorted.\n"
+    "        int startIdx = 0;\n"
+    "        int endIdx = numDomains_<name>-1;\n"
+    "        int midIdx = 0;\n"
+    "\n"
+    "        domainType_<name> midVal = domainType_<name>(0);\n"
+    "\n"
+    "        if (category == uDomains_<name>[startIdx]) {\n"
+    "            idx = startIdx;\n"
+    "        } else if (category == uDomains_<name>[endIdx]) {\n"
+    "            idx = endIdx;\n"
+    "        } else {\n"
+    "            while (true) {\n"
+    "                midIdx = startIdx + ((endIdx - startIdx) / 2);\n"
+    "                if (midIdx == startIdx) {\n"
+    "                    break;\n"
+    "                } else {\n"
+    "                    midVal = uDomains_<name>[midIdx];\n"
+    "                    if (category == midVal) {\n"
+    "                        idx = midIdx;\n"
+    "                        break;\n"
+    "                    } else if (category > midVal) {\n"
+    "                        startIdx = midIdx;\n"
+    "                    } else if (category < midVal) {  // for some reason, just an else doesn't work here ????\n"
+    "                        endIdx = midIdx;\n"
+    "                    }\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "\n"
+    "        if (idx >= 0) {\n"
+    "            val = uRanges_<name>[idx % numRanges_<name>];\n"
+    "        }\n"
+    "\n"
+    "    #endif\n"
+    "\n"
+    "    return val;\n"
+    "}\n";
+}  // namespace MapD_Renderer
+
+#endif  // ORDINALSCALETEMPLATE_VERT_H_

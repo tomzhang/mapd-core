@@ -1,22 +1,23 @@
 #ifndef BUFFER_LAYOUT_H_
 #define BUFFER_LAYOUT_H_
 
+#include "QueryRendererError.h"
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
+#include <GL/glew.h>
 #include <glog/logging.h>
 
 #include <array>
 #include <vector>
 #include <string>
-#include <assert.h>
 #include <utility>  // std::pair, std::make_pair
 #include <memory>   // std::unique_ptr
-#include <GL/glew.h>
 #include "TypeGL.h"
 #include "Shader.h"
 #include <cstdint>
+#include <stdexcept>
 
 using namespace ::boost;
 using namespace ::boost::multi_index;
@@ -133,8 +134,8 @@ class BaseBufferLayout {
     BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
     BufferAttrMap_by_name::iterator itr;
 
-    // TODO: throw an exception instead of an assert
-    CHECK((itr = nameLookup.find(attrName)) != nameLookup.end());
+    RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
+                      "BaseBufferLayout::getAttributeTypeGL(): attribute " + attrName + " does not exist in layout.");
 
     return (*itr)->typeInfo->clone();
   }
@@ -145,8 +146,8 @@ class BaseBufferLayout {
     BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
     BufferAttrMap_by_name::iterator itr;
 
-    // TODO(croot): throw an exception instead of an assert
-    CHECK((itr = nameLookup.find(attrName)) != nameLookup.end());
+    RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
+                      "BaseBufferLayout::getAttributeType(): attribute " + attrName + " does not exist in layout.");
 
     return (*itr)->type;
   }
@@ -180,8 +181,8 @@ class CustomBufferLayout : public BaseBufferLayout {
   CustomBufferLayout() : BaseBufferLayout(CUSTOM) {}
 
   void addAttribute(const std::string& attrName, BufferAttrType type, int stride, int offset) {
-    // TODO: throw exception instead
-    CHECK(!hasAttribute(attrName) && attrName.length());
+    RUNTIME_EX_ASSERT(!hasAttribute(attrName) && attrName.length(),
+                      "CustomBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
     // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type,
     // attrTypeInfo[static_cast<int>(type)].get(), stride, offset));
@@ -205,8 +206,9 @@ class InterleavedBufferLayout : public BaseBufferLayout {
   int getBytesPerVertex() { return _vertexByteSize; }
 
   void addAttribute(const std::string& attrName, BufferAttrType type) {
-    // TODO: throw exception instead
-    CHECK(!hasAttribute(attrName) && attrName.length());
+    RUNTIME_EX_ASSERT(
+        !hasAttribute(attrName) && attrName.length(),
+        "InterleavedBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
     // TODO, set the stride of all currently existing attrs, or leave
     // that for when the layout is bound to the renderer/shader/VAO
@@ -224,8 +226,9 @@ class InterleavedBufferLayout : public BaseBufferLayout {
 
   template <typename T, int numComponents = 1>
   void addAttribute(const std::string& attrName) {
-    // TODO(croot): throw exception
-    CHECK(!hasAttribute(attrName) && attrName.length());
+    RUNTIME_EX_ASSERT(
+        !hasAttribute(attrName) && attrName.length(),
+        "InterleavedBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
     BufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
@@ -254,12 +257,11 @@ class InterleavedBufferLayout : public BaseBufferLayout {
         attrPtr->bind(attrLoc, _vertexByteSize, bufAttrPtr->offset);
       }
     } else {
-      // TODO(croot): throw an exception
       BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
       BufferAttrMap_by_name::iterator itr;
 
-      // TODO(croot): throw an exception instead of an assert
-      CHECK((itr = nameLookup.find(attr)) != nameLookup.end());
+      RUNTIME_EX_ASSERT((itr = nameLookup.find(attr)) != nameLookup.end(),
+                        "InterleavedBufferLayout::bindToRenderer(): attribute " + attr + " doesn't exist in layout.");
       bufAttrPtr = itr->get();
       attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
       attrPtr = bufAttrPtr->typeInfo;
@@ -276,8 +278,9 @@ class SequentialBufferLayout : public BaseBufferLayout {
   SequentialBufferLayout() : BaseBufferLayout(SEQUENTIAL) {}
 
   void addAttribute(const std::string& attrName, BufferAttrType type) {
-    // TODO: throw exception instead
-    CHECK(!hasAttribute(attrName) && attrName.length());
+    RUNTIME_EX_ASSERT(
+        !hasAttribute(attrName) && attrName.length(),
+        "SequentialBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
     int enumVal = static_cast<int>(type);
     // _attrMap[attrName] = BufferAttrInfoPtr(new BufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(),
@@ -290,8 +293,9 @@ class SequentialBufferLayout : public BaseBufferLayout {
 
   template <typename T, int numComponents = 1>
   void addAttribute(const std::string& attrName) {
-    // TODO: throw exception
-    CHECK(!hasAttribute(attrName) && attrName.length());
+    RUNTIME_EX_ASSERT(
+        !hasAttribute(attrName) && attrName.length(),
+        "SequentialBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
     BufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
@@ -327,8 +331,8 @@ class SequentialBufferLayout : public BaseBufferLayout {
         offset += attrPtr->numBytes() * numActiveBufferItems;
       }
     } else {
-      // TODO: throw an exception
-      CHECK(hasAttribute(attr));
+      RUNTIME_EX_ASSERT(hasAttribute(attr),
+                        "SequentialBufferLayout::bindToRenderer(): attribute " + attr + " doesn't exist in layout.");
 
       for (itr = _attrMap.begin(); itr != _attrMap.end(); ++itr) {
         bufAttrPtr = itr->get();

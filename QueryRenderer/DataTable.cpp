@@ -19,20 +19,23 @@ DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
     // TODO(croot): How do we properly handle floats?
     return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 
+    // double val = rowItem.GetDouble();
     // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
     //   return DataColumnUqPtr(new TDataColumn<float>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
     // } else {
     //   return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
     // }
   } else {
-    CHECK(false);
+    THROW_RUNTIME_EX("Cannot create data column for column \"" + columnName +
+                     "\". The JSON data for the column is not supported.");
   }
 }
 
 DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnName,
                                                      const rapidjson::Value& rowItem,
                                                      const rapidjson::Value& dataArray) {
-  CHECK(rowItem.IsString());
+  RUNTIME_EX_ASSERT(rowItem.IsString(),
+                    "Cannot create color column \"" + columnName + "\". Colors must be defined as strings.");
 
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 }
@@ -100,12 +103,13 @@ void DataTable::_readFromCsvFile(const std::string& filename) {
 void DataTable::_readDataFromFile(const std::string& filename) {
   boost::filesystem::path p(filename);  // avoid repeated path construction below
 
-  // TODO: throw exceptions instead of asserts
-  CHECK(boost::filesystem::exists(p));
+  RUNTIME_EX_ASSERT(boost::filesystem::exists(p), "File: " + filename + " does not exist.");
 
-  CHECK(boost::filesystem::is_regular_file(p));
+  RUNTIME_EX_ASSERT(boost::filesystem::is_regular_file(p),
+                    "File: " + filename + " is not a regular file. Cannot read contents to build a data table.");
 
-  CHECK(p.has_extension());
+  RUNTIME_EX_ASSERT(p.has_extension(),
+                    "File: " + filename + " does not have an extension. Cannot read contents to build a data table.");
 
   std::string ext = p.extension().string();
   boost::to_lower(ext);
@@ -113,31 +117,36 @@ void DataTable::_readDataFromFile(const std::string& filename) {
   if (ext == ".csv") {
     _readFromCsvFile(filename);
   } else {
-    CHECK(false);
+    THROW_RUNTIME_EX("File: " + filename + " with extension \"" + ext + "\" is not a supported data file.");
   }
 }
 
 void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool buildIdColumn) {
-  // TODO: Throw exception in place of asserts
-  CHECK(obj.IsObject());
+  RUNTIME_EX_ASSERT(obj.IsObject(),
+                    "JSON data parse error - data must be an object. Cannot build data table from JSON.");
 
   rapidjson::Value::ConstMemberIterator mitr1, mitr2;
 
   bool isObject;
 
   if ((mitr1 = obj.FindMember("values")) != obj.MemberEnd()) {
-    CHECK((isObject = mitr1->value.IsObject()) || mitr1->value.IsArray());
+    RUNTIME_EX_ASSERT((isObject = mitr1->value.IsObject()) || mitr1->value.IsArray(),
+                      "JSON data parse error - \"values\" property in the json must be an object or an array.");
 
     if (isObject) {
       // in column format
       // TODO: fill out
+      THROW_RUNTIME_EX("JSON data parse error - column format not supported yet.");
     } else {
       // in row format in an array
-      CHECK(!mitr1->value.Empty());
+
+      // TODO(croot) - should we just log a warning if no data is supplied instead?
+      RUNTIME_EX_ASSERT(!mitr1->value.Empty(), "JSON data parse error - there is no data in defined.");
 
       const rapidjson::Value& item = mitr1->value[0];
 
-      CHECK(item.IsObject());
+      RUNTIME_EX_ASSERT(item.IsObject(),
+                        "JSON data parse error - every row of JSON data must be defined as an object.");
 
       for (mitr2 = item.MemberBegin(); mitr2 != item.MemberEnd(); ++mitr2) {
         // TODO: Support strings? bools? Anything else?
@@ -153,14 +162,15 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool build
       }
     }
   } else if ((mitr1 = obj.FindMember("url")) != obj.MemberEnd()) {
-    CHECK(mitr1->value.IsString());
+    RUNTIME_EX_ASSERT(mitr1->value.IsString(), "JSON data parse error - \"url\" property must be a string.");
 
     _readDataFromFile(mitr1->value.GetString());
   } else {
-    CHECK(false);
+    THROW_RUNTIME_EX("JSON data parse error - JSON data object must contain either a \"values\" or \"url\" property.");
   }
 
-  CHECK(_columns.size());
+  // TODO(croot) - throw a warning instead if no data?
+  RUNTIME_EX_ASSERT(_columns.size(), "JSON data parse error - there are not columns in the data table.");
   _numRows = (*_columns.begin())->size();
 
   if (buildIdColumn) {
@@ -175,11 +185,11 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool build
 }
 
 DataType DataTable::getColumnType(const std::string& columnName) {
-  // TODO: throw exception for assert
   ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
 
   ColumnMap_by_name::iterator itr;
-  CHECK((itr = nameLookup.find(columnName)) != nameLookup.end());
+  RUNTIME_EX_ASSERT((itr = nameLookup.find(columnName)) != nameLookup.end(),
+                    "DataTable::getColumnType(): column \"" + columnName + "\" does not exist.");
 
   return (*itr)->getColumnType();
 }
@@ -188,7 +198,8 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
   ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
 
   ColumnMap_by_name::iterator itr;
-  CHECK((itr = nameLookup.find(columnName)) != nameLookup.end());
+  RUNTIME_EX_ASSERT((itr = nameLookup.find(columnName)) != nameLookup.end(),
+                    "DataTable::getColumn(): column \"" + columnName + "\" does not exist.");
 
   return *itr;
 }
@@ -321,7 +332,8 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
     }
   }
 
-  CHECK(_vbo->hasAttribute(columnName));
+  RUNTIME_EX_ASSERT(_vbo->hasAttribute(columnName),
+                    "DataTable::getColumnVBO(): column \"" + columnName + "\" does not exist.");
 
   return _vbo;
 }
@@ -343,14 +355,19 @@ void TDataColumn<ColorRGBA>::push_back(const std::string& val) {
 
 template <typename T>
 void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  CHECK(dataArrayObj.IsArray());
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(), "JSON data parse error: Row-major data object is not an array.");
 
   rapidjson::Value::ConstValueIterator vitr;
   rapidjson::Value::ConstMemberIterator mitr;
 
   for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    CHECK(vitr->IsObject());
-    CHECK((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd());
+    RUNTIME_EX_ASSERT(vitr->IsObject(),
+                      "JSON data parse error: Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                          "in data array must be an object for row-major-defined data.");
+    RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
+                      "JSON data parse error: column \"" + columnName +
+                          "\" does not exist in row-major-defined data item " +
+                          std::to_string(vitr - dataArrayObj.Begin()));
 
     _columnDataPtr->push_back(getNumValFromJSONObj<T>(mitr->value));
   }
@@ -358,7 +375,7 @@ void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayO
 
 template <>
 void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  CHECK(dataArrayObj.IsArray());
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(), "JSON data parse error: Row-major data object is not an array.");
 
   rapidjson::Value::ConstValueIterator vitr;
   rapidjson::Value::ConstMemberIterator mitr;
@@ -366,11 +383,15 @@ void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& da
   ColorRGBA color;
 
   for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    CHECK(vitr->IsObject());
-    CHECK((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd());
+    RUNTIME_EX_ASSERT(vitr->IsObject(),
+                      "JSON data parse error: Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                          "in data array must be an object for row-major-defined data.");
+    RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
+                      "JSON data parse error: column \"" + columnName +
+                          "\" does not exist in row-major-defined data item " +
+                          std::to_string(vitr - dataArrayObj.Begin()));
 
     _columnDataPtr->push_back(color.initFromCSSString(mitr->value.GetString()));
-    // _columnDataPtr->push_back(color);
   }
 }
 

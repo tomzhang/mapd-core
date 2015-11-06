@@ -53,10 +53,9 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow* win
   obj.Parse(configJSON.c_str());
 
   // TODO(croot): this can be removed if the executor will handle the initial parse.
-  if (obj.HasParseError()) {
-    throw RJMapDException("Error parsing the json config: offset: " + std::to_string(obj.GetErrorOffset()) +
-                          ", error: " + rapidjson::GetParseError_En(obj.GetParseError()));
-  }
+  RUNTIME_EX_ASSERT(!obj.HasParseError(),
+                    "JSON parse error - " + std::to_string(obj.GetErrorOffset()) + ", error: " +
+                        rapidjson::GetParseError_En(obj.GetParseError()));
 
   _initFromJSON(obj, win);
 }
@@ -65,34 +64,26 @@ void QueryRenderer::_initFromJSON(const rapidjson::Value& obj, GLFWwindow* win) 
   // clear out the previous state? Or do we want to maintain the previous state in case of an error?
   _clear();
 
-  if (!obj.IsObject()) {
-    throw RJMapDException("Root object is not a JSON object.");
-  }
+  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - Root object is not a JSON object.");
 
   rapidjson::Value::ConstMemberIterator mitr;
   rapidjson::Value::ConstValueIterator vitr;
 
-  if ((mitr = obj.FindMember("width")) == obj.MemberEnd()) {
-    throw RJMapDException("\"width\" is not defined.");
-  } else if (!mitr->value.IsInt()) {
-    throw RJMapDException("\"width\" is not an integer.");
-  }
+  RUNTIME_EX_ASSERT((mitr = obj.FindMember("width")) != obj.MemberEnd(),
+                    "JSON parse error - \"width\" is not defined.");
+  RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"width\" is not an integer.");
   int width = mitr->value.GetInt();
 
-  if ((mitr = obj.FindMember("height")) == obj.MemberEnd()) {
-    throw RJMapDException("\"height\" is not defined.");
-  } else if (!mitr->value.IsInt()) {
-    throw RJMapDException("\"width\" is not an integer.");
-  }
+  RUNTIME_EX_ASSERT((mitr = obj.FindMember("height")) != obj.MemberEnd(),
+                    "JSON parse error - \"height\" is not defined.");
+  RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"height\" is not an integer.");
   int height = mitr->value.GetInt();
 
   setWidthHeight(width, height, win);
 
   mitr = obj.FindMember("data");
   if (mitr != obj.MemberEnd()) {
-    if (!mitr->value.IsArray()) {
-      throw RJMapDException("the \"data\" member must be an array.");
-    }
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"data\" member must be an array.");
 
     DataVBOShPtr dataTablePtr;
 
@@ -110,9 +101,7 @@ void QueryRenderer::_initFromJSON(const rapidjson::Value& obj, GLFWwindow* win) 
 
   mitr = obj.FindMember("scales");
   if (mitr != obj.MemberEnd()) {
-    if (!mitr->value.IsArray()) {
-      throw RJMapDException("the \"scales\" member must be an array.");
-    }
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"scales\" member must be an array.");
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
       ScaleShPtr scaleConfig = createScale(*vitr, _ctx);
@@ -122,9 +111,7 @@ void QueryRenderer::_initFromJSON(const rapidjson::Value& obj, GLFWwindow* win) 
 
   mitr = obj.FindMember("marks");
   if (mitr != obj.MemberEnd()) {
-    if (!mitr->value.IsArray()) {
-      throw RJMapDException("the \"marks\" member must be an array");
-    }
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"marks\" member must be an array");
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
       GeomConfigShPtr geomConfigPtr = createMark(*vitr, _ctx);
@@ -189,9 +176,7 @@ void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& la
 }
 
 void QueryRenderer::render() {
-  if (!_framebufferPtr) {
-    throw std::runtime_error("QueryRenderer: The framebuffer is not defined. Cannot render.");
-  }
+  RUNTIME_EX_ASSERT(_framebufferPtr != nullptr, "QueryRenderer: The framebuffer is not defined. Cannot render.");
 
   _framebufferPtr->bindToRenderer();
 
@@ -209,9 +194,8 @@ void QueryRenderer::render() {
 }
 
 unsigned int QueryRenderer::getIdAt(int x, int y) {
-  if (!_framebufferPtr) {
-    throw std::runtime_error("QueryRenderer: The framebuffer is not defined. Cannot render.");
-  }
+  RUNTIME_EX_ASSERT(_framebufferPtr != nullptr,
+                    "QueryRenderer: The framebuffer is not defined. Cannot retrieve id at pixel.");
 
   // TODO(croot): develop an API for reading from specific fbo buffers
   _framebufferPtr->bindToRenderer();
@@ -260,22 +244,25 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
 // }
 
 DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
-  // TODO(croot): change asserts to throwing/logging runtime errors
-  CHECK(obj.IsObject());
+  RUNTIME_EX_ASSERT(obj.IsObject(), "createDataTable: A data object in the JSON must be an object.");
 
   rapidjson::Value::ConstMemberIterator itr;
 
-  CHECK((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString());
+  RUNTIME_EX_ASSERT((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString(),
+                    "createDataTable: A data object must contain a \"name\" property and it must be a string");
   std::string tableName = itr->value.GetString();
 
   if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
-    CHECK(itr->value.IsString());
+    RUNTIME_EX_ASSERT(itr->value.IsString(),
+                      "createDataTable: The sql property for \"" + tableName + "\" must be a string.");
     return DataVBOShPtr(new SqlQueryDataTable(tableName, ctx->getQueryResultVertexBuffer(), itr->value.GetString()));
   } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
   } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
   }
-  CHECK(false);
-  return nullptr;
+  THROW_RUNTIME_EX("createDataTable: There is not valid data property in the table \"" + tableName +
+                   "\". Must have an \"sql\", \"values\" or \"url\" property.");
+
+  return DataVBOShPtr(nullptr);
 }

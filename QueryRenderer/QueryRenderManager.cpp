@@ -47,9 +47,7 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
   if (!prntWindow) {
     // need to init glfw -- this needs to happen in the main thread
     if (!glfwInit()) {
-      std::runtime_error err("GLFW error: Couldn't initialize GLFW");
-      LOG(ERROR) << err.what();
-      throw err;
+      RUNTIME_EX_ASSERT(glfwInit(), "GLFW error: Couldn\'t initialize GLFW.");
     }
   }
 
@@ -60,13 +58,7 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
 
   // _windowPtr.reset(glfwCreateWindow(1, 1, "", NULL, NULL));
   _windowPtr = glfwCreateWindow(1, 1, "", NULL, prntWindow);
-  if (_windowPtr == nullptr) {
-    // TODO(croot): is this necessary? Will the error callback catch
-    // all possible errors?
-    std::runtime_error err("GLFW error: Couldn\'t create a window.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  RUNTIME_EX_ASSERT(_windowPtr != nullptr, "GLFW error: Couldn't create a window.");
 
   glfwMakeContextCurrent(_windowPtr);
 
@@ -75,12 +67,10 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
   if (err != 0) {
     char errstr[512];
     snprintf(errstr, sizeof(errstr), "%s", glewGetErrorString(err));
-    std::runtime_error err(std::string("GLEW error: Couldn\'t initialize glew. ") + errstr);
-    LOG(ERROR) << err.what();
-    throw err;
+    RUNTIME_EX_ASSERT(false, "GLEW error: Couldn\'t initialize glew. " + std::string(errstr));
   }
 
-  // glGetError();  // clear error code - this always throws error but seems to not matter
+  // glGetError();  // clear error code?
 
   // indicates how many frames to wait until buffers are swapped.
   glfwSwapInterval(1);
@@ -118,22 +108,15 @@ void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   if (userWidget != _activeUserWidget) {
     auto userIter = _rendererDict.find(userId);
 
-    if (userIter == _rendererDict.end()) {
-      std::runtime_error err("User id: " + std::to_string(userId) + " does not exist.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(userIter != _rendererDict.end(), "User id: " + std::to_string(userId) + " does not exist.");
 
     WidgetRendererMap* wfMap = userIter->second.get();
 
     auto widgetIter = wfMap->find(widgetId);
 
-    if (widgetIter == wfMap->end()) {
-      std::runtime_error err("Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) +
-                             " does not exist.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(
+        widgetIter != wfMap->end(),
+        "Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) + " does not exist.");
 
     _activeRenderer = widgetIter->second.get();
     _activeUserWidget = userWidget;
@@ -177,21 +160,15 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
   } else {
     wfMap = userIter->second.get();
 
-    if (wfMap->find(widgetId) != wfMap->end()) {
-      // a framebuffer already exists! Throw an error.
-      std::runtime_error err("User id: " + std::to_string(userId) + " with widget id: " + std::to_string(widgetId) +
-                             " already exists.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
+    RUNTIME_EX_ASSERT(wfMap->find(widgetId) == wfMap->end(),
+                      "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
+                          std::to_string(widgetId) + " already exists.");
   }
 
-  // (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(configJSON, doHitTest, doDepthTest, (_debugMode ?
-  // _windowPtr.get() : nullptr)));
   (*wfMap)[widgetId] = QueryRendererUqPtr(
       new QueryRenderer(_queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
 
-  // TODO: should we set this as active the newly added ids as active?
+  // TODO(croot): should we set this as active the newly added ids as active?
   // setActiveUserWidget(userId, widgetId);
 }
 
@@ -200,12 +177,9 @@ void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, boo
 }
 
 void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument, QueryDataLayout* dataLayoutPtr) {
-  if (!_activeRenderer) {
-    std::runtime_error err(
-        "There is no active user/widget id. Must set a user/widget id active before configuring the render.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
+                    "configuring the render.");
 
   glfwMakeContextCurrent(_windowPtr);
 
@@ -220,50 +194,10 @@ void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument
   glfwMakeContextCurrent(nullptr);
 }
 
-// void QueryRenderManager::setJSONConfigForUserWidget(int userId, int widgetId, const std::string& configJSON) {
-//   QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-//   // renderer->setJSONConfig(configJSON, (_debugMode ? _windowPtr.get() : nullptr));
-//   renderer->setJSONConfig(configJSON, (_debugMode ? _windowPtr : nullptr));
-// }
-
-// void QueryRenderManager::setJSONConfigForUserWidget(const UserWidgetPair& userWidgetPair,
-//                                                     const std::string& configJSON) {
-//   setJSONConfigForUserWidget(userWidgetPair.first, userWidgetPair.second, configJSON);
-// }
-
-// int QueryRenderManager::getActiveUserId() const {
-//     if (_activeRenderer) {
-//         return _activeFramebufferIds.first;
-//     }
-
-//     return -1;
-// }
-
-// int QueryRenderManager::getActiveWidgetId() const {
-//     if (_activeRenderer) {
-//         return _activeFramebufferIds.second;
-//     }
-
-//     return -1;
-// }
-
-// void QueryRenderManager::setUserWidgetWidthHeight(int userId, int widgetId, int width, int height) {
-//   QueryRenderer* renderer = _getRendererForUserWidget(userId, widgetId);
-//   // renderer->setWidthHeight(width, height, (_debugMode ? _windowPtr.get() : nullptr));
-//   renderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
-// }
-
-// void QueryRenderManager::setUserWidgetWidthHeight(const UserWidgetPair& userWidgetPair, int width, int height) {
-//   setUserWidgetWidthHeight(userWidgetPair.first, userWidgetPair.second, width, height);
-// }
-
 void QueryRenderManager::setWidthHeight(int width, int height) {
-  if (!_activeRenderer) {
-    std::runtime_error err(
-        "There is no active user/widget id. Must set a user/widget id active before setting width/height.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
+                    "setting width/height.");
 
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
@@ -271,11 +205,8 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
 }
 
 void QueryRenderManager::render() const {
-  if (!_activeRenderer) {
-    std::runtime_error err("There is no active user/widget id. Must set a user/widget id active before rendering.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->render();
@@ -307,23 +238,19 @@ void QueryRenderManager::render() const {
 }
 
 PngData QueryRenderManager::renderToPng() const {
-  if (!_activeRenderer) {
-    std::runtime_error err("There is no active user/widget id. Must set a user/widget id active before rendering.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->render();
 
-  // unsigned char* pixels = new unsigned char[width * height * 4];
   int width = _activeRenderer->getWidth();
   int height = _activeRenderer->getHeight();
   int r, g, b, a;
 
   gdImagePtr im = gdImageCreateTrueColor(width, height);
   // the above gdImageCreateTrueColor() constructs a default image
-  // with an black opaque background color. This is the only way
+  // with a fully opaque black background color. This is the only way
   // i've found to make a fully transparent background --- extracting
   // the black background color index and setting it fully transparent
   // with the gdImageColorTransparent() call.
@@ -364,12 +291,9 @@ PngData QueryRenderManager::renderToPng() const {
 }
 
 unsigned int QueryRenderManager::getIdAt(int x, int y) const {
-  if (!_activeRenderer) {
-    std::runtime_error err(
-        "There is no active user/widget id. Must set a user/widget id active before requesting pixel data.");
-    LOG(ERROR) << err.what();
-    throw err;
-  }
+  RUNTIME_EX_ASSERT(
+      _activeRenderer != nullptr,
+      "getIdAt(): There is no active user/widget id. Must set an active user/widget id before requesting pixel data.");
 
   glfwMakeContextCurrent(_windowPtr);
   unsigned int id = _activeRenderer->getIdAt(x, y);

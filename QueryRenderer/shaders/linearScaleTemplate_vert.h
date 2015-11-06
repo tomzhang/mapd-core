@@ -1,0 +1,87 @@
+#ifndef LINEARSCALETEMPLATE_VERT_H_
+#define LINEARSCALETEMPLATE_VERT_H_
+
+#include <string>
+
+namespace MapD_Renderer {
+struct LinearScaleTemplate_vert {
+  static const std::string source;
+};
+
+const std::string LinearScaleTemplate_vert::source =
+    "#define domainType_<name> <domainType>\n"
+    "#define rangeType_<name> <rangeType>\n"
+    "\n"
+    "#define numDomains_<name> <numDomains>\n"
+    "#define numRanges_<name> <numRanges>\n"
+    "#define useClamp_<name> <useClamp>\n"
+    "\n"
+    "uniform domainType_<name> uDomains_<name>[numDomains_<name>];\n"
+    "uniform rangeType_<name> uRanges_<name>[numRanges_<name>];\n"
+    "\n"
+    "\n"
+    "\n"
+    "rangeType_<name> getLinearScale_<name>(in domainType_<name> domainVal) {\n"
+    "    domainType_<name> val1;\n"
+    "    domainType_<name> val2;\n"
+    "    int idx1, idx2;\n"
+    "\n"
+    "    #if numDomains_<name> == 1 || numRanges_<name> == 1\n"
+    "        idx1 = 0;\n"
+    "        idx2 = 0;\n"
+    "        val1 = uDomains_<name>[0];\n"
+    "        val2 = uDomains_<name>[0];\n"
+    "    #elif numDomains_<name> == 2 || numRanges_<name> == 2\n"
+    "        idx1 = 0;\n"
+    "        idx2 = 1;\n"
+    "        val1 = uDomains_<name>[0];\n"
+    "        val2 = uDomains_<name>[1];\n"
+    "    #else\n"
+    "        int startIdx = 0;\n"
+    "        int endIdx = numDomains_<name> - 1;\n"
+    "        domainType_<name> midVal;\n"
+    "\n"
+    "        if (domainVal == uDomains_<name>[startIdx]) {\n"
+    "            idx1 = startIdx;\n"
+    "            idx2 = startIdx+1;\n"
+    "        } else if (domainVal == uDomains_<name>[endIdx]) {\n"
+    "            idx1 = endIdx-1;\n"
+    "            idx2 = endIdx;\n"
+    "        } else {\n"
+    "            while (true) {\n"
+    "                int midIdx = startIdx + (endIdx - startIdx) / 2;\n"
+    "                if (midIdx == startIdx) {\n"
+    "                    idx1 = startIdx;\n"
+    "                    idx2 = endIdx;\n"
+    "                    break;\n"
+    "                } else {\n"
+    "                    midVal = uDomains_<name>[midIdx];\n"
+    "                    if (domainVal == midVal) {\n"
+    "                        idx1 = midIdx;\n"
+    "                        idx2 = midIdx+1;\n"
+    "                        break;\n"
+    "                    } else if (domainVal > midVal) {\n"
+    "                        startIdx = midIdx;\n"
+    "                    } else {\n"
+    "                        endIdx = midIdx;\n"
+    "                    }\n"
+    "                }\n"
+    "            }\n"
+    "        }\n"
+    "\n"
+    "        val1 = uDomains_<name>[idx1];\n"
+    "        val2 = uDomains_<name>[idx2];\n"
+    "    #endif\n"
+    "\n"
+    "    float t = float(domainVal - val1) / float(val2 - val1);\n"
+    "\n"
+    "    #if useClamp_<name> == 1\n"
+    "        t = clamp(t, 0.0, 1.0);\n"
+    "    #endif\n"
+    "\n"
+    "    return mix(uRanges_<name>[idx1], uRanges_<name>[idx2], t);\n"
+    "}\n";
+
+}  // namespace MapD_Renderer
+
+#endif  // LINEARSCALETEMPLATE_VERT_H_
