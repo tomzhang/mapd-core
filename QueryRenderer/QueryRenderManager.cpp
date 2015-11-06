@@ -372,8 +372,9 @@ unsigned int QueryRenderManager::getIdAt(int x, int y) const {
   }
 
   glfwMakeContextCurrent(_windowPtr);
-  return _activeRenderer->getIdAt(x, y);
+  unsigned int id = _activeRenderer->getIdAt(x, y);
   glfwMakeContextCurrent(nullptr);
+  return id;
 }
 
 int randColor() {
