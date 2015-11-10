@@ -124,6 +124,21 @@ template <>
 inline TypeGLShPtr ScaleDomainRangeData<ColorRGBA>::getTypeGL();
 
 template <>
+unsigned int MapD_Renderer::ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj);
+
+template <>
+int MapD_Renderer::ScaleDomainRangeData<int>::getDataValueFromJSONObj(const rapidjson::Value& obj);
+
+template <>
+float MapD_Renderer::ScaleDomainRangeData<float>::getDataValueFromJSONObj(const rapidjson::Value& obj);
+
+template <>
+double MapD_Renderer::ScaleDomainRangeData<double>::getDataValueFromJSONObj(const rapidjson::Value& obj);
+
+template <>
+ColorRGBA MapD_Renderer::ScaleDomainRangeData<ColorRGBA>::getDataValueFromJSONObj(const rapidjson::Value& obj);
+
+template <>
 void MapD_Renderer::ScaleDomainRangeData<unsigned int>::_pushItem(const rapidjson::Value& obj);
 
 template <>
