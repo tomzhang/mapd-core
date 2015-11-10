@@ -18,7 +18,7 @@ const std::string OrdinalScaleTemplate_vert::source =
     "uniform domainType_<name> uDomains_<name>[numDomains_<name>];\n"
     "uniform rangeType_<name> uRanges_<name>[numRanges_<name>];\n"
     "\n"
-    "rangeType_<name> uDefault_<name>;\n"
+    "uniform rangeType_<name> uDefault_<name>;\n"
     "\n"
     "\n"
     "rangeType_<name> getOrdinalScale_<name>(in domainType_<name> category) {\n"

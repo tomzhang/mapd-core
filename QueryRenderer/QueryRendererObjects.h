@@ -58,6 +58,8 @@ class BaseScale {
 
   std::string getRangeGLSLUniformName() { return "uRanges_" + name; }
 
+  std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + name; }
+
   virtual void bindUniformsToRenderer(Shader* activeShader) = 0;
 
  protected:
@@ -105,6 +107,8 @@ class ScaleDomainRangeData {
   std::vector<T>& getVectorData() { return *_vectorPtr; }
 
   inline TypeGLShPtr getTypeGL();
+
+  static T getDataValueFromJSONObj(const rapidjson::Value& obj);
 
  private:
   std::string _name;
@@ -168,6 +172,8 @@ class Scale : public BaseScale {
 
   ScaleDomainRangeData<DomainType> _domainPtr;
   ScaleDomainRangeData<RangeType> _rangePtr;
+
+  RangeType _defaultVal;
 
   void _pushDomainItem(const rapidjson::Value& obj);
   void _pushRangeItem(const rapidjson::Value& obj);

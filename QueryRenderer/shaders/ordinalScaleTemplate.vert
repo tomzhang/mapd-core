@@ -7,7 +7,7 @@
 uniform domainType_<name> uDomains_<name>[numDomains_<name>];
 uniform rangeType_<name> uRanges_<name>[numRanges_<name>];
 
-rangeType_<name> uDefault_<name>;
+uniform rangeType_<name> uDefault_<name>;
 
 
 rangeType_<name> getOrdinalScale_<name>(in domainType_<name> category) {

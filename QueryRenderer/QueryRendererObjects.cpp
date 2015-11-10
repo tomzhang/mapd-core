@@ -241,6 +241,10 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
     _vectorPtr.reset(new std::vector<T>());
 
     // gather all the items
+    // TODO(croot): can improve this by allocating the full vector
+    // size upfront, but cost should be negligable since large domains/ranges
+    // would be really rare. Normally we're just talking about a couple
+    // handfulls of values max.
     DataType itemType;
     for (vitr = jsonObj.Begin(); vitr != jsonObj.End(); ++vitr) {
       itemType = getDataTypeFromJSONObj(*vitr);
@@ -271,12 +275,22 @@ template <>
 const DataType ScaleDomainRangeData<unsigned int>::dataType = DataType::UINT;
 
 template <>
+unsigned int ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+  return obj.GetUint();
+}
+
+template <>
 void MapD_Renderer::ScaleDomainRangeData<unsigned int>::_pushItem(const rapidjson::Value& obj) {
   _vectorPtr->push_back(obj.GetUint());
 }
 
 template <>
 const DataType ScaleDomainRangeData<int>::dataType = DataType::INT;
+
+template <>
+int ScaleDomainRangeData<int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+  return obj.GetInt();
+}
 
 template <>
 void MapD_Renderer::ScaleDomainRangeData<int>::_pushItem(const rapidjson::Value& obj) {
@@ -287,6 +301,11 @@ template <>
 const DataType ScaleDomainRangeData<float>::dataType = DataType::FLOAT;
 
 template <>
+float ScaleDomainRangeData<float>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+  return static_cast<float>(obj.GetDouble());
+}
+
+template <>
 void MapD_Renderer::ScaleDomainRangeData<float>::_pushItem(const rapidjson::Value& obj) {
   _vectorPtr->push_back(static_cast<float>(obj.GetDouble()));
 }
@@ -295,12 +314,22 @@ template <>
 const DataType ScaleDomainRangeData<double>::dataType = DataType::DOUBLE;
 
 template <>
+double ScaleDomainRangeData<double>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+  return obj.GetDouble();
+}
+
+template <>
 void MapD_Renderer::ScaleDomainRangeData<double>::_pushItem(const rapidjson::Value& obj) {
   _vectorPtr->push_back(obj.GetDouble());
 }
 
 template <>
 const DataType ScaleDomainRangeData<ColorRGBA>::dataType = DataType::COLOR;
+
+template <>
+ColorRGBA ScaleDomainRangeData<ColorRGBA>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+  return ColorRGBA(obj.GetString());
+}
 
 template <>
 void MapD_Renderer::ScaleDomainRangeData<ColorRGBA>::_pushItem(const rapidjson::Value& obj) {
@@ -352,7 +381,7 @@ void ScaleDomainRangeData<ColorRGBA>::_updateVectorDataByType(TDataColumn<ColorR
 
 template <typename DomainType, typename RangeType>
 Scale<DomainType, RangeType>::Scale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx)
-    : BaseScale(obj, ctx), _domainPtr("domain", false), _rangePtr("range", true) {
+    : BaseScale(obj, ctx), _domainPtr("domain", false), _rangePtr("range", true), _defaultVal() {
   _initGLTypes();
   _initFromJSONObj(obj);
 }
@@ -365,6 +394,16 @@ template <typename DomainType, typename RangeType>
 void Scale<DomainType, RangeType>::_initFromJSONObj(const rapidjson::Value& obj) {
   _domainPtr.initializeFromJSONObj(obj, _ctx, type);
   _rangePtr.initializeFromJSONObj(obj, _ctx, type);
+
+  rapidjson::Value::ConstMemberIterator mitr;
+  if ((mitr = obj.FindMember("default")) != obj.MemberEnd()) {
+    DataType itemType = getDataTypeFromJSONObj(mitr->value);
+
+    RUNTIME_EX_ASSERT(itemType == _rangePtr.dataType,
+                      "JSON parse error - scale \"" + name + "\" default is not the same type as its range.");
+
+    _defaultVal = _rangePtr.getDataValueFromJSONObj(mitr->value);
+  }
 }
 
 template <typename DomainType, typename RangeType>
@@ -413,6 +452,10 @@ void Scale<DomainType, RangeType>::bindUniformsToRenderer(Shader* activeShader) 
   activeShader->setUniformAttribute(getDomainGLSLUniformName(), _domainPtr.getVectorData());
   // activeShader->setUniformAttribute(getRangeGLSLUniformName(), *_rangePtr);
   activeShader->setUniformAttribute(getRangeGLSLUniformName(), _rangePtr.getVectorData());
+
+  if (type == ScaleType::ORDINAL) {
+    activeShader->setUniformAttribute(getRangeDefaultGLSLUniformName(), _defaultVal);
+  }
 }
 
 ScaleShPtr MapD_Renderer::createScale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
