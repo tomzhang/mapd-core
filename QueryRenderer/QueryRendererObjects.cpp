@@ -275,7 +275,7 @@ template <>
 const DataType ScaleDomainRangeData<unsigned int>::dataType = DataType::UINT;
 
 template <>
-unsigned int ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+unsigned int MapD_Renderer::ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
   return obj.GetUint();
 }
 
@@ -288,7 +288,7 @@ template <>
 const DataType ScaleDomainRangeData<int>::dataType = DataType::INT;
 
 template <>
-int ScaleDomainRangeData<int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+int MapD_Renderer::ScaleDomainRangeData<int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
   return obj.GetInt();
 }
 
@@ -301,7 +301,7 @@ template <>
 const DataType ScaleDomainRangeData<float>::dataType = DataType::FLOAT;
 
 template <>
-float ScaleDomainRangeData<float>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+float MapD_Renderer::ScaleDomainRangeData<float>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
   return static_cast<float>(obj.GetDouble());
 }
 
@@ -314,7 +314,7 @@ template <>
 const DataType ScaleDomainRangeData<double>::dataType = DataType::DOUBLE;
 
 template <>
-double ScaleDomainRangeData<double>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+double MapD_Renderer::ScaleDomainRangeData<double>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
   return obj.GetDouble();
 }
 
@@ -327,7 +327,7 @@ template <>
 const DataType ScaleDomainRangeData<ColorRGBA>::dataType = DataType::COLOR;
 
 template <>
-ColorRGBA ScaleDomainRangeData<ColorRGBA>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
+ColorRGBA MapD_Renderer::ScaleDomainRangeData<ColorRGBA>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
   return ColorRGBA(obj.GetString());
 }
 
