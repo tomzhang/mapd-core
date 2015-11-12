@@ -1,3 +1,4 @@
+#include "MapDGL.h"
 #include "QueryRendererError.h"
 #include "QueryFramebuffer.h"
 #include <iostream>
@@ -18,13 +19,13 @@ void resizeTexture2D(GLuint texture,
                      GLint internalFormat,
                      GLenum pixelFormat,
                      GLenum pixelType) {
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, pixelFormat, pixelType, NULL);
+  MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, texture));
+  MAPD_CHECK_GL_ERROR(glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, pixelFormat, pixelType, NULL));
 }
 
 GLuint generateTexture2D(GLint width, GLint height, GLint internalFormat, GLenum pixelFormat, GLenum pixelType) {
   GLuint tex;
-  glGenTextures(1, &tex);
+  MAPD_CHECK_GL_ERROR(glGenTextures(1, &tex));
   resizeTexture2D(tex, width, height, internalFormat, pixelFormat, pixelType);
   return tex;
 }
@@ -38,23 +39,23 @@ GLuint generateTexture2D(GLint width,
   GLuint tex = generateTexture2D(width, height, internalFormat, pixelFormat, pixelType);
 
   // TODO - use a sampler object instead
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, samplingProps.magFilter);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, samplingProps.minFilter);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, samplingProps.wrapS);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, samplingProps.wrapT);
+  MAPD_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, samplingProps.magFilter));
+  MAPD_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, samplingProps.minFilter));
+  MAPD_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, samplingProps.wrapS));
+  MAPD_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, samplingProps.wrapT));
 
   return tex;
 }
 
 void resizeRenderbuffer(GLuint rbo, GLint width, GLint height, GLint internalFormat) {
-  glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-  glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height);
+  MAPD_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, rbo));
+  MAPD_CHECK_GL_ERROR(glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height));
 }
 
 GLuint generateRenderBuffer(GLint width, GLint height, GLint internalFormat) {
   GLuint rbo;
 
-  glGenRenderbuffers(1, &rbo);
+  MAPD_CHECK_GL_ERROR(glGenRenderbuffers(1, &rbo));
   resizeRenderbuffer(rbo, width, height, internalFormat);
 
   return rbo;
@@ -65,7 +66,7 @@ int AttachmentContainer::numColorAttachments = -1;
 AttachmentContainer::AttachmentContainer() {
   // need to initialize the number of color attachments for the system
   if (numColorAttachments < 0) {
-    glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &numColorAttachments);
+    MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &numColorAttachments));
   }
 }
 
@@ -78,7 +79,7 @@ inline bool AttachmentContainer::isColorAttachment(GLenum attachment) {
 }
 
 void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) {
-  glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, tex, 0);
+  MAPD_CHECK_GL_ERROR(glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, tex, 0));
 
   AttachmentData data = {attachment, tex};
   _attachmentMap.insert(data);
@@ -89,7 +90,7 @@ void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) 
 }
 
 void AttachmentContainer::addRenderbufferAttachment(GLenum attachment, GLuint rbo) {
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, rbo);
+  MAPD_CHECK_GL_ERROR(glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, rbo));
 
   AttachmentData data = {attachment, rbo};
   _attachmentMap.insert(data);
@@ -121,7 +122,7 @@ void AttachmentContainer::enableAttachments() {
     _dirty = false;
   }
 
-  glDrawBuffers(_activeAttachments.size(), &_activeAttachments[0]);
+  MAPD_CHECK_GL_ERROR(glDrawBuffers(_activeAttachments.size(), &_activeAttachments[0]));
 }
 
 QueryFramebuffer::QueryFramebuffer(int width, int height, bool doHitTest, bool doDepthTest)
@@ -135,9 +136,9 @@ QueryFramebuffer::QueryFramebuffer(int width, int height, bool doHitTest, bool d
 }
 
 QueryFramebuffer::~QueryFramebuffer() {
-  glDeleteFramebuffers(1, &_fbo);
-  glDeleteTextures(MAX_TEXTURE_BUFFERS + 1, &_textureBuffers[0]);
-  glDeleteRenderbuffers(MAX_RENDER_BUFFERS + 1, &_renderBuffers[0]);
+  MAPD_CHECK_GL_ERROR(glDeleteFramebuffers(1, &_fbo));
+  MAPD_CHECK_GL_ERROR(glDeleteTextures(MAX_TEXTURE_BUFFERS + 1, &_textureBuffers[0]));
+  MAPD_CHECK_GL_ERROR(glDeleteRenderbuffers(MAX_RENDER_BUFFERS + 1, &_renderBuffers[0]));
   // std::cerr << "IN QueryFramebuffer DESTRUCTOR" << std::endl;
 }
 
@@ -148,12 +149,12 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
   _doHitTest = doHitTest;
   _doDepthTest = doDepthTest;
 
-  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currFramebuffer);
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTexture);
-  glGetIntegerv(GL_RENDERBUFFER_BINDING, &currRbo);
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currFramebuffer));
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTexture));
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_RENDERBUFFER_BINDING, &currRbo));
 
-  glGenFramebuffers(1, &_fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+  MAPD_CHECK_GL_ERROR(glGenFramebuffers(1, &_fbo));
+  MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, _fbo));
 
   // TODO: Make a texture wrapper
   tex = generateTexture2D(_width, _height, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
@@ -215,9 +216,9 @@ void QueryFramebuffer::_init(bool doHitTest, bool doDepthTest) {
     THROW_RUNTIME_EX(ss.str());
   }
 
-  glBindFramebuffer(GL_FRAMEBUFFER, currFramebuffer);
-  glBindTexture(GL_TEXTURE_2D, currTexture);
-  glBindRenderbuffer(GL_RENDERBUFFER, currRbo);
+  MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, currFramebuffer));
+  MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, currTexture));
+  MAPD_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, currRbo));
 }
 
 void QueryFramebuffer::resize(int width, int height) {
@@ -238,11 +239,11 @@ void QueryFramebuffer::resize(int width, int height) {
 }
 
 void QueryFramebuffer::bindToRenderer(BindType bindType) {
-  glBindFramebuffer(static_cast<int>(bindType), _fbo);
+  MAPD_CHECK_GL_ERROR(glBindFramebuffer(static_cast<int>(bindType), _fbo));
   // _attachmentManager.enableAttachments();
 
   // TODO: How do we properly deal with the state machine
   if (_renderBuffers[DEPTH_BUFFER]) {
-    glEnable(GL_DEPTH_TEST);
+    MAPD_CHECK_GL_ERROR(glEnable(GL_DEPTH_TEST));
   }
 }

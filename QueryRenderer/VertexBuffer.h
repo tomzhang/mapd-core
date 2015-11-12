@@ -1,11 +1,13 @@
 #ifndef VERTEX_BUFFER_H_
 #define VERTEX_BUFFER_H_
 
-// #include "Buffer.h"
+#include "MapDGL.h"
 #include "QueryRendererError.h"
 #include "BufferLayout.h"
 #include "Shader.h"
+
 #include <GL/glew.h>
+
 #include <glog/logging.h>
 #include <vector>
 #include <memory>
@@ -29,7 +31,7 @@ class BaseVertexBuffer {
       : _type(type), _bufferId(0), _target(target), _usage(usage), _size(0), _layoutPtr(layoutPtr) {}
   virtual ~BaseVertexBuffer() {
     if (_bufferId) {
-      glDeleteBuffers(1, &_bufferId);
+      MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_bufferId));
     }
   }
 
@@ -66,7 +68,7 @@ class BaseVertexBuffer {
   void bindToRenderer(Shader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "") {
     RUNTIME_EX_ASSERT(_bufferId != 0, "Cannot bind vertex buffer. It has not been initialized with data.");
     RUNTIME_EX_ASSERT(_layoutPtr != nullptr, "Cannot bind vertex buffer. It does not have a defined layout.");
-    glBindBuffer(GL_ARRAY_BUFFER, _bufferId);
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, _bufferId));
     _layoutPtr->bindToRenderer(activeShader, size(), attr, shaderAttr);
   }
 
@@ -79,9 +81,9 @@ class BaseVertexBuffer {
     BufferBindingMap::const_iterator itr;
 
     RUNTIME_EX_ASSERT((itr = bufferBindings.find(target)) != bufferBindings.end(),
-                      std::to_string(target) + " is not a valid opengl buffer target.");
+                      std::to_string(static_cast<int>(target)) + " is not a valid opengl buffer target.");
 
-    return itr->first;
+    return itr->second;
   }
 
   VertexBufferType _type;
@@ -95,7 +97,7 @@ class BaseVertexBuffer {
 
   void _initBuffer() {
     if (!_bufferId) {
-      glGenBuffers(1, &_bufferId);
+      MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_bufferId));
     }
   }
 };
@@ -126,7 +128,7 @@ class VertexBuffer : public BaseVertexBuffer {
 
   ~VertexBuffer() {
     // if (_bufferId) {
-    //   glDeleteBuffers(1, &_bufferId);
+    //   MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_bufferId));
     // }
   }
 
@@ -140,18 +142,18 @@ class VertexBuffer : public BaseVertexBuffer {
 
   void bufferData(void* data, int numItems, int numBytesPerItem) {
     _initBuffer();
-    // glGenBuffers(1, &_bufferId);
+    // MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_bufferId));
 
     // don't mess with the current state
     // TODO(croot): Apply some kind of push-pop state system
     GLint currArrayBuf;
-    glGetIntegerv(_getBufferBinding(_target), &currArrayBuf);
+    MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(_target), &currArrayBuf));
 
-    glBindBuffer(_target, _bufferId);
-    glBufferData(_target, numItems * numBytesPerItem, data, _usage);
+    MAPD_CHECK_GL_ERROR(glBindBuffer(_target, _bufferId));
+    MAPD_CHECK_GL_ERROR(glBufferData(_target, numItems * numBytesPerItem, data, _usage));
 
     // restore the state
-    glBindBuffer(_target, currArrayBuf);
+    MAPD_CHECK_GL_ERROR(glBindBuffer(_target, currArrayBuf));
 
     _size = numItems;
   }

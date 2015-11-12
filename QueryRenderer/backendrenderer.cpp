@@ -6,7 +6,7 @@
 
 #include <glog/logging.h>
 
-#include <GL/glew.h>
+// #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <curand.h>
 #include <curand_kernel.h>

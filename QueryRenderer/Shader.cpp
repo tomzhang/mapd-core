@@ -7,12 +7,12 @@ GLint compileShader(const GLuint& shaderId, const std::string& shaderSrc, std::s
   GLint compiled;
   const GLchar* shaderSrcCode = shaderSrc.c_str();
 
-  glShaderSource(shaderId, 1, &shaderSrcCode, NULL);
-  glCompileShader(shaderId);
-  glGetShaderiv(shaderId, GL_COMPILE_STATUS, &compiled);
+  MAPD_CHECK_GL_ERROR(glShaderSource(shaderId, 1, &shaderSrcCode, NULL));
+  MAPD_CHECK_GL_ERROR(glCompileShader(shaderId));
+  MAPD_CHECK_GL_ERROR(glGetShaderiv(shaderId, GL_COMPILE_STATUS, &compiled));
   if (!compiled) {
     GLchar errLog[1024];
-    glGetShaderInfoLog(shaderId, 1024, NULL, errLog);
+    MAPD_CHECK_GL_ERROR(glGetShaderInfoLog(shaderId, 1024, NULL, errLog));
     errStr.assign(std::string(errLog));
 
     // std::ofstream shadersrcstream;
@@ -30,10 +30,10 @@ std::string getShaderSource(const GLuint& shaderId) {
   }
 
   GLint sourceLen;
-  glGetShaderiv(shaderId, GL_SHADER_SOURCE_LENGTH, &sourceLen);
+  MAPD_CHECK_GL_ERROR(glGetShaderiv(shaderId, GL_SHADER_SOURCE_LENGTH, &sourceLen));
 
   GLchar source[sourceLen];
-  glGetShaderSource(shaderId, sourceLen, NULL, source);
+  MAPD_CHECK_GL_ERROR(glGetShaderSource(shaderId, sourceLen, NULL, source));
 
   return std::string(source);
 }
@@ -41,11 +41,11 @@ std::string getShaderSource(const GLuint& shaderId) {
 GLint linkProgram(const GLuint& programId, std::string& errStr) {
   GLint linked;
 
-  glLinkProgram(programId);
-  glGetProgramiv(programId, GL_LINK_STATUS, &linked);
+  MAPD_CHECK_GL_ERROR(glLinkProgram(programId));
+  MAPD_CHECK_GL_ERROR(glGetProgramiv(programId, GL_LINK_STATUS, &linked));
   if (!linked) {
     GLchar errLog[1024];
-    glGetProgramInfoLog(programId, 1024, NULL, errLog);
+    MAPD_CHECK_GL_ERROR(glGetProgramInfoLog(programId, 1024, NULL, errLog));
     errStr.assign(std::string(errLog));
   }
 
@@ -121,16 +121,16 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
 //  switch (sz)
 //  {
 //    case 1:
-//      glUniform1uiv(loc, 1, value);
+//      MAPD_CHECK_GL_ERROR(glUniform1uiv(loc, 1, value));
 //      break;
 //    case 2:
-//      glUniform2uiv(loc, 2, value);
+//      MAPD_CHECK_GL_ERROR(glUniform2uiv(loc, 2, value));
 //      break;
 //    case 3:
-//      glUniform3uiv(loc, 3, value);
+//      MAPD_CHECK_GL_ERROR(glUniform3uiv(loc, 3, value));
 //      break;
 //    case 4:
-//      glUniform4uiv(loc, 4, value);
+//      MAPD_CHECK_GL_ERROR(glUniform4uiv(loc, 4, value));
 //      break;
 //  }
 // }
@@ -140,16 +140,16 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
 //  switch (sz)
 //  {
 //    case 1:
-//      glUniform1iv(loc, 1, value);
+//      MAPD_CHECK_GL_ERROR(glUniform1iv(loc, 1, value));
 //      break;
 //    case 2:
-//      glUniform2iv(loc, 2, value);
+//      MAPD_CHECK_GL_ERROR(glUniform2iv(loc, 2, value));
 //      break;
 //    case 3:
-//      glUniform3iv(loc, 3, value);
+//      MAPD_CHECK_GL_ERROR(glUniform3iv(loc, 3, value));
 //      break;
 //    case 4:
-//      glUniform4iv(loc, 4, value);
+//      MAPD_CHECK_GL_ERROR(glUniform4iv(loc, 4, value));
 //      break;
 //  }
 // }
@@ -159,16 +159,16 @@ UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint locatio
 //  switch (sz)
 //  {
 //    case 1:
-//      glUniform1fv(loc, 1, value);
+//      MAPD_CHECK_GL_ERROR(glUniform1fv(loc, 1, value));
 //      break;
 //    case 2:
-//      glUniform2fv(loc, 2, value);
+//      MAPD_CHECK_GL_ERROR(glUniform2fv(loc, 2, value));
 //      break;
 //    case 3:
-//      glUniform3fv(loc, 3, value);
+//      MAPD_CHECK_GL_ERROR(glUniform3fv(loc, 3, value));
 //      break;
 //    case 4:
-//      glUniform4fv(loc, 4, value);
+//      MAPD_CHECK_GL_ERROR(glUniform4fv(loc, 4, value));
 //      break;
 //  }
 // }
@@ -185,15 +185,15 @@ Shader::~Shader() {
 
 void Shader::_cleanupIds() {
   if (_vertShaderId) {
-    glDeleteShader(_vertShaderId);
+    MAPD_CHECK_GL_ERROR(glDeleteShader(_vertShaderId));
   }
 
   if (_fragShaderId) {
-    glDeleteShader(_fragShaderId);
+    MAPD_CHECK_GL_ERROR(glDeleteShader(_fragShaderId));
   }
 
   if (_programId) {
-    glDeleteProgram(_programId);
+    MAPD_CHECK_GL_ERROR(glDeleteProgram(_programId));
   }
 }
 
@@ -201,21 +201,22 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
   std::string errStr;
 
   // build and compile the vertex shader
-  _vertShaderId = glCreateShader(GL_VERTEX_SHADER);
+  MAPD_CHECK_GL_ERROR((_vertShaderId = glCreateShader(GL_VERTEX_SHADER)));
+
   if (!compileShader(_vertShaderId, vertSrc, errStr)) {
     _cleanupIds();
     THROW_RUNTIME_EX("Error compiling vertex shader: " + errStr + ".\n\nVertex shader src:\n\n" + vertSrc);
   }
 
-  _fragShaderId = glCreateShader(GL_FRAGMENT_SHADER);
+  MAPD_CHECK_GL_ERROR((_fragShaderId = glCreateShader(GL_FRAGMENT_SHADER)));
   if (!compileShader(_fragShaderId, fragSrc, errStr)) {
     _cleanupIds();
     THROW_RUNTIME_EX("Error compiling fragment shader: " + errStr + ".\n\nFragment shader src:\n\n" + fragSrc);
   }
 
-  _programId = glCreateProgram();
-  glAttachShader(_programId, _vertShaderId);
-  glAttachShader(_programId, _fragShaderId);
+  MAPD_CHECK_GL_ERROR((_programId = glCreateProgram()));
+  MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _vertShaderId));
+  MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _fragShaderId));
   if (!linkProgram(_programId, errStr)) {
     // clean out the shader references
     _cleanupIds();
@@ -236,14 +237,14 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
 
   // setup the uniform attributes
   _uniformAttrs.clear();
-  glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &numAttrs);
+  MAPD_CHECK_GL_ERROR(glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &numAttrs));
   for (GLuint i = 0; i < static_cast<GLuint>(numAttrs); ++i) {
-    glGetActiveUniformName(_programId, i, 512, NULL, attrName);
+    MAPD_CHECK_GL_ERROR(glGetActiveUniformName(_programId, i, 512, NULL, attrName));
     std::string attrNameStr(attrName);
 
-    glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_TYPE, &attrType);
-    glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_SIZE, &attrSz);
-    attrLoc = glGetUniformLocation(_programId, attrName);
+    MAPD_CHECK_GL_ERROR(glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_TYPE, &attrType));
+    MAPD_CHECK_GL_ERROR(glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_SIZE, &attrSz));
+    MAPD_CHECK_GL_ERROR((attrLoc = glGetUniformLocation(_programId, attrName)));
 
     if (boost::algorithm::ends_with(attrNameStr, "[0]")) {
       attrNameStr.erase(attrNameStr.size() - 3, 3);
@@ -255,10 +256,10 @@ void Shader::_init(const std::string& vertSrc, const std::string& fragSrc) {
 
   // now setup the vertex attributes
   _vertexAttrs.clear();
-  glGetProgramiv(_programId, GL_ACTIVE_ATTRIBUTES, &numAttrs);
+  MAPD_CHECK_GL_ERROR(glGetProgramiv(_programId, GL_ACTIVE_ATTRIBUTES, &numAttrs));
   for (int i = 0; i < numAttrs; ++i) {
-    glGetActiveAttrib(_programId, i, 512, NULL, &attrSz, (GLenum*)&attrType, attrName);
-    attrLoc = glGetAttribLocation(_programId, attrName);
+    MAPD_CHECK_GL_ERROR(glGetActiveAttrib(_programId, i, 512, NULL, &attrSz, (GLenum*)&attrType, attrName));
+    MAPD_CHECK_GL_ERROR((attrLoc = glGetAttribLocation(_programId, attrName)));
 
     _vertexAttrs.insert(
         std::make_pair(std::string(attrName), std::unique_ptr<AttrInfo>(new AttrInfo(attrType, attrSz, attrLoc))));
@@ -289,6 +290,6 @@ void Shader::bindToRenderer() const {
   // is invalid?
 
   if (_programId) {
-    glUseProgram(_programId);
+    MAPD_CHECK_GL_ERROR(glUseProgram(_programId));
   }
 }

@@ -1,6 +1,9 @@
 #include "QueryRenderManager.h"
 #include "QueryFramebuffer.h"
 #include "../QueryEngine/Execute.h"
+
+#include <GL/glew.h>
+
 #include <glog/logging.h>
 #include <time.h>
 #include <iostream>
@@ -44,7 +47,6 @@ QueryRenderManager::~QueryRenderManager() {
 }
 
 void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
-
   // set the error callback
   glfwSetErrorCallback(glfwErrorCallback);
 
@@ -59,6 +61,7 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+  glfwWindowHint(GLFW_VISIBLE, _debugMode);
 
   // _windowPtr.reset(glfwCreateWindow(1, 1, "", NULL, NULL));
   _windowPtr = glfwCreateWindow(1, 1, "", NULL, prntWindow);
@@ -71,10 +74,10 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
   if (err != 0) {
     char errstr[512];
     snprintf(errstr, sizeof(errstr), "%s", glewGetErrorString(err));
-    RUNTIME_EX_ASSERT(false, "GLEW error: Couldn\'t initialize glew. " + std::string(errstr));
+    THROW_RUNTIME_EX("GLEW error: Couldn\'t initialize glew. " + std::string(errstr));
   }
 
-  // glGetError();  // clear error code?
+  err = glGetError();  // clear error code? This is due to a deprecated GL function call during glewInit()
 
   // indicates how many frames to wait until buffers are swapped.
   glfwSwapInterval(1);
@@ -224,27 +227,27 @@ void QueryRenderManager::render() {
   glfwSwapBuffers(_windowPtr);
 
   if (_debugMode) {
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glDrawBuffer(GL_BACK);
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
+    MAPD_CHECK_GL_ERROR(glDrawBuffer(GL_BACK));
 
     // TODO(croot): need an API to set the framebuffer's read buffer
     _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT0));
 
     int framebufferWidth, framebufferHeight;
     // glfwGetFramebufferSize(_windowPtr.get(), &framebufferWidth, &framebufferHeight);
-    glfwGetFramebufferSize(_windowPtr, &framebufferWidth, &framebufferHeight);
+    MAPD_CHECK_GL_ERROR(glfwGetFramebufferSize(_windowPtr, &framebufferWidth, &framebufferHeight));
 
-    glBlitFramebuffer(0,
-                      0,
-                      framebufferWidth,
-                      framebufferHeight,
-                      0,
-                      0,
-                      framebufferWidth,
-                      framebufferHeight,
-                      GL_COLOR_BUFFER_BIT,
-                      GL_NEAREST);
+    MAPD_CHECK_GL_ERROR(glBlitFramebuffer(0,
+                                          0,
+                                          framebufferWidth,
+                                          framebufferHeight,
+                                          0,
+                                          0,
+                                          framebufferWidth,
+                                          framebufferHeight,
+                                          GL_COLOR_BUFFER_BIT,
+                                          GL_NEAREST));
   }
   glfwMakeContextCurrent(nullptr);
 }
@@ -276,8 +279,8 @@ PngData QueryRenderManager::renderToPng() {
   // TODO(croot): Make an improved read-pixels API for framebuffers
   // _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
   _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
-  glReadBuffer(GL_COLOR_ATTACHMENT0);
-  glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+  MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT0));
+  MAPD_CHECK_GL_ERROR(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
 
   int idx = 0;
   for (int j = 0; j < height; ++j) {

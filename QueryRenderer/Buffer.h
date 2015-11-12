@@ -1,6 +1,7 @@
 #ifndef BUFFER_H_
 #define BUFFER_H_
 
+#include "MapDGL.h"
 #include <vector>
 #include <GL/glew.h>
 #include <iostream>
@@ -20,7 +21,7 @@ class Buffer {
   virtual ~Buffer() {
     // std::cout << "IN Buffer DESTRUCTOR" << std::endl;
     if (_bufferId) {
-      glDeleteBuffers(1, &_bufferId);
+      MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_bufferId));
     }
   }
 
@@ -32,7 +33,7 @@ class Buffer {
   GLuint _bufferId;
   void _initBuffer() {
     if (!_bufferId) {
-      glGenBuffers(1, &_bufferId);
+      MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_bufferId));
     }
   }
 };

@@ -4,6 +4,7 @@
 #include "MapDGL.h"
 
 #include <GL/glew.h>
+
 #include <string>
 #include <memory>
 #include <functional>
@@ -79,16 +80,17 @@ struct TypeGL : BaseTypeGL {
 
   void bind(GLuint shaderAttrLoc, int stride, int offset) const {
     if (_useAsFloat) {
-      glVertexAttribPointer(shaderAttrLoc,
-                            numComponents(),
-                            baseGLType(),
-                            (_normalize ? GL_TRUE : GL_FALSE),
-                            stride,
-                            BUFFER_OFFSET(offset));
+      MAPD_CHECK_GL_ERROR(glVertexAttribPointer(shaderAttrLoc,
+                                                numComponents(),
+                                                baseGLType(),
+                                                (_normalize ? GL_TRUE : GL_FALSE),
+                                                stride,
+                                                BUFFER_OFFSET(offset)));
     } else {
-      _getAltVertexAttribPointerFunc()(shaderAttrLoc, numComponents(), baseGLType(), stride, BUFFER_OFFSET(offset));
+      MAPD_CHECK_GL_ERROR(_getAltVertexAttribPointerFunc()(
+          shaderAttrLoc, numComponents(), baseGLType(), stride, BUFFER_OFFSET(offset)));
     }
-    glEnableVertexAttribArray(shaderAttrLoc);
+    MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(shaderAttrLoc));
   }
 
   // void bind(GLuint shaderAttrLoc, int stride, int offset) {

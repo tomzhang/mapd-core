@@ -839,7 +839,7 @@ BaseMark::~BaseMark() {
   // std::cerr << "IN BaseMark DESTRUCTOR" << std::endl;
 
   if (_vao) {
-    glDeleteVertexArrays(1, &_vao);
+    MAPD_CHECK_GL_ERROR(glDeleteVertexArrays(1, &_vao));
   }
 }
 
@@ -864,12 +864,12 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj) {
 
 void BaseMark::_buildVertexArrayObjectFromProperties(Shader* activeShader) {
   if (_vao) {
-    glDeleteVertexArrays(1, &_vao);
+    MAPD_CHECK_GL_ERROR(glDeleteVertexArrays(1, &_vao));
     _vao = 0;
   }
 
-  glGenVertexArrays(1, &_vao);
-  glBindVertexArray(_vao);
+  MAPD_CHECK_GL_ERROR(glGenVertexArrays(1, &_vao));
+  MAPD_CHECK_GL_ERROR(glBindVertexArray(_vao));
 
   _initPropertiesForRendering(activeShader);
 
@@ -877,7 +877,7 @@ void BaseMark::_buildVertexArrayObjectFromProperties(Shader* activeShader) {
   // TODO: Actually look for a currently bound vao at start of function and reset to that?
   // NOTE: No need to unbind at this point since we're going directly into rendering
   // after this function?
-  // glBindVertexArray(0);
+  // MAPD_CHECK_GL_ERROR(glBindVertexArray(0));
 }
 
 void BaseMark::_bindToRenderer(Shader* activeShader) {
@@ -885,7 +885,7 @@ void BaseMark::_bindToRenderer(Shader* activeShader) {
     _buildVertexArrayObjectFromProperties(activeShader);
   }
 
-  glBindVertexArray(_vao);
+  MAPD_CHECK_GL_ERROR(glBindVertexArray(_vao));
 
   _bindPropertiesToRenderer(activeShader);
 }
@@ -1087,13 +1087,13 @@ void PointMark::_bindPropertiesToRenderer(Shader* activeShader) {
       GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
       if (type == GL_INT) {
         activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(_invalidKey));
-      } else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
-        // TODO(croot) - do we need to do the glew extension check above or
-        // would there be an error at shader compilation if the extension
-        // didn't exist?
+      }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
+         // TODO(croot) - do we need to do the glew extension check above or
+         // would there be an error at shader compilation if the extension
+         // didn't exist?
 
-        // TODO(croot) fill this out
-      }
+      // TODO(croot) fill this out
+      // }
     }
   }
 
@@ -1114,7 +1114,7 @@ void PointMark::draw() {
   _bindToRenderer(_shaderPtr.get());
 
   // TODO: render state stack -- push/pop
-  glEnable(GL_PROGRAM_POINT_SIZE);
+  MAPD_CHECK_GL_ERROR(glEnable(GL_PROGRAM_POINT_SIZE));
 
   // now draw points
   // TODO: What about the possibility of index buffers?
@@ -1123,10 +1123,10 @@ void PointMark::draw() {
   // is deemed not to have any index buffers, but we
   // need to have a way to generically draw bound buffers
   // which would be best with a renderer class
-  glDrawArrays(GL_POINTS, 0, x.size());
+  MAPD_CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, x.size()));
 
   // unset state
-  glDisable(GL_PROGRAM_POINT_SIZE);
+  MAPD_CHECK_GL_ERROR(glDisable(GL_PROGRAM_POINT_SIZE));
 }
 
 GeomConfigShPtr MapD_Renderer::createMark(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {

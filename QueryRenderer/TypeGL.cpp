@@ -272,15 +272,6 @@ int TypeGL<uint64_t, 1>::baseGLType() const {
   }
 }
 
-// template <>
-// int TypeGL<uint64_t, 1>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(unsigned int) * numComponents();
-//   }
-// }
-
 template <>
 std::string TypeGL<uint64_t, 2>::glslType() const {
   if (GLEW_NV_vertex_attrib_integer_64bit) {
@@ -298,15 +289,6 @@ int TypeGL<uint64_t, 2>::baseGLType() const {
     return GL_UNSIGNED_INT;
   }
 }
-
-// template <>
-// int TypeGL<uint64_t, 2>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(unsigned int) * numComponents();
-//   }
-// }
 
 template <>
 std::string TypeGL<uint64_t, 3>::glslType() const {
@@ -326,15 +308,6 @@ int TypeGL<uint64_t, 3>::baseGLType() const {
   }
 }
 
-// template <>
-// int TypeGL<uint64_t, 3>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(unsigned int) * numComponents();
-//   }
-// }
-
 template <>
 std::string TypeGL<uint64_t, 4>::glslType() const {
   if (GLEW_NV_vertex_attrib_integer_64bit) {
@@ -352,15 +325,6 @@ int TypeGL<uint64_t, 4>::baseGLType() const {
     return GL_UNSIGNED_INT;
   }
 }
-
-// template <>
-// int TypeGL<uint64_t, 4>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(unsigned int) * numComponents();
-//   }
-// }
 
 /*****************
  * INT64
@@ -395,15 +359,6 @@ int TypeGL<int64_t, 1>::baseGLType() const {
   }
 }
 
-// template <>
-// int TypeGL<int64_t, 1>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(int) * numComponents();
-//   }
-// }
-
 template <>
 std::string TypeGL<int64_t, 2>::glslType() const {
   if (GLEW_NV_vertex_attrib_integer_64bit) {
@@ -421,15 +376,6 @@ int TypeGL<int64_t, 2>::baseGLType() const {
     return GL_INT;
   }
 }
-
-// template <>
-// int TypeGL<int64_t, 2>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(int) * numComponents();
-//   }
-// }
 
 template <>
 std::string TypeGL<int64_t, 3>::glslType() const {
@@ -449,15 +395,6 @@ int TypeGL<int64_t, 3>::baseGLType() const {
   }
 }
 
-// template <>
-// int TypeGL<int64_t, 3>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(int) * numComponents();
-//   }
-// }
-
 template <>
 std::string TypeGL<int64_t, 4>::glslType() const {
   if (GLEW_NV_vertex_attrib_integer_64bit) {
@@ -475,12 +412,3 @@ int TypeGL<int64_t, 4>::baseGLType() const {
     return GL_INT;
   }
 }
-
-// template <>
-// int TypeGL<int64_t, 4>::numGLSLBytes() {
-//   if (GLEW_NV_vertex_attrib_integer_64bit) {
-//     return numBytes();
-//   } else {
-//     return sizeof(int) * numComponents();
-//   }
-// }

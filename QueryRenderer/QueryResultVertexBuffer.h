@@ -9,10 +9,9 @@
 #include <glog/logging.h>
 
 // CUDA libs
-// CROOT: CUDA COMMENT
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
+// #include <cuda_gl_interop.h>
 #include <cuda.h>
-#include <cuda_gl_interop.h>
 #include <cudaGL.h>
 
 #include <vector>
@@ -26,13 +25,11 @@
 namespace MapD_Renderer {
 
 struct CudaHandle {
-  // CROOT: CUDA COMMENT
   void* handle;
 
   // GLuint handle;
   unsigned int numBytes;
 
-  // CROOT: CUDA COMMENT
   CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
 
   // CudaHandle(GLuint handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
@@ -86,15 +83,9 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     _initBuffer();
 
     // now map the buffer for cuda
-    // TODO(croot) - check for cuda errors
-
-    // CROOT: CUDA COMMENT
-    // checkCudaErrors(cudaGraphicsMapResources(1, &_cudaResource, 0));
     checkCudaErrors(cuGraphicsMapResources(1, &_cudaResource, 0));
 
     size_t num_bytes;
-    // void* cudaPtr;
-    // checkCudaErrors(cudaGraphicsResourceGetMappedPointer(&cudaPtr, &num_bytes, _cudaResource));
 
     CUdeviceptr devPtr;
     checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
@@ -105,8 +96,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
 
     _isActive = true;
 
-    // return CudaHandle(_bufferId, _numTotalBytes);
-    // return CudaHandle(cudaPtr, _numTotalBytes);
     return CudaHandle(reinterpret_cast<void*>(devPtr), _numTotalBytes);
   }
 
@@ -119,11 +108,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     _isActive = false;
 
     // unmap buffer object
-    // TODO(croot) check for cuda errors
-
-    // CROOT: CUDA COMMENT
-    // checkCudaErrors(cudaGraphicsUnmapResources(1, &_cudaResource, 0));
-
     checkCudaErrors(cuGraphicsUnmapResources(1, &_cudaResource, 0));
 
     _layoutPtr = bufferLayout;
@@ -131,11 +115,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
   }
 
  private:
-  // CROOT: CUDA COMMENT
-  static void checkCudaErrors(cudaError_t result) {
-    RUNTIME_EX_ASSERT(result == cudaSuccess, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
-  }
-
   static void checkCudaErrors(CUresult result) {
     RUNTIME_EX_ASSERT(result == CUDA_SUCCESS, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
   }
@@ -143,14 +122,10 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
   bool _isActive;
   unsigned int _numTotalBytes;
 
-  // CROOT: CUDA COMMENT
-  // struct cudaGraphicsResource* _cudaResource;
-  // struct CUgraphicsResource* _cudaResource;
   CUgraphicsResource _cudaResource;
 
   void _initBuffer() {
     if (!_bufferId) {
-      // glGenBuffers(1, &_bufferId);
       BaseVertexBuffer::_initBuffer();
 
       // don't mess with the current state
@@ -161,9 +136,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       glBindBuffer(_target, _bufferId);
       glBufferData(_target, _numTotalBytes, 0, _usage);
 
-      // CROOT: CUDA COMMENT
-      // checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cudaResource, _bufferId,
-      // cudaGraphicsRegisterFlagsWriteDiscard));
       checkCudaErrors(cuGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
 
       // restore the state

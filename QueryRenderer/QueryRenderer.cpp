@@ -1,3 +1,4 @@
+#include "MapDGL.h"
 #include "QueryRenderer.h"
 #include "RapidJSONUtils.h"
 #include <glog/logging.h>
@@ -180,13 +181,13 @@ void QueryRenderer::render() {
 
   _framebufferPtr->bindToRenderer();
 
-  glEnable(GL_BLEND);
-  glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
+  MAPD_CHECK_GL_ERROR(glEnable(GL_BLEND));
+  MAPD_CHECK_GL_ERROR(glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD));
+  MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
 
-  glClearColor(0, 0, 0, 0);
-  glViewport(0, 0, _ctx->_width, _ctx->_height);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  MAPD_CHECK_GL_ERROR(glClearColor(0, 0, 0, 0));
+  MAPD_CHECK_GL_ERROR(glViewport(0, 0, _ctx->_width, _ctx->_height));
+  MAPD_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
   for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
     _ctx->_geomConfigs[i]->draw();
@@ -199,12 +200,12 @@ unsigned int QueryRenderer::getIdAt(int x, int y) {
 
   // TODO(croot): develop an API for reading from specific fbo buffers
   _framebufferPtr->bindToRenderer();
-  glReadBuffer(GL_COLOR_ATTACHMENT1);
+  MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT1));
 
   // TODO(croot): support a wider pixel check for a hit test and take a weighted avg
   // of the results to get a more stable result at boundaries
   unsigned int id;
-  glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id);
+  MAPD_CHECK_GL_ERROR(glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id));
 
   return id;
 }

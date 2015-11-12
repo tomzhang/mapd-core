@@ -1,11 +1,14 @@
 #ifndef SHADER_H_
 #define SHADER_H_
 
+#include "MapDGL.h"
 #include "QueryRendererError.h"
+
+#include <GL/glew.h>
+
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <GL/glew.h>
 #include <memory>
 #include <iostream>
 
@@ -40,82 +43,106 @@ struct UniformAttrInfo : AttrInfo {
 
 struct Uniform1uiAttr : UniformAttrInfo {
   Uniform1uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform1uiv(location, size, static_cast<const GLuint*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform1uiv(location, size, static_cast<const GLuint*>(data)));
+  }
 };
 
 struct Uniform2uiAttr : UniformAttrInfo {
   Uniform2uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform2uiv(location, size, static_cast<const GLuint*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform2uiv(location, size, static_cast<const GLuint*>(data)));
+  }
 };
 
 struct Uniform3uiAttr : UniformAttrInfo {
   Uniform3uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform3uiv(location, size, static_cast<const GLuint*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform3uiv(location, size, static_cast<const GLuint*>(data)));
+  }
 };
 
 struct Uniform4uiAttr : UniformAttrInfo {
   Uniform4uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform4uiv(location, size, static_cast<const GLuint*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform4uiv(location, size, static_cast<const GLuint*>(data)));
+  }
 };
 
 struct Uniform1iAttr : UniformAttrInfo {
   Uniform1iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform1iv(location, size, static_cast<const GLint*>(data)); }
+  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform1iv(location, size, static_cast<const GLint*>(data))); }
 };
 
 struct Uniform2iAttr : UniformAttrInfo {
   Uniform2iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform2iv(location, size, static_cast<const GLint*>(data)); }
+  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform2iv(location, size, static_cast<const GLint*>(data))); }
 };
 
 struct Uniform3iAttr : UniformAttrInfo {
   Uniform3iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform3iv(location, size, static_cast<const GLint*>(data)); }
+  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform3iv(location, size, static_cast<const GLint*>(data))); }
 };
 
 struct Uniform4iAttr : UniformAttrInfo {
   Uniform4iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform4iv(location, size, static_cast<const GLint*>(data)); }
+  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform4iv(location, size, static_cast<const GLint*>(data))); }
 };
 
 struct Uniform1fAttr : UniformAttrInfo {
   Uniform1fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform1fv(location, size, static_cast<const GLfloat*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform1fv(location, size, static_cast<const GLfloat*>(data)));
+  }
 };
 
 struct Uniform2fAttr : UniformAttrInfo {
   Uniform2fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform2fv(location, size, static_cast<const GLfloat*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform2fv(location, size, static_cast<const GLfloat*>(data)));
+  }
 };
 
 struct Uniform3fAttr : UniformAttrInfo {
   Uniform3fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform3fv(location, size, static_cast<const GLfloat*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform3fv(location, size, static_cast<const GLfloat*>(data)));
+  }
 };
 
 struct Uniform4fAttr : UniformAttrInfo {
   Uniform4fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform4fv(location, size, static_cast<const GLfloat*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform4fv(location, size, static_cast<const GLfloat*>(data)));
+  }
 };
 
 struct Uniform1dAttr : UniformAttrInfo {
   Uniform1dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform1dv(location, size, static_cast<const GLdouble*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform1dv(location, size, static_cast<const GLdouble*>(data)));
+  }
 };
 
 struct Uniform2dAttr : UniformAttrInfo {
   Uniform2dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform2dv(location, size, static_cast<const GLdouble*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform2dv(location, size, static_cast<const GLdouble*>(data)));
+  }
 };
 
 struct Uniform3dAttr : UniformAttrInfo {
   Uniform3dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform3dv(location, size, static_cast<const GLdouble*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform3dv(location, size, static_cast<const GLdouble*>(data)));
+  }
 };
 
 struct Uniform4dAttr : UniformAttrInfo {
   Uniform4dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { glUniform4dv(location, size, static_cast<const GLdouble*>(data)); }
+  void setAttr(const void* data) {
+    MAPD_CHECK_GL_ERROR(glUniform4dv(location, size, static_cast<const GLdouble*>(data)));
+  }
 };
 
 enum { ATTR_TYPE = 0, ATTR_SIZE, ATTR_LOC };

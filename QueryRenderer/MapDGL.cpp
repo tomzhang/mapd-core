@@ -1,8 +1,9 @@
 #include "MapDGL.h"
 #include "QueryRendererError.h"
+#include <GL/glew.h>
 #include <string>
 
-void checkGLError(const char* cmd, const char* file, int line) {
+void MapD_GL::checkGLError(const char* cmd, const char* file, int line) {
   const GLenum err = glGetError();
   if (err != GL_NO_ERROR) {
     const char* error = nullptr;
@@ -33,6 +34,6 @@ void checkGLError(const char* cmd, const char* file, int line) {
         break;
     }
 
-    RUNTIME_EX_ASSERT(false, std::string(cmd) + ": Error GL_" + error + " - " + file + ":" + std::to_string(line));
+    THROW_RUNTIME_EX(std::string(cmd) + ": Error GL_" + error + " - " + file + ":" + std::to_string(line));
   }
 }

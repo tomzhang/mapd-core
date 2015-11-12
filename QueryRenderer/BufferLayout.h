@@ -1,11 +1,13 @@
 #ifndef BUFFER_LAYOUT_H_
 #define BUFFER_LAYOUT_H_
 
+#include "MapDGL.h"
 #include "QueryRendererError.h"
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
+
 #include <GL/glew.h>
 #include <glog/logging.h>
 
@@ -327,7 +329,7 @@ class SequentialBufferLayout : public BaseBufferLayout {
         // glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE, bufAttrPtr->stride,
         // BUFFER_OFFFSET(offset));
         attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
-        glEnableVertexAttribArray(attrLoc);
+        MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
         offset += attrPtr->numBytes() * numActiveBufferItems;
       }
     } else {
@@ -340,10 +342,11 @@ class SequentialBufferLayout : public BaseBufferLayout {
 
         if (bufAttrPtr->name == attr) {
           attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
-          // glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE,
-          // bufAttrPtr->stride, BUFFER_OFFSET(offset));
+          // MAPD_CHECK_GL_ERROR(glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(),
+          // GL_FALSE,
+          // bufAttrPtr->stride, BUFFER_OFFSET(offset)));
           attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
-          glEnableVertexAttribArray(attrLoc);
+          MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
           break;
         }
 
@@ -354,9 +357,10 @@ class SequentialBufferLayout : public BaseBufferLayout {
     // for (const auto& itr : _attrMap) {
     //     attrLoc = activeShader->getVertexAttributeLocation(itr.first);
     //     attrPtr = itr.second->typeInfo;
-    //     glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE, itr.second->stride,
-    //     BUFFER_OFFSET(offset));
-    //     glEnableVertexAttribArray(attrLoc);
+    //     MAPD_CHECK_GL_ERROR(glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE,
+    //     itr.second->stride,
+    //     BUFFER_OFFSET(offset)));
+    //     MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
     //     offset += attrPtr->numBytes() * numActiveBufferItems;
     // }
   }
