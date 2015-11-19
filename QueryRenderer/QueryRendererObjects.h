@@ -44,31 +44,43 @@ typedef std::shared_ptr<BaseScaleDomainRangeData> ScaleDomainRangeDataShPtr;
 
 class BaseScale {
  public:
-  enum class ScaleType { LINEAR = 0, ORDINAL };
+  enum class ScaleType { LINEAR = 0, ORDINAL, UNDEFINED };
   const static std::vector<std::string> scaleVertexShaderSource;
-
-  std::string name;
-  ScaleType type;
 
   // DataType domainType;
   // DataType rangeType;
 
-  BaseScale(const QueryRendererContextShPtr& ctx);
-  BaseScale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+  BaseScale(const QueryRendererContextShPtr& ctx,
+            DataType domainDataType,
+            DataType rangeDataType,
+            const std::string& name = "",
+            ScaleType type = ScaleType::UNDEFINED);
+  BaseScale(const rapidjson::Value& obj,
+            const rapidjson::Pointer& objPath,
+            const QueryRendererContextShPtr& ctx,
+            DataType domainDataType,
+            DataType rangeDataType,
+            const std::string& name = "",
+            ScaleType type = ScaleType::UNDEFINED);
 
   virtual ~BaseScale();
 
-  const std::string& getName() { return name; };
+  // std::string getName() { return name; }
+  const std::string& getNameRef() { return _name; }
+  ScaleType getType() { return _type; }
 
-  const TypeGLShPtr& getDomainType() {
-    RUNTIME_EX_ASSERT(_domainType != nullptr, "BaseScale::getDomainType(): the domain type is uninitialized.");
-    return _domainType;
+  DataType getDomainDataType() { return _domainDataType; }
+  DataType getRangeDataType() { return _rangeDataType; }
+
+  const TypeGLShPtr& getDomainTypeGL() {
+    RUNTIME_EX_ASSERT(_domainTypeGL != nullptr, "BaseScale::getDomainTypeGL(): the domain type is uninitialized.");
+    return _domainTypeGL;
   }
 
-  const TypeGLShPtr& getRangeType() {
-    RUNTIME_EX_ASSERT(_rangeType != nullptr, "BaseScale::getRangeType(): the range type is uninitialized.");
+  const TypeGLShPtr& getRangeTypeGL() {
+    RUNTIME_EX_ASSERT(_rangeTypeGL != nullptr, "BaseScale::getRangeTypeGL(): the range type is uninitialized.");
 
-    return _rangeType;
+    return _rangeTypeGL;
   }
 
   std::string getScaleGLSLFuncName(const std::string& extraSuffix = "");
@@ -77,11 +89,11 @@ class BaseScale {
                                   bool ignoreDomain = false,
                                   bool ignoreRange = false) = 0;
 
-  std::string getDomainGLSLUniformName() { return "uDomains_" + name; }
+  std::string getDomainGLSLUniformName() { return "uDomains_" + _name; }
 
-  std::string getRangeGLSLUniformName() { return "uRanges_" + name; }
+  std::string getRangeGLSLUniformName() { return "uRanges_" + _name; }
 
-  std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + name; }
+  std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + _name; }
 
   virtual void bindUniformsToRenderer(Shader* activeShader,
                                       const std::string& extraSuffix = "",
@@ -91,17 +103,29 @@ class BaseScale {
   virtual BaseScaleDomainRangeData* getDomainData() = 0;
   virtual BaseScaleDomainRangeData* getRangeData() = 0;
 
+  virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+
  protected:
-  TypeGLShPtr _domainType;
-  TypeGLShPtr _rangeType;
-  QueryRendererContextShPtr _ctx;
+  std::string _name;
+  ScaleType _type;
+
   bool _useClamp;
 
- private:
-  // virtual void _pushDomainItem(const rapidjson::Value& item) = 0;
-  // virtual void _pushRangeItem(const rapidjson::Value& item) = 0;
+  // TODO(croot): somehow consolidate all the types and use typeid() or the like
+  // to handle type-ness.
+  DataType _domainDataType;
+  TypeGLShPtr _domainTypeGL;
 
-  void _initFromJSONObj(const rapidjson::Value& obj);
+  DataType _rangeDataType;
+  TypeGLShPtr _rangeTypeGL;
+
+  QueryRendererContextShPtr _ctx;
+
+  rapidjson::Pointer _jsonPath;
+
+  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+
+ private:
 };
 
 typedef std::unique_ptr<BaseScale> ScaleUqPtr;
@@ -118,8 +142,10 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   ~ScaleDomainRangeData() {}
 
   void initializeFromJSONObj(const rapidjson::Value& obj,
+                             const rapidjson::Pointer& objPath,
                              const QueryRendererContextShPtr& ctx,
                              BaseScale::ScaleType type);
+  void updateJSONPath(const rapidjson::Pointer& objPath);
 
   int size() { return (_vectorPtr == nullptr ? 0 : _vectorPtr->size()); }
 
@@ -133,8 +159,10 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
  private:
   std::shared_ptr<std::vector<T>> _vectorPtr;
   TypeGLShPtr _cachedTypeGL;
+  rapidjson::Pointer _jsonPath;
 
   void _pushItem(const rapidjson::Value& obj);
+  void _setItem(size_t idx, const rapidjson::Value& obj);
   void _setFromStringValue(const std::string& strVal, BaseScale::ScaleType type);
   void _updateVectorDataByType(TDataColumn<T>* dataColumnPtr, BaseScale::ScaleType type);
 };
@@ -185,7 +213,11 @@ void ScaleDomainRangeData<ColorRGBA>::_updateVectorDataByType(TDataColumn<ColorR
 template <typename DomainType, typename RangeType>
 class Scale : public BaseScale {
  public:
-  Scale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+  Scale(const rapidjson::Value& obj,
+        const rapidjson::Pointer& objPath,
+        const QueryRendererContextShPtr& ctx,
+        const std::string& name = "",
+        BaseScale::ScaleType type = BaseScale::ScaleType::UNDEFINED);
   ~Scale();
 
   std::string getGLSLCode(const std::string& extraSuffix = "", bool ignoreDomain = false, bool ignoreRange = false);
@@ -195,6 +227,8 @@ class Scale : public BaseScale {
                               bool ignoreRange = false);
   BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
+
+  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
  private:
   // std::vector<DomainType> _domain;
@@ -207,18 +241,32 @@ class Scale : public BaseScale {
   ScaleDomainRangeData<RangeType> _rangePtr;
 
   RangeType _defaultVal;
+  rapidjson::Pointer _defaultJsonPath;
 
   void _pushDomainItem(const rapidjson::Value& obj);
   void _pushRangeItem(const rapidjson::Value& obj);
 
-  void _initFromJSONObj(const rapidjson::Value& obj);
   void _initGLTypes();
+
+  void _setDefaultFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  void _updateDefaultJSONPath(const rapidjson::Pointer& objPath);
 };
 
 // std::unique_ptr<BaseScale> createScaleConfig(DataType domainType, DataType rangeType);
-ScaleShPtr createScale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+
+std::string getScaleNameFromJSONObj(const rapidjson::Value& obj);
+BaseScale::ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj);
+DataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+DataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+ScaleShPtr createScale(const rapidjson::Value& obj,
+                       const rapidjson::Pointer& objPath,
+                       const QueryRendererContextShPtr& ctx,
+                       const std::string& name = "",
+                       // TODO(croot): expose default as a constant somewhere
+                       BaseScale::ScaleType type = BaseScale::ScaleType::UNDEFINED);
 
 class BaseRenderProperty;
+class BaseMark;
 
 class BaseScaleRef {
  public:
@@ -226,19 +274,19 @@ class BaseScaleRef {
       : _ctx(ctx), _scalePtr(scalePtr), _rndrPropPtr(rndrProp) {}
   virtual ~BaseScaleRef() {}
 
-  const std::string& getName() {
+  const std::string& getNameRef() {
     _verifyScalePointer();
-    return _scalePtr->getName();
+    return _scalePtr->getNameRef();
   }
 
-  virtual const TypeGLShPtr& getDomainType() {
+  virtual const TypeGLShPtr& getDomainTypeGL() {
     _verifyScalePointer();
-    return _scalePtr->getDomainType();
+    return _scalePtr->getDomainTypeGL();
   }
 
-  virtual const TypeGLShPtr& getRangeType() {
+  virtual const TypeGLShPtr& getRangeTypeGL() {
     _verifyScalePointer();
-    return _scalePtr->getRangeType();
+    return _scalePtr->getRangeTypeGL();
   }
 
   std::string getScaleGLSLFuncName(const std::string& extraSuffix = "") {
@@ -255,6 +303,8 @@ class BaseScaleRef {
     _verifyScalePointer();
     return _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix);
   }
+
+  ScaleShPtr getScalePtr() { return _scalePtr; }
 
  protected:
   void _verifyScalePointer() {
@@ -274,8 +324,8 @@ class ScaleRef : public BaseScaleRef {
   ScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp);
   ~ScaleRef() {}
 
-  const TypeGLShPtr& getDomainType();
-  const TypeGLShPtr& getRangeType();
+  const TypeGLShPtr& getDomainTypeGL();
+  const TypeGLShPtr& getRangeTypeGL();
 
   std::string getGLSLCode(const std::string& extraSuffix = "");
 
@@ -291,14 +341,17 @@ class ScaleRef : public BaseScaleRef {
 
 class BaseRenderProperty {
  public:
-  BaseRenderProperty(const std::string& name,
+  BaseRenderProperty(BaseMark* prntMark,
+                     const std::string& name,
                      const QueryRendererContextShPtr& ctx,
                      bool useScale = true,
                      bool flexibleType = true)
-      : _name(name),
+      : _prntMark(prntMark),
+        _name(name),
         _useScale(useScale),
         _vboAttrName(""),
         _vboPtr(nullptr),
+        _vboInitType(VboInitType::UNDEFINED),
         _dataPtr(nullptr),
         _ctx(ctx),
         _inType(nullptr),
@@ -310,7 +363,9 @@ class BaseRenderProperty {
     // std::cerr << "IN BaseRenderProperty DESTRUCTOR " << _name << std::endl;
   }
 
-  void initializeFromJSONObj(const rapidjson::Value& obj, const DataVBOShPtr& dataPtr);
+  void initializeFromJSONObj(const rapidjson::Value& obj,
+                             const rapidjson::Pointer& objPath,
+                             const DataVBOShPtr& dataPtr);
   void initializeFromData(const std::string& columnName, const DataVBOShPtr& dataPtr);
 
   int size() const {
@@ -351,11 +406,15 @@ class BaseRenderProperty {
   const DataVBOShPtr& getDataTablePtr() { return _dataPtr; }
 
  protected:
+  enum class VboInitType { FROM_VALUE = 0, FROM_DATAREF, UNDEFINED };
+
+  BaseMark* _prntMark;
   std::string _name;
   bool _useScale;
 
   std::string _vboAttrName;
   BaseVertexBufferShPtr _vboPtr;
+  VboInitType _vboInitType;
   DataVBOShPtr _dataPtr;
 
   QueryRendererContextShPtr _ctx;
@@ -368,6 +427,10 @@ class BaseRenderProperty {
 
   bool _flexibleType;
 
+  rapidjson::Pointer _fieldJsonPath;
+  rapidjson::Pointer _valueJsonPath;
+  rapidjson::Pointer _scaleJsonPath;
+
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj, int numItems = 1) = 0;
@@ -378,11 +441,12 @@ class BaseRenderProperty {
 template <typename T, int numComponents = 1>
 class RenderProperty : public BaseRenderProperty {
  public:
-  RenderProperty(const std::string& name,
+  RenderProperty(BaseMark* prntMark,
+                 const std::string& name,
                  const QueryRendererContextShPtr& ctx,
                  bool useScale = true,
                  bool flexibleType = true)
-      : BaseRenderProperty(name, ctx, useScale, flexibleType), _mult(), _offset() {
+      : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset() {
     _inType.reset(new TypeGL<T, numComponents>());
     _outType.reset(new TypeGL<T, numComponents>());
   }
@@ -402,7 +466,8 @@ class RenderProperty : public BaseRenderProperty {
 };
 
 template <>
-RenderProperty<ColorRGBA, 1>::RenderProperty(const std::string& name,
+RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
+                                             const std::string& name,
                                              const QueryRendererContextShPtr& ctx,
                                              bool useScale,
                                              // TODO(croot): perhaps remove flexibleType? it ultimately is saying
@@ -426,11 +491,17 @@ class BaseMark {
  public:
   enum GeomType { POINTS = 0 };  // LINES, POLYS
 
-  GeomType type;
-
   BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx);
-  BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx, const rapidjson::Value& obj);
+  BaseMark(GeomType geomType,
+           const QueryRendererContextShPtr& ctx,
+           const rapidjson::Value& obj,
+           const rapidjson::Pointer& objPath);
   virtual ~BaseMark();
+
+  GeomType getType() { return _type; }
+
+  void setShaderDirty() { _shaderDirty = true; }
+  void setPropsDirty() { _propsDirty = true; }
 
   // virtual void _pushDomainItem(const rapidjson::Value& item) = 0;
 
@@ -439,7 +510,11 @@ class BaseMark {
 
   void setInvalidKey(const int64_t invalidKey) { _invalidKey = invalidKey; }
 
+  virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+
  protected:
+  GeomType _type;
+
   // all query-based shaders should have a "key"
 
   // TODO(croot): Should we use this as a "property"? Or should we
@@ -449,19 +524,27 @@ class BaseMark {
   int64_t _invalidKey;
 
   DataVBOShPtr _dataPtr;
+
   ShaderUqPtr _shaderPtr;
   QueryRendererContextShPtr _ctx;
 
+  rapidjson::Pointer _dataPtrJsonPath;
+  rapidjson::Pointer _propertiesJsonPath;
+  rapidjson::Pointer _jsonPath;
+
+  bool _shaderDirty;
+  bool _propsDirty;
+
   void _bindToRenderer(Shader* activeShader);
+  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
  private:
   GLuint _vao;  // opengl vertex array object id
 
-  void _initFromJSONObj(const rapidjson::Value& obj);
   void _buildVertexArrayObjectFromProperties(Shader* activeShader);
 
-  virtual void _initPropertiesFromJSONObj(const rapidjson::Value& obj) = 0;
-  virtual void _initShader() = 0;
+  virtual void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+  virtual void _updateShader() = 0;
 
   virtual void _initPropertiesForRendering(Shader* activeShader) = 0;
   virtual void _bindPropertiesToRenderer(Shader* activeShader) = 0;
@@ -476,27 +559,43 @@ typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
 
 class PointMark : public BaseMark {
  public:
-  PointMark(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+  PointMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, const QueryRendererContextShPtr& ctx);
   ~PointMark();
 
   void draw();
 
+  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+
  private:
   RenderProperty<float> x;
-  RenderProperty<float> y;
-  RenderProperty<float> z;
-  RenderProperty<float> size;
-  RenderProperty<unsigned int> id;
-  RenderProperty<ColorRGBA> fillColor;
+  rapidjson::Pointer _xJsonPath;
 
-  void _initPropertiesFromJSONObj(const rapidjson::Value& propObj);
-  void _initShader();
+  RenderProperty<float> y;
+  rapidjson::Pointer _yJsonPath;
+
+  RenderProperty<float> z;
+  rapidjson::Pointer _zJsonPath;
+
+  RenderProperty<float> size;
+  rapidjson::Pointer _sizeJsonPath;
+
+  RenderProperty<unsigned int> id;
+  rapidjson::Pointer _idJsonPath;
+
+  RenderProperty<ColorRGBA> fillColor;
+  rapidjson::Pointer _fillColorJsonPath;
+
+  void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  void _updateShader();
 
   void _initPropertiesForRendering(Shader* activeShader);
   void _bindPropertiesToRenderer(Shader* activeShader);
 };
 
-GeomConfigShPtr createMark(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+BaseMark::GeomType getMarkTypeFromJSONObj(const rapidjson::Value& obj);
+GeomConfigShPtr createMark(const rapidjson::Value& obj,
+                           const rapidjson::Pointer& objPath,
+                           const QueryRendererContextShPtr& ctx);
 
 }  // MapD_Renderer namespace
 

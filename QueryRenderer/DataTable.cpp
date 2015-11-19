@@ -1,4 +1,5 @@
 #include "DataTable.h"
+#include "QueryRenderer.h"
 #include "RapidJSONUtils.h"
 #include <limits>
 #include <boost/filesystem.hpp>
@@ -7,6 +8,36 @@
 #include <regex>
 
 using namespace MapD_Renderer;
+
+template <>
+DataType MapD_Renderer::getDataTypeForType<unsigned int>() {
+  return DataType::UINT;
+}
+
+template <>
+DataType MapD_Renderer::getDataTypeForType<int>() {
+  return DataType::INT;
+}
+
+template <>
+DataType MapD_Renderer::getDataTypeForType<float>() {
+  return DataType::FLOAT;
+}
+
+template <>
+DataType MapD_Renderer::getDataTypeForType<double>() {
+  return DataType::DOUBLE;
+}
+
+template <>
+DataType MapD_Renderer::getDataTypeForType<ColorRGBA>() {
+  return DataType::COLOR;
+}
+
+template <>
+DataType MapD_Renderer::getDataTypeForType<std::string>() {
+  return DataType::STRING;
+}
 
 DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
                                                 const rapidjson::Value& rowItem,
@@ -40,6 +71,18 @@ DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnNa
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 }
 
+void SqlQueryDataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+  if (_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
+    // need to update the path in case the path has changed in the json,
+    // but the data is the same.
+    _jsonPath = objPath;
+    return;
+  }
+
+  // force an initialization
+  _initFromJSONObj(obj, objPath, true);
+}
+
 DataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
   BufferAttrType attrType = _vbo->getAttributeType(columnName);
   switch (attrType) {
@@ -59,9 +102,11 @@ DataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
   }
 }
 
-void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj) {
+void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj,
+                                         const rapidjson::Pointer& objPath,
+                                         bool forceUpdate) {
   rapidjson::Value::ConstMemberIterator itr;
-  if (!_sqlQueryStr.length()) {
+  if (forceUpdate || !_sqlQueryStr.length()) {
     RUNTIME_EX_ASSERT((itr = obj.FindMember("sql")) != obj.MemberEnd() && itr->value.IsString(),
                       "SQL data object \"" + _name + "\" must contain an \"sql\" property and it must be a string");
 
@@ -72,19 +117,27 @@ void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj) {
 
   // TODO(croot) - for backwards compatibility, the dbTableName doesn't have to be present
   // but should it be required? Or can we somehow extract it from the sql?
-  if (!_tableName.length() && (itr = obj.FindMember("dbTableName")) != obj.MemberEnd()) {
+  if ((forceUpdate || !_tableName.length()) && (itr = obj.FindMember("dbTableName")) != obj.MemberEnd()) {
     RUNTIME_EX_ASSERT(itr->value.IsString(),
                       "SQL data object \"" + _name + "\" \"dbTableName\" property must be a string");
 
     _tableName = itr->value.GetString();
   }
+
+  _jsonPath = objPath;
 }
 
 const std::string DataTable::defaultIdColumnName = "rowid";
 
-DataTable::DataTable(const std::string& name, const rapidjson::Value& obj, bool buildIdColumn, VboType vboType)
-    : BaseDataTableVBO(name, BaseDataTableVBO::DataTableType::OTHER), _vboType(vboType), _numRows(0) {
-  _buildColumnsFromJSONObj(obj, buildIdColumn);
+DataTable::DataTable(const QueryRendererContextShPtr& ctx,
+                     const std::string& name,
+                     const rapidjson::Value& obj,
+                     const rapidjson::Pointer& objPath,
+                     BaseDataTableVBO::DataTableType type,
+                     bool buildIdColumn,
+                     VboType vboType)
+    : BaseDataTableVBO(ctx, name, obj, objPath, type), _vboType(vboType), _numRows(0) {
+  _buildColumnsFromJSONObj(obj, objPath, buildIdColumn);
 }
 
 void DataTable::_readFromCsvFile(const std::string& filename) {
@@ -161,7 +214,9 @@ void DataTable::_readDataFromFile(const std::string& filename) {
   }
 }
 
-void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj, bool buildIdColumn) {
+void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
+                                         const rapidjson::Pointer& objPath,
+                                         bool buildIdColumn) {
   RUNTIME_EX_ASSERT(obj.IsObject(),
                     "JSON data parse error - data must be an object. Cannot build data table from JSON.");
 
@@ -386,6 +441,19 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
   return _vbo;
 }
 
+void DataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+  if (_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
+    // need to update the path in case the path has changed in the json,
+    // but the data is the same.
+    _jsonPath = objPath;
+    return;
+  }
+
+  _jsonPath = objPath;
+
+  THROW_RUNTIME_EX("Updating a JSON-embedded data table is not yet supported.");
+}
+
 template <typename T>
 TDataColumn<T>::TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType)
     : DataColumn(name), _columnDataPtr(new std::vector<T>()) {
@@ -417,7 +485,7 @@ void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayO
                           "\" does not exist in row-major-defined data item " +
                           std::to_string(vitr - dataArrayObj.Begin()));
 
-    _columnDataPtr->push_back(getNumValFromJSONObj<T>(mitr->value));
+    _columnDataPtr->push_back(RapidJSONUtils::getNumValFromJSONObj<T>(mitr->value));
   }
 }
 
@@ -453,28 +521,3 @@ void TDataColumn<T>::_initFromColMajorJSONObj(const rapidjson::Value& dataArrayO
 
 //     return std::make_pair(min, max);
 // }
-
-template <>
-DataType TDataColumn<unsigned int>::getColumnType() {
-  return DataType::UINT;
-}
-
-template <>
-DataType TDataColumn<int>::getColumnType() {
-  return DataType::INT;
-}
-
-template <>
-DataType TDataColumn<float>::getColumnType() {
-  return DataType::FLOAT;
-}
-
-template <>
-DataType TDataColumn<double>::getColumnType() {
-  return DataType::DOUBLE;
-}
-
-template <>
-DataType TDataColumn<ColorRGBA>::getColumnType() {
-  return DataType::COLOR;
-}

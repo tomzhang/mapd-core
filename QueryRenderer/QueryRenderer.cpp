@@ -4,8 +4,9 @@
 #include "../QueryEngine/Execute.h"
 #include <glog/logging.h>
 #include <utility>  // std::pair
-#include <stdexcept>
+#include <unordered_set>
 #include "rapidjson/error/en.h"
+#include "rapidjson/allocators.h"
 
 using namespace MapD_Renderer;
 
@@ -18,13 +19,13 @@ QueryRenderer::QueryRenderer(const Executor* executor,
 }
 
 QueryRenderer::QueryRenderer(const Executor* executor,
-                             const rapidjson::Document& jsonDocument,
+                             const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                              const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                              bool doHitTest,
                              bool doDepthTest,
                              GLFWwindow* win)
     : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
-  _initFromJSON(jsonDocument, win);
+  _initFromJSON(jsonDocumentPtr, win);
 }
 
 QueryRenderer::QueryRenderer(const Executor* executor,
@@ -53,77 +54,209 @@ void QueryRenderer::_initFramebuffer(int width, int height) {
   }
 }
 
-void QueryRenderer::_initFromJSON(const std::string& configJSON, GLFWwindow* win) {
-  rapidjson::Document obj;
-  obj.Parse(configJSON.c_str());
+void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdate, GLFWwindow* win) {
+  std::shared_ptr<rapidjson::Document> objPtr(new rapidjson::Document());
+
+  objPtr->Parse(configJSON.c_str());
 
   // TODO(croot): this can be removed if the executor will handle the initial parse.
-  RUNTIME_EX_ASSERT(!obj.HasParseError(),
-                    "JSON parse error - " + std::to_string(obj.GetErrorOffset()) + ", error: " +
-                        rapidjson::GetParseError_En(obj.GetParseError()));
+  RUNTIME_EX_ASSERT(!objPtr->HasParseError(),
+                    "JSON parse error - " + std::to_string(objPtr->GetErrorOffset()) + ", error: " +
+                        rapidjson::GetParseError_En(objPtr->GetParseError()));
 
-  _initFromJSON(obj, win);
+  _initFromJSON(objPtr, win);
 }
 
-void QueryRenderer::_initFromJSON(const rapidjson::Value& obj, GLFWwindow* win) {
-  // clear out the previous state? Or do we want to maintain the previous state in case of an error?
-  _clear();
+void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                                  bool forceUpdate,
+                                  GLFWwindow* win) {
+  rapidjson::Pointer rootPath;
+  rapidjson::Value* obj = jsonDocumentPtr.get();
 
-  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - Root object is not a JSON object.");
+  if (forceUpdate) {
+    _clear();
+    if (!_ctx->_jsonCache->ObjectEmpty()) {
+      _ctx->_jsonCache.reset(new rapidjson::Value());
+    }
+  }
+
+  if (_ctx->_jsonCache && *_ctx->_jsonCache == *jsonDocumentPtr) {
+    // nothing's changed. Return.
+    // std::cerr << "CROOT - cache hasn't changed!" << std::endl;
+    return;
+  }
+
+  RUNTIME_EX_ASSERT(obj->IsObject(), "JSON parse error - Root object is not a JSON object.");
 
   rapidjson::Value::ConstMemberIterator mitr;
   rapidjson::Value::ConstValueIterator vitr;
 
-  RUNTIME_EX_ASSERT((mitr = obj.FindMember("width")) != obj.MemberEnd(),
+  RUNTIME_EX_ASSERT((mitr = obj->FindMember("width")) != obj->MemberEnd(),
                     "JSON parse error - \"width\" is not defined.");
   RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"width\" is not an integer.");
   int width = mitr->value.GetInt();
 
-  RUNTIME_EX_ASSERT((mitr = obj.FindMember("height")) != obj.MemberEnd(),
+  RUNTIME_EX_ASSERT((mitr = obj->FindMember("height")) != obj->MemberEnd(),
                     "JSON parse error - \"height\" is not defined.");
   RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"height\" is not an integer.");
   int height = mitr->value.GetInt();
 
   setWidthHeight(width, height, win);
 
-  mitr = obj.FindMember("data");
-  if (mitr != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"data\" member must be an array.");
+  std::string propName = "data";
+  mitr = obj->FindMember(propName.c_str());
+  if (mitr != obj->MemberEnd()) {
+    rapidjson::Pointer dataPath = rootPath.Append(propName.c_str(), propName.length());
+
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array.");
 
     DataVBOShPtr dataTablePtr;
+    std::unordered_set<std::string> visitedNames;
+    std::unordered_set<std::string> unvisitedNames;
+    unvisitedNames.reserve(_ctx->_dataTableMap.size());
+    for (auto kv : _ctx->_dataTableMap) {
+      unvisitedNames.insert(kv.first);
+    }
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      // dataTablePtr.reset(
-      //     new DataTable(*vitr, _doHitTest, DataTable::VboType::INTERLEAVED));  // NOTE: uses a SEQUENTIAL vbo by
-      // default
-      // new DataTable(*vitr, _doHitTest, DataTable::VboType::SEQUENTIAL));  // NOTE: uses a SEQUENTIAL vbo by default
+      rapidjson::Pointer dataObjPath = dataPath.Append(vitr - mitr->value.Begin());
 
-      dataTablePtr = createDataTable(*vitr, _ctx);
+      std::string tableName = getDataTableNameFromJSONObj(*vitr);
 
-      _ctx->_dataTableMap.insert(std::make_pair(dataTablePtr->getName(), dataTablePtr));
+      RUNTIME_EX_ASSERT(visitedNames.find(tableName) == visitedNames.end(),
+                        "JSON parse error - a data table with the name \"" + tableName + "\" already exists.");
+
+      dataTablePtr = _ctx->getDataTable(tableName);
+
+      if (!dataTablePtr) {
+        dataTablePtr = createDataTable(*vitr, dataObjPath, _ctx, tableName);
+        _ctx->_dataTableMap.insert(std::make_pair(tableName, dataTablePtr));
+      } else {
+        // TODO(croot): data table is changing. Need to validate any previously existing references.
+        // One way to do this is store a map of all objects changing in-place in order to
+        // validate.
+        if (dataTablePtr->getType() != getDataTableTypeFromJSONObj(*vitr)) {
+          // completely new data table type, so destroy previous one and
+          // build a new one from scratch.
+          _ctx->_dataTableMap.erase(tableName);
+          dataTablePtr = createDataTable(*vitr, dataObjPath, _ctx, tableName);
+          _ctx->_dataTableMap.insert(std::make_pair(tableName, dataTablePtr));
+        } else {
+          dataTablePtr->updateFromJSONObj(*vitr, dataObjPath);
+        }
+      }
+
+      unvisitedNames.erase(tableName);
+      visitedNames.insert(std::move(tableName));
     }
+
+    // now remove any unused tables that may be lingering around
+    for (const auto& itr : unvisitedNames) {
+      _ctx->_dataTableMap.erase(itr);
+    }
+  } else {
+    // need to clear out the previous data
+    // TODO(croot): Need to invalidate any previous data references
+    // This should probably be handled by some data reference object.
+    // That or do an object validation check after everything's been rebuilt.
+    // The latter would be the easiest way.
+    _ctx->_dataTableMap.clear();
   }
 
-  mitr = obj.FindMember("scales");
-  if (mitr != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"scales\" member must be an array.");
+  propName = "scales";
+  mitr = obj->FindMember(propName.c_str());
+  if (mitr != obj->MemberEnd()) {
+    rapidjson::Pointer scalePath = rootPath.Append(propName.c_str(), propName.length());
+
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array.");
+
+    ScaleShPtr scalePtr;
+    std::unordered_set<std::string> visitedNames;
+    std::unordered_set<std::string> unvisitedNames;
+    unvisitedNames.reserve(_ctx->_scaleConfigMap.size());
+    for (auto kv : _ctx->_scaleConfigMap) {
+      unvisitedNames.insert(kv.first);
+    }
 
     for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      ScaleShPtr scaleConfig = createScale(*vitr, _ctx);
-      _ctx->_scaleConfigMap.insert(std::make_pair(scaleConfig->name, scaleConfig));
+      rapidjson::Pointer scaleObjPath = scalePath.Append(vitr - mitr->value.Begin());
+
+      std::string scaleName = getScaleNameFromJSONObj(*vitr);
+
+      RUNTIME_EX_ASSERT(visitedNames.find(scaleName) == visitedNames.end(),
+                        "JSON parse error - a scale with the name \"" + scaleName + "\" already exists.");
+
+      scalePtr = _ctx->getScale(scaleName);
+
+      if (!scalePtr) {
+        scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
+        _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
+      } else {
+        // TODO(croot): scale config is changing. Need to validate any previously existing references.
+        // One way to do this is store a map of all objects changing in-place in order to
+        // validate.
+        if (scalePtr->getType() != getScaleTypeFromJSONObj(*vitr) ||
+            scalePtr->getDomainDataType() != getScaleDomainDataTypeFromJSONObj(*vitr, _ctx) ||
+            scalePtr->getRangeDataType() != getScaleRangeDataTypeFromJSONObj(*vitr, _ctx)) {
+          // completely new scale type, so destroy previous one and
+          // build a new one from scratch.
+          _ctx->_scaleConfigMap.erase(scaleName);
+          scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
+          _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
+        } else {
+          scalePtr->updateFromJSONObj(*vitr, scaleObjPath);
+        }
+      }
+
+      unvisitedNames.erase(scaleName);
+      visitedNames.insert(std::move(scaleName));
     }
+
+    // now remove any unused scales that may be lingering around
+    for (const auto& itr : unvisitedNames) {
+      _ctx->_scaleConfigMap.erase(itr);
+    }
+
+  } else {
+    // need to clear out the previous data
+    // TODO(croot): Need to invalidate any previous data references
+    // This should probably be handled by some scale reference object.
+    // That or do an object validation check after everything's been rebuilt.
+    // The latter would be the easiest way.
+    _ctx->_scaleConfigMap.clear();
   }
 
-  mitr = obj.FindMember("marks");
-  if (mitr != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"marks\" member must be an array");
+  propName = "marks";
+  mitr = obj->FindMember(propName.c_str());
+  if (mitr != obj->MemberEnd()) {
+    rapidjson::Pointer markPath = rootPath.Append(propName.c_str(), propName.length());
 
-    for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      GeomConfigShPtr geomConfigPtr = createMark(*vitr, _ctx);
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array");
 
-      _ctx->_geomConfigs.push_back(geomConfigPtr);
+    size_t i;
+    for (vitr = mitr->value.Begin(), i = 0; vitr != mitr->value.End(); ++vitr, ++i) {
+      rapidjson::Pointer markObjPath = markPath.Append(vitr - mitr->value.Begin());
+
+      if (i == _ctx->_geomConfigs.size()) {
+        GeomConfigShPtr geomConfigPtr = createMark(*vitr, markObjPath, _ctx);
+
+        _ctx->_geomConfigs.push_back(geomConfigPtr);
+      } else {
+        // do an update
+        if (_ctx->_geomConfigs[i]->getType() != getMarkTypeFromJSONObj(*vitr)) {
+          // TODO(croot): need to do a replace
+          THROW_RUNTIME_EX("The type of mark " + RapidJSONUtils::getPointerPath(markObjPath) +
+                           " has changed in-place in the json. This has yet to be implemented.");
+        } else {
+          _ctx->_geomConfigs[i]->updateFromJSONObj(*vitr, markObjPath);
+        }
+      }
     }
+  } else {
+    _ctx->_geomConfigs.clear();
   }
+
+  _ctx->_jsonCache = jsonDocumentPtr;
 }
 
 int QueryRenderer::getWidth() {
@@ -155,12 +288,14 @@ const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer() {
   return _framebufferPtr;
 }
 
-void QueryRenderer::setJSONConfig(const std::string& configJSON, GLFWwindow* win) {
-  _initFromJSON(configJSON, win);
+void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate, GLFWwindow* win) {
+  _initFromJSON(configJSON, forceUpdate, win);
 }
 
-void QueryRenderer::setJSONDocument(const rapidjson::Document& jsonDocument, GLFWwindow* win) {
-  _initFromJSON(jsonDocument, win);
+void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                                    bool forceUpdate,
+                                    GLFWwindow* win) {
+  _initFromJSON(jsonDocumentPtr, forceUpdate, win);
 }
 
 void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
@@ -248,27 +383,63 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
 
 // }
 
-DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "createDataTable: A data object in the JSON must be an object.");
+std::string MapD_Renderer::getDataTableNameFromJSONObj(const rapidjson::Value& obj) {
+  RUNTIME_EX_ASSERT(obj.IsObject(), "A data object in the JSON must be an object.");
 
   rapidjson::Value::ConstMemberIterator itr;
 
   RUNTIME_EX_ASSERT((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString(),
-                    "createDataTable: A data object must contain a \"name\" property and it must be a string");
-  std::string tableName = itr->value.GetString();
+                    "A data object must contain a \"name\" property and it must be a string");
+
+  return itr->value.GetString();
+}
+
+BaseDataTableVBO::DataTableType MapD_Renderer::getDataTableTypeFromJSONObj(const rapidjson::Value& obj) {
+  RUNTIME_EX_ASSERT(obj.IsObject(), "A data table in the JSON must be an object.");
+
+  rapidjson::Value::ConstMemberIterator itr;
 
   if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
     RUNTIME_EX_ASSERT(itr->value.IsString(),
-                      "createDataTable: The sql property for \"" + tableName + "\" must be a string.");
-    return DataVBOShPtr(
-        new SqlQueryDataTable(tableName, obj, ctx->getQueryResultVertexBuffer(), itr->value.GetString()));
+                      "Cannot get data table's type - the sql property for a data table must be a string.");
+    return BaseDataTableVBO::DataTableType::SQLQUERY;
   } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
-    return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+    return BaseDataTableVBO::DataTableType::EMBEDDED;
   } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
-    return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+    return BaseDataTableVBO::DataTableType::URL;
   }
-  THROW_RUNTIME_EX("createDataTable: There is not valid data property in the table \"" + tableName +
-                   "\". Must have an \"sql\", \"values\" or \"url\" property.");
+
+  THROW_RUNTIME_EX("Cannot get data table's type - the data table's type is not supported.");
+  return BaseDataTableVBO::DataTableType::UNSUPPORTED;
+}
+
+DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj,
+                                            const rapidjson::Pointer& objPath,
+                                            const QueryRendererContextShPtr& ctx,
+                                            const std::string& name) {
+  std::string tableName(name);
+  if (!tableName.length()) {
+    tableName = getDataTableNameFromJSONObj(obj);
+  } else {
+    RUNTIME_EX_ASSERT(obj.IsObject(), "Cannot create data table - A data object in the JSON must be an object.");
+  }
+
+  RUNTIME_EX_ASSERT(tableName.length(),
+                    "Cannot create data table - The data table has an empty name. It must have a name.");
+
+  BaseDataTableVBO::DataTableType tableType = getDataTableTypeFromJSONObj(obj);
+  switch (tableType) {
+    case BaseDataTableVBO::DataTableType::SQLQUERY:
+      return DataVBOShPtr(new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffer()));
+    case BaseDataTableVBO::DataTableType::EMBEDDED:
+    case BaseDataTableVBO::DataTableType::URL:
+      return DataVBOShPtr(
+          new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+    default:
+      THROW_RUNTIME_EX(
+          "Cannot create data table \"" + tableName +
+          "\". It is not a supported table. Supported tables must have an \"sql\", \"values\" or \"url\" property.");
+  }
 
   return DataVBOShPtr(nullptr);
 }

@@ -21,6 +21,8 @@
 #include <string>
 #include <stdexcept>
 #include <cstdint>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace MapD_Renderer {
 
@@ -45,7 +47,8 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       : BaseVertexBuffer(BaseVertexBuffer::VertexBufferType::QUERY_RESULT_VERTEX_BUFFER, target, usage),
         _isActive(false),
         _numTotalBytes(numBytes),
-        _cudaResource(nullptr) {}
+        // _cudaResource(nullptr),
+        _cudaResourceMap() {}
 
   ~QueryResultVertexBuffer() {
     if (_bufferId) {
@@ -68,6 +71,26 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       // checkCudaErrors(cudaGraphicsUnregisterResource(_cudaResource));
       // checkCudaErrors(cuGraphicsUnregisterResource(_cudaResource));
 
+      // return to the previous cuda context after
+      // unregistering all remaining resources
+      // for each context
+      CUcontext currCudaCtx;
+      CUresult result = cuCtxGetCurrent(&currCudaCtx);
+      if (result != CUDA_ERROR_DEINITIALIZED) {
+        // verify that cuda's not being shut down.
+        // This destructor may have been triggered
+        // by a program exit, therefore cuda could
+        // be in shutdown mode before we get here.
+
+        checkCudaErrors(result);
+        checkCudaErrors(cuCtxGetCurrent(&currCudaCtx));
+        for (const auto& item : _cudaResourceMap) {
+          checkCudaErrors(cuCtxSetCurrent(item.first));
+          checkCudaErrors(cuGraphicsUnregisterResource(item.second));
+        }
+        checkCudaErrors(cuCtxSetCurrent(currCudaCtx));
+      }
+
       glDeleteBuffers(1, &_bufferId);
     }
   }
@@ -83,12 +106,14 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     _initBuffer();
 
     // now map the buffer for cuda
-    checkCudaErrors(cuGraphicsMapResources(1, &_cudaResource, 0));
+    CUgraphicsResource cudaRsrc = _getCudaGraphicsResource(true);
+    _mapCudaGraphicsResource(cudaRsrc);
 
     size_t num_bytes;
 
     CUdeviceptr devPtr;
-    checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
+    // checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
+    checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc));
 
     RUNTIME_EX_ASSERT(num_bytes == _numTotalBytes,
                       "QueryResultVertexBuffer: couldn't successfully map all " + std::to_string(_numTotalBytes) +
@@ -108,7 +133,8 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     _isActive = false;
 
     // unmap buffer object
-    checkCudaErrors(cuGraphicsUnmapResources(1, &_cudaResource, 0));
+    CUgraphicsResource cudaRsrc = _getCudaGraphicsResource();
+    _unmapCudaGraphicsResource(cudaRsrc);
 
     _layoutPtr = bufferLayout;
     _size = numRows;
@@ -122,7 +148,49 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
   bool _isActive;
   unsigned int _numTotalBytes;
 
-  CUgraphicsResource _cudaResource;
+  // CUgraphicsResource _cudaResource;
+
+  std::unordered_map<CUcontext, CUgraphicsResource> _cudaResourceMap;
+  std::unordered_set<CUgraphicsResource> _mappedCudaResources;
+
+  CUgraphicsResource _getCudaGraphicsResource(bool registerResource = false) {
+    // CUcontext* currCudaCtx=nullptr;
+    CUcontext currCudaCtx;
+
+    checkCudaErrors(cuCtxGetCurrent(&currCudaCtx));
+
+    // TODO(croot): convert these checks to log/throw errors
+    CHECK(currCudaCtx != nullptr);
+    CHECK(_bufferId);
+
+    const auto itr = _cudaResourceMap.find(currCudaCtx);
+    if (itr == _cudaResourceMap.end()) {
+      CHECK(registerResource);
+
+      CUgraphicsResource rsrc;
+      checkCudaErrors(cuGraphicsGLRegisterBuffer(&rsrc, _bufferId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
+      _cudaResourceMap.insert(std::make_pair(currCudaCtx, rsrc));
+      return rsrc;
+    }
+
+    return itr->second;
+  }
+
+  void _mapCudaGraphicsResource(CUgraphicsResource& rsrc) {
+    if (_mappedCudaResources.find(rsrc) == _mappedCudaResources.end()) {
+      checkCudaErrors(cuGraphicsMapResources(1, &rsrc, 0));
+      _mappedCudaResources.insert(rsrc);
+    }  // already mapped otherwise
+  }
+
+  void _unmapCudaGraphicsResource(CUgraphicsResource& rsrc) {
+    const auto itr = _mappedCudaResources.find(rsrc);
+    if (itr != _mappedCudaResources.end()) {
+      checkCudaErrors(cuGraphicsUnmapResources(1, &rsrc, 0));
+      _mappedCudaResources.erase(itr);
+    }
+    // TODO(croot): throw an error if nothing to unmap?
+  }
 
   void _initBuffer() {
     if (!_bufferId) {
@@ -135,8 +203,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
 
       glBindBuffer(_target, _bufferId);
       glBufferData(_target, _numTotalBytes, 0, _usage);
-
-      checkCudaErrors(cuGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
 
       // restore the state
       glBindBuffer(_target, currArrayBuf);

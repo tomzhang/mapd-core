@@ -141,6 +141,11 @@ class VertexBuffer : public BaseVertexBuffer {
   // }
 
   void bufferData(void* data, int numItems, int numBytesPerItem) {
+    // TODO(croot): this could be a performance hit when buffering data
+    // frequently. Should perhaps look into buffer object streaming techniques:
+    // https://www.opengl.org/wiki/Buffer_Object_Streaming
+    // Gonna start with an orphaning technique/re-specification
+
     _initBuffer();
     // MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_bufferId));
 
@@ -150,6 +155,25 @@ class VertexBuffer : public BaseVertexBuffer {
     MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(_target), &currArrayBuf));
 
     MAPD_CHECK_GL_ERROR(glBindBuffer(_target, _bufferId));
+
+    // passing "NULL" to glBufferData first "may" induce orphaning.
+    // See: https://www.opengl.org/wiki/Buffer_Object_Streaming#Buffer_re-specification
+    // This is implementation dependent, and not guaranteed to be implemented
+    // properly. If not, then this will force a synchronization, which
+    // can be slow. If implemented properly, this should allocate a new
+    // buffer without clashing with the old one. The old one will be
+    // freed once all GL commands in the command queue referencing the old
+    // one are executed.
+    // TODO(croot): the docs indicate that to orphan with glBufferData(...), the exact
+    // same size and usage hints from before should be used. I'm not ensuring the
+    // same size here. Is that a problem? Should I employ a glMapBufferRange(...) technique
+    // instead?
+    MAPD_CHECK_GL_ERROR(glBufferData(_target, numItems * numBytesPerItem, NULL, _usage));
+
+    // Did the orphaning above, now actually buffer the data to the orphaned
+    // buffer.
+    // TODO(croot): use a pbuffer streaming technique instead perhaps?
+    // That could be a faster, asynchronous way.
     MAPD_CHECK_GL_ERROR(glBufferData(_target, numItems * numBytesPerItem, data, _usage));
 
     // restore the state

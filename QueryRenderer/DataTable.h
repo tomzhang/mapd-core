@@ -17,21 +17,56 @@
 #include <algorithm>  // minmax_element
 
 #include "rapidjson/document.h"
+#include "rapidjson/pointer.h"
 
 namespace MapD_Renderer {
 
+class QueryRendererContext;
+typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
+
 enum class DataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR, STRING };
+
+template <typename T>
+DataType getDataTypeForType();
+
+template <>
+DataType getDataTypeForType<unsigned int>();
+
+template <>
+DataType getDataTypeForType<int>();
+
+template <>
+DataType getDataTypeForType<float>();
+
+template <>
+DataType getDataTypeForType<double>();
+
+template <>
+DataType getDataTypeForType<ColorRGBA>();
+
+template <>
+DataType getDataTypeForType<std::string>();
 
 class BaseDataTableVBO {
  public:
-  enum class DataTableType { SQLQUERY = 0, OTHER };
+  enum class DataTableType { SQLQUERY = 0, EMBEDDED, URL, UNSUPPORTED };
 
-  BaseDataTableVBO(const std::string& name = "", DataTableType type = DataTableType::OTHER)
-      : _name(name), _vbo(nullptr), _type(type) {}
-  explicit BaseDataTableVBO(const std::string& name, DataTableType type, const BaseVertexBufferShPtr& vbo)
-      : _name(name), _vbo(vbo), _type(type) {}
+  BaseDataTableVBO(const QueryRendererContextShPtr& ctx,
+                   const std::string& name,
+                   const rapidjson::Value& obj,
+                   const rapidjson::Pointer& objPath,
+                   DataTableType type)
+      : _ctx(ctx), _name(name), _vbo(nullptr), _type(type), _jsonPath(objPath) {}
+  explicit BaseDataTableVBO(const QueryRendererContextShPtr& ctx,
+                            const std::string& name,
+                            const rapidjson::Value& obj,
+                            const rapidjson::Pointer& objPath,
+                            DataTableType type,
+                            const BaseVertexBufferShPtr& vbo)
+      : _ctx(ctx), _name(name), _vbo(vbo), _type(type), _jsonPath(objPath) {}
   virtual ~BaseDataTableVBO() {}
 
+  virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
   virtual bool hasColumn(const std::string& columnName) = 0;
   virtual BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName) = 0;
   virtual DataType getColumnType(const std::string& columnName) = 0;
@@ -41,9 +76,11 @@ class BaseDataTableVBO {
   DataTableType getType() { return _type; }
 
  protected:
+  QueryRendererContextShPtr _ctx;
   std::string _name;
   BaseVertexBufferShPtr _vbo;
   DataTableType _type;
+  rapidjson::Pointer _jsonPath;
 };
 
 typedef std::unique_ptr<BaseDataTableVBO> DataVBOUqPtr;
@@ -51,17 +88,20 @@ typedef std::shared_ptr<BaseDataTableVBO> DataVBOShPtr;
 
 class SqlQueryDataTable : public BaseDataTableVBO {
  public:
-  SqlQueryDataTable(const std::string& name,
+  SqlQueryDataTable(const QueryRendererContextShPtr& ctx,
+                    const std::string& name,
                     const rapidjson::Value& obj,
+                    const rapidjson::Pointer& objPath,
                     const BaseVertexBufferShPtr& vbo,
-                    const std::string& sqlQueryStr)
-      : BaseDataTableVBO(name, BaseDataTableVBO::DataTableType::SQLQUERY, vbo),
+                    const std::string& sqlQueryStr = "")
+      : BaseDataTableVBO(ctx, name, obj, objPath, BaseDataTableVBO::DataTableType::SQLQUERY, vbo),
         _sqlQueryStr(sqlQueryStr),
         _tableName() {
-    _initFromJSONObj(obj);
+    _initFromJSONObj(obj, objPath);
   }
   ~SqlQueryDataTable() {}
 
+  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   bool hasColumn(const std::string& columnName) { return _vbo->hasAttribute(columnName); }
   BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName) {
     RUNTIME_EX_ASSERT(_vbo->hasAttribute(columnName),
@@ -77,7 +117,7 @@ class SqlQueryDataTable : public BaseDataTableVBO {
   std::string _sqlQueryStr;
   std::string _tableName;
 
-  void _initFromJSONObj(const rapidjson::Value& obj);
+  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
 };
 
 struct TypelessColumnData {
@@ -126,7 +166,7 @@ class TDataColumn : public DataColumn {
     _columnDataPtr->push_back(boost::lexical_cast<T>(val));
   }
 
-  DataType getColumnType();
+  DataType getColumnType() { return getDataTypeForType<T>(); }
 
   std::shared_ptr<std::vector<T>> getColumnData() { return _columnDataPtr; }
   TypelessColumnData getTypelessColumnData() {
@@ -153,21 +193,6 @@ class TDataColumn : public DataColumn {
 };
 
 template <>
-DataType TDataColumn<unsigned int>::getColumnType();
-
-template <>
-DataType TDataColumn<int>::getColumnType();
-
-template <>
-DataType TDataColumn<float>::getColumnType();
-
-template <>
-DataType TDataColumn<double>::getColumnType();
-
-template <>
-DataType TDataColumn<ColorRGBA>::getColumnType();
-
-template <>
 void TDataColumn<ColorRGBA>::push_back(const std::string& val);
 
 template <>
@@ -178,14 +203,19 @@ class DataTable : public BaseDataTableVBO {
   enum class VboType { SEQUENTIAL = 0, INTERLEAVED, INDIVIDUAL };
   static const std::string defaultIdColumnName;
 
-  DataTable(const std::string& name,
+  DataTable(const QueryRendererContextShPtr& ctx,
+            const std::string& name,
             const rapidjson::Value& obj,
+            const rapidjson::Pointer& objPath,
+            BaseDataTableVBO::DataTableType type,
             bool buildIdColumn = false,
             VboType vboType = VboType::SEQUENTIAL);
   ~DataTable() {}
 
   template <typename C1, typename C2>
   std::pair<C1, C2> getExtrema(const std::string& column);
+
+  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
   bool hasColumn(const std::string& columnName) {
     ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
@@ -215,7 +245,7 @@ class DataTable : public BaseDataTableVBO {
 
   ColumnMap _columns;
 
-  void _buildColumnsFromJSONObj(const rapidjson::Value& obj, bool buildIdColumn);
+  void _buildColumnsFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool buildIdColumn);
   void _populateColumnsFromJSONObj(const rapidjson::Value& obj);
   void _readDataFromFile(const std::string& filename);
   void _readFromCsvFile(const std::string& filename);

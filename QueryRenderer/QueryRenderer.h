@@ -9,6 +9,7 @@
 // #include "QueryRenderManager.h"
 #include "DataTable.h"
 #include "BufferLayout.h"
+#include "RapidJSONUtils.h"
 
 #include <GLFW/glfw3.h>
 
@@ -20,6 +21,7 @@
 #include <limits>
 
 #include "rapidjson/document.h"
+#include "rapidjson/pointer.h"
 // #include <utility>  // std::pair
 
 class Executor;
@@ -39,7 +41,7 @@ class QueryRenderer {
                          GLFWwindow* win = nullptr);
 
   explicit QueryRenderer(const Executor* executor,
-                         const rapidjson::Document& jsonDocument,
+                         const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                          const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                          bool doHitTest = false,
                          bool doDepthTest = false,
@@ -60,8 +62,10 @@ class QueryRenderer {
 
   const QueryFramebufferUqPtr& getFramebuffer();
 
-  void setJSONConfig(const std::string& configJSON, GLFWwindow* win = nullptr);
-  void setJSONDocument(const rapidjson::Document& jsonDocument, GLFWwindow* win = nullptr);
+  void setJSONConfig(const std::string& configJSON, bool forceUpdate = false, GLFWwindow* win = nullptr);
+  void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                       bool forceUpdate = false,
+                       GLFWwindow* win = nullptr);
 
   void updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
                                         const int numRows,
@@ -76,8 +80,10 @@ class QueryRenderer {
   QueryFramebufferUqPtr _framebufferPtr;
 
   void _clear();
-  void _initFromJSON(const rapidjson::Value& obj, GLFWwindow* win = nullptr);
-  void _initFromJSON(const std::string& configJSON, GLFWwindow* win = nullptr);
+  void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                     bool forceUpdate = false,
+                     GLFWwindow* win = nullptr);
+  void _initFromJSON(const std::string& configJSON, bool forceUpdate = false, GLFWwindow* win = nullptr);
   void _initFramebuffer(int width, int height);
 };
 
@@ -98,7 +104,8 @@ class QueryRendererContext {
         _height(0),
         _doHitTest(doHitTest),
         _doDepthTest(doDepthTest),
-        _invalidKey(std::numeric_limits<int64_t>::max()) {}
+        _invalidKey(std::numeric_limits<int64_t>::max()),
+        _jsonCache(nullptr) {}
   explicit QueryRendererContext(const Executor* executor,
                                 const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                                 int width,
@@ -111,7 +118,8 @@ class QueryRendererContext {
         _height(height),
         _doHitTest(doHitTest),
         _doDepthTest(doDepthTest),
-        _invalidKey(std::numeric_limits<int64_t>::max()) {}
+        _invalidKey(std::numeric_limits<int64_t>::max()),
+        _jsonCache(nullptr) {}
   ~QueryRendererContext() { _clear(); }
 
   int getWidth() { return _width; }
@@ -132,6 +140,23 @@ class QueryRendererContext {
   int64_t getInvalidKey() { return _invalidKey; }
 
   const Executor* const getExecutor() { return executor_; }
+
+  const RapidJSONUtils::JsonCachePtr& getJsonCachePtr() { return _jsonCache; }
+
+  bool isJSONCacheUpToDate(const rapidjson::Pointer& objPath, const rapidjson::Value& obj) {
+    if (!_jsonCache) {
+      return false;
+    }
+
+    const rapidjson::Value* cachedVal = GetValueByPointer(*_jsonCache, objPath);
+
+    // TODO(croot): throw an exception or just return false?
+    RUNTIME_EX_ASSERT(
+        cachedVal != nullptr,
+        "The path " + RapidJSONUtils::getPointerPath(objPath) + " is not a valid path in the cached json.");
+
+    return (cachedVal ? (*cachedVal == obj) : false);
+  }
 
   // bool hasMark(const std::string& geomConfigName) const {
   //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
@@ -172,6 +197,8 @@ class QueryRendererContext {
   bool _doDepthTest;
   int64_t _invalidKey;
 
+  RapidJSONUtils::JsonCachePtr _jsonCache;
+
   void _clear() {
     _width = 0;
     _height = 0;
@@ -184,7 +211,12 @@ class QueryRendererContext {
 typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 
-DataVBOShPtr createDataTable(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj);
+BaseDataTableVBO::DataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj);
+DataVBOShPtr createDataTable(const rapidjson::Value& obj,
+                             const rapidjson::Pointer& objPath,
+                             const QueryRendererContextShPtr& ctx,
+                             const std::string& name = "");
 
 };  // MapD_Renderer namespace
 

@@ -1,12 +1,9 @@
+#include "QueryRenderer/QueryRendererError.h"
 #include "QueryRenderManager.h"
 
-// CROOT: CUDA COMMENT
 #include "backendrendererSetup.h"
-#include <cuda.h>
 
 #include <glog/logging.h>
-
-// #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <curand.h>
 #include <curand_kernel.h>
@@ -61,6 +58,15 @@ void mouse_move_callback(GLFWwindow* window, double xpos, double ypos) {
 }
 
 // CROOT: CUDA COMMENT
+// CROOT: CUDA COMMENT
+void checkCudaErrors(cudaError_t result) {
+  RUNTIME_EX_ASSERT(result == cudaSuccess, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
+}
+
+void checkCudaErrors(CUresult result) {
+  RUNTIME_EX_ASSERT(result == CUDA_SUCCESS, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
+}
+
 template <typename T>
 void checkCudaErrors(T result) {
   if (result) {
@@ -359,14 +365,14 @@ int main(int argc, char* argv[]) {
   CHECK(argc == 3);
 
   // setup google logging
-  // google::InitGoogleLogging(argv[0]);
+  google::InitGoogleLogging(argv[0]);
   // FLAGS_log_dir = "./LOGS";
 
   // CROOT: CUDA COMMENT
   CUcontext cudaCtx;
   int deviceId = gpuGetMaxGflopsDeviceId();
-  cuCtxCreate(&cudaCtx, 0, deviceId);
-  cuCtxSetCurrent(cudaCtx);
+  checkCudaErrors(cuCtxCreate(&cudaCtx, 0, deviceId));
+  checkCudaErrors(cuCtxSetCurrent(cudaCtx));
 
   std::string configJSON;
 
@@ -375,38 +381,72 @@ int main(int argc, char* argv[]) {
   configJSON.reserve(inFile.tellg());
   inFile.seekg(0, std::ios::beg);
   configJSON.assign((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+  inFile.close();
 
   renderManager.addUserWidget(userWidgetId1, false, false);
   renderManager.setActiveUserWidget(userWidgetId1);
 
-  rapidjson::Document jsonDoc;
-  jsonDoc.Parse(configJSON.c_str());
-  if (jsonDoc.HasParseError()) {
-    throw std::runtime_error("Error parsing the json config: offset: " + std::to_string(jsonDoc.GetErrorOffset()) +
-                             ", error: " + rapidjson::GetParseError_En(jsonDoc.GetParseError()));
-  }
+  {
+    std::shared_ptr<rapidjson::Document> jsonDocPtr(new rapidjson::Document());
+    jsonDocPtr->Parse(configJSON.c_str());
+    if (jsonDocPtr->HasParseError()) {
+      throw std::runtime_error("Error parsing the json config: offset: " +
+                               std::to_string(jsonDocPtr->GetErrorOffset()) + ", error: " +
+                               rapidjson::GetParseError_En(jsonDocPtr->GetParseError()));
+    }
 
-  CHECK(jsonDoc.IsObject());
+    // inFile.open(argv[2]);
+    // inFile.seekg(0, std::ios::end);
+    // configJSON.reserve(inFile.tellg());
+    // inFile.seekg(0, std::ios::beg);
+    // configJSON.assign((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+    // inFile.close();
 
-  rapidjson::Value::ConstMemberIterator mitr1, mitr2;
-  rapidjson::Value::ConstValueIterator vitr;
-  bool foundSql = false;
+    // rapidjson::Document CROOTtestDoc;
+    // CROOTtestDoc.Parse(configJSON.c_str());
+    // if (jsonDoc != CROOTtestDoc) {
+    //   std::cout << "not the same" << std::endl;
+    // } else {
+    //   std::cout << "the same" << std::endl;
+    // }
 
-  if ((mitr1 = jsonDoc.FindMember("data")) != jsonDoc.MemberEnd() && mitr1->value.IsArray()) {
-    for (vitr = mitr1->value.Begin(); vitr != mitr1->value.End(); ++vitr) {
-      if (vitr->IsObject()) {
-        if ((mitr2 = vitr->FindMember("sql")) != vitr->MemberEnd() && mitr2->value.IsString()) {
-          foundSql = true;
+    CHECK(jsonDocPtr->IsObject());
+
+    rapidjson::Value::ConstMemberIterator mitr1, mitr2;
+    rapidjson::Value::ConstValueIterator vitr;
+    bool foundSql = false;
+
+    if ((mitr1 = jsonDocPtr->FindMember("data")) != jsonDocPtr->MemberEnd() && mitr1->value.IsArray()) {
+      for (vitr = mitr1->value.Begin(); vitr != mitr1->value.End(); ++vitr) {
+        if (vitr->IsObject()) {
+          if ((mitr2 = vitr->FindMember("sql")) != vitr->MemberEnd() && mitr2->value.IsString()) {
+            foundSql = true;
+          }
         }
       }
     }
+
+    if (foundSql) {
+      QueryDataLayout layout = runCuda(renderManager.getCudaHandle(), std::stoi(argv[2]));
+      renderManager.configureRender(jsonDocPtr, &layout);
+    } else {
+      renderManager.configureRender(jsonDocPtr);
+    }
   }
 
-  if (foundSql) {
-    QueryDataLayout layout = runCuda(renderManager.getCudaHandle(), std::stoi(argv[2]));
-    renderManager.configureRender(jsonDoc, &layout);
-  } else {
-    renderManager.configureRender(jsonDoc);
+  std::ifstream inFile2(argv[2]);
+  inFile2.seekg(0, std::ios::end);
+  configJSON.reserve(inFile2.tellg());
+  inFile2.seekg(0, std::ios::beg);
+  configJSON.assign((std::istreambuf_iterator<char>(inFile2)), std::istreambuf_iterator<char>());
+  inFile2.close();
+
+  std::shared_ptr<rapidjson::Document> jsonDocUpdatePtr(new rapidjson::Document());
+  jsonDocUpdatePtr->Parse(configJSON.c_str());
+  if (jsonDocUpdatePtr->HasParseError()) {
+    throw std::runtime_error("Error parsing the json config: offset: " +
+                             std::to_string(jsonDocUpdatePtr->GetErrorOffset()) + ", error: " +
+                             rapidjson::GetParseError_En(jsonDocUpdatePtr->GetParseError()));
   }
 
   if (renderManager.inDebugMode()) {
@@ -451,8 +491,15 @@ int main(int argc, char* argv[]) {
     PngData pngData = renderManager.renderToPng();
     pngData.writeToFile("out.png");
 
+    renderManager.configureRender(jsonDocUpdatePtr);
+    pngData = renderManager.renderToPng();
+    pngData.writeToFile("out1.png");
+
     std::cout << "DONE with render" << std::endl;
   }
+
+  checkCudaErrors(cuCtxSetCurrent(nullptr));
+  checkCudaErrors(cuCtxDestroy(cudaCtx));
 
   return 0;
 }

@@ -191,7 +191,8 @@ class QueryRenderManager {
   void setWidthHeight(int width, int height);
 
   // TODO(croot): add result buffer layout object
-  void configureRender(const rapidjson::Document& jsonDocument, QueryDataLayout* dataLayoutPtr = nullptr);
+  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                       QueryDataLayout* dataLayoutPtr = nullptr);
 
   void render();
   PngData renderToPng();

@@ -13,11 +13,21 @@
 #include <map>
 #include "rapidjson/document.h"
 
+#include <sys/time.h>
+
 // using namespace MapD_Renderer;
 using ::MapD_Renderer::CudaHandle;
 using ::MapD_Renderer::QueryRenderManager;
 using ::MapD_Renderer::QueryRenderer;
 using ::MapD_Renderer::PngData;
+
+double dtime() {
+  double tseconds = 0.0;
+  struct timeval mytime;
+  gettimeofday(&mytime, (struct timezone*)0);
+  tseconds = (double)(mytime.tv_sec + mytime.tv_usec * 1.0e-6);
+  return (tseconds);
+}
 
 void glfwErrorCallback(int error, const char* errstr) {
   // TODO(croot): should we throw an exception?
@@ -62,6 +72,10 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
   glfwWindowHint(GLFW_VISIBLE, _debugMode);
+
+  if (!_debugMode) {
+    glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
+  }
 
   // _windowPtr.reset(glfwCreateWindow(1, 1, "", NULL, NULL));
   _windowPtr = glfwCreateWindow(1, 1, "", NULL, prntWindow);
@@ -187,7 +201,9 @@ void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, boo
   addUserWidget(userWidgetPair.first, userWidgetPair.second, doHitTest, doDepthTest);
 }
 
-void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument, QueryDataLayout* dataLayoutPtr) {
+void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                                         QueryDataLayout* dataLayoutPtr) {
+  // double tStart = dtime();
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
@@ -202,8 +218,12 @@ void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument
         dataLayoutPtr->convertToBufferLayout(), dataLayoutPtr->numRows, dataLayoutPtr->invalidKey);
   }
 
-  _activeRenderer->setJSONDocument(jsonDocument, (_debugMode ? _windowPtr : nullptr));
+  _activeRenderer->setJSONDocument(jsonDocumentPtr, false, (_debugMode ? _windowPtr : nullptr));
   glfwMakeContextCurrent(nullptr);
+
+  // double tStop = dtime();
+  // double totalElapsedTime = tStop - tStart;
+  // std::cerr << "CROOT - configureRender - Cpu Elapsed: " << totalElapsedTime * 1000.0 << " ms" << std::endl;
 }
 
 void QueryRenderManager::setWidthHeight(int width, int height) {
@@ -253,6 +273,8 @@ void QueryRenderManager::render() {
 }
 
 PngData QueryRenderManager::renderToPng() {
+  // double tStart = dtime();
+
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
@@ -303,6 +325,10 @@ PngData QueryRenderManager::renderToPng() {
   delete[] pixels;
 
   glfwMakeContextCurrent(nullptr);
+
+  // double tStop = dtime();
+  // double totalElapsedTime = tStop - tStart;
+  // std::cerr << "CROOT - renderToPng - Cpu Elapsed: " << totalElapsedTime * 1000.0 << " ms" << std::endl;
 
   return PngData(pngPtr, pngSize);
 }
