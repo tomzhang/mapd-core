@@ -40,12 +40,11 @@ QueryRenderManager::QueryRenderManager(const Executor* executor,
 }
 
 QueryRenderManager::~QueryRenderManager() {
-  // TODO(croot): don't use glfwTerminate() -- use whatever the window deletion function is
-  // glfwTerminate();
   glfwDestroyWindow(_windowPtr);
 }
 
 void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
+
   // set the error callback
   glfwSetErrorCallback(glfwErrorCallback);
 
@@ -101,13 +100,17 @@ CudaHandle QueryRenderManager::getCudaHandle() {
     LOG(FATAL) << "The query render manager is in a corrupt state.";
   }
 
+  std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
   CudaHandle rtn = _queryResultVBOPtr->getCudaHandlePreQuery();
   glfwMakeContextCurrent(nullptr);
+
   return rtn;
 }
 
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
+  // TODO(croot): should we put thread locks in here? that probably makes sense.
+
   UserWidgetPair userWidget = std::make_pair(userId, widgetId);
 
   if (userWidget != _activeUserWidget) {
@@ -186,6 +189,7 @@ void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
+  std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
 
   // need to update the data layout of the query result buffer before building up
@@ -204,17 +208,20 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
                     "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
                     "setting width/height.");
 
+  std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
   glfwMakeContextCurrent(nullptr);
 }
 
-void QueryRenderManager::render() const {
+void QueryRenderManager::render() {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
+  std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->render();
+  glfwSwapBuffers(_windowPtr);
 
   if (_debugMode) {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -242,12 +249,14 @@ void QueryRenderManager::render() const {
   glfwMakeContextCurrent(nullptr);
 }
 
-PngData QueryRenderManager::renderToPng() const {
+PngData QueryRenderManager::renderToPng() {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
+  std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->render();
+  glfwSwapBuffers(_windowPtr);
 
   int width = _activeRenderer->getWidth();
   int height = _activeRenderer->getHeight();
@@ -295,11 +304,12 @@ PngData QueryRenderManager::renderToPng() const {
   return PngData(pngPtr, pngSize);
 }
 
-unsigned int QueryRenderManager::getIdAt(int x, int y) const {
+unsigned int QueryRenderManager::getIdAt(int x, int y) {
   RUNTIME_EX_ASSERT(
       _activeRenderer != nullptr,
       "getIdAt(): There is no active user/widget id. Must set an active user/widget id before requesting pixel data.");
 
+  std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
   unsigned int id = _activeRenderer->getIdAt(x, y);
   glfwMakeContextCurrent(nullptr);

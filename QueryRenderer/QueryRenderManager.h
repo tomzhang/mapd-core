@@ -19,6 +19,8 @@
 #include <fstream>
 #include <cstdint>
 #include <limits>
+#include <thread>
+#include <mutex>
 
 #include "rapidjson/document.h"
 
@@ -191,11 +193,11 @@ class QueryRenderManager {
   // TODO(croot): add result buffer layout object
   void configureRender(const rapidjson::Document& jsonDocument, QueryDataLayout* dataLayoutPtr = nullptr);
 
-  void render() const;
-  PngData renderToPng() const;
+  void render();
+  PngData renderToPng();
 
   // get the id at a specific pixel
-  unsigned int getIdAt(int x, int y) const;
+  unsigned int getIdAt(int x, int y);
 
   PngData getColorNoisePNG(int width, int height);
 
@@ -223,6 +225,7 @@ class QueryRenderManager {
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
 
   const Executor* executor_;
+  std::mutex _mtx;
 };
 
 }  // namespace MapD_Renderer
