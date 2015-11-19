@@ -22,6 +22,8 @@
 
 #include "rapidjson/document.h"
 
+class Executor;
+
 namespace MapD_Renderer {
 
 struct PngData {
@@ -57,7 +59,9 @@ struct QueryDataLayout {
   QueryDataLayout(const size_t numRows,
                   const std::vector<std::string>& attrNames,
                   const std::vector<AttrType>& attrTypes,
-                  const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant except the first key, which would be the one to check the invalid key against.
+                  const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant
+                                             // except the first key, which would be the one to check the invalid key
+                                             // against.
                   const int64_t invalidKey = std::numeric_limits<int64_t>::max(),
                   const LayoutType layoutType = LayoutType::INTERLEAVED)
       : numRows(numRows),
@@ -162,7 +166,10 @@ typedef std::unordered_map<int, std::unique_ptr<WidgetRendererMap>> RendererTabl
 
 class QueryRenderManager {
  public:
-  explicit QueryRenderManager(unsigned int queryResultBufferSize = 500000, GLFWwindow* prntWindow=nullptr, bool debugMode = false);
+  explicit QueryRenderManager(const Executor* executor,
+                              unsigned int queryResultBufferSize = 500000,
+                              GLFWwindow* prntWindow = nullptr,
+                              bool debugMode = false);
   ~QueryRenderManager();
 
   CudaHandle getCudaHandle();
@@ -214,6 +221,8 @@ class QueryRenderManager {
   void _initQueryResultBuffer();
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
+
+  const Executor* executor_;
 };
 
 }  // namespace MapD_Renderer

@@ -1,5 +1,6 @@
 #include "QueryRenderManager.h"
 #include "QueryFramebuffer.h"
+#include "../QueryEngine/Execute.h"
 #include <glog/logging.h>
 #include <time.h>
 #include <iostream>
@@ -24,12 +25,16 @@ void glfwErrorCallback(int error, const char* errstr) {
 
 // QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode) : _debugMode(debugMode),
 // _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultVBOPtr(nullptr) {
-QueryRenderManager::QueryRenderManager(unsigned int queryResultBufferSize, GLFWwindow* prntWindow, bool debugMode)
+QueryRenderManager::QueryRenderManager(const Executor* executor,
+                                       unsigned int queryResultBufferSize,
+                                       GLFWwindow* prntWindow,
+                                       bool debugMode)
     : _debugMode(debugMode),
       _activeRenderer(nullptr),
       _windowPtr(nullptr),
       _queryResultVBOPtr(new QueryResultVertexBuffer(queryResultBufferSize)),
-      _queryResultBufferSize(queryResultBufferSize) {
+      _queryResultBufferSize(queryResultBufferSize),
+      executor_(executor) {
   _initGLFW(prntWindow);
   _initQueryResultBuffer();
 }
