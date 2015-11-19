@@ -10,12 +10,13 @@ namespace MapD_GL {
 void checkGLError(const char* cmd, const char* file, int line);
 
 #ifndef NDEBUG
-#define MAPD_CHECK_GL_ERROR(cmd)                                                   \
-  ([&]() {                                                                         \
-    struct __MAPD_GL_ERR {                                                         \
-      inline ~__MAPD_GL_ERR() { MapD_GL::checkGLError(#cmd, __FILE__, __LINE__); } \
-    } __MAPD_GL_ERR;                                                               \
-    return cmd;                                                                    \
+#define MAPD_CHECK_GL_ERROR(cmd)                                          \
+  ([&]() {                                                                \
+    struct MAPD_GL_ERR {                                                  \
+      ~MAPD_GL_ERR() { MapD_GL::checkGLError(#cmd, __FILE__, __LINE__); } \
+    } MAPD_GL_ERR_INST;                                                   \
+    (void) MAPD_GL_ERR_INST;                                              \
+    return cmd;                                                           \
   }())
 #else
 #define MAPD_CHECK_GL_ERROR(cmd) (cmd)
