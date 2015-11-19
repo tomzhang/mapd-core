@@ -47,12 +47,12 @@ struct QueryDataLayout {
   std::vector<AttrType> attrTypes;
   LayoutType layoutType;
 
-  QueryDataLayout(size_t numRows,
-                  std::initializer_list<std::string> attrNames,
-                  std::initializer_list<AttrType> attrTypes,
-                  size_t keySz = 0,
-                  int64_t invalidKey = std::numeric_limits<int64_t>::max(),
-                  LayoutType layoutType = LayoutType::INTERLEAVED)
+  QueryDataLayout(const size_t numRows,
+                  const std::vector<std::string>& attrNames,
+                  const std::vector<AttrType>& attrTypes,
+                  const size_t keySz = 0,
+                  const int64_t invalidKey = std::numeric_limits<int64_t>::max(),
+                  const LayoutType layoutType = LayoutType::INTERLEAVED)
       : numRows(numRows),
         keySz(keySz),
         invalidKey(invalidKey),
