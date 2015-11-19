@@ -57,6 +57,7 @@ QueryRenderManager::~QueryRenderManager() {
 }
 
 void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
+
   // set the error callback
   glfwSetErrorCallback(glfwErrorCallback);
 
@@ -273,8 +274,6 @@ void QueryRenderManager::render() {
 }
 
 PngData QueryRenderManager::renderToPng() {
-  // double tStart = dtime();
-
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
