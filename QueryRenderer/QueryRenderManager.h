@@ -141,7 +141,7 @@ typedef std::unordered_map<int, std::unique_ptr<WidgetRendererMap>> RendererTabl
 
 class QueryRenderManager {
  public:
-  explicit QueryRenderManager(unsigned int queryResultBufferSize = 500000, bool debugMode = false);
+  explicit QueryRenderManager(unsigned int queryResultBufferSize = 500000, GLFWwindow* prntWindow=nullptr, bool debugMode = false);
   ~QueryRenderManager();
 
   CudaHandle getCudaHandle();
@@ -189,7 +189,7 @@ class QueryRenderManager {
   QueryResultVertexBufferShPtr _queryResultVBOPtr;
   unsigned int _queryResultBufferSize;
 
-  void _initGLFW();
+  void _initGLFW(GLFWwindow* prntWindow);
   void _initQueryResultBuffer();
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;

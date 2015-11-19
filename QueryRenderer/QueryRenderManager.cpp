@@ -24,28 +24,33 @@ void glfwErrorCallback(int error, const char* errstr) {
 
 // QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode) : _debugMode(debugMode),
 // _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultVBOPtr(nullptr) {
-QueryRenderManager::QueryRenderManager(unsigned int queryResultBufferSize, bool debugMode)
+QueryRenderManager::QueryRenderManager(unsigned int queryResultBufferSize, GLFWwindow* prntWindow, bool debugMode)
     : _debugMode(debugMode),
       _activeRenderer(nullptr),
       _windowPtr(nullptr),
       _queryResultVBOPtr(new QueryResultVertexBuffer(queryResultBufferSize)),
       _queryResultBufferSize(queryResultBufferSize) {
-  _initGLFW();
+  _initGLFW(prntWindow);
   _initQueryResultBuffer();
 }
 
 QueryRenderManager::~QueryRenderManager() {
-  glfwTerminate();
+  // TODO(croot): don't use glfwTerminate() -- use whatever the window deletion function is
+  // glfwTerminate();
+  glfwDestroyWindow(_windowPtr);
 }
 
-void QueryRenderManager::_initGLFW() {
+void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
   // set the error callback
   glfwSetErrorCallback(glfwErrorCallback);
 
-  if (!glfwInit()) {
-    std::runtime_error err("GLFW error: Couldn't initialize GLFW");
-    LOG(ERROR) << err.what();
-    throw err;
+  if (!prntWindow) {
+    // need to init glfw -- this needs to happen in the main thread
+    if (!glfwInit()) {
+      std::runtime_error err("GLFW error: Couldn't initialize GLFW");
+      LOG(ERROR) << err.what();
+      throw err;
+    }
   }
 
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -54,7 +59,7 @@ void QueryRenderManager::_initGLFW() {
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
   // _windowPtr.reset(glfwCreateWindow(1, 1, "", NULL, NULL));
-  _windowPtr = glfwCreateWindow(1, 1, "", NULL, NULL);
+  _windowPtr = glfwCreateWindow(1, 1, "", NULL, prntWindow);
   if (_windowPtr == nullptr) {
     // TODO(croot): is this necessary? Will the error callback catch
     // all possible errors?
