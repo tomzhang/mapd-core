@@ -1,6 +1,7 @@
 #include "MapDGL.h"
 #include "QueryRenderer.h"
 #include "RapidJSONUtils.h"
+#include "../QueryEngine/Execute.h"
 #include <glog/logging.h>
 #include <utility>  // std::pair
 #include <stdexcept>
@@ -8,28 +9,31 @@
 
 using namespace MapD_Renderer;
 
-QueryRenderer::QueryRenderer(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
-                             bool doHitTest,
-                             bool doDepthTest,
-                             GLFWwindow* win)
-    : _ctx(new QueryRendererContext(queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
-}
-
-QueryRenderer::QueryRenderer(const rapidjson::Document& jsonDocument,
+QueryRenderer::QueryRenderer(const Executor* executor,
                              const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                              bool doHitTest,
                              bool doDepthTest,
                              GLFWwindow* win)
-    : _ctx(new QueryRendererContext(queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
+    : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
+}
+
+QueryRenderer::QueryRenderer(const Executor* executor,
+                             const rapidjson::Document& jsonDocument,
+                             const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                             bool doHitTest,
+                             bool doDepthTest,
+                             GLFWwindow* win)
+    : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
   _initFromJSON(jsonDocument, win);
 }
 
-QueryRenderer::QueryRenderer(const std::string& configJSON,
+QueryRenderer::QueryRenderer(const Executor* executor,
+                             const std::string& configJSON,
                              const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                              bool doHitTest,
                              bool doDepthTest,
                              GLFWwindow* win)
-    : _ctx(new QueryRendererContext(queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
+    : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
   _initFromJSON(configJSON, win);
 }
 
@@ -256,7 +260,8 @@ DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj, const Q
   if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
     RUNTIME_EX_ASSERT(itr->value.IsString(),
                       "createDataTable: The sql property for \"" + tableName + "\" must be a string.");
-    return DataVBOShPtr(new SqlQueryDataTable(tableName, ctx->getQueryResultVertexBuffer(), itr->value.GetString()));
+    return DataVBOShPtr(
+        new SqlQueryDataTable(tableName, obj, ctx->getQueryResultVertexBuffer(), itr->value.GetString()));
   } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
     return DataVBOShPtr(new DataTable(tableName, obj, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
   } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {

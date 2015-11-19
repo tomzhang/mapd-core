@@ -40,6 +40,46 @@ DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnNa
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
 }
 
+DataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
+  BufferAttrType attrType = _vbo->getAttributeType(columnName);
+  switch (attrType) {
+    case BufferAttrType::UINT:
+      return DataType::UINT;
+    case BufferAttrType::INT:
+      return DataType::INT;
+    case BufferAttrType::FLOAT:
+      return DataType::FLOAT;
+    case BufferAttrType::DOUBLE:
+      return DataType::DOUBLE;
+    case BufferAttrType::VEC4F:
+      return DataType::COLOR;
+    default:
+      THROW_RUNTIME_EX("SqlQueryDataTable::getColumnType(): Vertex buffer attribute type: " +
+                       std::to_string(static_cast<int>(attrType)) + " is not a supported type.");
+  }
+}
+
+void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj) {
+  rapidjson::Value::ConstMemberIterator itr;
+  if (!_sqlQueryStr.length()) {
+    RUNTIME_EX_ASSERT((itr = obj.FindMember("sql")) != obj.MemberEnd() && itr->value.IsString(),
+                      "SQL data object \"" + _name + "\" must contain an \"sql\" property and it must be a string");
+
+    _sqlQueryStr = itr->value.GetString();
+  }
+
+  // TODO(croot) -- should we validate the sql?
+
+  // TODO(croot) - for backwards compatibility, the dbTableName doesn't have to be present
+  // but should it be required? Or can we somehow extract it from the sql?
+  if (!_tableName.length() && (itr = obj.FindMember("dbTableName")) != obj.MemberEnd()) {
+    RUNTIME_EX_ASSERT(itr->value.IsString(),
+                      "SQL data object \"" + _name + "\" \"dbTableName\" property must be a string");
+
+    _tableName = itr->value.GetString();
+  }
+}
+
 const std::string DataTable::defaultIdColumnName = "rowid";
 
 DataTable::DataTable(const std::string& name, const rapidjson::Value& obj, bool buildIdColumn, VboType vboType)
@@ -233,6 +273,10 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
             case DataType::COLOR:
               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::VEC4F);
               break;
+            default:
+              THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
+                               "\" is not supported. Cannot build vertex buffer.");
+              break;
           }
 
           TypelessColumnData data = (*itr)->getTypelessColumnData();
@@ -294,6 +338,10 @@ BaseVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName)
               break;
             case DataType::COLOR:
               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::VEC4F);
+              break;
+            default:
+              THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
+                               "\" is not supported. Cannot build vertex buffer.");
               break;
           }
 

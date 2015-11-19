@@ -22,6 +22,8 @@
 #include "rapidjson/document.h"
 // #include <utility>  // std::pair
 
+class Executor;
+
 namespace MapD_Renderer {
 
 class QueryRendererContext;
@@ -30,18 +32,21 @@ class BaseScale;
 
 class QueryRenderer {
  public:
-  explicit QueryRenderer(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
-                         bool doHitTest = false,
-                         bool doDepthTest = false,
-                         GLFWwindow* win = nullptr);
-
-  explicit QueryRenderer(const rapidjson::Document& jsonDocument,
+  explicit QueryRenderer(const Executor* executor,
                          const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                          bool doHitTest = false,
                          bool doDepthTest = false,
                          GLFWwindow* win = nullptr);
 
-  explicit QueryRenderer(const std::string& configJSON,
+  explicit QueryRenderer(const Executor* executor,
+                         const rapidjson::Document& jsonDocument,
+                         const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+                         bool doHitTest = false,
+                         bool doDepthTest = false,
+                         GLFWwindow* win = nullptr);
+
+  explicit QueryRenderer(const Executor* executor,
+                         const std::string& configJSON,
                          const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                          bool doHitTest = false,
                          bool doDepthTest = false,
@@ -83,21 +88,25 @@ class QueryRendererContext {
  public:
   typedef std::shared_ptr<BaseScale> ScaleShPtr;
 
-  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+  explicit QueryRendererContext(const Executor* executor,
+                                const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                                 bool doHitTest = false,
                                 bool doDepthTest = false)
-      : _queryResultVBOPtr(queryResultVBOPtr),
+      : executor_(executor),
+        _queryResultVBOPtr(queryResultVBOPtr),
         _width(0),
         _height(0),
         _doHitTest(doHitTest),
         _doDepthTest(doDepthTest),
         _invalidKey(std::numeric_limits<int64_t>::max()) {}
-  explicit QueryRendererContext(const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+  explicit QueryRendererContext(const Executor* executor,
+                                const QueryResultVertexBufferShPtr& queryResultVBOPtr,
                                 int width,
                                 int height,
                                 bool doHitTest = false,
                                 bool doDepthTest = false)
-      : _queryResultVBOPtr(queryResultVBOPtr),
+      : executor_(executor),
+        _queryResultVBOPtr(queryResultVBOPtr),
         _width(width),
         _height(height),
         _doHitTest(doHitTest),
@@ -121,6 +130,8 @@ class QueryRendererContext {
   bool doDepthTest() { return _doDepthTest; }
 
   int64_t getInvalidKey() { return _invalidKey; }
+
+  const Executor* const getExecutor() { return executor_; }
 
   // bool hasMark(const std::string& geomConfigName) const {
   //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
@@ -150,6 +161,8 @@ class QueryRendererContext {
   DataTableMap _dataTableMap;
   ScaleConfigMap _scaleConfigMap;
   GeomConfigVector _geomConfigs;
+
+  const Executor* executor_;
   QueryResultVertexBufferShPtr _queryResultVBOPtr;
   BufferLayoutShPtr _queryResultBufferLayout;
 

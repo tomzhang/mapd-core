@@ -29,14 +29,14 @@ class Executor;
 namespace MapD_Renderer {
 
 struct PngData {
-  char* pngDataPtr;
+  std::shared_ptr<char> pngDataPtr;
   int pngSize;
 
-  PngData(char* pngDataPtr, int pngSize) : pngDataPtr(pngDataPtr), pngSize(pngSize) {}
+  PngData(const std::shared_ptr<char>& pngDataPtr, int pngSize) : pngDataPtr(pngDataPtr), pngSize(pngSize) {}
 
   void writeToFile(const std::string& filename) {
     std::ofstream pngFile(filename, std::ios::binary);
-    pngFile.write(pngDataPtr, pngSize);
+    pngFile.write(pngDataPtr.get(), pngSize);
     pngFile.close();
   }
 };

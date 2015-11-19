@@ -177,7 +177,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
   }
 
   (*wfMap)[widgetId] = QueryRendererUqPtr(
-      new QueryRenderer(_queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
+      new QueryRenderer(executor_, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
 
   // TODO(croot): should we set this as active the newly added ids as active?
   // setActiveUserWidget(userId, widgetId);
@@ -297,7 +297,7 @@ PngData QueryRenderManager::renderToPng() {
   }
 
   int pngSize;
-  char* pngPtr = reinterpret_cast<char*>(gdImagePngPtr(im, &pngSize));
+  std::shared_ptr<char> pngPtr(reinterpret_cast<char*>(gdImagePngPtr(im, &pngSize)), gdFree);
 
   gdImageDestroy(im);
   delete[] pixels;
@@ -349,7 +349,7 @@ PngData QueryRenderManager::getColorNoisePNG(int width, int height) {
   }
 
   int pngSize;
-  char* pngPtr = (char*)gdImagePngPtr(im, &pngSize);
+  std::shared_ptr<char> pngPtr(reinterpret_cast<char*>(gdImagePngPtr(im, &pngSize)), gdFree);
 
   gdImageDestroy(im);
 

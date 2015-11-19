@@ -20,7 +20,7 @@
 
 namespace MapD_Renderer {
 
-enum class DataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR };
+enum class DataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR, STRING };
 
 class BaseDataTableVBO {
  public:
@@ -51,8 +51,15 @@ typedef std::shared_ptr<BaseDataTableVBO> DataVBOShPtr;
 
 class SqlQueryDataTable : public BaseDataTableVBO {
  public:
-  SqlQueryDataTable(const std::string& name, const BaseVertexBufferShPtr& vbo, const std::string& sqlQueryStr)
-      : BaseDataTableVBO(name, BaseDataTableVBO::DataTableType::SQLQUERY, vbo), _sqlQueryStr(sqlQueryStr) {}
+  SqlQueryDataTable(const std::string& name,
+                    const rapidjson::Value& obj,
+                    const BaseVertexBufferShPtr& vbo,
+                    const std::string& sqlQueryStr)
+      : BaseDataTableVBO(name, BaseDataTableVBO::DataTableType::SQLQUERY, vbo),
+        _sqlQueryStr(sqlQueryStr),
+        _tableName() {
+    _initFromJSONObj(obj);
+  }
   ~SqlQueryDataTable() {}
 
   bool hasColumn(const std::string& columnName) { return _vbo->hasAttribute(columnName); }
@@ -61,30 +68,16 @@ class SqlQueryDataTable : public BaseDataTableVBO {
                       "SqlQueryDataTable::hasColumn(): column \"" + columnName + "\" does not exist.");
     return _vbo;
   }
-  DataType getColumnType(const std::string& columnName) {
-    BufferAttrType attrType = _vbo->getAttributeType(columnName);
-    switch (attrType) {
-      case BufferAttrType::UINT:
-        return DataType::UINT;
-      case BufferAttrType::INT:
-        return DataType::INT;
-      case BufferAttrType::FLOAT:
-        return DataType::FLOAT;
-      case BufferAttrType::DOUBLE:
-        return DataType::DOUBLE;
-      case BufferAttrType::VEC4F:
-        return DataType::COLOR;
-      default:
-        THROW_RUNTIME_EX("SqlQueryDataTable::getColumnType(): Vertex buffer attribute type: " +
-                         std::to_string(static_cast<int>(attrType)) + " is not a supported type.");
-    }
-
-    return DataType::INT;
-  }
+  DataType getColumnType(const std::string& columnName);
   int numRows() { return _vbo->size(); }
+
+  std::string getTableName() { return _tableName; }
 
  private:
   std::string _sqlQueryStr;
+  std::string _tableName;
+
+  void _initFromJSONObj(const rapidjson::Value& obj);
 };
 
 struct TypelessColumnData {
@@ -124,10 +117,10 @@ class TDataColumn : public DataColumn {
 
   T& operator[](unsigned int i) { return (*_columnDataPtr)[i]; }
 
-  void push_back(const T& val) { _columnDataPtr->push_back(val); }
+  // void push_back(const T& val) { _columnDataPtr->push_back(val); }
 
   void push_back(const std::string& val) {
-    // TODO: this would throw a boost::bad_lexical_cast error
+    // TODO(croot): this would throw a boost::bad_lexical_cast error
     // if the conversion can't be done.. I may need to throw
     // a MapD-compliant exception
     _columnDataPtr->push_back(boost::lexical_cast<T>(val));

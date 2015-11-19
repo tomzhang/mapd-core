@@ -17,11 +17,30 @@
 #include "DataTable.h"
 #include "Color.h"
 #include <cstdint>
+#include <typeinfo>
 
 namespace MapD_Renderer {
 
 class QueryRendererContext;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
+
+class BaseScaleDomainRangeData {
+ public:
+  BaseScaleDomainRangeData(const std::string& name, bool useString = false) : _name(name), _useString(useString) {}
+  virtual ~BaseScaleDomainRangeData() {}
+  virtual int size() = 0;
+  virtual const TypeGLShPtr& getTypeGL() = 0;
+  virtual const std::type_info& getTypeInfo() = 0;
+
+  std::string getName() { return _name; }
+  bool useString() { return _useString; }
+
+ protected:
+  std::string _name;
+  bool _useString;
+};
+
+typedef std::shared_ptr<BaseScaleDomainRangeData> ScaleDomainRangeDataShPtr;
 
 class BaseScale {
  public:
@@ -39,20 +58,24 @@ class BaseScale {
 
   virtual ~BaseScale();
 
-  TypeGLShPtr& getDomainType() {
+  const std::string& getName() { return name; };
+
+  const TypeGLShPtr& getDomainType() {
     RUNTIME_EX_ASSERT(_domainType != nullptr, "BaseScale::getDomainType(): the domain type is uninitialized.");
     return _domainType;
   }
 
-  TypeGLShPtr& getRangeType() {
+  const TypeGLShPtr& getRangeType() {
     RUNTIME_EX_ASSERT(_rangeType != nullptr, "BaseScale::getRangeType(): the range type is uninitialized.");
 
     return _rangeType;
   }
 
-  std::string getScaleGLSLFuncName();
+  std::string getScaleGLSLFuncName(const std::string& extraSuffix = "");
 
-  virtual std::string getGLSLCode() = 0;
+  virtual std::string getGLSLCode(const std::string& extraSuffix = "",
+                                  bool ignoreDomain = false,
+                                  bool ignoreRange = false) = 0;
 
   std::string getDomainGLSLUniformName() { return "uDomains_" + name; }
 
@@ -60,7 +83,13 @@ class BaseScale {
 
   std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + name; }
 
-  virtual void bindUniformsToRenderer(Shader* activeShader) = 0;
+  virtual void bindUniformsToRenderer(Shader* activeShader,
+                                      const std::string& extraSuffix = "",
+                                      bool ignoreDomain = false,
+                                      bool ignoreRange = false) = 0;
+
+  virtual BaseScaleDomainRangeData* getDomainData() = 0;
+  virtual BaseScaleDomainRangeData* getRangeData() = 0;
 
  protected:
   TypeGLShPtr _domainType;
@@ -79,41 +108,31 @@ typedef std::unique_ptr<BaseScale> ScaleUqPtr;
 typedef std::shared_ptr<BaseScale> ScaleShPtr;
 
 template <typename T>
-class ScaleDomainRangeData {
+class ScaleDomainRangeData : public BaseScaleDomainRangeData {
  public:
   static const DataType dataType;
   ScaleDomainRangeData(const std::string& name, bool useString = false)
-      : _name(name), _useString(useString), _vectorPtr(nullptr) {}
+      : BaseScaleDomainRangeData(name, useString), _vectorPtr(nullptr), _cachedTypeGL(nullptr) {}
+  ScaleDomainRangeData(const std::string& name, size_t size, bool useString = false)
+      : BaseScaleDomainRangeData(name, useString), _vectorPtr(new std::vector<T>(size)), _cachedTypeGL(nullptr) {}
   ~ScaleDomainRangeData() {}
 
   void initializeFromJSONObj(const rapidjson::Value& obj,
                              const QueryRendererContextShPtr& ctx,
                              BaseScale::ScaleType type);
 
-  // void setVectorPtr(const std::shared_ptr<std::vector<T>>& vectorPtr) {
-  //     _vectorPtr = vectorPtr;
-  // }
-
-  // void initializeNewVectorPtr() {
-  //     _vectorPtr.reset(new std::vector<T>());
-  // }
-
-  // void initializeNewVectorPtr(std::initializer_list<T> l) {
-  //     _vectorPtr.reset(new std::vector<T>(l));
-  // }
-
   int size() { return (_vectorPtr == nullptr ? 0 : _vectorPtr->size()); }
 
   std::vector<T>& getVectorData() { return *_vectorPtr; }
 
-  inline TypeGLShPtr getTypeGL();
+  inline const TypeGLShPtr& getTypeGL();
+  inline const std::type_info& getTypeInfo() { return typeid(T); }
 
   static T getDataValueFromJSONObj(const rapidjson::Value& obj);
 
  private:
-  std::string _name;
-  bool _useString;
   std::shared_ptr<std::vector<T>> _vectorPtr;
+  TypeGLShPtr _cachedTypeGL;
 
   void _pushItem(const rapidjson::Value& obj);
   void _setFromStringValue(const std::string& strVal, BaseScale::ScaleType type);
@@ -121,7 +140,10 @@ class ScaleDomainRangeData {
 };
 
 template <>
-inline TypeGLShPtr ScaleDomainRangeData<ColorRGBA>::getTypeGL();
+inline const TypeGLShPtr& ScaleDomainRangeData<ColorRGBA>::getTypeGL();
+
+template <>
+inline const TypeGLShPtr& ScaleDomainRangeData<std::string>::getTypeGL();
 
 template <>
 unsigned int MapD_Renderer::ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj);
@@ -139,19 +161,7 @@ template <>
 ColorRGBA MapD_Renderer::ScaleDomainRangeData<ColorRGBA>::getDataValueFromJSONObj(const rapidjson::Value& obj);
 
 template <>
-void MapD_Renderer::ScaleDomainRangeData<unsigned int>::_pushItem(const rapidjson::Value& obj);
-
-template <>
-void MapD_Renderer::ScaleDomainRangeData<int>::_pushItem(const rapidjson::Value& obj);
-
-template <>
-void MapD_Renderer::ScaleDomainRangeData<float>::_pushItem(const rapidjson::Value& obj);
-
-template <>
-void MapD_Renderer::ScaleDomainRangeData<double>::_pushItem(const rapidjson::Value& obj);
-
-template <>
-void MapD_Renderer::ScaleDomainRangeData<ColorRGBA>::_pushItem(const rapidjson::Value& obj);
+std::string MapD_Renderer::ScaleDomainRangeData<std::string>::getDataValueFromJSONObj(const rapidjson::Value& obj);
 
 // template <>
 // TypeGLShPtr ScaleDomainRangeData<ColorRGBA>::getTypeGL() {
@@ -166,6 +176,9 @@ template <>
 void ScaleDomainRangeData<ColorRGBA>::_setFromStringValue(const std::string& strVal, BaseScale::ScaleType type);
 
 template <>
+void ScaleDomainRangeData<std::string>::_setFromStringValue(const std::string& strVal, BaseScale::ScaleType type);
+
+template <>
 void ScaleDomainRangeData<ColorRGBA>::_updateVectorDataByType(TDataColumn<ColorRGBA>* dataColumnPtr,
                                                               BaseScale::ScaleType type);
 
@@ -175,8 +188,13 @@ class Scale : public BaseScale {
   Scale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
   ~Scale();
 
-  std::string getGLSLCode();
-  void bindUniformsToRenderer(Shader* activeShader);
+  std::string getGLSLCode(const std::string& extraSuffix = "", bool ignoreDomain = false, bool ignoreRange = false);
+  void bindUniformsToRenderer(Shader* activeShader,
+                              const std::string& extraSuffix = "",
+                              bool ignoreDomain = false,
+                              bool ignoreRange = false);
+  BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
+  BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
  private:
   // std::vector<DomainType> _domain;
@@ -200,6 +218,77 @@ class Scale : public BaseScale {
 // std::unique_ptr<BaseScale> createScaleConfig(DataType domainType, DataType rangeType);
 ScaleShPtr createScale(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
 
+class BaseRenderProperty;
+
+class BaseScaleRef {
+ public:
+  BaseScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp)
+      : _ctx(ctx), _scalePtr(scalePtr), _rndrPropPtr(rndrProp) {}
+  virtual ~BaseScaleRef() {}
+
+  const std::string& getName() {
+    _verifyScalePointer();
+    return _scalePtr->getName();
+  }
+
+  virtual const TypeGLShPtr& getDomainType() {
+    _verifyScalePointer();
+    return _scalePtr->getDomainType();
+  }
+
+  virtual const TypeGLShPtr& getRangeType() {
+    _verifyScalePointer();
+    return _scalePtr->getRangeType();
+  }
+
+  std::string getScaleGLSLFuncName(const std::string& extraSuffix = "") {
+    _verifyScalePointer();
+    return _scalePtr->getScaleGLSLFuncName(extraSuffix);
+  }
+
+  virtual std::string getGLSLCode(const std::string& extraSuffix = "") {
+    _verifyScalePointer();
+    return _scalePtr->getGLSLCode(extraSuffix);
+  }
+
+  virtual void bindUniformsToRenderer(Shader* activeShader, const std::string& extraSuffix = "") {
+    _verifyScalePointer();
+    return _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix);
+  }
+
+ protected:
+  void _verifyScalePointer() {
+    RUNTIME_EX_ASSERT(_scalePtr != nullptr, "The scale reference object is uninitialized.");
+  }
+
+  QueryRendererContextShPtr _ctx;
+  ScaleShPtr _scalePtr;
+  BaseRenderProperty* _rndrPropPtr;
+};
+
+typedef std::shared_ptr<BaseScaleRef> ScaleRefShPtr;
+
+template <typename DomainType, typename RangeType>
+class ScaleRef : public BaseScaleRef {
+ public:
+  ScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp);
+  ~ScaleRef() {}
+
+  const TypeGLShPtr& getDomainType();
+  const TypeGLShPtr& getRangeType();
+
+  std::string getGLSLCode(const std::string& extraSuffix = "");
+
+  void bindUniformsToRenderer(Shader* activeShader, const std::string& extraSuffix = "");
+
+ private:
+  std::unique_ptr<ScaleDomainRangeData<DomainType>> _coercedDomainData;
+  std::unique_ptr<ScaleDomainRangeData<RangeType>> _coercedRangeData;
+  std::unique_ptr<RangeType> _coercedDefaultVal;
+
+  void _doStringToDataConversion(ScaleDomainRangeData<std::string>* domainData);
+};
+
 class BaseRenderProperty {
  public:
   BaseRenderProperty(const std::string& name,
@@ -210,6 +299,7 @@ class BaseRenderProperty {
         _useScale(useScale),
         _vboAttrName(""),
         _vboPtr(nullptr),
+        _dataPtr(nullptr),
         _ctx(ctx),
         _inType(nullptr),
         _outType(nullptr),
@@ -247,7 +337,8 @@ class BaseRenderProperty {
 
   bool usesScaleConfig() { return (_scaleConfigPtr != nullptr); }
 
-  ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
+  // ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
+  const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
 
   void bindToRenderer(Shader* activeShader) const {
     RUNTIME_EX_ASSERT(_vboPtr != nullptr,
@@ -256,23 +347,28 @@ class BaseRenderProperty {
     _vboPtr->bindToRenderer(activeShader, _vboAttrName, _name);
   }
 
+  std::string getDataColumnName() { return _vboAttrName; }
+  const DataVBOShPtr& getDataTablePtr() { return _dataPtr; }
+
  protected:
   std::string _name;
   bool _useScale;
 
   std::string _vboAttrName;
   BaseVertexBufferShPtr _vboPtr;
+  DataVBOShPtr _dataPtr;
 
   QueryRendererContextShPtr _ctx;
 
   TypeGLShPtr _inType;
   TypeGLShPtr _outType;
 
-  ScaleShPtr _scaleConfigPtr;
+  // ScaleShPtr _scaleConfigPtr;
+  ScaleRefShPtr _scaleConfigPtr;
 
   bool _flexibleType;
 
-  void _initScaleFromJSONObj(const rapidjson::Value& obj);
+  virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj, int numItems = 1) = 0;
   virtual void _initTypeFromVbo() = 0;
@@ -298,6 +394,7 @@ class RenderProperty : public BaseRenderProperty {
   T _mult;
   T _offset;
 
+  void _initScaleFromJSONObj(const rapidjson::Value& obj);
   void _initFromJSONObj(const rapidjson::Value& obj);
   void _initValueFromJSONObj(const rapidjson::Value& obj, int numItems = 1);
   void _initTypeFromVbo();
@@ -319,8 +416,8 @@ void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj)
 template <>
 void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj, int numItems);
 
-template <>
-void RenderProperty<ColorRGBA, 1>::_initTypeFromVbo();
+// template <>
+// void RenderProperty<ColorRGBA, 1>::_initTypeFromVbo();
 
 template <>
 void RenderProperty<ColorRGBA, 1>::_verifyScale();
@@ -385,10 +482,10 @@ class PointMark : public BaseMark {
   void draw();
 
  private:
-  RenderProperty<double> x;
-  RenderProperty<double> y;
-  RenderProperty<double> z;
-  RenderProperty<double> size;
+  RenderProperty<float> x;
+  RenderProperty<float> y;
+  RenderProperty<float> z;
+  RenderProperty<float> size;
   RenderProperty<unsigned int> id;
   RenderProperty<ColorRGBA> fillColor;
 
