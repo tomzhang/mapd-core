@@ -106,6 +106,7 @@ CudaHandle QueryRenderManager::getCudaHandle() {
     LOG(FATAL) << "The query render manager is in a corrupt state.";
   }
 
+  glfwMakeContextCurrent(_windowPtr);
   return _queryResultVBOPtr->getCudaHandlePreQuery();
 }
 
@@ -204,6 +205,8 @@ void QueryRenderManager::configureRender(const rapidjson::Document& jsonDocument
     throw err;
   }
 
+  glfwMakeContextCurrent(_windowPtr);
+
   // need to update the data layout of the query result buffer before building up
   // from the json obj
   if (dataLayoutPtr) {
@@ -258,6 +261,8 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
     LOG(ERROR) << err.what();
     throw err;
   }
+
+  glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
 }
 
@@ -268,6 +273,7 @@ void QueryRenderManager::render() const {
     throw err;
   }
 
+  glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->render();
 
   if (_debugMode) {
@@ -302,6 +308,7 @@ PngData QueryRenderManager::renderToPng() const {
     throw err;
   }
 
+  glfwMakeContextCurrent(_windowPtr);
   _activeRenderer->render();
 
   // unsigned char* pixels = new unsigned char[width * height * 4];
@@ -356,6 +363,8 @@ unsigned int QueryRenderManager::getIdAt(int x, int y) const {
     LOG(ERROR) << err.what();
     throw err;
   }
+
+  glfwMakeContextCurrent(_windowPtr);
   return _activeRenderer->getIdAt(x, y);
 }
 

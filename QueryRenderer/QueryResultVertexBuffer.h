@@ -10,7 +10,9 @@
 // CUDA libs
 // CROOT: CUDA COMMENT
 #include <cuda_runtime.h>
+#include <cuda.h>
 #include <cuda_gl_interop.h>
+#include <cudaGL.h>
 
 #include <vector>
 #include <memory>
@@ -49,7 +51,19 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
 
   ~QueryResultVertexBuffer() {
     if (_bufferId) {
-      // TODO(croot): check for cuda errors?
+      // TODO(croot): this is probably a bad place to manage the cuda graphics
+      // resource. Ultimately the current device/current cuda context is
+      // managed by the caller, and there can only be one registered per context
+      // see: https://docs.nvidia.com/cuda/cuda-c-programming-guide/#graphics-interoperability
+      // as it states in that document:
+      // "Each CUDA context which intends to use the resource is required to register it separately."
+      // So, we either need to:
+      //   a) let the caller be responsible for the registering of the resource, and it be passed
+      //      down as an argument,
+      //   or
+      //   b) we somehow have an api to access the current context, and change the
+      //      resource to be an unordered_map by context.
+      
 
       // CROOT: CUDA COMMENT
       // if (_isActive) {
@@ -60,9 +74,10 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       // this keeps erroring out and I'm not sure why
       // but comment out until I do
       // checkCudaErrors(cudaGraphicsUnregisterResource(_cudaResource));
+      // checkCudaErrors(cuGraphicsUnregisterResource(_cudaResource));
 
       // NOTE: let the base class destroy _bufferId
-      // glDeleteBuffers(1, &_bufferId);
+      glDeleteBuffers(1, &_bufferId);
     }
   }
 
@@ -101,11 +116,14 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     // TODO(croot) - check for cuda errors
 
     // CROOT: CUDA COMMENT
-    checkCudaErrors(cudaGraphicsMapResources(1, &_cudaResource, 0));
+    // checkCudaErrors(cudaGraphicsMapResources(1, &_cudaResource, 0));
+    checkCudaErrors(cuGraphicsMapResources(1, &_cudaResource, 0));
 
-    void* cudaPtr;
     size_t num_bytes;
-    checkCudaErrors(cudaGraphicsResourceGetMappedPointer(&cudaPtr, &num_bytes, _cudaResource));
+    // checkCudaErrors(cudaGraphicsResourceGetMappedPointer(&cudaPtr, &num_bytes, _cudaResource));
+
+    CUdeviceptr devPtr;
+    checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
 
     if (num_bytes != _numTotalBytes) {
       std::runtime_error err("QueryResultVertexBuffer: couldn't successfully map all " +
@@ -118,7 +136,8 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     _isActive = true;
 
     // return CudaHandle(_bufferId, _numTotalBytes);
-    return CudaHandle(cudaPtr, _numTotalBytes);
+    //return CudaHandle(cudaPtr, _numTotalBytes);
+    return CudaHandle(reinterpret_cast<void*>(devPtr), _numTotalBytes);
   }
 
   void updatePostQuery(const BufferLayoutShPtr& bufferLayout, const int numRows) {
@@ -137,7 +156,9 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     // TODO(croot) check for cuda errors
 
     // CROOT: CUDA COMMENT
-    checkCudaErrors(cudaGraphicsUnmapResources(1, &_cudaResource, 0));
+    // checkCudaErrors(cudaGraphicsUnmapResources(1, &_cudaResource, 0));
+
+    checkCudaErrors(cuGraphicsUnmapResources(1, &_cudaResource, 0));
 
     _layoutPtr = bufferLayout;
     _size = numRows;
@@ -152,11 +173,17 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     }
   }
 
+  static void checkCudaErrors(CUresult result) {
+    CHECK(result == CUDA_SUCCESS) << "CUDA error code = " << static_cast<unsigned int>(result);
+  }
+
   bool _isActive;
   unsigned int _numTotalBytes;
 
   // CROOT: CUDA COMMENT
-  struct cudaGraphicsResource* _cudaResource;
+  // struct cudaGraphicsResource* _cudaResource;
+  // struct CUgraphicsResource* _cudaResource;
+  CUgraphicsResource _cudaResource;
 
   void _initBuffer() {
     if (!_bufferId) {
@@ -172,7 +199,8 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       glBufferData(_target, _numTotalBytes, 0, _usage);
 
       // CROOT: CUDA COMMENT
-      checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, cudaGraphicsRegisterFlagsWriteDiscard));
+      // checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, cudaGraphicsRegisterFlagsWriteDiscard));
+      checkCudaErrors(cuGraphicsGLRegisterBuffer(&_cudaResource, _bufferId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
 
       // restore the state
       glBindBuffer(_target, currArrayBuf);
