@@ -430,6 +430,7 @@ class Executor {
                                 const bool allow_lazy_fetch,
                                 std::shared_ptr<RowSetMemoryOwner>,
                                 const size_t max_groups_buffer_entry_count,
+                                const size_t small_groups_buffer_entry_count,
                                 const int64_t scan_limit,
                                 const Planner::Sort* sort_plan,
                                 const bool output_columnar_hint,
@@ -719,10 +720,11 @@ class Executor {
 
 #ifdef HAVE_RENDERING
   std::unique_ptr<MapD_Renderer::QueryRenderManager> render_manager_;
-  const size_t small_groups_buffer_entry_count_{2 * 1024 * 1024};
-#else
-  const size_t small_groups_buffer_entry_count_{512};
 #endif  // HAVE_RENDERING
+
+  const size_t small_groups_buffer_entry_count_{512};
+  const size_t render_small_groups_buffer_entry_count_{2 * 1024 * 1024};
+
   const unsigned block_size_x_;
   const unsigned grid_size_x_;
   const std::string debug_dir_;
