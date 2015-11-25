@@ -238,6 +238,9 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
       size_t max_groups_buffer_entry_guess{2048};
       std::unique_ptr<RenderAllocator> render_allocator;
       if (root_plan->get_plan_dest() == Planner::RootPlan::kRENDER) {
+        if (device_type != ExecutorDeviceType::GPU) {
+          throw std::runtime_error("Backend rendering is only supported on GPU");
+        }
 #ifdef HAVE_RENDERING
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
         const auto cuda_handle = render_manager_->getCudaHandle();
