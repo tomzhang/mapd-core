@@ -241,7 +241,8 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
 #ifdef HAVE_RENDERING
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
         const auto cuda_handle = render_manager_->getCudaHandle();
-        render_allocator.reset(new RenderAllocator(static_cast<int8_t*>(cuda_handle.handle), cuda_handle.numBytes));
+        render_allocator.reset(new RenderAllocator(
+            static_cast<int8_t*>(cuda_handle.handle), cuda_handle.numBytes, blockSize(), gridSize()));
 #else
         throw std::runtime_error("This build doesn't support backend rendering");
 #endif  // HAVE_RENDERING
