@@ -388,7 +388,7 @@ std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targ
       num_rows, attr_names, attr_types, 0, EMPTY_KEY, MapD_Renderer::QueryDataLayout::LayoutType::INTERLEAVED);
   render_manager_->configureRender(json_doc, &query_data_layout);
 
-  const auto png_data = render_manager_->renderToPng();
+  const auto png_data = render_manager_->renderToPng(3);
 
   CHECK(png_data.pngDataPtr);
   CHECK(png_data.pngSize);

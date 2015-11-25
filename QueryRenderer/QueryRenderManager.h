@@ -195,12 +195,10 @@ class QueryRenderManager {
                        QueryDataLayout* dataLayoutPtr = nullptr);
 
   void render();
-  PngData renderToPng();
+  PngData renderToPng(int compressionLevel=-1);
 
   // get the id at a specific pixel
   unsigned int getIdAt(int x, int y);
-
-  PngData getColorNoisePNG(int width, int height);
 
   // CROOT - the following is a debug function. Remove when ready for deployment
   GLFWwindow* getWindow() {
