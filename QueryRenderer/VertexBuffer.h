@@ -63,8 +63,6 @@ class BaseVertexBuffer {
 
   BufferLayoutShPtr getBufferLayout() const { return BufferLayoutShPtr(_layoutPtr); }
 
-  virtual void setBufferLayout() { THROW_RUNTIME_EX("Cannot set the buffer layout of a vertex buffer."); }
-
   void bindToRenderer(Shader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "") {
     RUNTIME_EX_ASSERT(_bufferId != 0, "Cannot bind vertex buffer. It has not been initialized with data.");
     RUNTIME_EX_ASSERT(_layoutPtr != nullptr, "Cannot bind vertex buffer. It does not have a defined layout.");
@@ -135,10 +133,6 @@ class VertexBuffer : public BaseVertexBuffer {
   // BufferLayoutShPtr getBufferLayout() const { return BufferLayoutShPtr(_layoutPtr); }
 
   // TypeGLShPtr getAttributeTypeGL(const std::string& attrName) { return _layoutPtr->getAttributeTypeGL(attrName); }
-
-  // void setBufferLayout(const std::shared_ptr<BaseBufferLayout>& layoutPtr) {
-  //     _layoutPtr = layoutPtr;
-  // }
 
   void bufferData(void* data, int numItems, int numBytesPerItem) {
     // TODO(croot): this could be a performance hit when buffering data

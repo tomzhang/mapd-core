@@ -95,8 +95,6 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
     }
   }
 
-  void setBufferLayout(const BufferLayoutShPtr& layoutPtr) { _layoutPtr = layoutPtr; }
-
   CudaHandle getCudaHandlePreQuery() {
     // Handling the state of the buffer since the GL VBO needs to be mapped/unmapped to/from a CUDA buffer.
     // Managing the state ensures that the mapping/unmapping is done in the appropriate order.
