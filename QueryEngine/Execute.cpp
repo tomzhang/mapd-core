@@ -265,6 +265,10 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
                                     root_plan->get_plan_dest() == Planner::RootPlan::kEXPLAIN,
                                     allow_loop_joins,
                                     render_allocator.get());
+      if (error_code == ERR_OUT_OF_RENDER_MEM) {
+        CHECK_EQ(Planner::RootPlan::kRENDER, root_plan->get_plan_dest());
+        throw std::runtime_error("Not enough OpenGL memory to render the query results");
+      }
       if (render_allocator) {
 #ifdef HAVE_RENDERING
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
@@ -3505,6 +3509,8 @@ int32_t Executor::executePlanWithGroupBy(const CompilationResult& compilation_re
                                        render_allocator);
     } catch (const OutOfMemory&) {
       return ERR_OUT_OF_GPU_MEM;
+    } catch (const OutOfRenderMemory&) {
+      return ERR_OUT_OF_RENDER_MEM;
     }
   }
   if (!query_exe_context->query_mem_desc_.usesCachedContext() && !render_allocator) {
