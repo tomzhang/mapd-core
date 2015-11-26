@@ -8,7 +8,6 @@
 #include "BufferLayout.h"
 
 #include <GLFW/glfw3.h>
-#include <gd.h>
 
 #include <unordered_map>
 #include <vector>
