@@ -169,6 +169,8 @@ class Executor {
   typedef std::tuple<std::string, const Analyzer::Expr*, int64_t, const size_t> AggInfo;
 
   ResultRows execute(const Planner::RootPlan* root_plan,
+                     const Catalog_Namespace::SessionInfo& session,
+                     const int render_widget_id,
                      const bool hoist_literals,
                      const ExecutorDeviceType device_type,
                      const NVVMBackend nvvm_backend,
@@ -176,7 +178,7 @@ class Executor {
                      const bool allow_multifrag,
                      const bool allow_loop_joins);
 
-  int64_t getRowidForPixel(const int64_t x, const int64_t y);
+  int64_t getRowidForPixel(const int64_t x, const int64_t y, const int user_id, const int render_widget_id);
 
   int32_t getStringId(const std::string& table_name, const std::string& col_name, const std::string& col_val) const;
 
@@ -289,7 +291,9 @@ class Executor {
 
   std::string renderRows(const std::vector<Analyzer::TargetEntry*>& targets,
                          const std::string& config_json,
-                         const size_t used_bytes);
+                         const size_t used_bytes,
+                         const int user_id,
+                         const int render_widget_id);
 
   typedef std::deque<Fragmenter_Namespace::FragmentInfo> TableFragments;
 

@@ -62,7 +62,6 @@ Executor::Executor(const int db_id,
       catalog_(nullptr) {
 #ifdef HAVE_RENDERING
   render_manager_.reset(new MapD_Renderer::QueryRenderManager(this, render_mem_bytes, prnt_window));
-  render_manager_->addUserWidget(1, 1, true);
 #endif  // HAVE_RENDERING
 }
 
@@ -226,6 +225,8 @@ ResultRows Executor::executeSelectPlan(const Planner::Plan* plan,
  */
 
 ResultRows Executor::execute(const Planner::RootPlan* root_plan,
+                             const Catalog_Namespace::SessionInfo& session,
+                             const int render_widget_id,
                              const bool hoist_literals,
                              const ExecutorDeviceType device_type,
                              const NVVMBackend nvvm_backend,
@@ -276,15 +277,19 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
       }
       if (render_allocator) {
 #ifdef HAVE_RENDERING
+        const int user_id = session.get_currentUser().userId;
         if (error_code) {
           CHECK_LT(error_code, 0);
-          renderRows(root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0);
+          renderRows(
+              root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0, user_id, render_widget_id);
           throw std::runtime_error(out_of_opengl_mem_err_str);
         }
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
         return ResultRows(renderRows(root_plan->get_plan()->get_targetlist(),
                                      root_plan->get_render_type(),
-                                     render_allocator->getAllocatedSize()));
+                                     render_allocator->getAllocatedSize(),
+                                     user_id,
+                                     render_widget_id));
 #else
         throw std::runtime_error("This build doesn't support backend rendering");
 #endif  // HAVE_RENDERING
@@ -375,12 +380,23 @@ MapD_Renderer::QueryDataLayout::AttrType sql_type_to_render_type(const SQLTypeIn
   return MapD_Renderer::QueryDataLayout::AttrType::INT64;
 }
 
+void set_render_widget(MapD_Renderer::QueryRenderManager* render_manager,
+                       const int user_id,
+                       const int render_widget_id) {
+  if (!render_manager->hasUserWidget(user_id, render_widget_id)) {
+    render_manager->addUserWidget(user_id, render_widget_id, true);
+  }
+  render_manager->setActiveUserWidget(user_id, render_widget_id);
+}
+
 }  // namespace
 
 std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targets,
                                  const std::string& config_json,
-                                 const size_t used_bytes) {
-  render_manager_->setActiveUserWidget(1, 1);
+                                 const size_t used_bytes,
+                                 const int user_id,
+                                 const int render_widget_id) {
+  set_render_widget(render_manager_.get(), user_id, render_widget_id);
 
   std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
   json_doc->Parse(config_json.c_str());
@@ -410,9 +426,9 @@ std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targ
   return std::string(png_data.pngDataPtr.get(), png_data.pngSize);
 }
 
-int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y) {
-  render_manager_->setActiveUserWidget(1, 1);
-  // catalog_->get_dataMgr().cudaMgr_->setContext(0);
+int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y, const int user_id, const int render_widget_id) {
+  set_render_widget(render_manager_.get(), user_id, render_widget_id);
+
   int id = render_manager_->getIdAt(x, y);
 
   return (id ? id : -1);

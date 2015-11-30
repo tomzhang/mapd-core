@@ -386,6 +386,8 @@ class MapDHandler : virtual public MapDIf {
             ResultRows results({}, nullptr, nullptr, executor_device_type);
             execute_time += measure<>::execution([&]() {
               results = executor->execute(root_plan,
+                                          session_info,
+                                          -1,
                                           true,
                                           executor_device_type,
                                           nvvm_backend_,
@@ -516,7 +518,8 @@ class MapDHandler : virtual public MapDIf {
     // TODO(alex): add a scope class for setting device type or additional parameter to sql_execute
     set_execution_mode(session, TExecuteMode::CPU);
     for (const auto& pixel : pixels) {
-      const auto rowid = executor->getRowidForPixel(pixel.x, pixel.y);
+      const auto rowid = executor->getRowidForPixel(
+          pixel.x, pixel.y, session_info.get_currentUser().userId, 1);  // TODO(alex): de-hardcode user widget
 
       // TODO(alex): fix potential SQL injection issues?
       const auto projection = boost::algorithm::join(col_names, ", ");
@@ -958,6 +961,8 @@ class MapDHandler : virtual public MapDIf {
                                               window_ptr_,
                                               render_mem_bytes_);
         const auto results = executor->execute(root_plan,
+                                               session_info,
+                                               1,  // TODO(alex): de-hardcode widget id
                                                true,
                                                session_info.get_executor_device_type(),
                                                nvvm_backend_,

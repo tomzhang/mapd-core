@@ -158,7 +158,7 @@ bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
     return false;
   }
 
-  return (userIter->second->find(widgetId) == userIter->second->end());
+  return (userIter->second->find(widgetId) != userIter->second->end());
 }
 
 bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) const {
