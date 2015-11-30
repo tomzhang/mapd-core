@@ -383,6 +383,7 @@ MapD_Renderer::QueryDataLayout::AttrType sql_type_to_render_type(const SQLTypeIn
 void set_render_widget(MapD_Renderer::QueryRenderManager* render_manager,
                        const int user_id,
                        const int render_widget_id) {
+  CHECK(render_manager);
   if (!render_manager->hasUserWidget(user_id, render_widget_id)) {
     render_manager->addUserWidget(user_id, render_widget_id, true);
   }
