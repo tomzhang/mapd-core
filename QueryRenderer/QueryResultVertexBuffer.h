@@ -1,6 +1,7 @@
 #ifndef QUERY_RESULT_VERTEX_BUFFER_H_
 #define QUERY_RESULT_VERTEX_BUFFER_H_
 
+#include "MapDGL.h"
 #include "QueryRendererError.h"
 #include "BufferLayout.h"
 #include "Shader.h"
@@ -91,7 +92,7 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
         checkCudaErrors(cuCtxSetCurrent(currCudaCtx));
       }
 
-      glDeleteBuffers(1, &_bufferId);
+      MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_bufferId));
     }
   }
 
@@ -197,13 +198,13 @@ class QueryResultVertexBuffer : public BaseVertexBuffer {
       // don't mess with the current state
       // TODO(croot): Apply some kind of push-pop state system
       GLint currArrayBuf;
-      glGetIntegerv(_getBufferBinding(_target), &currArrayBuf);
+      MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(_target), &currArrayBuf));
 
-      glBindBuffer(_target, _bufferId);
-      glBufferData(_target, _numTotalBytes, 0, _usage);
+      MAPD_CHECK_GL_ERROR(glBindBuffer(_target, _bufferId));
+      MAPD_CHECK_GL_ERROR(glBufferData(_target, _numTotalBytes, 0, _usage));
 
       // restore the state
-      glBindBuffer(_target, currArrayBuf);
+      MAPD_CHECK_GL_ERROR(glBindBuffer(_target, currArrayBuf));
     }
   }
 };
