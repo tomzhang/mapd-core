@@ -12,7 +12,15 @@ set(odbc_source_files
     DataEngine/QSTypeInfoMetadataSource.cpp
     Main_Unix.cpp)
 
-set_source_files_properties(${mapd_thrift_gen_files} GENERATED)
+add_custom_command(
+    DEPENDS ${CMAKE_SOURCE_DIR}/mapd.thrift
+    OUTPUT ${CMAKE_BINARY_DIR}/gen-cpp/MapD.cpp
+    COMMAND ${Thrift_EXECUTABLE}
+    ARGS -gen cpp -o ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/mapd.thrift)
+
+set_source_files_properties(${CMAKE_BINARY_DIR}/gen-cpp/MapD.cpp GENERATED)
+set_source_files_properties(${CMAKE_BINARY_DIR}/gen-cpp/mapd_constants.cpp GENERATED)
+set_source_files_properties(${CMAKE_BINARY_DIR}/gen-cpp/mapd_types.cpp GENERATED)
 
 include_directories(${CMAKE_SOURCE_DIR}/ODBC ${CMAKE_SOURCE_DIR}/ODBC/Common ${CMAKE_SOURCE_DIR}/ODBC/Core ${CMAKE_SOURCE_DIR}/ODBC/DataEngine $ENV{SIMBAENGINE_THIRDPARTY_DIR}/odbcheaders $ENV{SIMBAENGINE_DIR}/Include/DSI $ENV{SIMBAENGINE_DIR}/Include/DSI/Client $ENV{SIMBAENGINE_DIR}/Include/Support $ENV{SIMBAENGINE_DIR}/Include/Support/Exceptions $ENV{SIMBAENGINE_DIR}/Include/Support/TypedDataWrapper $ENV{SIMBAENGINE_DIR}/Include/SQLEngine $ENV{SIMBAENGINE_DIR}/Include/SQLEngine/AETree $ENV{SIMBAENGINE_DIR}/Include/SQLEngine/DSIExt $ENV{SIMBAENGINE_DIR}/Include/Server)
 
