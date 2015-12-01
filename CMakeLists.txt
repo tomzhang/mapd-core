@@ -69,10 +69,11 @@ include_directories(${Boost_INCLUDE_DIR} "/usr/local/include" ${CMAKE_SOURCE_DIR
 include_directories(ThirdParty/googletest)
 add_subdirectory(ThirdParty/googletest)
 
+include_directories(ThirdParty/rapidjson)
+
 option(ENABLE_RENDERING "Build backend renderer" OFF)
 if(ENABLE_RENDERING)
     # RapidJSON
-    include_directories(ThirdParty/rapidjson)
     add_definitions("-DHAVE_RENDERING")
     ADD_SUBDIRECTORY    (QueryRenderer)
 endif()
