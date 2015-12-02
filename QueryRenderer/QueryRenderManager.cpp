@@ -47,7 +47,6 @@ QueryRenderManager::~QueryRenderManager() {
 }
 
 void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
-
   // set the error callback
   glfwSetErrorCallback(glfwErrorCallback);
 
@@ -86,6 +85,12 @@ void QueryRenderManager::_initGLFW(GLFWwindow* prntWindow) {
 
   // indicates how many frames to wait until buffers are swapped.
   glfwSwapInterval(1);
+
+  // unset the gl context for the current thread
+  // TODO(croot): create a context resource wrapper object to handle
+  // these kind of issues. It should be non-copyable - moveable-only
+  // and handle thread-switching appropriately.
+  glfwMakeContextCurrent(nullptr);
 }
 
 void QueryRenderManager::_initQueryResultBuffer() {
@@ -274,9 +279,9 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
-  RUNTIME_EX_ASSERT(compressionLevel >=-1 && compressionLevel <= 9,
-                    "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " + 
-                    "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
+  RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
+                    "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " +
+                        "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
 
   std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
@@ -292,7 +297,6 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
   MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT0));
   MAPD_CHECK_GL_ERROR(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
-
 
   // Now build the png stream using libpng
 
@@ -340,7 +344,7 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   // png_set_filter_heuristics(png_ptr, PNG_FILTER_HEURISTIC_WEIGHTED, 3, weights, costs);
 
   // set zlib compression level
-  //if (compressionLevel >= 0) {
+  // if (compressionLevel >= 0) {
   //  png_set_compression_level(png_ptr, compressionLevel);
   //}
   png_set_compression_level(png_ptr, compressionLevel);
