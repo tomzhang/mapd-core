@@ -26,6 +26,8 @@ void glfwErrorCallback(int error, const char* errstr) {
   LOG(ERROR) << "GLFW error: 0x" << std::hex << error << ": " << errstr << std::endl;
 }
 
+const ::MapD_Renderer::UserWidgetPair QueryRenderManager::_emptyUserWidget = std::make_pair(-1, -1);
+
 // QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode) : _debugMode(debugMode),
 // _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultVBOPtr(nullptr) {
 QueryRenderManager::QueryRenderManager(const Executor* executor,
@@ -34,6 +36,7 @@ QueryRenderManager::QueryRenderManager(const Executor* executor,
                                        bool debugMode)
     : _debugMode(debugMode),
       _activeRenderer(nullptr),
+      _activeUserWidget(_emptyUserWidget),
       _windowPtr(nullptr),
       _queryResultVBOPtr(new QueryResultVertexBuffer(queryResultBufferSize)),
       _queryResultBufferSize(queryResultBufferSize),
@@ -195,6 +198,46 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
 
 void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
   addUserWidget(userWidgetPair.first, userWidgetPair.second, doHitTest, doDepthTest);
+}
+
+void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
+  auto userIter = _rendererDict.find(userId);
+
+  RUNTIME_EX_ASSERT(userIter != _rendererDict.end(),
+                    "User id " + std::to_string(userId) + " does not exist. Cannot remove the caches for " +
+                        std::to_string(userId) + ":" + std::to_string(widgetId) + ".");
+
+  WidgetRendererMap* wfMap = userIter->second.get();
+  auto widgetIter = wfMap->find(widgetId);
+
+  RUNTIME_EX_ASSERT(widgetIter != wfMap->end(),
+                    "Widget id " + std::to_string(widgetId) + " for user id " + std::to_string(userId) +
+                        " does not exist. Cannot remove widget.");
+
+  wfMap->erase(widgetIter);
+
+  if (userId == _activeUserWidget.first && widgetId == _activeUserWidget.second) {
+    _activeUserWidget = _emptyUserWidget;
+    _activeRenderer = nullptr;
+  }
+}
+void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
+  removeUserWidget(userWidgetPair.first, userWidgetPair.second);
+}
+
+// Removes all widgets/sessions for a particular user id.
+void QueryRenderManager::removeUser(int userId) {
+  auto userIter = _rendererDict.find(userId);
+
+  RUNTIME_EX_ASSERT(userIter != _rendererDict.end(),
+                    "User id " + std::to_string(userId) + " does not exist. Cannot remove its caches.");
+
+  _rendererDict.erase(userIter);
+
+  if (userId == _activeUserWidget.first) {
+    _activeUserWidget = _emptyUserWidget;
+    _activeRenderer = nullptr;
+  }
 }
 
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -411,9 +454,9 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
 }
 
 unsigned int QueryRenderManager::getIdAt(int x, int y) {
-  RUNTIME_EX_ASSERT(
-      _activeRenderer != nullptr,
-      "getIdAt(): There is no active user/widget id. Must set an active user/widget id before requesting pixel data.");
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
+                    "requesting pixel data.");
 
   std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);

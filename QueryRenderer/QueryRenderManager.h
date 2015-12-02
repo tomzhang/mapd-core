@@ -184,6 +184,12 @@ class QueryRenderManager {
   void addUserWidget(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
   void addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest = false, bool doDepthTest = false);
 
+  void removeUserWidget(int userId, int widgetId);
+  void removeUserWidget(const UserWidgetPair& userWidgetPair);
+
+  // Removes all widgets/sessions for a particular user id.
+  void removeUser(int userId);
+
   void setActiveUserWidget(int userId, int widgetId);
   void setActiveUserWidget(const UserWidgetPair& userWidgetPair);
 
@@ -194,7 +200,7 @@ class QueryRenderManager {
                        QueryDataLayout* dataLayoutPtr = nullptr);
 
   void render();
-  PngData renderToPng(int compressionLevel=-1);
+  PngData renderToPng(int compressionLevel = -1);
 
   // get the id at a specific pixel
   unsigned int getIdAt(int x, int y);
@@ -206,6 +212,8 @@ class QueryRenderManager {
   }
 
  private:
+  static const UserWidgetPair _emptyUserWidget;
+
   bool _debugMode;
   RendererTable _rendererDict;
 
