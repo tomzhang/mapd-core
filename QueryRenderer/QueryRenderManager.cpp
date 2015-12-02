@@ -462,6 +462,11 @@ unsigned int QueryRenderManager::getIdAt(int x, int y) {
   glfwMakeContextCurrent(_windowPtr);
   unsigned int id = _activeRenderer->getIdAt(x, y);
   glfwMakeContextCurrent(nullptr);
-  return id;
+
+  // ids go from 0 to numitems-1, but since we're storing
+  // the ids as unsigned ints, and there isn't a way to specify the
+  // clear value for secondary buffers, we need to account for that
+  // offset here
+  return id-1;
 }
 

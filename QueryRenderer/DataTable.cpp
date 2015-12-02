@@ -272,7 +272,7 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
     TDataColumn<unsigned int>* idColumn = new TDataColumn<unsigned int>(defaultIdColumnName, _numRows);
 
     for (int i = 0; i < _numRows; ++i) {
-      (*idColumn)[i] = i + 1;
+      (*idColumn)[i] = i;
     }
 
     _columns.push_back(DataColumnUqPtr(idColumn));

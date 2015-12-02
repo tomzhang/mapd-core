@@ -87,5 +87,10 @@ void main() {
 
     fColor = getfillColor(fillColor);
     #endif
-    fPrimitiveId = id;
+
+    // ids from queries go from 0 to numrows-1, but since we're storing
+    // the ids as unsigned ints, and there isn't a way to specify the
+    // clear value for secondary buffers, we need to account for that
+    // offset here
+    fPrimitiveId = id + 1;
 }

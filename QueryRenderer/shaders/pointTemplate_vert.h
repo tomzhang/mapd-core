@@ -92,7 +92,12 @@ const std::string PointTemplate_Vert::source =
     "\n"
     "  fColor = getfillColor(fillColor);\n"
     "#endif\n"
-    "  fPrimitiveId = id;\n"
+    "\n"
+    "  // ids from queries go from 0 to numrows-1, but since we're storing\n"
+    "  // the ids as unsigned ints, and there isn't a way to specify the\n"
+    "  // clear value for secondary buffers, we need to account for that\n"
+    "  // offset here\n"
+    "  fPrimitiveId = id + 1;\n"
     "}\n";
 
 }  // namespace MapD_Renderer

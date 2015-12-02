@@ -437,9 +437,7 @@ std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targ
 int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y, const int user_id, const int render_widget_id) {
   set_render_widget(render_manager_.get(), user_id, render_widget_id);
 
-  int id = render_manager_->getIdAt(x, y);
-
-  return (id ? id : -1);
+  return render_manager_->getIdAt(x, y);
 }
 
 #endif  // HAVE_RENDERING
