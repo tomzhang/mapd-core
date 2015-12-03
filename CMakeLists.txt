@@ -76,6 +76,8 @@ if(ENABLE_RENDERING)
     # RapidJSON
     add_definitions("-DHAVE_RENDERING")
     ADD_SUBDIRECTORY    (QueryRenderer)
+
+    set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-render")
 endif()
 
 ADD_SUBDIRECTORY    (SqliteConnector)
