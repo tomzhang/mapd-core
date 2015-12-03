@@ -453,14 +453,14 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   return PngData(pngPtr, pngSize);
 }
 
-unsigned int QueryRenderManager::getIdAt(int x, int y) {
+int64_t QueryRenderManager::getIdAt(int x, int y) {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
                     "requesting pixel data.");
 
   std::lock_guard<std::mutex> render_lock(_mtx);
   glfwMakeContextCurrent(_windowPtr);
-  unsigned int id = _activeRenderer->getIdAt(x, y);
+  int64_t id = _activeRenderer->getIdAt(x, y);
   glfwMakeContextCurrent(nullptr);
 
   // ids go from 0 to numitems-1, but since we're storing
