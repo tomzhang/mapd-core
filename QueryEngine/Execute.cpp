@@ -271,19 +271,15 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
                                     root_plan->get_plan_dest() == Planner::RootPlan::kEXPLAIN,
                                     allow_loop_joins,
                                     render_allocator.get());
+#ifdef HAVE_RENDERING
       const int user_id = session.get_currentUser().userId;
       if (error_code == ERR_OUT_OF_RENDER_MEM) {
-#ifdef HAVE_RENDERING
         CHECK_EQ(Planner::RootPlan::kRENDER, root_plan->get_plan_dest());
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
         renderRows(root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0, user_id, render_widget_id);
         throw std::runtime_error(out_of_opengl_mem_err_str);
-#else
-        CHECK(false);
-#endif
       }
       if (render_allocator) {
-#ifdef HAVE_RENDERING
         if (error_code) {
           CHECK_LT(error_code, 0);
           catalog_->get_dataMgr().cudaMgr_->setContext(0);
@@ -297,10 +293,8 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
                                      render_allocator->getAllocatedSize(),
                                      user_id,
                                      render_widget_id));
-#else
-        throw std::runtime_error("This build doesn't support backend rendering");
-#endif  // HAVE_RENDERING
       }
+#endif  // HAVE_RENDERING
       if (error_code == ERR_DIV_BY_ZERO) {
         throw std::runtime_error("Division by zero");
       }
