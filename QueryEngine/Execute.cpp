@@ -255,7 +255,6 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
         throw std::runtime_error("This build doesn't support backend rendering");
 #endif  // HAVE_RENDERING
       }
-      const std::string out_of_opengl_mem_err_str{"Not enough OpenGL memory to render the query results"};
       auto rows = executeSelectPlan(root_plan->get_plan(),
                                     root_plan->get_limit(),
                                     root_plan->get_offset(),
@@ -272,6 +271,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
                                     allow_loop_joins,
                                     render_allocator.get());
 #ifdef HAVE_RENDERING
+      const std::string out_of_opengl_mem_err_str{"Not enough OpenGL memory to render the query results"};
       const int user_id = session.get_currentUser().userId;
       if (error_code == ERR_OUT_OF_RENDER_MEM) {
         CHECK_EQ(Planner::RootPlan::kRENDER, root_plan->get_plan_dest());
