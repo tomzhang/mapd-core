@@ -8,10 +8,17 @@ flat in vec4 fColor;
 
 void main() {
     float dist = distance(gl_PointCoord, vec2(0.5));
-    if (dist > 0.5) {
+    //if (dist > 0.5) {
+    //    discard;
+    //}
+
+    float delta = fwidth(dist);
+    float alpha = 1.0 - smoothstep(0.5-delta, 0.5, dist);
+    if (alpha == 0.0) {
         discard;
     }
 
-    color = fColor;
+    color = vec4(fColor.xyz, fColor.w*alpha);
+    //color = fColor;
     id = fPrimitiveId;
 }
