@@ -272,11 +272,12 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
                                     render_allocator.get());
 #ifdef HAVE_RENDERING
       const std::string out_of_opengl_mem_err_str{"Not enough OpenGL memory to render the query results"};
-      const int user_id = session.get_currentUser().userId;
+      const int session_id = session.get_session_id();
       if (error_code == ERR_OUT_OF_RENDER_MEM) {
         CHECK_EQ(Planner::RootPlan::kRENDER, root_plan->get_plan_dest());
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
-        renderRows(root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0, user_id, render_widget_id);
+        renderRows(
+            root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0, session_id, render_widget_id);
         throw std::runtime_error(out_of_opengl_mem_err_str);
       }
       if (render_allocator) {
@@ -284,14 +285,14 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
           CHECK_LT(error_code, 0);
           catalog_->get_dataMgr().cudaMgr_->setContext(0);
           renderRows(
-              root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0, user_id, render_widget_id);
+              root_plan->get_plan()->get_targetlist(), root_plan->get_render_type(), 0, session_id, render_widget_id);
           throw std::runtime_error(out_of_opengl_mem_err_str);
         }
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
         return ResultRows(renderRows(root_plan->get_plan()->get_targetlist(),
                                      root_plan->get_render_type(),
                                      render_allocator->getAllocatedSize(),
-                                     user_id,
+                                     session_id,
                                      render_widget_id));
       }
 #endif  // HAVE_RENDERING
@@ -382,13 +383,13 @@ MapD_Renderer::QueryDataLayout::AttrType sql_type_to_render_type(const SQLTypeIn
 }
 
 void set_render_widget(MapD_Renderer::QueryRenderManager* render_manager,
-                       const int user_id,
+                       const int session_id,
                        const int render_widget_id) {
   CHECK(render_manager);
-  if (!render_manager->hasUserWidget(user_id, render_widget_id)) {
-    render_manager->addUserWidget(user_id, render_widget_id, true);
+  if (!render_manager->hasUserWidget(session_id, render_widget_id)) {
+    render_manager->addUserWidget(session_id, render_widget_id, true);
   }
-  render_manager->setActiveUserWidget(user_id, render_widget_id);
+  render_manager->setActiveUserWidget(session_id, render_widget_id);
 }
 
 }  // namespace
@@ -396,9 +397,9 @@ void set_render_widget(MapD_Renderer::QueryRenderManager* render_manager,
 std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targets,
                                  const std::string& config_json,
                                  const size_t used_bytes,
-                                 const int user_id,
+                                 const int session_id,
                                  const int render_widget_id) {
-  set_render_widget(render_manager_.get(), user_id, render_widget_id);
+  set_render_widget(render_manager_.get(), session_id, render_widget_id);
 
   std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
   json_doc->Parse(config_json.c_str());
@@ -428,8 +429,8 @@ std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targ
   return std::string(png_data.pngDataPtr.get(), png_data.pngSize);
 }
 
-int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y, const int user_id, const int render_widget_id) {
-  set_render_widget(render_manager_.get(), user_id, render_widget_id);
+int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y, const int session_id, const int render_widget_id) {
+  set_render_widget(render_manager_.get(), session_id, render_widget_id);
 
   return render_manager_->getIdAt(x, y);
 }

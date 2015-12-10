@@ -357,7 +357,7 @@ class MapDHandler : virtual public MapDIf {
         [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
     for (const auto& pixel : pixels) {
       const auto rowid = executor->getRowidForPixel(
-          pixel.x, pixel.y, session_info_ptr->get_currentUser().userId, 1);  // TODO(alex): de-hardcode user widget
+          pixel.x, pixel.y, session_info_ptr->get_session_id(), 1);  // TODO(alex): de-hardcode user widget
 
       // TODO(alex): fix potential SQL injection issues?
       const auto projection = boost::algorithm::join(col_names, ", ");
