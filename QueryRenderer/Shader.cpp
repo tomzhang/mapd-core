@@ -32,10 +32,10 @@ std::string getShaderSource(const GLuint& shaderId) {
   GLint sourceLen;
   MAPD_CHECK_GL_ERROR(glGetShaderiv(shaderId, GL_SHADER_SOURCE_LENGTH, &sourceLen));
 
-  GLchar source[sourceLen];
-  MAPD_CHECK_GL_ERROR(glGetShaderSource(shaderId, sourceLen, NULL, source));
+  std::unique_ptr<GLchar[]> source(new GLchar[sourceLen]);
+  MAPD_CHECK_GL_ERROR(glGetShaderSource(shaderId, sourceLen, NULL, source.get()));
 
-  return std::string(source);
+  return std::string(source.get());
 }
 
 GLint linkProgram(const GLuint& programId, std::string& errStr) {
