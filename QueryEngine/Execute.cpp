@@ -279,7 +279,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
         throw std::runtime_error(out_of_opengl_mem_err_str);
       }
       if (render_allocator) {
-        if (error_code) {
+        if (error_code && !root_plan->get_limit()) {
           CHECK_LT(error_code, 0);
           catalog_->get_dataMgr().cudaMgr_->setContext(0);
           renderRows(
