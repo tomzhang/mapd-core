@@ -226,6 +226,27 @@ class Shader {
     // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
 
+  template <typename T, size_t N>
+  void setUniformAttribute(const std::string& attrName, const std::array<T, N>& attrValue) {
+    UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
+
+    // TODO: check if bound
+
+    RUNTIME_EX_ASSERT(iter != _uniformAttrs.end(),
+                      "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
+
+    UniformAttrInfo* info = iter->second.get();
+
+    GLuint attrSz = info->size;
+    RUNTIME_EX_ASSERT(attrSz == N,
+                      "Uniform attribute: " + attrName + " is not the appropriate size. It is size " +
+                          std::to_string(N) + " but should be " + std::to_string(attrSz) + ".");
+
+    // TODO: check type mismatch?
+    info->setAttr((void*)(&attrValue[0]));
+    // setUniformByLocation(attrLoc, attrSz, &attrValue);
+  }
+
   GLuint getVertexAttributeLocation(const std::string& attrName) const;
 
   void bindToRenderer() const;

@@ -950,14 +950,14 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
       "The render property \"" + _rndrPropPtr->getName() +
           "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
 
-  std::vector<std::string>& vec = domainData->getVectorData();
-  _coercedDomainData.reset(
-      new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
-  std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
-  for (size_t i = 0; i < vec.size(); ++i) {
-    // get data from the executor
-    coercedVec[i] = static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i]));
-  }
+  // std::vector<std::string>& vec = domainData->getVectorData();
+  // _coercedDomainData.reset(
+  //     new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
+  // std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
+  // for (size_t i = 0; i < vec.size(); ++i) {
+  //   // get data from the executor
+  //   coercedVec[i] = static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i]));
+  // }
 }
 
 void setRenderPropertyTypeInShaderSrc(const BaseRenderProperty& prop, std::string& shaderSrc) {
@@ -976,6 +976,15 @@ void setRenderPropertyTypeInShaderSrc(const BaseRenderProperty& prop, std::strin
   out_ss << "<" << outname << "Type"
          << ">";
   boost::replace_first(shaderSrc, out_ss.str(), outtype);
+}
+
+void setRenderPropertyAttrTypeInShaderSrc(const BaseRenderProperty& prop, std::string& shaderSrc, bool isUniform) {
+  std::ostringstream ss;
+
+  std::string name = prop.getName();
+
+  ss << "<useU" << name << ">";
+  boost::replace_first(shaderSrc, ss.str(), (isUniform ? "1" : "0"));
 }
 
 void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
@@ -1012,7 +1021,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       _vboAttrName = "";
 
       if (!_ctx->isJSONCacheUpToDate(_valueJsonPath, mitr->value)) {
-        _initValueFromJSONObj(mitr->value, (dataPtr != nullptr ? dataPtr->numRows() : 1));
+        _initValueFromJSONObj(mitr->value);
       }
       _valueJsonPath = objPath.Append(valueProp.c_str(), valueProp.length());
     } else {
@@ -1061,7 +1070,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     _dataPtr = nullptr;
     _vboAttrName = "";
     _scaleConfigPtr = nullptr;
-    _initValueFromJSONObj(obj, (dataPtr != nullptr ? dataPtr->numRows() : 1));
+    _initValueFromJSONObj(obj);
   }
 }
 
@@ -1114,7 +1123,7 @@ RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
                                              const QueryRendererContextShPtr& ctx,
                                              bool useScale,
                                              bool flexibleType)
-    : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset() {
+    : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset(), _uniformVal() {
   _inType.reset(new TypeGL<float, 4>());
   _outType.reset(new TypeGL<float, 4>());
 }
@@ -1181,52 +1190,43 @@ void RenderProperty<T, numComponents>::_initFromJSONObj(const rapidjson::Value& 
 }
 
 template <typename T, int numComponents>
-void RenderProperty<T, numComponents>::initializeValue(const T& val, int numItems) {
+void RenderProperty<T, numComponents>::initializeValue(const T& val) {
   // TODO: this is a public function.. should I protect from already existing data?
 
   if (_vboInitType != VboInitType::FROM_VALUE) {
     _inType.reset(new TypeGL<T, numComponents>());
     _outType.reset(new TypeGL<T, numComponents>());
 
-    std::vector<T> data(numItems, val);
-
-    SequentialBufferLayout* vboLayout = new SequentialBufferLayout();
-    vboLayout->addAttribute<T>(_name);
-
-    VertexBuffer::BufferLayoutShPtr vboLayoutPtr;
-    vboLayoutPtr.reset(dynamic_cast<BaseBufferLayout*>(vboLayout));
-
-    VertexBuffer* vbo = new VertexBuffer(data, vboLayoutPtr);
-    _vboPtr.reset(vbo);
+    _vboPtr = nullptr;
     _vboInitType = VboInitType::FROM_VALUE;
     _prntMark->setPropsDirty();
   } else {
-    std::vector<T> data(numItems, val);
-    VertexBuffer* vbo = dynamic_cast<VertexBuffer*>(_vboPtr.get());
-    vbo->bufferData(reinterpret_cast<void*>(&data[0]), numItems, sizeof(T));
-
     // TODO(croot): do we need to set props dirty on the parent?
   }
+
+  _uniformVal = val;
 }
 
 template <typename T, int numComponents>
-void RenderProperty<T, numComponents>::_initValueFromJSONObj(const rapidjson::Value& obj, int numItems) {
+void RenderProperty<T, numComponents>::bindUniformToRenderer(Shader* activeShader,
+                                                             const std::string& uniformAttrName) const {
+  RUNTIME_EX_ASSERT(_vboPtr == nullptr,
+                    "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
+                    "vertex buffers defined for uniform properties.");
+
+  // TODO(croot): deal with numComponents here by using a vector instead?
+  activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal);
+}
+
+template <typename T, int numComponents>
+void RenderProperty<T, numComponents>::_initValueFromJSONObj(const rapidjson::Value& obj) {
   T val = RapidJSONUtils::getNumValFromJSONObj<T>(obj);
 
-  initializeValue(val, numItems);
+  initializeValue(val);
 }
 
 template <>
-void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj) {
-  // TODO: what about offsets / mults for colors?
-}
-
-template <>
-void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj, int numItems) {
-  RUNTIME_EX_ASSERT(obj.IsString(), "JSON parse error - value for color property \"" + _name + "\" must be a string.");
-
-  ColorRGBA color(obj.GetString());
-
+void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
   // TODO: combine all the different types into a utility file somewhere.
   // i.e. this is already defined in BufferLayout.h, so let's find a
   // good way to consolidate these definitions
@@ -1235,26 +1235,39 @@ void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value&
     _inType.reset(new TypeGL<float, 4>());
     _outType.reset(new TypeGL<float, 4>());
 
-    std::vector<ColorRGBA> data(numItems, color);
-
-    SequentialBufferLayout* vboLayout = new SequentialBufferLayout();
-    vboLayout->addAttribute(_name, BufferAttrType::VEC4F);
-
-    VertexBuffer::BufferLayoutShPtr vboLayoutPtr;
-    vboLayoutPtr.reset(dynamic_cast<BaseBufferLayout*>(vboLayout));
-
-    VertexBuffer* vbo = new VertexBuffer(data, vboLayoutPtr);
-    // vbo->bufferData();
-    _vboPtr.reset(vbo);
+    _vboPtr = nullptr;
     _vboInitType = VboInitType::FROM_VALUE;
     _prntMark->setPropsDirty();
   } else {
-    std::vector<ColorRGBA> data(numItems, color);
-    VertexBuffer* vbo = dynamic_cast<VertexBuffer*>(_vboPtr.get());
-    vbo->bufferData(reinterpret_cast<void*>(&data[0]), numItems, sizeof(ColorRGBA));
-
     // TODO(croot): do we need to set props dirty on the parent?
   }
+
+  _uniformVal = val;
+}
+
+template <>
+void RenderProperty<ColorRGBA, 1>::bindUniformToRenderer(Shader* activeShader,
+                                                         const std::string& uniformAttrName) const {
+  RUNTIME_EX_ASSERT(_vboPtr == nullptr,
+                    "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
+                    "vertex buffers defined for uniform properties.");
+
+  // TODO(croot): deal with numComponents here by using a vector instead?
+  activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArray());
+}
+
+template <>
+void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj) {
+  // TODO: what about offsets / mults for colors?
+}
+
+template <>
+void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj) {
+  RUNTIME_EX_ASSERT(obj.IsString(), "JSON parse error - value for color property \"" + _name + "\" must be a string.");
+
+  ColorRGBA color(obj.GetString());
+
+  initializeValue(color);
 }
 
 template <typename T, int numComponents>
@@ -1301,6 +1314,8 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _ctx(ctx),
       _shaderDirty(true),
       _propsDirty(true),
+      _vboProps(),
+      _uniformProps(),
       _vao(0) {
 }
 
@@ -1410,6 +1425,8 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
   const rapidjson::Value& propObj = mitr->value;
 
   if (!_ctx->isJSONCacheUpToDate(_propertiesJsonPath, propObj)) {
+    std::vector<BaseRenderProperty*> usedProps{&x, &y, &size, &fillColor};  // TODO(croot) add z
+
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
 
     RUNTIME_EX_ASSERT(propObj.IsObject(),
@@ -1457,6 +1474,8 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
       } else {
         _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
       }
+
+      usedProps.push_back(&z);
     } else {
       // empty the json path for z
       _zJsonPath = rapidjson::Pointer();
@@ -1513,10 +1532,12 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
         if (_dataPtr != nullptr) {
           id.initializeFromData(DataTable::defaultIdColumnName, _dataPtr);
         } else {
-          id.initializeValue(1);  // reaching here "should" guarantee that there's only
+          id.initializeValue(0);  // reaching here "should" guarantee that there's only
                                   // 1 row of data
         }
       }
+
+      usedProps.push_back(&id);
     } else {
       // clear out id path
       _idJsonPath = rapidjson::Pointer();
@@ -1534,6 +1555,19 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
          ((vboPtr = fillColor.getVboPtr()) && vboPtr->type() == resultVBO)) &&
         vboPtr->hasAttribute(key.getName())) {
       key.initializeFromData(key.getName(), _dataPtr);
+      usedProps.push_back(&key);
+    }
+
+    // Now update which props are vbo-defined, and which will be uniforms
+    _vboProps.clear();
+    _uniformProps.clear();
+
+    for (const auto& prop : usedProps) {
+      if (prop->hasVboPtr()) {
+        _vboProps.push_back(prop);
+      } else {
+        _uniformProps.push_back(prop);
+      }
     }
   } else {
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
@@ -1558,13 +1592,25 @@ void PointMark::_updateShader() {
   bool useKey = key.hasVboPtr();
   boost::replace_first(vertSrc, "<useKey>", std::to_string(useKey));
 
-  if (_ctx->doHitTest()) {
-    props.push_back(&id);
+  // update all the types first
+  for (auto& prop : props) {
+    setRenderPropertyTypeInShaderSrc(*prop, vertSrc);
   }
 
-  // update all the types first
-  for (auto prop : props) {
-    setRenderPropertyTypeInShaderSrc(*prop, vertSrc);
+  // now set props as uniform or vertex attrs
+  for (auto& prop : _vboProps) {
+    setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, false);
+  }
+
+  for (auto& prop : _uniformProps) {
+    setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, true);
+  }
+
+  if (_ctx->doHitTest()) {
+    props.push_back(&id);
+  } else {
+    // define the id as uniform to get the shader to compile
+    setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, true);
   }
 
   // now insert any additional functionality
@@ -1629,32 +1675,21 @@ void PointMark::_updateShader() {
 }
 
 void PointMark::_initPropertiesForRendering(Shader* activeShader) {
-  RUNTIME_EX_ASSERT(!key.hasVboPtr() || key.size() == x.size(),
-                    "Invalid point mark. The size of the vertex buffer's \"key\" and \"x\" sizes do not match.");
-  RUNTIME_EX_ASSERT(x.size() == y.size() && x.size() == size.size() && x.size() == fillColor.size() &&
-                        (!_ctx->doHitTest() || x.size() == id.size()),
-                    "Invalid point mark. Not all of the sizes for the vertex attributes match.");
-
-  // TODO(croot): only bind key if found? also, move this into base class?
-  if (key.hasVboPtr()) {
-    key.bindToRenderer(activeShader);
-  }
-
-  x.bindToRenderer(activeShader);
-  y.bindToRenderer(activeShader);
-  // z.bindToRenderer(activeShader);
-  size.bindToRenderer(activeShader);
-  fillColor.bindToRenderer(activeShader);
-
-  if (_ctx->doHitTest()) {
-    id.bindToRenderer(activeShader);
+  int cnt = 0;
+  int vboSize = 0;
+  for (auto& itr : _vboProps) {
+    cnt++;
+    if (cnt == 1) {
+      vboSize = itr->size();
+    } else {
+      RUNTIME_EX_ASSERT(itr->size() == vboSize,
+                        "Invalid point mark. The sizes of the vertex buffer attributes do not match.");
+    }
+    itr->bindToRenderer(activeShader);
   }
 }
 
 void PointMark::_bindPropertiesToRenderer(Shader* activeShader) {
-  // std::unordered_map<std::string, BaseScale*> visitedScales;
-  std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
-
   // TODO(croot): create a static invalidKeyAttrName string on the class
   static const std::string invalidKeyAttrName = "invalidKey";
   if (key.hasVboPtr()) {
@@ -1672,11 +1707,20 @@ void PointMark::_bindPropertiesToRenderer(Shader* activeShader) {
     }
   }
 
-  for (auto prop : props) {
+  for (auto prop : _vboProps) {
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
     if (scalePtr != nullptr) {
       scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
     }
+  }
+
+  for (auto prop : _uniformProps) {
+    const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+    if (scalePtr != nullptr) {
+      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+    }
+
+    prop->bindUniformToRenderer(activeShader, prop->getName());
   }
 }
 

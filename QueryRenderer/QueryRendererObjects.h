@@ -402,6 +402,8 @@ class BaseRenderProperty {
     _vboPtr->bindToRenderer(activeShader, _vboAttrName, _name);
   }
 
+  virtual void bindUniformToRenderer(Shader* activeShader, const std::string& uniformAttrName) const = 0;
+
   std::string getDataColumnName() { return _vboAttrName; }
   const DataVBOShPtr& getDataTablePtr() { return _dataPtr; }
 
@@ -433,7 +435,7 @@ class BaseRenderProperty {
 
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
-  virtual void _initValueFromJSONObj(const rapidjson::Value& obj, int numItems = 1) = 0;
+  virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initTypeFromVbo() = 0;
   virtual void _verifyScale() = 0;
 };
@@ -452,15 +454,17 @@ class RenderProperty : public BaseRenderProperty {
   }
   ~RenderProperty() {}
 
-  void initializeValue(const T& val, int numItems = 1);
+  void initializeValue(const T& val);
+  void bindUniformToRenderer(Shader* activeShader, const std::string& uniformAttrName) const;
 
  private:
   T _mult;
   T _offset;
+  T _uniformVal;
 
   void _initScaleFromJSONObj(const rapidjson::Value& obj);
   void _initFromJSONObj(const rapidjson::Value& obj);
-  void _initValueFromJSONObj(const rapidjson::Value& obj, int numItems = 1);
+  void _initValueFromJSONObj(const rapidjson::Value& obj);
   void _initTypeFromVbo();
   void _verifyScale();
 };
@@ -476,10 +480,17 @@ RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
                                              bool flexibleType);
 
 template <>
+void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val);
+
+template <>
+void RenderProperty<ColorRGBA, 1>::bindUniformToRenderer(Shader* activeShader,
+                                                         const std::string& uniformAttrName) const;
+
+template <>
 void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj);
 
 template <>
-void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj, int numItems);
+void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj);
 
 // template <>
 // void RenderProperty<ColorRGBA, 1>::_initTypeFromVbo();
@@ -534,6 +545,9 @@ class BaseMark {
 
   bool _shaderDirty;
   bool _propsDirty;
+
+  std::vector<BaseRenderProperty*> _vboProps;
+  std::vector<BaseRenderProperty*> _uniformProps;
 
   void _bindToRenderer(Shader* activeShader);
   void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
