@@ -950,14 +950,14 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
       "The render property \"" + _rndrPropPtr->getName() +
           "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
 
-  // std::vector<std::string>& vec = domainData->getVectorData();
-  // _coercedDomainData.reset(
-  //     new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
-  // std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
-  // for (size_t i = 0; i < vec.size(); ++i) {
-  //   // get data from the executor
-  //   coercedVec[i] = static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i]));
-  // }
+  std::vector<std::string>& vec = domainData->getVectorData();
+  _coercedDomainData.reset(
+      new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
+  std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
+  for (size_t i = 0; i < vec.size(); ++i) {
+    // get data from the executor
+    coercedVec[i] = static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i]));
+  }
 }
 
 void setRenderPropertyTypeInShaderSrc(const BaseRenderProperty& prop, std::string& shaderSrc) {
