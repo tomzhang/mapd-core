@@ -414,7 +414,8 @@ std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targ
   const size_t row_bytes{(targets.size() + 1) * sizeof(int64_t)};
   CHECK_EQ(size_t(0), used_bytes % row_bytes);
   const size_t num_rows{used_bytes / row_bytes};
-  MapD_Renderer::QueryDataLayout* query_data_layout = new MapD_Renderer::QueryDataLayout(num_rows, attr_names, attr_types, 0, EMPTY_KEY, MapD_Renderer::QueryDataLayout::LayoutType::INTERLEAVED);
+  MapD_Renderer::QueryDataLayout* query_data_layout = new MapD_Renderer::QueryDataLayout(
+      num_rows, attr_names, attr_types, 0, EMPTY_KEY, MapD_Renderer::QueryDataLayout::LayoutType::INTERLEAVED);
   render_manager_->configureRender(json_doc, query_data_layout);
 
   const auto png_data = render_manager_->renderToPng(3);

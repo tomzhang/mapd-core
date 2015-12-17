@@ -468,6 +468,5 @@ int64_t QueryRenderManager::getIdAt(int x, int y) {
   // the ids as unsigned ints, and there isn't a way to specify the
   // clear value for secondary buffers, we need to account for that
   // offset here
-  return id-1;
+  return id - 1;
 }
-
