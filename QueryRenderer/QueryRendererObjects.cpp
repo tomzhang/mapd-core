@@ -1773,8 +1773,6 @@ void PointMark::_updateShader() {
     return;
   }
 
-  std::cerr << "CROOT - Updating Shader!!" << std::endl;
-
   std::string vertSrc(PointTemplate_Vert::source);
 
   std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
