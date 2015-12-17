@@ -2,6 +2,7 @@
 #define QUERY_RENDERER_H_
 
 #include "QueryRendererError.h"
+#include "QueryDataLayout.h"
 #include "QueryResultVertexBuffer.h"
 #include "QueryFramebuffer.h"
 #include "QueryRendererObjects.h"
@@ -16,6 +17,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <set>
 #include <memory>  // std::unique_ptr
 #include <cstdint>
 #include <limits>
@@ -67,9 +69,11 @@ class QueryRenderer {
                        bool forceUpdate = false,
                        GLFWwindow* win = nullptr);
 
-  void updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
-                                        const int numRows,
-                                        const int64_t invalid_key);
+  // void updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
+  //                                       const int numRows,
+  //                                       const int64_t invalid_key);
+
+  void updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr);
 
   void render();
 
@@ -90,9 +94,13 @@ class QueryRenderer {
 typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
 typedef std::shared_ptr<QueryRenderer> QueryRendererShPtr;
 
+enum class RefEventType { UPDATE = 0, REMOVE, REPLACE, ALL };
+
 class QueryRendererContext {
  public:
   typedef std::shared_ptr<BaseScale> ScaleShPtr;
+  typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
+  // typedef std::function<void(int)> RefEventCallback;
 
   explicit QueryRendererContext(const Executor* executor,
                                 const QueryResultVertexBufferShPtr& queryResultVBOPtr,
@@ -119,7 +127,8 @@ class QueryRendererContext {
         _doHitTest(doHitTest),
         _doDepthTest(doDepthTest),
         _invalidKey(std::numeric_limits<int64_t>::max()),
-        _jsonCache(nullptr) {}
+        _jsonCache(nullptr),
+        _queryDataLayoutPtr(nullptr) {}
   ~QueryRendererContext() { _clear(); }
 
   int getWidth() { return _width; }
@@ -173,6 +182,11 @@ class QueryRendererContext {
   //     return rtn;
   // }
 
+  void subscribeToRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
+  void unsubscribeFromRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
+
+  const std::unique_ptr<QueryDataLayout>& getQueryDataLayout() { return _queryDataLayoutPtr; }
+
   friend class QueryRenderer;
 
  private:
@@ -182,6 +196,15 @@ class QueryRendererContext {
 
   typedef std::vector<GeomConfigShPtr> GeomConfigVector;
   typedef std::unordered_map<std::string, DataVBOShPtr> DataTableMap;
+
+  struct func_compare {
+    bool operator()(const RefEventCallback& lhs, const RefEventCallback& rhs) const {
+      return lhs.target_type().hash_code() < rhs.target_type().hash_code();
+    }
+  };
+  typedef std::set<RefEventCallback, func_compare> EventCallbackList;
+  typedef std::array<EventCallbackList, static_cast<size_t>(RefEventType::ALL)> EventCallbacksArray;
+  typedef std::unordered_map<std::string, EventCallbacksArray> EventCallbacksMap;
 
   DataTableMap _dataTableMap;
   ScaleConfigMap _scaleConfigMap;
@@ -199,13 +222,20 @@ class QueryRendererContext {
 
   RapidJSONUtils::JsonCachePtr _jsonCache;
 
+  EventCallbacksMap _eventCallbacksMap;
+
+  std::unique_ptr<QueryDataLayout> _queryDataLayoutPtr;
+
   void _clear() {
     _width = 0;
     _height = 0;
     _dataTableMap.clear();
     _scaleConfigMap.clear();
     _geomConfigs.clear();
+    _eventCallbacksMap.clear();
   }
+
+  void _fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj);
 };
 
 typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;

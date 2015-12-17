@@ -252,8 +252,9 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   // need to update the data layout of the query result buffer before building up
   // from the json obj
   if (dataLayoutPtr) {
-    _activeRenderer->updateQueryResultBufferPostQuery(
-        dataLayoutPtr->convertToBufferLayout(), dataLayoutPtr->numRows, dataLayoutPtr->invalidKey);
+    // _activeRenderer->updateQueryResultBufferPostQuery(
+    //     dataLayoutPtr->convertToBufferLayout(), dataLayoutPtr->numRows, dataLayoutPtr->invalidKey);
+    _activeRenderer->updateQueryResultBufferPostQuery(dataLayoutPtr);
   }
 
   _activeRenderer->setJSONDocument(jsonDocumentPtr, false, (_debugMode ? _windowPtr : nullptr));

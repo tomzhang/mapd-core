@@ -16,6 +16,7 @@
 #include <iostream>
 #include <sstream>
 #include <utility>
+#include <functional>
 
 // CROOT - remote the following includes -- only used for debugging
 // #include <fstream>
@@ -151,7 +152,8 @@ BaseScale::BaseScale(const rapidjson::Value& obj,
 BaseScale::~BaseScale() {
 }
 
-void BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+  bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
     RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - scale items must be objects.");
 
@@ -178,6 +180,7 @@ void BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::P
       // TODO(croot): move the "clamp" prop name into a const somewhere.
       std::string clampProp = "clamp";
 
+      bool prevClamp = _useClamp;
       if ((itr = obj.FindMember("clamp")) != obj.MemberEnd()) {
         RUNTIME_EX_ASSERT(itr->value.IsBool(),
                           "JSON parse error - the \"clamp\" property for linear scales must be a boolean.");
@@ -187,8 +190,18 @@ void BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::P
         // TODO(croot): set a const default for _useClamp somewhere
         _useClamp = false;
       }
+
+      if (prevClamp != _useClamp) {
+        _clampChanged = true;
+      } else {
+        _clampChanged = false;
+      }
     }
+
+    rtn = true;
   }
+
+  return rtn;
 }
 
 std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
@@ -209,10 +222,12 @@ std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
 }
 
 template <typename T>
-void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
+bool ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
                                                     const rapidjson::Pointer& objPath,
                                                     const QueryRendererContextShPtr& ctx,
                                                     BaseScale::ScaleType type) {
+  bool rtn = false;
+
   rapidjson::Value::ConstMemberIterator mitr;
   rapidjson::Value::ConstValueIterator vitr;
 
@@ -236,6 +251,10 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
 
     const rapidjson::Value& jsonObj = mitr->value;
 
+    int prevSz = 0;
+    if (_vectorPtr) {
+      prevSz = _vectorPtr->size();
+    }
     if (isObject) {
       RUNTIME_EX_ASSERT((mitr = jsonObj.FindMember("data")) != jsonObj.MemberEnd() && mitr->value.IsString(),
                         "JSON parse error - scale data reference must have a \"data\" string property.");
@@ -283,9 +302,20 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
         _setItem(idx, *vitr);
       }
     }
+
+    int newSz = 0;
+    if (_vectorPtr) {
+      newSz = _vectorPtr->size();
+    }
+
+    // only need to mark the data as changed if it requires a shader change,
+    // which means the amount of data has changed
+    rtn = (prevSz != newSz);
   }
 
   updateJSONPath(objPath);
+
+  return rtn;
 }
 
 template <typename T>
@@ -480,23 +510,29 @@ void Scale<DomainType, RangeType>::_updateDefaultJSONPath(const rapidjson::Point
 }
 
 template <typename DomainType, typename RangeType>
-void Scale<DomainType, RangeType>::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  BaseScale::_initFromJSONObj(obj, objPath);
+bool Scale<DomainType, RangeType>::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+  bool rtn = BaseScale::_initFromJSONObj(obj, objPath);
 
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type);
-    _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type);
+    _domainDataChanged = _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type);
+    _rangeDataChanged = _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type);
 
     if (_type == BaseScale::ScaleType::ORDINAL) {
       _setDefaultFromJSONObj(obj, objPath);
     }
+
+    rtn = rtn || _domainDataChanged || _rangeDataChanged;
   } else if (_jsonPath != objPath) {
+    _domainDataChanged = _rangeDataChanged = false;
+
     _domainPtr.updateJSONPath(objPath);
     _rangePtr.updateJSONPath(objPath);
     _updateDefaultJSONPath(objPath);
   }
 
   _jsonPath = objPath;
+
+  return rtn;
 }
 
 template <typename DomainType, typename RangeType>
@@ -792,10 +828,27 @@ void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData, 
   }
 }
 
+template <class T>
+void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData,
+                            ScaleDomainRangeData<ColorRGBA>* srcData) {
+  THROW_RUNTIME_EX("Cannot convert a color to a numeric value.");
+}
+
 template <class TT>
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
                             ScaleDomainRangeData<TT>* srcData) {
   THROW_RUNTIME_EX("Cannot convert a numeric value to a color.");
+}
+
+void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
+                            ScaleDomainRangeData<ColorRGBA>* srcData) {
+  std::vector<ColorRGBA>& srcVec = srcData->getVectorData();
+
+  destData.reset(new ScaleDomainRangeData<ColorRGBA>(srcData->getName(), srcVec.size(), srcData->useString()));
+  std::vector<ColorRGBA>& destVec = destData->getVectorData();
+  for (size_t i = 0; i < srcVec.size(); ++i) {
+    destVec[i] = srcVec[i];
+  }
 }
 
 template <typename DomainType, typename RangeType>
@@ -803,60 +856,89 @@ ScaleRef<DomainType, RangeType>::ScaleRef(const QueryRendererContextShPtr& ctx,
                                           const ScaleShPtr& scalePtr,
                                           BaseRenderProperty* rndrProp)
     : BaseScaleRef(ctx, scalePtr, rndrProp), _coercedDomainData(nullptr), _coercedRangeData(nullptr) {
+  _updateDomainRange(true, true);
+}
+
+template <typename DomainType, typename RangeType>
+void ScaleRef<DomainType, RangeType>::_updateDomainRange(bool updateDomain, bool updateRange, bool force) {
+  CHECK(_scalePtr != nullptr);
+
   ScaleDomainRangeData<unsigned int>* uintDomain;
   ScaleDomainRangeData<int>* intDomain;
   ScaleDomainRangeData<float>* floatDomain;
   ScaleDomainRangeData<double>* doubleDomain;
   ScaleDomainRangeData<std::string>* stringDomain;
+  ScaleDomainRangeData<ColorRGBA>* colorDomain;
+  bool doSort = false;
 
-  BaseScaleDomainRangeData* domainData = scalePtr->getDomainData();
-  BaseScaleDomainRangeData* rangeData = scalePtr->getRangeData();
+  if (updateDomain) {
+    BaseScaleDomainRangeData* domainDataPtr = _scalePtr->getDomainData();
+    if (force || domainDataPtr->getTypeInfo() != typeid(DomainType)) {
+      uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(domainDataPtr);
+      intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(domainDataPtr);
+      floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(domainDataPtr);
+      doubleDomain = dynamic_cast<ScaleDomainRangeData<double>*>(domainDataPtr);
+      stringDomain = dynamic_cast<ScaleDomainRangeData<std::string>*>(domainDataPtr);
 
-  if (domainData->getTypeInfo() != typeid(DomainType)) {
-    uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(domainData);
-    intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(domainData);
-    floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(domainData);
-    doubleDomain = dynamic_cast<ScaleDomainRangeData<double>*>(domainData);
-    stringDomain = dynamic_cast<ScaleDomainRangeData<std::string>*>(domainData);
-
-    if (uintDomain) {
-      convertDomainRangeData(_coercedDomainData, uintDomain);
-    } else if (intDomain) {
-      convertDomainRangeData(_coercedDomainData, intDomain);
-    } else if (floatDomain) {
-      convertDomainRangeData(_coercedDomainData, floatDomain);
-    } else if (doubleDomain) {
-      convertDomainRangeData(_coercedDomainData, doubleDomain);
-    } else if (stringDomain) {
-      _doStringToDataConversion(stringDomain);
+      if (uintDomain) {
+        convertDomainRangeData(_coercedDomainData, uintDomain);
+      } else if (intDomain) {
+        convertDomainRangeData(_coercedDomainData, intDomain);
+      } else if (floatDomain) {
+        convertDomainRangeData(_coercedDomainData, floatDomain);
+      } else if (doubleDomain) {
+        convertDomainRangeData(_coercedDomainData, doubleDomain);
+      } else if (stringDomain) {
+        _doStringToDataConversion(stringDomain);
+        doSort = true;
+      } else {
+        THROW_RUNTIME_EX("Cannot create scale reference - unsupported domain type.");
+      }
     } else {
-      THROW_RUNTIME_EX("Cannot create scale reference - unsupported domain type.");
+      _coercedDomainData = nullptr;
     }
-  } else {
-    _coercedDomainData = nullptr;
   }
 
-  if (rangeData->getTypeInfo() != typeid(RangeType)) {
-    uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(rangeData);
-    intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(rangeData);
-    floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(rangeData);
-    doubleDomain = dynamic_cast<ScaleDomainRangeData<double>*>(rangeData);
-    stringDomain = dynamic_cast<ScaleDomainRangeData<std::string>*>(rangeData);
+  if (updateRange) {
+    BaseScaleDomainRangeData* rangeDataPtr = _scalePtr->getRangeData();
+    if (force || rangeDataPtr->getTypeInfo() != typeid(RangeType)) {
+      uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(rangeDataPtr);
+      intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(rangeDataPtr);
+      floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(rangeDataPtr);
+      doubleDomain = dynamic_cast<ScaleDomainRangeData<double>*>(rangeDataPtr);
+      stringDomain = dynamic_cast<ScaleDomainRangeData<std::string>*>(rangeDataPtr);
+      colorDomain = dynamic_cast<ScaleDomainRangeData<ColorRGBA>*>(rangeDataPtr);
 
-    if (uintDomain) {
-      convertDomainRangeData(_coercedRangeData, uintDomain);
-    } else if (intDomain) {
-      convertDomainRangeData(_coercedRangeData, intDomain);
-    } else if (floatDomain) {
-      convertDomainRangeData(_coercedRangeData, floatDomain);
-    } else if (doubleDomain) {
-      convertDomainRangeData(_coercedRangeData, doubleDomain);
+      if (uintDomain) {
+        convertDomainRangeData(_coercedRangeData, uintDomain);
+      } else if (intDomain) {
+        convertDomainRangeData(_coercedRangeData, intDomain);
+      } else if (floatDomain) {
+        convertDomainRangeData(_coercedRangeData, floatDomain);
+      } else if (doubleDomain) {
+        convertDomainRangeData(_coercedRangeData, doubleDomain);
+      } else if (force && colorDomain) {
+        convertDomainRangeData(_coercedRangeData, colorDomain);
+      } else {
+        THROW_RUNTIME_EX("Cannot create scale reference - unsupported range type.");
+      }
     } else {
-      THROW_RUNTIME_EX("Cannot create scale reference - unsupported range type.");
+      _coercedRangeData = nullptr;
     }
-  } else {
-    _coercedRangeData = nullptr;
   }
+
+  if (doSort) {
+    _sort();
+  }
+}
+
+template <typename DomainType, typename RangeType>
+void ScaleRef<DomainType, RangeType>::updateScaleRef(const ScaleShPtr& scalePtr) {
+  if (scalePtr != _scalePtr) {
+    _scalePtr = scalePtr;
+  }
+
+  _updateDomainRange(_scalePtr->hasDomainDataChanged(), _scalePtr->hasRangeDataChanged());
 }
 
 template <typename DomainType, typename RangeType>
@@ -945,10 +1027,14 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
                         "convert a string column");
 
   std::string colName = _rndrPropPtr->getDataColumnName();
+  colName = "origin";
   RUNTIME_EX_ASSERT(
       colName.length() != 0,
       "The render property \"" + _rndrPropPtr->getName() +
           "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
+
+  const std::unique_ptr<QueryDataLayout>& queryDataLayoutPtr = _ctx->getQueryDataLayout();
+  CHECK(queryDataLayoutPtr != nullptr);
 
   std::vector<std::string>& vec = domainData->getVectorData();
   _coercedDomainData.reset(
@@ -957,6 +1043,49 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
   for (size_t i = 0; i < vec.size(); ++i) {
     // get data from the executor
     coercedVec[i] = static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i]));
+  }
+}
+
+template <typename DomainType, typename RangeType>
+void ScaleRef<DomainType, RangeType>::_sort() {
+  _verifyScalePointer();
+
+  bool hasDomain = (_coercedDomainData != nullptr);
+  bool hasRange = (_coercedRangeData != nullptr);
+
+  // force a copy of both the domain and range to sort
+  _updateDomainRange(!hasDomain, !hasRange, true);
+
+  // TODO(croot): somehow do a sort in place? Not sure how to do this without
+  // creating an iterator class on the ScaleRef objects (which might be nice
+  // to do in the future). So, for now, I'm just copying all the domain/range
+  // data as pairs into a vector, sorting that vector based on the domain, and
+  // placing the results back. Very hacky, but since domains/ranges should on the
+  // whole be small, this shouldn't be a big bottle neck.
+
+  // TODO(croot): Possible bug -- the size of the domains/ranges don't have to
+  // be equal. You can have more domains than ranges and vice-versa. So we need
+  // to sort by the smaller of the two and leave the hanging items alone.
+
+  std::vector<DomainType>& domainVec = _coercedDomainData->getVectorData();
+  std::vector<RangeType>& rangeVec = _coercedRangeData->getVectorData();
+
+  int numItems = std::min(domainVec.size(), rangeVec.size());
+  std::vector<std::pair<DomainType, RangeType>> sortVec(numItems);
+
+  int i;
+  for (i = 0; i < numItems; ++i) {
+    sortVec[i] = std::make_pair(domainVec[i], rangeVec[i]);
+  }
+
+  std::sort(sortVec.begin(),
+            sortVec.end(),
+            [](const std::pair<DomainType, RangeType>& a,
+               const std::pair<DomainType, RangeType>& b) { return a.first < b.first; });
+
+  for (i = 0; i < numItems; ++i) {
+    domainVec[i] = sortVec[i].first;
+    rangeVec[i] = sortVec[i].second;
   }
 }
 
@@ -1027,7 +1156,8 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     } else {
       // need some value source, either by "field" or by "value"
       THROW_RUNTIME_EX(
-          "JSON parse error - invalid mark property object. Must contain a data reference via a \"field\" property or "
+          "JSON parse error - invalid mark property object. Must contain a data reference via a \"field\" property "
+          "or "
           "a \"value\" property.");
     }
 
@@ -1055,6 +1185,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 
       if (_scaleConfigPtr) {
         _prntMark->setShaderDirty();
+        _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
       }
 
       _scaleConfigPtr = nullptr;
@@ -1069,7 +1200,13 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     _scaleJsonPath = rapidjson::Pointer();
     _dataPtr = nullptr;
     _vboAttrName = "";
+
+    if (_scaleConfigPtr) {
+      _prntMark->setShaderDirty();
+      _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
+    }
     _scaleConfigPtr = nullptr;
+
     _initValueFromJSONObj(obj);
   }
 }
@@ -1117,6 +1254,24 @@ std::string BaseRenderProperty::getOutGLSLType() const {
   return (_outType->glslType());
 }
 
+template <typename T, int numComponents>
+RenderProperty<T, numComponents>::RenderProperty(BaseMark* prntMark,
+                                                 const std::string& name,
+                                                 const QueryRendererContextShPtr& ctx,
+                                                 bool useScale,
+                                                 bool flexibleType)
+    : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset() {
+  _inType.reset(new TypeGL<T, numComponents>());
+  _outType.reset(new TypeGL<T, numComponents>());
+}
+
+template <typename T, int numComponents>
+RenderProperty<T, numComponents>::~RenderProperty() {
+  if (_scaleConfigPtr) {
+    _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
+  }
+}
+
 template <>
 RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
                                              const std::string& name,
@@ -1146,12 +1301,18 @@ void RenderProperty<T, numComponents>::_initScaleFromJSONObj(const rapidjson::Va
       scalePtr != nullptr,
       "JSON parse error - the scale \"" + std::string(obj.GetString()) + "\" does not exist in the json.");
 
+  _updateScalePtr(scalePtr);
+}
+
+template <typename T, int numComponents>
+void RenderProperty<T, numComponents>::_updateScalePtr(const ScaleShPtr& scalePtr) {
   if (!_scaleConfigPtr) {
     _prntMark->setShaderDirty();
   } else {
     ScaleShPtr prevPtr = _scaleConfigPtr->getScalePtr();
     if (!prevPtr || scalePtr.get() != prevPtr.get()) {
       _prntMark->setShaderDirty();
+      _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
     }
   }
 
@@ -1167,6 +1328,11 @@ void RenderProperty<T, numComponents>::_initScaleFromJSONObj(const rapidjson::Va
     THROW_RUNTIME_EX("Scale domain with shader type \"" + scalePtr->getDomainTypeGL()->glslType() +
                      "\" and data with shader type \"" + _inType->glslType() + "\" are not supported to work together");
   }
+
+  // setup callbacks for scale updates
+  _scaleRefSubscriptionCB = std::bind(
+      &RenderProperty<T, numComponents>::_scaleRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
+  _ctx->subscribeToRefEvent(RefEventType::ALL, scalePtr, _scaleRefSubscriptionCB);
 }
 
 template <typename T, int numComponents>
@@ -1303,6 +1469,28 @@ void RenderProperty<ColorRGBA, 1>::_verifyScale() {
   // colors need to be a specific type
   RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(vboType),
                     "Vertex buffer to use for mark property \"" + _name + "\" is not an appropriate type for colors.");
+}
+
+template <typename T, int numComponents>
+void RenderProperty<T, numComponents>::_scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) {
+  switch (refEventType) {
+    case RefEventType::UPDATE:
+      _scaleConfigPtr->updateScaleRef(scalePtr);
+
+      if (scalePtr->hasClampChanged() || scalePtr->hasDomainDataChanged() || scalePtr->hasRangeDataChanged()) {
+        _prntMark->setShaderDirty();
+      }
+      break;
+    case RefEventType::REPLACE:
+      _updateScalePtr(scalePtr);
+      break;
+    case RefEventType::REMOVE:
+      break;
+    default:
+      THROW_RUNTIME_EX("Ref event type: " + std::to_string(static_cast<int>(refEventType)) +
+                       " isn't currently supported for scale reference updates.");
+      break;
+  }
 }
 
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
@@ -1585,6 +1773,8 @@ void PointMark::_updateShader() {
     return;
   }
 
+  std::cerr << "CROOT - Updating Shader!!" << std::endl;
+
   std::string vertSrc(PointTemplate_Vert::source);
 
   std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
@@ -1672,6 +1862,9 @@ void PointMark::_updateShader() {
   _shaderPtr.reset(new Shader(vertSrc, fragSrc));
 
   _shaderDirty = false;
+
+  // set the props dirty to force a rebind with the new shader
+  setPropsDirty();
 }
 
 void PointMark::_initPropertiesForRendering(Shader* activeShader) {
@@ -1725,6 +1918,10 @@ void PointMark::_bindPropertiesToRenderer(Shader* activeShader) {
 }
 
 void PointMark::draw() {
+  // make sure the shader is up-to-date
+  _updateShader();
+
+  // now bind the shader
   _shaderPtr->bindToRenderer();
 
   _bindToRenderer(_shaderPtr.get());
@@ -1745,11 +1942,12 @@ void PointMark::draw() {
   MAPD_CHECK_GL_ERROR(glDisable(GL_PROGRAM_POINT_SIZE));
 }
 
-void PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+  bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
     BaseMark::_initFromJSONObj(obj, objPath);
     _initPropertiesFromJSONObj(obj, objPath);
-    _updateShader();
+    rtn = true;
   } else if (_jsonPath != objPath) {
     // TODO(croot) - Bug! What if the cache is up-to-date, but the path has changed -- we need to update
     // the paths for this and all sub-objects that manage paths.
@@ -1767,6 +1965,8 @@ void PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::
   // to trickle that path change to all subobjects who cache their
   // json data. How should we handle this?
   _jsonPath = objPath;
+
+  return rtn;
 }
 
 BaseMark::GeomType MapD_Renderer::getMarkTypeFromJSONObj(const rapidjson::Value& obj) {

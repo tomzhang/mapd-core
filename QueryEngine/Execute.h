@@ -3,6 +3,7 @@
 
 #ifdef HAVE_RENDERING
 #include "../QueryRenderer/QueryRenderManager.h"
+#include "../QueryRenderer/QueryDataLayout.h"
 #include <GLFW/glfw3.h>
 #else
 typedef void GLFWwindow;

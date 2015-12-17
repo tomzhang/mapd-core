@@ -154,6 +154,29 @@ class BaseBufferLayout {
     return (*itr)->type;
   }
 
+  const BufferAttrInfo& getAttributeInfo(const std::string& attrName) {
+    // TODO(croot): consolidate this code with those in the above two functions
+    // into a single getBufferAttrInfo func or something.
+    BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
+    BufferAttrMap_by_name::iterator itr;
+
+    RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
+                      "BaseBufferLayout::getAttributeInfo(): attribute " + attrName + " does not exist in layout.");
+
+    return **itr;
+  }
+
+  // TODO(croot): add an iterator to iterate over the attributes?
+  int numAttributes() { return _attrMap.size(); }
+
+  const BufferAttrInfo& operator[](size_t i) {
+    RUNTIME_EX_ASSERT(i < _attrMap.size(),
+                      "BaseBufferLayout::operator[]: cannot retrieve attribute info at index: " + std::to_string(i) +
+                          ". The layout only has " + std::to_string(_attrMap.size()) + " attributes.");
+
+    return *_attrMap[i];
+  }
+
   virtual void bindToRenderer(Shader* activeShader,
                               int numActiveBufferItems,
                               const std::string& attr = "",

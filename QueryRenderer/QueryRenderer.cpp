@@ -163,6 +163,7 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
     _ctx->_dataTableMap.clear();
   }
 
+  std::array<std::vector<ScaleShPtr>, static_cast<size_t>(RefEventType::ALL)> scaleEvents;
   propName = "scales";
   mitr = obj->FindMember(propName.c_str());
   if (mitr != obj->MemberEnd()) {
@@ -191,6 +192,8 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
       if (!scalePtr) {
         scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
         _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
+
+        // TODO(croot): add an Add event type?
       } else {
         // TODO(croot): scale config is changing. Need to validate any previously existing references.
         // One way to do this is store a map of all objects changing in-place in order to
@@ -203,8 +206,12 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
           _ctx->_scaleConfigMap.erase(scaleName);
           scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
           _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
+
+          scaleEvents[static_cast<size_t>(RefEventType::REPLACE)].push_back(scalePtr);
         } else {
-          scalePtr->updateFromJSONObj(*vitr, scaleObjPath);
+          if (scalePtr->updateFromJSONObj(*vitr, scaleObjPath)) {
+            scaleEvents[static_cast<size_t>(RefEventType::UPDATE)].push_back(scalePtr);
+          }
         }
       }
 
@@ -213,8 +220,10 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
     }
 
     // now remove any unused scales that may be lingering around
-    for (const auto& itr : unvisitedNames) {
-      _ctx->_scaleConfigMap.erase(itr);
+    for (const auto& unvisitedName : unvisitedNames) {
+      scalePtr = _ctx->getScale(unvisitedName);
+      _ctx->_scaleConfigMap.erase(unvisitedName);
+      scaleEvents[static_cast<size_t>(RefEventType::REMOVE)].push_back(scalePtr);
     }
 
   } else {
@@ -254,6 +263,13 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
     }
   } else {
     _ctx->_geomConfigs.clear();
+  }
+
+  // now fire events so dependencies are cleaned and validated
+  for (size_t i = 0; i < scaleEvents.size(); ++i) {
+    for (auto scalePtr : scaleEvents[i]) {
+      _ctx->_fireRefEvent(static_cast<RefEventType>(i), scalePtr);
+    }
   }
 
   _ctx->_jsonCache = jsonDocumentPtr;
@@ -298,12 +314,29 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
   _initFromJSON(jsonDocumentPtr, forceUpdate, win);
 }
 
-void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
-                                                     const int numRows,
-                                                     const int64_t invalid_key) {
-  _ctx->_queryResultBufferLayout = layoutPtr;
-  _ctx->_queryResultVBOPtr->updatePostQuery(layoutPtr, numRows);
-  _ctx->_invalidKey = invalid_key;
+// void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
+//                                                      const int numRows,
+//                                                      const int64_t invalid_key) {
+//   _ctx->_queryResultBufferLayout = layoutPtr;
+//   _ctx->_queryResultVBOPtr->updatePostQuery(layoutPtr, numRows);
+//   _ctx->_invalidKey = invalid_key;
+
+//   // TODO(croot): Should each mark have its own invalid key? Probably, if we support
+//   // multiple sqls.
+//   // But if we deal with multiple sqls, then the context probably shouldn't
+//   // hold onto the invalidKey - the QueryResultVertexBuffer probably should, but
+//   // then how do we deal with setting that uniform?
+//   for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+//     _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
+//   }
+// }
+
+void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr) {
+  int numRows = dataLayoutPtr->numRows;
+  _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
+  _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
+  _ctx->_invalidKey = dataLayoutPtr->invalidKey;
+  _ctx->_queryDataLayoutPtr.reset(dataLayoutPtr);
 
   // TODO(croot): Should each mark have its own invalid key? Probably, if we support
   // multiple sqls.
@@ -322,8 +355,8 @@ void QueryRenderer::render() {
 
   MAPD_CHECK_GL_ERROR(glEnable(GL_BLEND));
   MAPD_CHECK_GL_ERROR(glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD));
-  //MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
-  //MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
+  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
+  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
   MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
 
   MAPD_CHECK_GL_ERROR(glClearColor(0, 0, 0, 0));
@@ -379,6 +412,85 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
   }
 
   return rtn;
+}
+
+void QueryRendererContext::subscribeToRefEvent(RefEventType eventType,
+                                               const ScaleShPtr& eventObj,
+                                               RefEventCallback cb) {
+  const std::string& eventObjName = eventObj->getNameRef();
+  RUNTIME_EX_ASSERT(
+      hasScale(eventObjName),
+      "Cannot subscribe to event for scale \"" + eventObj->getNameRef() + "\". The scale does not exist.");
+
+  EventCallbacksMap::iterator itr;
+
+  if ((itr = _eventCallbacksMap.find(eventObjName)) == _eventCallbacksMap.end()) {
+    itr = _eventCallbacksMap.insert(itr, std::make_pair(eventObjName, std::move(EventCallbacksArray())));
+  }
+
+  size_t idx = static_cast<size_t>(eventType);
+  if (eventType == RefEventType::ALL) {
+    for (size_t i = 0; i < idx; ++i) {
+      itr->second[i].insert(cb);
+    }
+  } else {
+    itr->second[idx].insert(cb);
+  }
+}
+
+void QueryRendererContext::unsubscribeFromRefEvent(RefEventType eventType,
+                                                   const ScaleShPtr& eventObj,
+                                                   RefEventCallback cb) {
+  EventCallbacksMap::iterator mitr;
+  EventCallbackList::iterator sitr;
+  const std::string& eventObjName = eventObj->getNameRef();
+
+  if ((mitr = _eventCallbacksMap.find(eventObjName)) != _eventCallbacksMap.end()) {
+    size_t idx = static_cast<size_t>(eventType);
+
+    if (eventType == RefEventType::ALL) {
+      for (size_t i = 0; i < idx; ++i) {
+        if ((sitr = mitr->second[i].find(cb)) != mitr->second[i].end()) {
+          mitr->second[i].erase(sitr);
+        }
+      }
+    } else {
+      if ((sitr = mitr->second[idx].find(cb)) != mitr->second[idx].end()) {
+        mitr->second[idx].erase(sitr);
+      }
+    }
+  }
+
+  // TODO(croot): throw an error or warning?
+}
+
+void QueryRendererContext::_fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj) {
+  CHECK(eventType != RefEventType::ALL);
+
+  EventCallbacksMap::iterator mitr;
+  const std::string& eventObjName = eventObj->getNameRef();
+
+  if ((mitr = _eventCallbacksMap.find(eventObjName)) != _eventCallbacksMap.end()) {
+    size_t idx = static_cast<size_t>(eventType);
+
+    std::vector<RefEventCallback> callbacksToCall(mitr->second[idx].size());
+
+    int i = 0;
+    for (auto& cb : mitr->second[idx]) {
+      // callbacks have the ability to subscribe and unsubscribe from the events
+      // so we can't just call them here while looping through the data structure
+      // that holds the callbacks as that data structure can be modified mid-stream.
+      // So we'll store an additional data structure for all callbacks that need
+      // calling and call them.
+      callbacksToCall[i++] = cb;
+    }
+
+    for (auto& cb : callbacksToCall) {
+      cb(eventType, eventObj);
+    }
+  }
+
+  // TODO(croot): throw an error or warning if eventObj not found in map?
 }
 
 // void QueryRenderer::_buildShaderFromGeomConfig(const GeomConfigPtr& geomConfigPtr) {

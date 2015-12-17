@@ -22,6 +22,7 @@
 namespace MapD_Renderer {
 
 class QueryRendererContext;
+enum class RefEventType;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 
 class BaseScaleDomainRangeData {
@@ -65,8 +66,8 @@ class BaseScale {
 
   virtual ~BaseScale();
 
-  // std::string getName() { return name; }
-  const std::string& getNameRef() { return _name; }
+  std::string getName() { return _name; }
+  const std::string& getNameRef() const { return _name; }
   ScaleType getType() { return _type; }
 
   DataType getDomainDataType() { return _domainDataType; }
@@ -103,27 +104,34 @@ class BaseScale {
   virtual BaseScaleDomainRangeData* getDomainData() = 0;
   virtual BaseScaleDomainRangeData* getRangeData() = 0;
 
-  virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+  virtual bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+
+  bool hasClampChanged() { return _clampChanged; }
+  bool hasDomainDataChanged() { return _domainDataChanged; }
+  bool hasRangeDataChanged() { return _rangeDataChanged; }
 
  protected:
   std::string _name;
   ScaleType _type;
 
   bool _useClamp;
+  bool _clampChanged;
 
   // TODO(croot): somehow consolidate all the types and use typeid() or the like
   // to handle type-ness.
   DataType _domainDataType;
   TypeGLShPtr _domainTypeGL;
+  bool _domainDataChanged;
 
   DataType _rangeDataType;
   TypeGLShPtr _rangeTypeGL;
+  bool _rangeDataChanged;
 
   QueryRendererContextShPtr _ctx;
 
   rapidjson::Pointer _jsonPath;
 
-  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  bool _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
  private:
 };
@@ -141,7 +149,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
       : BaseScaleDomainRangeData(name, useString), _vectorPtr(new std::vector<T>(size)), _cachedTypeGL(nullptr) {}
   ~ScaleDomainRangeData() {}
 
-  void initializeFromJSONObj(const rapidjson::Value& obj,
+  bool initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
                              const QueryRendererContextShPtr& ctx,
                              BaseScale::ScaleType type);
@@ -228,7 +236,7 @@ class Scale : public BaseScale {
   BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
-  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
  private:
   // std::vector<DomainType> _domain;
@@ -304,6 +312,8 @@ class BaseScaleRef {
     return _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix);
   }
 
+  virtual void updateScaleRef(const ScaleShPtr& scalePtr) = 0;
+
   ScaleShPtr getScalePtr() { return _scalePtr; }
 
  protected:
@@ -329,6 +339,7 @@ class ScaleRef : public BaseScaleRef {
 
   std::string getGLSLCode(const std::string& extraSuffix = "");
 
+  void updateScaleRef(const ScaleShPtr& scalePtr);
   void bindUniformsToRenderer(Shader* activeShader, const std::string& extraSuffix = "");
 
  private:
@@ -336,7 +347,9 @@ class ScaleRef : public BaseScaleRef {
   std::unique_ptr<ScaleDomainRangeData<RangeType>> _coercedRangeData;
   std::unique_ptr<RangeType> _coercedDefaultVal;
 
+  void _updateDomainRange(bool updateDomain, bool updateRange, bool force = false);
   void _doStringToDataConversion(ScaleDomainRangeData<std::string>* domainData);
+  void _sort();
 };
 
 class BaseRenderProperty {
@@ -433,11 +446,17 @@ class BaseRenderProperty {
   rapidjson::Pointer _valueJsonPath;
   rapidjson::Pointer _scaleJsonPath;
 
+  // TODO(croot): redefining RefEventCallback here, so we should have a "types"
+  // header file somewhere
+  typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
+  RefEventCallback _scaleRefSubscriptionCB;
+
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initTypeFromVbo() = 0;
   virtual void _verifyScale() = 0;
+  virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
 };
 
 template <typename T, int numComponents = 1>
@@ -447,12 +466,14 @@ class RenderProperty : public BaseRenderProperty {
                  const std::string& name,
                  const QueryRendererContextShPtr& ctx,
                  bool useScale = true,
-                 bool flexibleType = true)
-      : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset() {
-    _inType.reset(new TypeGL<T, numComponents>());
-    _outType.reset(new TypeGL<T, numComponents>());
-  }
-  ~RenderProperty() {}
+                 bool flexibleType = true);
+  //     : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset() {
+  //   _inType.reset(new TypeGL<T, numComponents>());
+  //   _outType.reset(new TypeGL<T, numComponents>());
+  // }
+  ~RenderProperty();  //{
+  // _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
+  //}
 
   void initializeValue(const T& val);
   void bindUniformToRenderer(Shader* activeShader, const std::string& uniformAttrName) const;
@@ -463,10 +484,12 @@ class RenderProperty : public BaseRenderProperty {
   T _uniformVal;
 
   void _initScaleFromJSONObj(const rapidjson::Value& obj);
+  void _updateScalePtr(const ScaleShPtr& scalePtr);
   void _initFromJSONObj(const rapidjson::Value& obj);
   void _initValueFromJSONObj(const rapidjson::Value& obj);
   void _initTypeFromVbo();
   void _verifyScale();
+  void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr);
 };
 
 template <>
@@ -521,7 +544,7 @@ class BaseMark {
 
   void setInvalidKey(const int64_t invalidKey) { _invalidKey = invalidKey; }
 
-  virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+  virtual bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
 
  protected:
   GeomType _type;
@@ -578,7 +601,7 @@ class PointMark : public BaseMark {
 
   void draw();
 
-  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
  private:
   RenderProperty<float> x;
