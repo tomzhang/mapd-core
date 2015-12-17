@@ -186,7 +186,12 @@ class Executor {
 
   int64_t getRowidForPixel(const int64_t x, const int64_t y, const int session_id, const int render_widget_id);
 
-  int32_t getStringId(const std::string& table_name, const std::string& col_name, const std::string& col_val) const;
+#ifdef HAVE_RENDERING
+  int32_t getStringId(const std::string& table_name,
+                      const std::string& col_name,
+                      const std::string& col_val,
+                      const MapD_Renderer::QueryDataLayout*) const;
+#endif  // HAVE_RENDERING
 
   StringDictionary* getStringDictionary(const int dictId,
                                         const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner) const;

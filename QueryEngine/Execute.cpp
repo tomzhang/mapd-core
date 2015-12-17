@@ -404,18 +404,35 @@ std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targ
 
   std::vector<std::string> attr_names{"key"};
   std::vector<MapD_Renderer::QueryDataLayout::AttrType> attr_types{MapD_Renderer::QueryDataLayout::AttrType::INT64};
+  std::unordered_map<std::string, std::string> alias_to_name;
 
   for (const auto te : targets) {
-    attr_names.push_back(te->get_resname());
-    attr_types.push_back(sql_type_to_render_type(te->get_expr()->get_type_info()));
+    const auto alias = te->get_resname();
+    attr_names.push_back(alias);
+    const auto target_expr = te->get_expr();
+    attr_types.push_back(sql_type_to_render_type(target_expr->get_type_info()));
+    const auto col_var = dynamic_cast<const Analyzer::ColumnVar*>(target_expr);
+    if (col_var) {
+      const int col_id = col_var->get_column_id();
+      const auto cd = get_column_descriptor(col_id, col_var->get_table_id(), *catalog_);
+      CHECK(cd);
+      const auto it_ok = alias_to_name.insert(std::make_pair(alias, cd->columnName));
+      CHECK(it_ok.second);
+    }
   }
 
   // TODO(alex): make it more general, only works for projection queries
   const size_t row_bytes{(targets.size() + 1) * sizeof(int64_t)};
   CHECK_EQ(size_t(0), used_bytes % row_bytes);
   const size_t num_rows{used_bytes / row_bytes};
-  MapD_Renderer::QueryDataLayout* query_data_layout = new MapD_Renderer::QueryDataLayout(
-      num_rows, attr_names, attr_types, 0, EMPTY_KEY, MapD_Renderer::QueryDataLayout::LayoutType::INTERLEAVED);
+  MapD_Renderer::QueryDataLayout* query_data_layout =
+      new MapD_Renderer::QueryDataLayout(num_rows,
+                                         attr_names,
+                                         attr_types,
+                                         alias_to_name,
+                                         0,
+                                         EMPTY_KEY,
+                                         MapD_Renderer::QueryDataLayout::LayoutType::INTERLEAVED);
   render_manager_->configureRender(json_doc, query_data_layout);
 
   const auto png_data = render_manager_->renderToPng(3);
@@ -432,14 +449,16 @@ int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y, const int s
   return render_manager_->getIdAt(x, y);
 }
 
-#endif  // HAVE_RENDERING
-
 int32_t Executor::getStringId(const std::string& table_name,
                               const std::string& col_name,
-                              const std::string& col_val) const {
+                              const std::string& col_val,
+                              const MapD_Renderer::QueryDataLayout* query_data_layout) const {
   const auto td = catalog_->getMetadataForTable(table_name);
   CHECK(td);
-  const auto cd = catalog_->getMetadataForColumn(td->tableId, col_name);
+  CHECK(query_data_layout);
+  const auto col_real_name_it = query_data_layout->attrAliasToName.find(col_name);
+  CHECK(col_real_name_it != query_data_layout->attrAliasToName.end());
+  const auto cd = catalog_->getMetadataForColumn(td->tableId, col_real_name_it->second);
   CHECK(cd);
   CHECK(cd->columnType.is_string() && cd->columnType.get_compression() == kENCODING_DICT);
   const int dict_id = cd->columnType.get_comp_param();
@@ -447,6 +466,8 @@ int32_t Executor::getStringId(const std::string& table_name,
   CHECK(sd);
   return sd->get(col_val);
 }
+
+#endif  // HAVE_RENDERING
 
 StringDictionary* Executor::getStringDictionary(const int dict_id_in,
                                                 std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner) const {

@@ -1041,7 +1041,8 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
   std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
   for (size_t i = 0; i < vec.size(); ++i) {
     // get data from the executor
-    coercedVec[i] = static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i]));
+    coercedVec[i] =
+        static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i], queryDataLayoutPtr.get()));
   }
 }
 

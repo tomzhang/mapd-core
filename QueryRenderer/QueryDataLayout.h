@@ -4,6 +4,7 @@
 #include "QueryRendererError.h"
 #include "BufferLayout.h"
 
+#include <unordered_map>
 #include <vector>
 
 namespace MapD_Renderer {
@@ -23,11 +24,13 @@ struct QueryDataLayout {
   int64_t invalidKey;
   std::vector<std::string> attrNames;
   std::vector<AttrType> attrTypes;
+  std::unordered_map<std::string, std::string> attrAliasToName;
   LayoutType layoutType;
 
   QueryDataLayout(const size_t numRows,
                   const std::vector<std::string>& attrNames,
                   const std::vector<AttrType>& attrTypes,
+                  const std::unordered_map<std::string, std::string>& attrAliasToName,
                   const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant
                                              // except the first key, which would be the one to check the invalid key
                                              // against.
@@ -38,6 +41,7 @@ struct QueryDataLayout {
         invalidKey(invalidKey),
         attrNames(attrNames),
         attrTypes(attrTypes),
+        attrAliasToName(attrAliasToName),
         layoutType(layoutType) {
     RUNTIME_EX_ASSERT(
         attrNames.size() == attrTypes.size(),
