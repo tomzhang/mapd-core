@@ -590,10 +590,10 @@ void Scale<DomainType, RangeType>::bindUniformsToRenderer(Shader* activeShader,
 
   if (!ignoreRange) {
     activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorData());
+  }
 
-    if (_type == ScaleType::ORDINAL) {
-      activeShader->setUniformAttribute(getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
-    }
+  if (_type == ScaleType::ORDINAL) {
+    activeShader->setUniformAttribute(getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
   }
 }
 

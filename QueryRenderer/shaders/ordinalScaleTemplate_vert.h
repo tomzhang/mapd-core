@@ -48,6 +48,8 @@ const std::string OrdinalScaleTemplate_vert::source =
     "            idx = startIdx;\n"
     "        } else if (category == uDomains_<name>[endIdx]) {\n"
     "            idx = endIdx;\n"
+    "        } else if (category < uDomains_<name>[startIdx] || category > uDomains_<name>[endIdx]) {\n"
+    "            idx = -1;\n"
     "        } else {\n"
     "            while (true) {\n"
     "                midIdx = startIdx + ((endIdx - startIdx) / 2);\n"
