@@ -1027,7 +1027,6 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
                         "convert a string column");
 
   std::string colName = _rndrPropPtr->getDataColumnName();
-  colName = "origin";
   RUNTIME_EX_ASSERT(
       colName.length() != 0,
       "The render property \"" + _rndrPropPtr->getName() +
