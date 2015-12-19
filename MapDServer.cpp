@@ -1210,6 +1210,7 @@ class MapDHandler : virtual public MapDIf {
                                                    session_info.get_currentUser().passwd,
                                                    session_info.get_catalog().get_currentDB().dbName,
                                                    query_str);
+            // LOG(INFO) << " query plan from calcite " << query_ra;
             root_plan = translate_query(query_ra, session_info.get_catalog());
             CHECK(root_plan);
             execute_root_plan(_return, root_plan, column_format, session_info, executor_device_type);
@@ -1315,7 +1316,7 @@ void start_server(TThreadedServer& server) {
 int main(int argc, char** argv) {
   int port = 9091;
   int http_port = 9090;
-  int calcite_port = 9092;
+  int calcite_port = 9093;
   std::string base_path;
   std::string device("gpu");
   std::string config_file("mapd.conf");
