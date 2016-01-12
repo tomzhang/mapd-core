@@ -396,7 +396,7 @@ void set_render_widget(MapD_Renderer::QueryRenderManager* render_manager,
 
 }  // namespace
 
-std::string Executor::renderRows(const std::vector<Analyzer::TargetEntry*>& targets,
+std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::TargetEntry>>& targets,
                                  const std::string& config_json,
                                  const size_t used_bytes,
                                  const int session_id,
