@@ -289,11 +289,14 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
           throw std::runtime_error("Ran out of slots in the output buffer");
         }
         catalog_->get_dataMgr().cudaMgr_->setContext(0);
-        return ResultRows(renderRows(root_plan->get_plan()->get_targetlist(),
-                                     root_plan->get_render_type(),
-                                     render_allocator->getAllocatedSize(),
-                                     session_id,
-                                     render_widget_id));
+        auto clock_begin = timer_start();
+        auto rrows = renderRows(root_plan->get_plan()->get_targetlist(),
+                                root_plan->get_render_type(),
+                                render_allocator->getAllocatedSize(),
+                                session_id,
+                                render_widget_id);
+        int64_t render_time_ms = timer_stop(clock_begin);
+        return ResultRows(rrows, queue_time_ms, render_time_ms);
       }
 #endif  // HAVE_RENDERING
       if (error_code == ERR_DIV_BY_ZERO) {
