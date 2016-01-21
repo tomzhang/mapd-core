@@ -45,6 +45,7 @@
 #ifdef HAVE_RENDERING
 #include <GLFW/glfw3.h>
 #include <GL/glew.h>
+#include <time.h>
 #endif  // HAVE_RENDERING
 
 using namespace ::apache::thrift;
@@ -1358,7 +1359,8 @@ int main(int argc, char** argv) {
   bool enable_rendering = true;
 #else
   bool enable_rendering = false;
-#endif  // HAVE_RENDERING
+#endif // HAVE_RENDERING
+
   size_t cpu_buffer_mem_bytes = 0;  // 0 will cause DataMgr to auto set this based on available memory
   size_t render_mem_bytes = 500000000;
   int num_gpus = -1;  // Can be used to override number of gpus detected on system - -1 means do not override
@@ -1506,6 +1508,28 @@ int main(int argc, char** argv) {
   lockf.open(lock_file.c_str(), std::ios::out | std::ios::trunc);
   lockf << getpid();
   lockf.close();
+
+#ifdef TIME_LIMITED_BUILD
+  // capture build date
+  std::string build_date(__DATE__);
+  int day_limit = TIME_LIMITED_NUMBER_OF_DAYS;
+  std::cerr << "This is a time limited build, you have " << day_limit << " days from build Date :" << build_date
+            << std::endl;
+  // this is our string in fixed format will always work.... famous last words
+  std::tm tm_struct;
+  char* p = strptime(build_date.c_str(), "%b %d %Y", &tm_struct);
+  tm_struct.tm_sec = tm_struct.tm_min = tm_struct.tm_hour = tm_struct.tm_isdst = 0;
+  CHECK(p);
+  time_t build_day_epoch = mktime(&tm_struct);
+  time_t current = std::time(0);
+  int64_t day_diff = (current - build_day_epoch) / (24 * 60 * 60);
+  if (day_diff > day_limit) {
+    std::cerr << "Time Limited build - EXPIRED.  Server cannot start please contact MapD Support for extention"
+              << std::endl;
+    ;
+    return 2;
+  }
+#endif  // TIME_LIMITED_BUILD
 
   while (true) {
     auto pid = fork();

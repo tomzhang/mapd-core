@@ -80,6 +80,14 @@ if(ENABLE_RENDERING)
     set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-render")
 endif()
 
+set(TIME_LIMITED_NUMBER_OF_DAYS "30" CACHE STRING "Number of days this build is valid for if build is time limited")
+
+option(TIME_LIMITED_BUILD "Build Time Limited Build" OFF)
+if(TIME_LIMITED_BUILD)
+  add_definitions("-DTIME_LIMITED_BUILD")
+  add_definitions(-DTIME_LIMITED_NUMBER_OF_DAYS=${TIME_LIMITED_NUMBER_OF_DAYS})
+endif()
+
 option(ENABLE_CALCITE "Build Calcite adapter" OFF)
 if(ENABLE_CALCITE)
     add_definitions("-DHAVE_CALCITE")
