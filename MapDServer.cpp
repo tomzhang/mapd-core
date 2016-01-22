@@ -1526,7 +1526,7 @@ int main(int argc, char** argv) {
   time_t current = std::time(0);
   int64_t day_diff = (current - build_day_epoch) / (24 * 60 * 60);
   if (day_diff > day_limit) {
-    std::cerr << "Time Limited build - EXPIRED.  Server cannot start please contact MapD Support for extention"
+    std::cerr << "Time Limited build - EXPIRED.  Server cannot start please contact support@mapd.com for extention"
               << std::endl;
     ;
     return 2;
