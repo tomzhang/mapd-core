@@ -39,8 +39,6 @@ typedef void GLFWwindow;
 #include <deque>
 #include <unistd.h>
 
-enum class NVVMBackend { CUDA, NVPTX };
-
 enum class ExecutorOptLevel { Default, LoopStrengthReduction };
 
 class Executor;
@@ -174,7 +172,6 @@ class Executor {
                      const int render_widget_id,
                      const bool hoist_literals,
                      const ExecutorDeviceType device_type,
-                     const NVVMBackend nvvm_backend,
                      const ExecutorOptLevel,
                      const bool allow_multifrag,
                      const bool allow_loop_joins);
@@ -262,7 +259,6 @@ class Executor {
                                const int64_t offset,
                                const bool hoist_literals,
                                const ExecutorDeviceType device_type,
-                               const NVVMBackend,
                                const ExecutorOptLevel,
                                const Catalog_Namespace::Catalog&,
                                size_t& max_groups_buffer_entry_guess,
@@ -276,7 +272,6 @@ class Executor {
                                 const int64_t limit,
                                 const bool hoist_literals,
                                 const ExecutorDeviceType device_type,
-                                const NVVMBackend,
                                 const ExecutorOptLevel,
                                 const Catalog_Namespace::Catalog&,
                                 std::shared_ptr<RowSetMemoryOwner>,
@@ -341,7 +336,6 @@ class Executor {
   ResultRows executeResultPlan(const Planner::Result* result_plan,
                                const bool hoist_literals,
                                const ExecutorDeviceType device_type,
-                               const NVVMBackend,
                                const ExecutorOptLevel,
                                const Catalog_Namespace::Catalog&,
                                size_t& max_groups_buffer_entry_guess,
@@ -355,7 +349,6 @@ class Executor {
                              const int64_t offset,
                              const bool hoist_literals,
                              const ExecutorDeviceType device_type,
-                             const NVVMBackend nvvm_backend,
                              const ExecutorOptLevel,
                              const Catalog_Namespace::Catalog&,
                              size_t& max_groups_buffer_entry_guess,
@@ -438,7 +431,6 @@ class Executor {
                                 const bool hoist_literals,
                                 const bool allow_multifrag,
                                 const ExecutorDeviceType device_type,
-                                const NVVMBackend nvvm_backend,
                                 const ExecutorOptLevel,
                                 const CudaMgr_Namespace::CudaMgr* cuda_mgr,
                                 const bool allow_lazy_fetch,
@@ -476,7 +468,6 @@ class Executor {
                                            llvm::Function*,
                                            std::unordered_set<llvm::Function*>&,
                                            const bool hoist_literals,
-                                           const NVVMBackend,
                                            const ExecutorOptLevel,
                                            llvm::Module*,
                                            const bool no_inline,

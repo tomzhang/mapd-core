@@ -6,11 +6,7 @@ find_package(GLFW3 REQUIRED)
 find_package(Glog REQUIRED)
 find_package(CUDA REQUIRED)
 if(ENABLE_CUDA)
-  find_library(CUDA_NVVM_LIBRARY
-    NAMES nvvm
-    HINTS "${CUDA_TOOLKIT_TARGET_DIR}/nvvm" "${CUDA_TOOLKIT_ROOT_DIR}/nvvm"
-    PATH_SUFFIXES "lib64" "lib")
-  list(APPEND CUDA_LIBRARIES ${CUDA_CUDA_LIBRARY} ${CUDA_NVVM_LIBRARY})
+  list(APPEND CUDA_LIBRARIES ${CUDA_CUDA_LIBRARY})
 endif()
 
 include_directories(${Boost_INCLUDE_DIR})
