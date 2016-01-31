@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 2.8)
 SET (catalog_source_files
     Catalog.cpp
     Catalog.h
+    LdapServer.cpp
+    LdapServer.h
 )
 
 include_directories("/usr/local/include")
