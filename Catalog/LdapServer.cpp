@@ -27,12 +27,6 @@ LdapServer::LdapServer(const LdapMetadata& ldapMetadata) {
   }
 }
 
-LdapServer::LdapServer(const LdapServer& orig) {
-}
-
-LdapServer::~LdapServer() {
-}
-
 bool LdapServer::inUse() {
   return ldapInUse;
 }

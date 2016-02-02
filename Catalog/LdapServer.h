@@ -33,8 +33,6 @@ class LdapServer {
  public:
   LdapServer();
   LdapServer(const LdapMetadata& ldapMetadata);
-  LdapServer(const LdapServer& orig);
-  virtual ~LdapServer();
   bool authenticate_user(const std::string& userName, const std::string& passwd);
   bool inUse();
 
