@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 struct PointTemplate_Vert {
   static const std::string source;
 };
@@ -143,6 +143,6 @@ const std::string PointTemplate_Vert::source =
     "fPrimitiveId = id + 1;\n"
     "}\n";
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // POINTTEMPLATE_VERT_H_

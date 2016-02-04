@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 struct OrdinalScaleTemplate_vert {
   static const std::string source;
 };
@@ -77,6 +77,6 @@ const std::string OrdinalScaleTemplate_vert::source =
     "\n"
     "    return val;\n"
     "}\n";
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // ORDINALSCALETEMPLATE_VERT_H_

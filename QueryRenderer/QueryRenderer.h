@@ -1,73 +1,62 @@
-#ifndef QUERY_RENDERER_H_
-#define QUERY_RENDERER_H_
+#ifndef QUERYRENDERER_QUERYRENDERER_H_
+#define QUERYRENDERER_QUERYRENDERER_H_
 
-#include "QueryRendererError.h"
-#include "QueryDataLayout.h"
-#include "QueryResultVertexBuffer.h"
+#include "Types.h"
+#include "QueryRenderManager.h"
+
+// #include "QueryRendererError.h"
+// #include "QueryDataLayout.h"
+// #include "QueryResultVertexBuffer.h"
 #include "QueryFramebuffer.h"
-#include "QueryRendererObjects.h"
-#include "QueryFramebuffer.h"
-// #include "QueryRenderManager.h"
-#include "DataTable.h"
-#include "BufferLayout.h"
+// #include "QueryRendererObjects.h"
+// #include "QueryFramebuffer.h"
+// // #include "QueryRenderManager.h"
+// #include "DataTable.h"
+// #include "BufferLayout.h"
 #include "RapidJSONUtils.h"
-
-#include <GLFW/glfw3.h>
+#include <Rendering/Renderer/GL/Resources/Types.h>
 
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <set>
-#include <memory>  // std::unique_ptr
-#include <cstdint>
-#include <limits>
+// #include <cstdint>
+// #include <limits>
 
-#include "rapidjson/document.h"
-#include "rapidjson/pointer.h"
-// #include <utility>  // std::pair
+// #include "rapidjson/document.h"
+// #include "rapidjson/pointer.h"
+// // #include <utility>  // std::pair
 
 class Executor;
 
-namespace MapD_Renderer {
-
-class QueryRendererContext;
-class BaseMark;
-class BaseScale;
+namespace QueryRenderer {
 
 class QueryRenderer {
  public:
-  explicit QueryRenderer(const Executor* executor,
-                         const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+  explicit QueryRenderer(std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                          bool doHitTest = false,
-                         bool doDepthTest = false,
-                         GLFWwindow* win = nullptr);
+                         bool doDepthTest = false);
 
-  explicit QueryRenderer(const Executor* executor,
-                         const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                         const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+  explicit QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                         std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                          bool doHitTest = false,
-                         bool doDepthTest = false,
-                         GLFWwindow* win = nullptr);
+                         bool doDepthTest = false);
 
-  explicit QueryRenderer(const Executor* executor,
-                         const std::string& configJSON,
-                         const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+  explicit QueryRenderer(const std::string& configJSON,
+                         std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                          bool doHitTest = false,
-                         bool doDepthTest = false,
-                         GLFWwindow* win = nullptr);
+                         bool doDepthTest = false);
 
   ~QueryRenderer();
 
   int getWidth();
   int getHeight();
-  void setWidthHeight(int width, int height, GLFWwindow* win = nullptr);
+  void setWidthHeight(int width, int height);
 
-  const QueryFramebufferUqPtr& getFramebuffer();
+  const QueryFramebufferUqPtr& getFramebuffer(size_t gpuId = 0);
 
-  void setJSONConfig(const std::string& configJSON, bool forceUpdate = false, GLFWwindow* win = nullptr);
-  void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                       bool forceUpdate = false,
-                       GLFWwindow* win = nullptr);
+  void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
+  void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
   // void updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
   //                                       const int numRows,
@@ -80,14 +69,20 @@ class QueryRenderer {
   unsigned int getIdAt(int x, int y);
 
  private:
+  struct PerGpuData {
+    QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryFramebufferUqPtr framebufferPtr;
+
+    PerGpuData() : qrmGpuData(nullptr), framebufferPtr(nullptr) {}
+  };
+
   std::shared_ptr<QueryRendererContext> _ctx;
-  QueryFramebufferUqPtr _framebufferPtr;
+  std::vector<PerGpuData> _perGpuData;
 
   void _clear();
-  void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                     bool forceUpdate = false,
-                     GLFWwindow* win = nullptr);
-  void _initFromJSON(const std::string& configJSON, bool forceUpdate = false, GLFWwindow* win = nullptr);
+  void _initialize(std::vector<QueryRenderManager::PerGpuData>& qrmPerGpuData);
+  void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
+  void _initFromJSON(const std::string& configJSON, bool forceUpdate = false);
   void _initFramebuffer(int width, int height);
 };
 
@@ -102,33 +97,36 @@ class QueryRendererContext {
   typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
   // typedef std::function<void(int)> RefEventCallback;
 
-  explicit QueryRendererContext(const Executor* executor,
-                                const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+  explicit QueryRendererContext(std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                                 bool doHitTest = false,
                                 bool doDepthTest = false)
-      : executor_(executor),
-        _queryResultVBOPtr(queryResultVBOPtr),
+      : executor_(nullptr),
+        _perGpuData(perGpuData.size()),
         _width(0),
         _height(0),
         _doHitTest(doHitTest),
         _doDepthTest(doDepthTest),
         _invalidKey(std::numeric_limits<int64_t>::max()),
-        _jsonCache(nullptr) {}
-  explicit QueryRendererContext(const Executor* executor,
-                                const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+        _jsonCache(nullptr) {
+    _initialize(perGpuData);
+  }
+
+  explicit QueryRendererContext(std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                                 int width,
                                 int height,
                                 bool doHitTest = false,
                                 bool doDepthTest = false)
-      : executor_(executor),
-        _queryResultVBOPtr(queryResultVBOPtr),
+      : executor_(nullptr),
+        _perGpuData(perGpuData.size()),
         _width(width),
         _height(height),
         _doHitTest(doHitTest),
         _doDepthTest(doDepthTest),
         _invalidKey(std::numeric_limits<int64_t>::max()),
         _jsonCache(nullptr),
-        _queryDataLayoutPtr(nullptr) {}
+        _queryDataLayoutPtr(nullptr) {
+    _initialize(perGpuData);
+  }
   ~QueryRendererContext() { _clear(); }
 
   int getWidth() { return _width; }
@@ -136,12 +134,17 @@ class QueryRendererContext {
   int getHeight() { return _height; }
 
   bool hasDataTable(const std::string& tableName) const;
-  DataVBOShPtr getDataTable(const std::string& tableName) const;
+  QueryDataTableVBOShPtr getDataTable(const std::string& tableName) const;
 
   bool hasScale(const std::string& scaleConfigName) const;
   ScaleShPtr getScale(const std::string& scaleConfigName) const;
 
-  QueryResultVertexBufferShPtr getQueryResultVertexBuffer() const { return _queryResultVBOPtr; }
+  QueryResultVertexBufferShPtr getQueryResultVertexBuffer(size_t gpuId = 0) const {
+    RUNTIME_EX_ASSERT(gpuId < _perGpuData.size(),
+                      "Invalid gpuId " + std::to_string(gpuId) + ". There are only " +
+                          std::to_string(_perGpuData.size()) + " GPUs available.");
+    return _perGpuData[gpuId].qrmGpuData->queryResultBufferPtr;
+  }
 
   bool doHitTest() { return _doHitTest; }
   bool doDepthTest() { return _doDepthTest; }
@@ -195,7 +198,7 @@ class QueryRendererContext {
   typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
 
   typedef std::vector<GeomConfigShPtr> GeomConfigVector;
-  typedef std::unordered_map<std::string, DataVBOShPtr> DataTableMap;
+  typedef std::unordered_map<std::string, QueryDataTableVBOShPtr> DataTableMap;
 
   struct func_compare {
     bool operator()(const RefEventCallback& lhs, const RefEventCallback& rhs) const {
@@ -211,8 +214,14 @@ class QueryRendererContext {
   GeomConfigVector _geomConfigs;
 
   const Executor* executor_;
-  QueryResultVertexBufferShPtr _queryResultVBOPtr;
-  BufferLayoutShPtr _queryResultBufferLayout;
+
+  struct PerGpuData {
+    QueryRenderManager::PerGpuData* qrmGpuData;
+
+    PerGpuData() : qrmGpuData(nullptr) {}
+  };
+  std::vector<PerGpuData> _perGpuData;
+  ::Rendering::GL::Resources::GLBufferLayoutShPtr _queryResultBufferLayout;
 
   int _width;
   int _height;
@@ -225,6 +234,8 @@ class QueryRendererContext {
   EventCallbacksMap _eventCallbacksMap;
 
   std::unique_ptr<QueryDataLayout> _queryDataLayoutPtr;
+
+  void _initialize(std::vector<QueryRenderManager::PerGpuData>& qrmPerGpuData);
 
   void _clear() {
     _width = 0;
@@ -242,12 +253,12 @@ typedef std::unique_ptr<QueryRendererContext> QueryRendererContextUqPtr;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 
 std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj);
-BaseDataTableVBO::DataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj);
-DataVBOShPtr createDataTable(const rapidjson::Value& obj,
-                             const rapidjson::Pointer& objPath,
-                             const QueryRendererContextShPtr& ctx,
-                             const std::string& name = "");
+QueryDataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj);
+QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
+                                       const rapidjson::Pointer& objPath,
+                                       const QueryRendererContextShPtr& ctx,
+                                       const std::string& name = "");
 
-};  // MapD_Renderer namespace
+};  // QueryRenderer namespace
 
-#endif  // QUERY_RENDERER_H_
+#endif  // QUERYRENDERER_QUERYRENDERER_H_

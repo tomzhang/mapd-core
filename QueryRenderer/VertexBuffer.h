@@ -16,7 +16,7 @@
 #include <string>
 #include <stdexcept>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 class BaseVertexBuffer {
  public:
@@ -182,6 +182,6 @@ class VertexBuffer : public BaseVertexBuffer {
 typedef std::unique_ptr<VertexBuffer> VertexBufferUqPtr;
 typedef std::shared_ptr<VertexBuffer> VertexBufferShPtr;
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // VERTEX_BUFFER_H_

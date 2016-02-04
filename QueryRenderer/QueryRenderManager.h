@@ -1,32 +1,21 @@
-#ifndef QUERY_RENDER_MANAGER_H_
-#define QUERY_RENDER_MANAGER_H_
+#ifndef QUERYRENDERER_QUERYRENDERMANAGER_H_
+#define QUERYRENDERER_QUERYRENDERMANAGER_H_
 
-#include "QueryRendererError.h"
+#include "Types.h"
 #include "QueryDataLayout.h"
-#include "QueryRenderer.h"
-#include "Shader.h"
 #include "QueryResultVertexBuffer.h"
-#include "BufferLayout.h"
-
-#include <GLFW/glfw3.h>
-
+#include "Types.h"
+#include <Rendering/Types.h>
 #include <unordered_map>
 #include <vector>
-#include <array>
 #include <utility>  // std::pair
-#include <string>
-#include <memory>
-#include <fstream>
-#include <cstdint>
-#include <limits>
-#include <thread>
 #include <mutex>
 
 #include "rapidjson/document.h"
 
 class Executor;
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 struct PngData {
   std::shared_ptr<char> pngDataPtr;
@@ -34,134 +23,8 @@ struct PngData {
 
   PngData(const std::shared_ptr<char>& pngDataPtr, int pngSize) : pngDataPtr(pngDataPtr), pngSize(pngSize) {}
 
-  void writeToFile(const std::string& filename) {
-    std::ofstream pngFile(filename, std::ios::binary);
-    pngFile.write(pngDataPtr.get(), pngSize);
-    pngFile.close();
-  }
+  void writeToFile(const std::string& filename);
 };
-
-// struct QueryDataLayout {
-//   enum class AttrType { UINT = 0, INT, FLOAT, DOUBLE, UINT64, INT64 };
-//   enum class LayoutType { INTERLEAVED = 0, SEQUENTIAL };
-
-//   size_t numRows;
-
-//   // TODO(croot): add size_t numKeys --- each row can have
-//   // multiple keys. This value would indicate how many.
-//   // We can default it to use one, and the invalid key
-//   // would only match against the very first key. None of the
-//   // others would concern me.
-//   size_t numKeys;
-//   int64_t invalidKey;
-//   std::vector<std::string> attrNames;
-//   std::vector<AttrType> attrTypes;
-//   LayoutType layoutType;
-
-//   QueryDataLayout(const size_t numRows,
-//                   const std::vector<std::string>& attrNames,
-//                   const std::vector<AttrType>& attrTypes,
-//                   const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be
-//                   irrelevant
-//                                              // except the first key, which would be the one to check the invalid key
-//                                              // against.
-//                   const int64_t invalidKey = std::numeric_limits<int64_t>::max(),
-//                   const LayoutType layoutType = LayoutType::INTERLEAVED)
-//       : numRows(numRows),
-//         numKeys(numKeys),
-//         invalidKey(invalidKey),
-//         attrNames(attrNames),
-//         attrTypes(attrTypes),
-//         layoutType(layoutType) {
-//     RUNTIME_EX_ASSERT(
-//         attrNames.size() == attrTypes.size(),
-//         "QueryDataLayout constructor: The number of attribute names must match the number of attribute types.");
-//   }
-
-//   BufferLayoutShPtr convertToBufferLayout() {
-//     static const std::string dummyPrefix = "___dummy___";
-//     int dummyCnt = 0;
-//     switch (layoutType) {
-//       case LayoutType::INTERLEAVED: {
-//         // TODO(croot): make a base interleaved/sequential buffer class
-//         // perhaps called BaseIntSeqBufferLayout
-//         // so we don't have to duplicate code here.
-//         // And support adding the attrnames and types in a constructor of
-//         // that base class?
-//         InterleavedBufferLayout* layout = new InterleavedBufferLayout();
-//         for (size_t i = 0; i < attrNames.size(); ++i) {
-//           switch (attrTypes[i]) {
-//             case AttrType::UINT:
-//               layout->addAttribute(attrNames[i], BufferAttrType::UINT);
-//               break;
-//             case AttrType::INT:
-//               layout->addAttribute(attrNames[i], BufferAttrType::INT);
-//               break;
-//             case AttrType::FLOAT:
-//               layout->addAttribute(attrNames[i], BufferAttrType::FLOAT);
-//               break;
-//             case AttrType::DOUBLE:
-//               layout->addAttribute(attrNames[i], BufferAttrType::DOUBLE);
-//               break;
-//             case AttrType::UINT64:
-//               // TODO(croot): support 64-bit ints
-//               // So for the time being, add a dummy attr for the first
-//               // 32bits of the attr, and then the real attr for the
-//               // last 32bits.
-//               layout->addAttribute(attrNames[i], BufferAttrType::UINT);
-//               layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::UINT);
-//               break;
-//             case AttrType::INT64:
-//               // TODO(croot): support 64-bit ints (see UINT64)
-//               layout->addAttribute(attrNames[i], BufferAttrType::INT);
-//               layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::INT);
-//               break;
-//           }
-//         }
-//         return BufferLayoutShPtr(layout);
-//       }
-//       case LayoutType::SEQUENTIAL: {
-//         SequentialBufferLayout* layout = new SequentialBufferLayout();
-//         for (size_t i = 0; i < attrNames.size(); ++i) {
-//           switch (attrTypes[i]) {
-//             case AttrType::UINT:
-//               layout->addAttribute(attrNames[i], BufferAttrType::UINT);
-//               break;
-//             case AttrType::INT:
-//               layout->addAttribute(attrNames[i], BufferAttrType::INT);
-//               break;
-//             case AttrType::FLOAT:
-//               layout->addAttribute(attrNames[i], BufferAttrType::FLOAT);
-//               break;
-//             case AttrType::DOUBLE:
-//               layout->addAttribute(attrNames[i], BufferAttrType::DOUBLE);
-//               break;
-//             case AttrType::UINT64:
-//               // TODO(croot): support 64-bit ints
-//               // So for the time being, add a dummy attr for the first
-//               // 32bits of the attr, and then the real attr for the
-//               // last 32bits.
-//               layout->addAttribute(attrNames[i], BufferAttrType::UINT);
-//               layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::UINT);
-//               break;
-//             case AttrType::INT64:
-//               // TODO(croot): support 64-bit ints
-//               // So for the time being, add a dummy attr for the first
-//               // 32bits of the attr, and then the real attr for the
-//               // last 32bits.
-//               layout->addAttribute(attrNames[i], BufferAttrType::INT);
-//               layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), BufferAttrType::INT);
-//               break;
-//           }
-//         }
-//         return BufferLayoutShPtr(layout);
-//       }
-//       default:
-//         CHECK(false);
-//         return nullptr;
-//     }
-//   }
-// };
 
 typedef std::pair<int, int> UserWidgetPair;
 typedef std::unordered_map<int, QueryRendererUqPtr> WidgetRendererMap;
@@ -169,13 +32,25 @@ typedef std::unordered_map<int, std::unique_ptr<WidgetRendererMap>> RendererTabl
 
 class QueryRenderManager {
  public:
-  explicit QueryRenderManager(const Executor* executor,
-                              unsigned int queryResultBufferSize = 500000,
-                              GLFWwindow* prntWindow = nullptr,
+  struct PerGpuData {
+    QueryResultVertexBufferShPtr queryResultBufferPtr;
+    Rendering::WindowShPtr windowPtr;
+    Rendering::RendererShPtr rendererPtr;
+    // QueryRendererFboShPtr rendererFboPtr;
+
+    PerGpuData() : queryResultBufferPtr(nullptr), windowPtr(nullptr), rendererPtr(nullptr) {}
+  };
+
+  explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
+                              const Executor* executor,
+                              int numGpus = -1,                       // < 0 means use all available GPUs
+                              size_t queryResultBufferSize = 500000,  // only applicable if a GPU or CUDA_INTEROP render
                               bool debugMode = false);
   ~QueryRenderManager();
 
+#ifdef HAVE_CUDA
   CudaHandle getCudaHandle();
+#endif
 
   bool inDebugMode() const;
 
@@ -197,9 +72,9 @@ class QueryRenderManager {
 
   void setWidthHeight(int width, int height);
 
-  // TODO(croot): add result buffer layout object
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                       QueryDataLayout* dataLayoutPtr = nullptr);
+                       QueryDataLayout* dataLayoutPtr = nullptr,
+                       const Executor* executor = nullptr);
 
   void render();
   PngData renderToPng(int compressionLevel = -1);
@@ -208,10 +83,10 @@ class QueryRenderManager {
   int64_t getIdAt(int x, int y);
 
   // CROOT - the following is a debug function. Remove when ready for deployment
-  GLFWwindow* getWindow() {
-    // return _windowPtr.get();
-    return _windowPtr;
-  }
+  // GLFWwindow* getWindow() {
+  //   // return _windowPtr.get();
+  //   return _windowPtr;
+  // }
 
  private:
   static const UserWidgetPair _emptyUserWidget;
@@ -222,20 +97,18 @@ class QueryRenderManager {
   mutable QueryRenderer* _activeRenderer;
   mutable UserWidgetPair _activeUserWidget;
 
-  // std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> _windowPtr;
-  GLFWwindow* _windowPtr;
-  QueryResultVertexBufferShPtr _queryResultVBOPtr;
-  unsigned int _queryResultBufferSize;
+  std::vector<PerGpuData> _perGpuData;
 
-  void _initGLFW(GLFWwindow* prntWindow);
-  void _initQueryResultBuffer();
+  void _initialize(Rendering::WindowManager& windowMgr, int numGpus, size_t queryResultBufferSize);
+
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
 
   const Executor* executor_;
+
   std::mutex _mtx;
 };
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
-#endif  // QUERY_RENDER_MANAGER_H_
+#endif  // QUERYRENDERER_QUERYRENDERMANAGER_H_

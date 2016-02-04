@@ -1,7 +1,7 @@
 #include "Shader.h"
 #include <boost/algorithm/string/predicate.hpp>
 
-using namespace MapD_Renderer;
+using namespace QueryRenderer;
 
 GLint compileShader(const GLuint& shaderId, const std::string& shaderSrc, std::string& errStr) {
   GLint compiled;

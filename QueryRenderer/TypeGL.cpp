@@ -1,6 +1,6 @@
 #include "TypeGL.h"
 
-using namespace MapD_Renderer;
+using namespace QueryRenderer;
 
 /*****************
  * UNSIGNED INT
@@ -256,74 +256,82 @@ std::string TypeGL<uint64_t, 1>::glslType() const {
   // able to create an additional template
   // specialization somehow, but i'm not sure
   // how to do that.
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "uint64_t";
-  } else {
-    return "uint";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "uint64_t";
+  // } else {
+  //   return "uint";
+  // }
+  return "uint";
 }
 
 template <>
 int TypeGL<uint64_t, 1>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_UNSIGNED_INT64_NV;
+  // } else {
+  //   return GL_UNSIGNED_INT;
+  // }
+  return GL_UNSIGNED_INT;
 }
 
 template <>
 std::string TypeGL<uint64_t, 2>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "u64vec2";
-  } else {
-    return "uvec2";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "u64vec2";
+  // } else {
+  //   return "uvec2";
+  // }
+  return "uvec2";
 }
 
 template <>
 int TypeGL<uint64_t, 2>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_UNSIGNED_INT64_NV;
+  // } else {
+  //   return GL_UNSIGNED_INT;
+  // }
+  return GL_UNSIGNED_INT;
 }
 
 template <>
 std::string TypeGL<uint64_t, 3>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "u64vec3";
-  } else {
-    return "uvec3";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "u64vec3";
+  // } else {
+  //   return "uvec3";
+  // }
+  return "uvec3";
 }
 
 template <>
 int TypeGL<uint64_t, 3>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_UNSIGNED_INT64_NV;
+  // } else {
+  //   return GL_UNSIGNED_INT;
+  // }
+  return GL_UNSIGNED_INT;
 }
 
 template <>
 std::string TypeGL<uint64_t, 4>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "u64vec4";
-  } else {
-    return "uvec4";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "u64vec4";
+  // } else {
+  //   return "uvec4";
+  // }
+  return "uvec4";
 }
 
 template <>
 int TypeGL<uint64_t, 4>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_UNSIGNED_INT64_NV;
+  // } else {
+  //   return GL_UNSIGNED_INT;
+  // }
+  return GL_UNSIGNED_INT;
 }
 
 /*****************
@@ -343,72 +351,80 @@ std::string TypeGL<int64_t, 1>::glslType() const {
   // able to create an additional template
   // specialization somehow, but i'm not sure
   // how to do that.
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "int64_t";
-  } else {
-    return "iint";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "int64_t";
+  // } else {
+  //   return "iint";
+  // }
+  return "iint";
 }
 
 template <>
 int TypeGL<int64_t, 1>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_INT64_NV;
+  // } else {
+  //   return GL_INT;
+  // }
+  return GL_INT;
 }
 
 template <>
 std::string TypeGL<int64_t, 2>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "i64vec2";
-  } else {
-    return "ivec2";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "i64vec2";
+  // } else {
+  //   return "ivec2";
+  // }
+  return "ivec2";
 }
 
 template <>
 int TypeGL<int64_t, 2>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_INT64_NV;
+  // } else {
+  //   return GL_INT;
+  // }
+  return GL_INT;
 }
 
 template <>
 std::string TypeGL<int64_t, 3>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "i64vec3";
-  } else {
-    return "ivec3";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "i64vec3";
+  // } else {
+  //   return "ivec3";
+  // }
+  return "ivec3";
 }
 
 template <>
 int TypeGL<int64_t, 3>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_INT64_NV;
+  // } else {
+  //   return GL_INT;
+  // }
+  return GL_INT;
 }
 
 template <>
 std::string TypeGL<int64_t, 4>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "i64vec4";
-  } else {
-    return "ivec4";
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return "i64vec4";
+  // } else {
+  //   return "ivec4";
+  // }
+  return "ivec4";
 }
 
 template <>
 int TypeGL<int64_t, 4>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
+  // if (GLEW_NV_vertex_attrib_integer_64bit) {
+  //   return GL_INT64_NV;
+  // } else {
+  //   return GL_INT;
+  // }
+  return GL_INT;
 }

@@ -10,7 +10,7 @@
 #include <functional>
 #include <cstdint>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 struct BaseTypeGL {
   BaseTypeGL() {}

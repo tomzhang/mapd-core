@@ -2,13 +2,13 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
-std::string MapD_Renderer::RapidJSONUtils::getPointerPath(const rapidjson::Pointer& ptr) {
+std::string QueryRenderer::RapidJSONUtils::getPointerPath(const rapidjson::Pointer& ptr) {
   rapidjson::StringBuffer sb;
   ptr.Stringify(sb);
   return sb.GetString();
 }
 
-std::string MapD_Renderer::RapidJSONUtils::getObjAsString(const rapidjson::Value& obj) {
+std::string QueryRenderer::RapidJSONUtils::getObjAsString(const rapidjson::Value& obj) {
   rapidjson::StringBuffer sb;
   rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
   obj.Accept(writer);

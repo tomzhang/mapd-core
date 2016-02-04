@@ -1,14 +1,14 @@
 #include "BufferLayout.h"
 
-using namespace MapD_Renderer;
+using namespace QueryRenderer;
 
-BufferAttrType MapD_Renderer::getBufferAttrType(unsigned int a, int numComponents) {
+BufferAttrType QueryRenderer::getBufferAttrType(unsigned int a, int numComponents) {
   RUNTIME_EX_ASSERT(numComponents == 1, "Only 1 component of unsigned ints are currently supported.");
 
   return BufferAttrType::UINT;
 }
 
-BufferAttrType MapD_Renderer::getBufferAttrType(int a, int numComponents) {
+BufferAttrType QueryRenderer::getBufferAttrType(int a, int numComponents) {
   switch (numComponents) {
     case 1:
       return BufferAttrType::INT;
@@ -25,7 +25,7 @@ BufferAttrType MapD_Renderer::getBufferAttrType(int a, int numComponents) {
   return BufferAttrType::INT;
 }
 
-BufferAttrType MapD_Renderer::getBufferAttrType(float a, int numComponents) {
+BufferAttrType QueryRenderer::getBufferAttrType(float a, int numComponents) {
   switch (numComponents) {
     case 1:
       return BufferAttrType::FLOAT;
@@ -42,7 +42,7 @@ BufferAttrType MapD_Renderer::getBufferAttrType(float a, int numComponents) {
   return BufferAttrType::FLOAT;
 }
 
-BufferAttrType MapD_Renderer::getBufferAttrType(double a, int numComponents) {
+BufferAttrType QueryRenderer::getBufferAttrType(double a, int numComponents) {
   switch (numComponents) {
     case 1:
       return BufferAttrType::DOUBLE;

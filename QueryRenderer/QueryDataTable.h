@@ -1,10 +1,14 @@
-#ifndef DATA_TABLE_H_
-#define DATA_TABLE_H_
+#ifndef QUERYRENDERER_QUERYDATATABLE_H_
+#define QUERYRENDERER_QUERYDATATABLE_H_
 
-#include "QueryRendererError.h"
-#include "VertexBuffer.h"
-#include "TypeGL.h"
-#include "Color.h"
+#include "Types.h"
+#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Renderer/GL/Resources/Types.h>
+#include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>
+// #include "QueryRendererError.h"
+// #include "VertexBuffer.h"
+// #include "TypeGL.h"
+// #include "Color.h"
 
 #include <boost/lexical_cast.hpp>
 #include <boost/multi_index_container.hpp>
@@ -12,89 +16,79 @@
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
 
-#include <string>
-#include <memory>
-#include <algorithm>  // minmax_element
+// #include <string>
+// #include <memory>
+// #include <algorithm>  // minmax_element
 
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 
-namespace MapD_Renderer {
-
-class QueryRendererContext;
-typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
-
-enum class DataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR, STRING };
+namespace QueryRenderer {
 
 template <typename T>
-DataType getDataTypeForType();
+QueryDataType getDataTypeForType();
 
 template <>
-DataType getDataTypeForType<unsigned int>();
+QueryDataType getDataTypeForType<unsigned int>();
 
 template <>
-DataType getDataTypeForType<int>();
+QueryDataType getDataTypeForType<int>();
 
 template <>
-DataType getDataTypeForType<float>();
+QueryDataType getDataTypeForType<float>();
 
 template <>
-DataType getDataTypeForType<double>();
+QueryDataType getDataTypeForType<double>();
 
 template <>
-DataType getDataTypeForType<ColorRGBA>();
+QueryDataType getDataTypeForType<Rendering::Objects::ColorRGBA>();
 
 template <>
-DataType getDataTypeForType<std::string>();
+QueryDataType getDataTypeForType<std::string>();
 
-class BaseDataTableVBO {
+class BaseQueryDataTableVBO {
  public:
-  enum class DataTableType { SQLQUERY = 0, EMBEDDED, URL, UNSUPPORTED };
-
-  BaseDataTableVBO(const QueryRendererContextShPtr& ctx,
-                   const std::string& name,
-                   const rapidjson::Value& obj,
-                   const rapidjson::Pointer& objPath,
-                   DataTableType type)
+  BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
+                        const std::string& name,
+                        const rapidjson::Value& obj,
+                        const rapidjson::Pointer& objPath,
+                        QueryDataTableType type)
       : _ctx(ctx), _name(name), _vbo(nullptr), _type(type), _jsonPath(objPath) {}
-  explicit BaseDataTableVBO(const QueryRendererContextShPtr& ctx,
-                            const std::string& name,
-                            const rapidjson::Value& obj,
-                            const rapidjson::Pointer& objPath,
-                            DataTableType type,
-                            const BaseVertexBufferShPtr& vbo)
+  explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
+                                 const std::string& name,
+                                 const rapidjson::Value& obj,
+                                 const rapidjson::Pointer& objPath,
+                                 QueryDataTableType type,
+                                 const Rendering::GL::Resources::GLVertexBufferShPtr& vbo)
       : _ctx(ctx), _name(name), _vbo(vbo), _type(type), _jsonPath(objPath) {}
-  virtual ~BaseDataTableVBO() {}
+  virtual ~BaseQueryDataTableVBO() {}
 
   virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
   virtual bool hasColumn(const std::string& columnName) = 0;
-  virtual BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName) = 0;
-  virtual DataType getColumnType(const std::string& columnName) = 0;
+  virtual ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const std::string& columnName) = 0;
+  virtual QueryDataType getColumnType(const std::string& columnName) = 0;
   virtual int numRows() = 0;
 
   std::string getName() { return _name; }
-  DataTableType getType() { return _type; }
+  QueryDataTableType getType() { return _type; }
 
  protected:
   QueryRendererContextShPtr _ctx;
   std::string _name;
-  BaseVertexBufferShPtr _vbo;
-  DataTableType _type;
+  ::Rendering::GL::Resources::GLVertexBufferShPtr _vbo;
+  QueryDataTableType _type;
   rapidjson::Pointer _jsonPath;
 };
 
-typedef std::unique_ptr<BaseDataTableVBO> DataVBOUqPtr;
-typedef std::shared_ptr<BaseDataTableVBO> DataVBOShPtr;
-
-class SqlQueryDataTable : public BaseDataTableVBO {
+class SqlQueryDataTable : public BaseQueryDataTableVBO {
  public:
   SqlQueryDataTable(const QueryRendererContextShPtr& ctx,
                     const std::string& name,
                     const rapidjson::Value& obj,
                     const rapidjson::Pointer& objPath,
-                    const BaseVertexBufferShPtr& vbo,
+                    const ::Rendering::GL::Resources::GLVertexBufferShPtr& vbo,
                     const std::string& sqlQueryStr = "")
-      : BaseDataTableVBO(ctx, name, obj, objPath, BaseDataTableVBO::DataTableType::SQLQUERY, vbo),
+      : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vbo),
         _sqlQueryStr(sqlQueryStr),
         _tableName() {
     _initFromJSONObj(obj, objPath);
@@ -103,13 +97,13 @@ class SqlQueryDataTable : public BaseDataTableVBO {
 
   void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   bool hasColumn(const std::string& columnName) { return _vbo->hasAttribute(columnName); }
-  BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName) {
+  ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const std::string& columnName) {
     RUNTIME_EX_ASSERT(_vbo->hasAttribute(columnName),
                       "SqlQueryDataTable::hasColumn(): column \"" + columnName + "\" does not exist.");
     return _vbo;
   }
-  DataType getColumnType(const std::string& columnName);
-  int numRows() { return _vbo->size(); }
+  QueryDataType getColumnType(const std::string& columnName);
+  int numRows() { return _vbo->numItems(); }
 
   std::string getTableName() { return _tableName; }
 
@@ -137,7 +131,7 @@ class DataColumn {
 
   virtual int size() = 0;
 
-  virtual DataType getColumnType() = 0;
+  virtual QueryDataType getColumnType() = 0;
   virtual TypelessColumnData getTypelessColumnData() = 0;
   virtual void push_back(const std::string& val) = 0;
 
@@ -166,7 +160,7 @@ class TDataColumn : public DataColumn {
     _columnDataPtr->push_back(boost::lexical_cast<T>(val));
   }
 
-  DataType getColumnType() { return getDataTypeForType<T>(); }
+  QueryDataType getColumnType() { return getDataTypeForType<T>(); }
 
   std::shared_ptr<std::vector<T>> getColumnData() { return _columnDataPtr; }
   TypelessColumnData getTypelessColumnData() {
@@ -193,12 +187,12 @@ class TDataColumn : public DataColumn {
 };
 
 template <>
-void TDataColumn<ColorRGBA>::push_back(const std::string& val);
+void TDataColumn<::Rendering::Objects::ColorRGBA>::push_back(const std::string& val);
 
 template <>
-void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
+void TDataColumn<::Rendering::Objects::ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
 
-class DataTable : public BaseDataTableVBO {
+class DataTable : public BaseQueryDataTableVBO {
  public:
   enum class VboType { SEQUENTIAL = 0, INTERLEAVED, INDIVIDUAL };
   static const std::string defaultIdColumnName;
@@ -207,7 +201,7 @@ class DataTable : public BaseDataTableVBO {
             const std::string& name,
             const rapidjson::Value& obj,
             const rapidjson::Pointer& objPath,
-            BaseDataTableVBO::DataTableType type,
+            QueryDataTableType type,
             bool buildIdColumn = false,
             VboType vboType = VboType::SEQUENTIAL);
   ~DataTable() {}
@@ -222,10 +216,10 @@ class DataTable : public BaseDataTableVBO {
     return (nameLookup.find(columnName) != nameLookup.end());
   }
 
-  DataType getColumnType(const std::string& columnName);
+  QueryDataType getColumnType(const std::string& columnName);
   DataColumnShPtr getColumn(const std::string& columnName);
 
-  BaseVertexBufferShPtr getColumnDataVBO(const std::string& columnName);
+  ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const std::string& columnName);
 
   int numRows() { return _numRows; }
 
@@ -233,12 +227,14 @@ class DataTable : public BaseDataTableVBO {
   VboType _vboType;
   int _numRows;
 
-  typedef multi_index_container<
+  typedef boost::multi_index_container<
       DataColumnShPtr,
-      indexed_by<random_access<>,
+      boost::multi_index::indexed_by<boost::multi_index::random_access<>,
 
-                 // hashed on name
-                 hashed_unique<tag<DataColumn::ColumnName>, member<DataColumn, std::string, &DataColumn::columnName>>>>
+                                     // hashed on name
+                                     boost::multi_index::hashed_unique<
+                                         boost::multi_index::tag<DataColumn::ColumnName>,
+                                         boost::multi_index::member<DataColumn, std::string, &DataColumn::columnName>>>>
       ColumnMap;
 
   typedef ColumnMap::index<DataColumn::ColumnName>::type ColumnMap_by_name;
@@ -254,6 +250,6 @@ class DataTable : public BaseDataTableVBO {
 typedef std::unique_ptr<DataTable> DataTableUqPtr;
 typedef std::shared_ptr<DataTable> DataTableShPtr;
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
-#endif  // DATA_TABLE_H_
+#endif  // QUERYRENDERER_QUERYDATATABLE_H_

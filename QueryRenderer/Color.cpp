@@ -4,7 +4,7 @@
 
 #include <glog/logging.h>
 
-using namespace MapD_Renderer;
+using namespace QueryRenderer;
 
 const std::unordered_map<std::string, std::string> ColorRGBA::colorKeywords = {{"aliceblue", "#F0F8FF"},
                                                                                {"antiquewhite", "#FAEBD7"},

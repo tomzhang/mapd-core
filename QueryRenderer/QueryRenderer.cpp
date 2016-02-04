@@ -1,41 +1,44 @@
-#include "MapDGL.h"
 #include "QueryRenderer.h"
-#include "RapidJSONUtils.h"
-#include "../QueryEngine/Execute.h"
-#include <glog/logging.h>
-#include <utility>  // std::pair
-#include <unordered_set>
+#include "QueryFramebuffer.h"
+#include "QueryDataTable.h"
+#include "QueryRendererObjects.h"
+#include <Rendering/Renderer/GL/GLRenderer.h>
+
+// #include "MapDGL.h"
+// #include "QueryRenderer.h"
+// #include "RapidJSONUtils.h"
+// // #include "../QueryEngine/Execute.h"
+// #include <glog/logging.h>
+// #include <utility>  // std::pair
+// #include <unordered_set>
+// #include "rapidjson/document.h"
+// #include "rapidjson/pointer.h"
 #include "rapidjson/error/en.h"
-#include "rapidjson/allocators.h"
+// #include "rapidjson/allocators.h"
 
-using namespace MapD_Renderer;
+namespace QueryRenderer {
 
-QueryRenderer::QueryRenderer(const Executor* executor,
-                             const QueryResultVertexBufferShPtr& queryResultVBOPtr,
-                             bool doHitTest,
-                             bool doDepthTest,
-                             GLFWwindow* win)
-    : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
+using ::Rendering::GL::GLRenderer;
+
+QueryRenderer::QueryRenderer(std::vector<QueryRenderManager::PerGpuData>& perGpuData, bool doHitTest, bool doDepthTest)
+    : _ctx(new QueryRendererContext(perGpuData, doHitTest, doDepthTest)), _perGpuData(perGpuData.size()) {
+  _initialize(perGpuData);
 }
 
-QueryRenderer::QueryRenderer(const Executor* executor,
-                             const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                             const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+QueryRenderer::QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                             std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                              bool doHitTest,
-                             bool doDepthTest,
-                             GLFWwindow* win)
-    : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
-  _initFromJSON(jsonDocumentPtr, win);
+                             bool doDepthTest)
+    : QueryRenderer(perGpuData, doHitTest, doDepthTest) {
+  _initFromJSON(jsonDocumentPtr);
 }
 
-QueryRenderer::QueryRenderer(const Executor* executor,
-                             const std::string& configJSON,
-                             const QueryResultVertexBufferShPtr& queryResultVBOPtr,
+QueryRenderer::QueryRenderer(const std::string& configJSON,
+                             std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                              bool doHitTest,
-                             bool doDepthTest,
-                             GLFWwindow* win)
-    : _ctx(new QueryRendererContext(executor, queryResultVBOPtr, doHitTest, doDepthTest)), _framebufferPtr(nullptr) {
-  _initFromJSON(configJSON, win);
+                             bool doDepthTest)
+    : QueryRenderer(perGpuData, doHitTest, doDepthTest) {
+  _initFromJSON(configJSON);
 }
 
 QueryRenderer::~QueryRenderer() {
@@ -46,15 +49,27 @@ void QueryRenderer::_clear() {
   _ctx->_clear();
 }
 
-void QueryRenderer::_initFramebuffer(int width, int height) {
-  if (_framebufferPtr == nullptr) {
-    _framebufferPtr.reset(new QueryFramebuffer(width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
-  } else {
-    _framebufferPtr->resize(width, height);
+void QueryRenderer::_initialize(std::vector<QueryRenderManager::PerGpuData>& qrmPerGpuData) {
+  CHECK(_perGpuData.size() == qrmPerGpuData.size());
+  for (size_t i = 0; i < qrmPerGpuData.size(); ++i) {
+    _perGpuData[i].qrmGpuData = &qrmPerGpuData[i];
   }
 }
 
-void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdate, GLFWwindow* win) {
+void QueryRenderer::_initFramebuffer(int width, int height) {
+  for (auto& gpuData : _perGpuData) {
+    if (gpuData.framebufferPtr == nullptr) {
+      CHECK(gpuData.qrmGpuData->rendererPtr);
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(gpuData.qrmGpuData->rendererPtr.get());
+      gpuData.framebufferPtr.reset(
+          new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
+    } else {
+      gpuData.framebufferPtr->resize(width, height);
+    }
+  }
+}
+
+void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdate) {
   std::shared_ptr<rapidjson::Document> objPtr(new rapidjson::Document());
 
   objPtr->Parse(configJSON.c_str());
@@ -64,12 +79,10 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdat
                     "JSON parse error - " + std::to_string(objPtr->GetErrorOffset()) + ", error: " +
                         rapidjson::GetParseError_En(objPtr->GetParseError()));
 
-  _initFromJSON(objPtr, win);
+  _initFromJSON(objPtr);
 }
 
-void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                                  bool forceUpdate,
-                                  GLFWwindow* win) {
+void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate) {
   rapidjson::Pointer rootPath;
   rapidjson::Value* obj = jsonDocumentPtr.get();
 
@@ -101,7 +114,7 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
   RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"height\" is not an integer.");
   int height = mitr->value.GetInt();
 
-  setWidthHeight(width, height, win);
+  setWidthHeight(width, height);
 
   std::string propName = "data";
   mitr = obj->FindMember(propName.c_str());
@@ -110,7 +123,7 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
     RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array.");
 
-    DataVBOShPtr dataTablePtr;
+    QueryDataTableVBOShPtr dataTablePtr;
     std::unordered_set<std::string> visitedNames;
     std::unordered_set<std::string> unvisitedNames;
     unvisitedNames.reserve(_ctx->_dataTableMap.size());
@@ -283,35 +296,45 @@ int QueryRenderer::getHeight() {
   return _ctx->_height;
 }
 
-void QueryRenderer::setWidthHeight(int width, int height, GLFWwindow* win) {
+void QueryRenderer::setWidthHeight(int width, int height) {
   _ctx->_width = width;
   _ctx->_height = height;
 
-  if (win) {
-    // pass a window in debug mode
-
-    // resize the window
-    glfwSetWindowSize(win, width, height);
-
-    // now get the actual framebuffer dimensions
-    glfwGetFramebufferSize(win, &_ctx->_width, &_ctx->_height);
-  }
-
   _initFramebuffer(_ctx->_width, _ctx->_height);
+
+  // if (win) {
+  //   // pass a window in debug mode
+
+  //   // resize the window
+  //   glfwSetWindowSize(win, width, height);
+
+  //   // now get the actual framebuffer dimensions
+  //   int CROOTw, CROOTh;
+  //   glfwGetWindowSize(win, &CROOTw, &CROOTh);
+
+  //   int w, h;
+  //   glfwGetFramebufferSize(win, &w, &h);
+  //   std::cerr << "CROOT - setting window width/height: " << width << "x" << height << ", " << w << "x" << h << ", "
+  //             << CROOTw << "x" << CROOTh << std::endl;
+  //   _ctx->_width = w;
+  //   _ctx->_height = h;
+  // }
 }
 
-const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer() {
-  return _framebufferPtr;
+const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer(size_t gpuId) {
+  RUNTIME_EX_ASSERT(gpuId < _perGpuData.size(),
+                    "Error getting QueryRenderer framebuffer for gpuId " + std::to_string(gpuId) + ". There are only " +
+                        std::to_string(_perGpuData.size()) + " GPUs active for rendering.");
+
+  return _perGpuData[gpuId].framebufferPtr;
 }
 
-void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate, GLFWwindow* win) {
-  _initFromJSON(configJSON, forceUpdate, win);
+void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate) {
+  _initFromJSON(configJSON, forceUpdate);
 }
 
-void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                                    bool forceUpdate,
-                                    GLFWwindow* win) {
-  _initFromJSON(jsonDocumentPtr, forceUpdate, win);
+void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate) {
+  _initFromJSON(jsonDocumentPtr, forceUpdate);
 }
 
 // void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
@@ -332,64 +355,71 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
 // }
 
 void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr) {
-  int numRows = dataLayoutPtr->numRows;
-  _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
-  _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
-  _ctx->_invalidKey = dataLayoutPtr->invalidKey;
-  _ctx->_queryDataLayoutPtr.reset(dataLayoutPtr);
+  // int numRows = dataLayoutPtr->numRows;
+  // _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
+  // _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
+  // _ctx->_invalidKey = dataLayoutPtr->invalidKey;
+  // _ctx->_queryDataLayoutPtr.reset(dataLayoutPtr);
 
-  // TODO(croot): Should each mark have its own invalid key? Probably, if we support
-  // multiple sqls.
-  // But if we deal with multiple sqls, then the context probably shouldn't
-  // hold onto the invalidKey - the QueryResultVertexBuffer probably should, but
-  // then how do we deal with setting that uniform?
-  for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
-    _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
-  }
+  // // TODO(croot): Should each mark have its own invalid key? Probably, if we support
+  // // multiple sqls.
+  // // But if we deal with multiple sqls, then the context probably shouldn't
+  // // hold onto the invalidKey - the QueryResultVertexBuffer probably should, but
+  // // then how do we deal with setting that uniform?
+  // for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+  //   _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
+  // }
 }
 
 void QueryRenderer::render() {
-  RUNTIME_EX_ASSERT(_framebufferPtr != nullptr, "QueryRenderer: The framebuffer is not defined. Cannot render.");
+  // RUNTIME_EX_ASSERT(_framebufferPtr != nullptr, "QueryRenderer: The framebuffer is not defined. Cannot render.");
 
-  _framebufferPtr->bindToRenderer();
+  // _framebufferPtr->bindToRenderer();
 
-  MAPD_CHECK_GL_ERROR(glEnable(GL_BLEND));
-  MAPD_CHECK_GL_ERROR(glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD));
-  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
-  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
-  MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
+  // MAPD_CHECK_GL_ERROR(glEnable(GL_BLEND));
+  // MAPD_CHECK_GL_ERROR(glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD));
+  // // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
+  // // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
+  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
 
-  MAPD_CHECK_GL_ERROR(glClearColor(0, 0, 0, 0));
-  MAPD_CHECK_GL_ERROR(glViewport(0, 0, _ctx->_width, _ctx->_height));
-  MAPD_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+  // MAPD_CHECK_GL_ERROR(glClearColor(0, 0, 0, 1));
+  // MAPD_CHECK_GL_ERROR(glViewport(0, 0, _ctx->_width, _ctx->_height));
+  // MAPD_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
-  for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
-    _ctx->_geomConfigs[i]->draw();
-  }
+  // for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+  //   _ctx->_geomConfigs[i]->draw();
+  // }
 }
 
 unsigned int QueryRenderer::getIdAt(int x, int y) {
-  RUNTIME_EX_ASSERT(_framebufferPtr != nullptr,
-                    "QueryRenderer: The framebuffer is not defined. Cannot retrieve id at pixel.");
+  // RUNTIME_EX_ASSERT(_framebufferPtr != nullptr,
+  //                   "QueryRenderer: The framebuffer is not defined. Cannot retrieve id at pixel.");
 
-  // TODO(croot): develop an API for reading from specific fbo buffers
-  _framebufferPtr->bindToRenderer();
-  MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT1));
+  // // TODO(croot): develop an API for reading from specific fbo buffers
+  // _framebufferPtr->bindToRenderer();
+  // MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT1));
 
-  // TODO(croot): support a wider pixel check for a hit test and take a weighted avg
-  // of the results to get a more stable result at boundaries
-  unsigned int id;
-  MAPD_CHECK_GL_ERROR(glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id));
+  // // TODO(croot): support a wider pixel check for a hit test and take a weighted avg
+  // // of the results to get a more stable result at boundaries
+  // unsigned int id;
+  // MAPD_CHECK_GL_ERROR(glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id));
 
-  return id;
+  // return id;
 }
 
 bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
   return (_dataTableMap.find(tableName) != _dataTableMap.end());
 }
 
-DataVBOShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
-  DataVBOShPtr rtn(nullptr);
+void QueryRendererContext::_initialize(std::vector<QueryRenderManager::PerGpuData>& qrmPerGpuData) {
+  CHECK(_perGpuData.size() == qrmPerGpuData.size());
+  for (size_t i = 0; i < qrmPerGpuData.size(); ++i) {
+    _perGpuData[i].qrmGpuData = &qrmPerGpuData[i];
+  }
+}
+
+QueryDataTableVBOShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
+  QueryDataTableVBOShPtr rtn(nullptr);
 
   auto itr = _dataTableMap.find(tableName);
   if (itr != _dataTableMap.end()) {
@@ -497,7 +527,7 @@ void QueryRendererContext::_fireRefEvent(RefEventType eventType, const ScaleShPt
 
 // }
 
-std::string MapD_Renderer::getDataTableNameFromJSONObj(const rapidjson::Value& obj) {
+std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj) {
   RUNTIME_EX_ASSERT(obj.IsObject(), "A data object in the JSON must be an object.");
 
   rapidjson::Value::ConstMemberIterator itr;
@@ -508,7 +538,7 @@ std::string MapD_Renderer::getDataTableNameFromJSONObj(const rapidjson::Value& o
   return itr->value.GetString();
 }
 
-BaseDataTableVBO::DataTableType MapD_Renderer::getDataTableTypeFromJSONObj(const rapidjson::Value& obj) {
+QueryDataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj) {
   RUNTIME_EX_ASSERT(obj.IsObject(), "A data table in the JSON must be an object.");
 
   rapidjson::Value::ConstMemberIterator itr;
@@ -516,44 +546,47 @@ BaseDataTableVBO::DataTableType MapD_Renderer::getDataTableTypeFromJSONObj(const
   if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
     RUNTIME_EX_ASSERT(itr->value.IsString(),
                       "Cannot get data table's type - the sql property for a data table must be a string.");
-    return BaseDataTableVBO::DataTableType::SQLQUERY;
+    return QueryDataTableType::SQLQUERY;
   } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
-    return BaseDataTableVBO::DataTableType::EMBEDDED;
+    return QueryDataTableType::EMBEDDED;
   } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
-    return BaseDataTableVBO::DataTableType::URL;
+    return QueryDataTableType::URL;
   }
 
   THROW_RUNTIME_EX("Cannot get data table's type - the data table's type is not supported.");
-  return BaseDataTableVBO::DataTableType::UNSUPPORTED;
+  return QueryDataTableType::UNSUPPORTED;
 }
 
-DataVBOShPtr MapD_Renderer::createDataTable(const rapidjson::Value& obj,
-                                            const rapidjson::Pointer& objPath,
-                                            const QueryRendererContextShPtr& ctx,
-                                            const std::string& name) {
-  std::string tableName(name);
-  if (!tableName.length()) {
-    tableName = getDataTableNameFromJSONObj(obj);
-  } else {
-    RUNTIME_EX_ASSERT(obj.IsObject(), "Cannot create data table - A data object in the JSON must be an object.");
-  }
+QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
+                                       const rapidjson::Pointer& objPath,
+                                       const QueryRendererContextShPtr& ctx,
+                                       const std::string& name) {
+  // std::string tableName(name);
+  // if (!tableName.length()) {
+  //   tableName = getDataTableNameFromJSONObj(obj);
+  // } else {
+  //   RUNTIME_EX_ASSERT(obj.IsObject(), "Cannot create data table - A data object in the JSON must be an object.");
+  // }
 
-  RUNTIME_EX_ASSERT(tableName.length(),
-                    "Cannot create data table - The data table has an empty name. It must have a name.");
+  // RUNTIME_EX_ASSERT(tableName.length(),
+  //                   "Cannot create data table - The data table has an empty name. It must have a name.");
 
-  BaseDataTableVBO::DataTableType tableType = getDataTableTypeFromJSONObj(obj);
-  switch (tableType) {
-    case BaseDataTableVBO::DataTableType::SQLQUERY:
-      return DataVBOShPtr(new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffer()));
-    case BaseDataTableVBO::DataTableType::EMBEDDED:
-    case BaseDataTableVBO::DataTableType::URL:
-      return DataVBOShPtr(
-          new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
-    default:
-      THROW_RUNTIME_EX(
-          "Cannot create data table \"" + tableName +
-          "\". It is not a supported table. Supported tables must have an \"sql\", \"values\" or \"url\" property.");
-  }
+  // QueryDataTableType tableType = getDataTableTypeFromJSONObj(obj);
+  // switch (tableType) {
+  //   case QueryDataTableType::SQLQUERY:
+  //     return QueryDataTableVBOShPtr(new SqlQueryDataTable(ctx, tableName, obj, objPath,
+  //     ctx->getQueryResultVertexBuffer()));
+  //   case QueryDataTableType::EMBEDDED:
+  //   case QueryDataTableType::URL:
+  //     return QueryDataTableVBOShPtr(
+  //         new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+  //   default:
+  //     THROW_RUNTIME_EX(
+  //         "Cannot create data table \"" + tableName +
+  //         "\". It is not a supported table. Supported tables must have an \"sql\", \"values\" or \"url\" property.");
+  // }
 
-  return DataVBOShPtr(nullptr);
+  // return QueryDataTableVBOShPtr(nullptr);
 }
+
+}  // namespace QueryRenderer

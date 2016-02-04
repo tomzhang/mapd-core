@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 struct LinearScaleTemplate_vert {
   static const std::string source;
 };
@@ -82,6 +82,6 @@ const std::string LinearScaleTemplate_vert::source =
     "    return mix(uRanges_<name>[idx1], uRanges_<name>[idx2], t);\n"
     "}\n";
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // LINEARSCALETEMPLATE_VERT_H_

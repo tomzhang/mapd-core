@@ -24,7 +24,7 @@
 using namespace ::boost;
 using namespace ::boost::multi_index;
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 enum LayoutType { INTERLEAVED = 0, SEQUENTIAL, CUSTOM };
 
@@ -389,6 +389,6 @@ class SequentialBufferLayout : public BaseBufferLayout {
   }
 };
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // BUFFER_LAYOUT_H_

@@ -7,7 +7,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 struct RapidJSONUtils {
   typedef std::shared_ptr<rapidjson::Value> JsonCachePtr;
@@ -51,6 +51,6 @@ struct RapidJSONUtils {
   }
 };
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // RAPID_JSON_UTILS_H_

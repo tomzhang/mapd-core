@@ -12,7 +12,7 @@
 #include <memory>
 #include <iostream>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 // typedef vector<GLuint> AttrInfo;
 // template <typename T>
@@ -255,6 +255,6 @@ class Shader {
 typedef std::unique_ptr<Shader> ShaderUqPtr;
 typedef std::shared_ptr<Shader> ShaderShPtr;
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // SHADER_H_

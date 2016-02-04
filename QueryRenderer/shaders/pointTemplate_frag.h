@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 struct PointTemplate_Frag {
   static const std::string source;
 };
@@ -37,6 +37,6 @@ const std::string PointTemplate_Frag::source =
     "    }\n"
     "    id = fPrimitiveId;\n"
     "}\n";
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // POINTTEMPLATE_FRAG_H_

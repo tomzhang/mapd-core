@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <unordered_map>
 
-namespace MapD_Renderer {
+namespace QueryRenderer {
 
 enum class ColorChannel { RED = 0, GREEN, BLUE, ALPHA };
 
@@ -79,6 +79,6 @@ class ColorRGBA {
   ColorArray _colorArray;
 };
 
-}  // namespace MapD_Renderer
+}  // namespace QueryRenderer
 
 #endif  // COLOR_H_
