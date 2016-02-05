@@ -20,51 +20,83 @@ namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
 
-QueryRenderer::QueryRenderer(std::vector<QueryRenderManager::PerGpuData>& perGpuData, bool doHitTest, bool doDepthTest)
-    : _ctx(new QueryRendererContext(perGpuData, doHitTest, doDepthTest)), _perGpuData(perGpuData.size()) {
-  _initialize(perGpuData);
+QueryRenderer::QueryRenderer(bool doHitTest, bool doDepthTest)
+    : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData() {
 }
 
 QueryRenderer::QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                             std::vector<QueryRenderManager::PerGpuData>& perGpuData,
                              bool doHitTest,
                              bool doDepthTest)
-    : QueryRenderer(perGpuData, doHitTest, doDepthTest) {
+    : QueryRenderer(doHitTest, doDepthTest) {
   _initFromJSON(jsonDocumentPtr);
 }
 
-QueryRenderer::QueryRenderer(const std::string& configJSON,
-                             std::vector<QueryRenderManager::PerGpuData>& perGpuData,
-                             bool doHitTest,
-                             bool doDepthTest)
-    : QueryRenderer(perGpuData, doHitTest, doDepthTest) {
+QueryRenderer::QueryRenderer(const std::string& configJSON, bool doHitTest, bool doDepthTest)
+    : QueryRenderer(doHitTest, doDepthTest) {
   _initFromJSON(configJSON);
 }
 
 QueryRenderer::~QueryRenderer() {
   _clear();
+  _clearGpuResources();
 }
 
 void QueryRenderer::_clear() {
   _ctx->_clear();
 }
 
-void QueryRenderer::_initialize(std::vector<QueryRenderManager::PerGpuData>& qrmPerGpuData) {
-  CHECK(_perGpuData.size() == qrmPerGpuData.size());
-  for (size_t i = 0; i < qrmPerGpuData.size(); ++i) {
-    _perGpuData[i].qrmGpuData = &qrmPerGpuData[i];
-  }
+void QueryRenderer::_clearGpuResources() {
+  _perGpuData.clear();
 }
 
-void QueryRenderer::_initFramebuffer(int width, int height) {
-  for (auto& gpuData : _perGpuData) {
-    if (gpuData.framebufferPtr == nullptr) {
-      CHECK(gpuData.qrmGpuData->rendererPtr);
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(gpuData.qrmGpuData->rendererPtr.get());
-      gpuData.framebufferPtr.reset(
+void QueryRenderer::_initGpuResources(const std::vector<GpuId>& gpuIds,
+                                      QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
+  std::unordered_set<GpuId> unusedGpus;
+  unusedGpus.reserve(_perGpuData.size());
+  for (const auto& kv : _perGpuData) {
+    unusedGpus.insert(kv.first);
+  }
+
+  for (auto gpuId : gpuIds) {
+    auto myItr = _perGpuData.find(gpuId);
+    if (myItr == _perGpuData.end()) {
+      auto itr = qrmPerGpuData.find(gpuId);
+      CHECK(itr != qrmPerGpuData.end());
+
+      PerGpuData gpuData;
+
+      gpuData.qrmGpuData = &(itr->second);
+
+      // TODO(croot): validate the QueryRenderManager data is complete?
+      CHECK(itr->second.rendererPtr != nullptr);
+
+      _perGpuData.emplace(gpuId, std::move(gpuData));
+    } else {
+      myItr->second.framebufferPtr->resize(_ctx->getWidth(), _ctx->getHeight());
+
+      unusedGpus.erase(gpuId);
+    }
+  }
+
+  // now clean up any unused gpu resources
+  for (auto gpuId : unusedGpus) {
+    _perGpuData.erase(gpuId);
+  }
+
+  _ctx->_initGpuResources(_perGpuData, unusedGpus);
+}
+
+void QueryRenderer::_resizeFramebuffers(int width, int height) {
+  for (auto& gpuDataItr : _perGpuData) {
+    if (gpuDataItr.second.framebufferPtr == nullptr) {
+      CHECK(gpuDataItr.second.qrmGpuData->rendererPtr != nullptr);
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(gpuDataItr.second.qrmGpuData->rendererPtr.get());
+      CHECK(renderer != nullptr);
+
+      gpuDataItr.second.framebufferPtr.reset(
           new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
     } else {
-      gpuData.framebufferPtr->resize(width, height);
+      gpuDataItr.second.framebufferPtr->resize(width, height);
     }
   }
 }
@@ -300,7 +332,7 @@ void QueryRenderer::setWidthHeight(int width, int height) {
   _ctx->_width = width;
   _ctx->_height = height;
 
-  _initFramebuffer(_ctx->_width, _ctx->_height);
+  _resizeFramebuffers(_ctx->_width, _ctx->_height);
 
   // if (win) {
   //   // pass a window in debug mode
@@ -321,12 +353,13 @@ void QueryRenderer::setWidthHeight(int width, int height) {
   // }
 }
 
-const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer(size_t gpuId) {
-  RUNTIME_EX_ASSERT(gpuId < _perGpuData.size(),
-                    "Error getting QueryRenderer framebuffer for gpuId " + std::to_string(gpuId) + ". There are only " +
-                        std::to_string(_perGpuData.size()) + " GPUs active for rendering.");
+const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer(const GpuId& gpuId) {
+  PerGpuDataMap::const_iterator itr = _perGpuData.find(gpuId);
 
-  return _perGpuData[gpuId].framebufferPtr;
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                    "Error getting QueryRenderer framebuffer for gpuId " + std::to_string(gpuId) + ".");
+
+  return itr->second.framebufferPtr;
 }
 
 void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate) {
@@ -337,24 +370,13 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
   _initFromJSON(jsonDocumentPtr, forceUpdate);
 }
 
-// void QueryRenderer::updateQueryResultBufferPostQuery(const BufferLayoutShPtr& layoutPtr,
-//                                                      const int numRows,
-//                                                      const int64_t invalid_key) {
-//   _ctx->_queryResultBufferLayout = layoutPtr;
-//   _ctx->_queryResultVBOPtr->updatePostQuery(layoutPtr, numRows);
-//   _ctx->_invalidKey = invalid_key;
-
-//   // TODO(croot): Should each mark have its own invalid key? Probably, if we support
-//   // multiple sqls.
-//   // But if we deal with multiple sqls, then the context probably shouldn't
-//   // hold onto the invalidKey - the QueryResultVertexBuffer probably should, but
-//   // then how do we deal with setting that uniform?
-//   for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
-//     _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
-//   }
-// }
-
-void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr) {
+void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr,
+                                                     QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
+  std::vector<GpuId> gpuIds;
+  for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
+    gpuIds.push_back(item.first);
+  }
+  _initGpuResources(gpuIds, qrmPerGpuData);
   // int numRows = dataLayoutPtr->numRows;
   // _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
   // _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
@@ -369,6 +391,10 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayout
   // for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
   //   _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
   // }
+}
+
+void QueryRenderer::activateGpu(const GpuId& gpuId, QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
+  _initGpuResources({gpuId}, qrmPerGpuData);
 }
 
 void QueryRenderer::render() {
@@ -407,15 +433,67 @@ unsigned int QueryRenderer::getIdAt(int x, int y) {
   // return id;
 }
 
-bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
-  return (_dataTableMap.find(tableName) != _dataTableMap.end());
+QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)
+    : executor_(nullptr),
+      _perGpuData(),
+      _width(0),
+      _height(0),
+      _doHitTest(doHitTest),
+      _doDepthTest(doDepthTest),
+      _invalidKey(std::numeric_limits<int64_t>::max()),
+      _jsonCache(nullptr) {
 }
 
-void QueryRendererContext::_initialize(std::vector<QueryRenderManager::PerGpuData>& qrmPerGpuData) {
-  CHECK(_perGpuData.size() == qrmPerGpuData.size());
-  for (size_t i = 0; i < qrmPerGpuData.size(); ++i) {
-    _perGpuData[i].qrmGpuData = &qrmPerGpuData[i];
+QueryRendererContext::QueryRendererContext(int width, int height, bool doHitTest, bool doDepthTest)
+    : executor_(nullptr),
+      _perGpuData(),
+      _width(width),
+      _height(height),
+      _doHitTest(doHitTest),
+      _doDepthTest(doDepthTest),
+      _invalidKey(std::numeric_limits<int64_t>::max()),
+      _jsonCache(nullptr),
+      _queryDataLayoutPtr(nullptr) {
+}
+
+QueryRendererContext::~QueryRendererContext() {
+  _clear();
+  _clearGpuResources();
+}
+
+void QueryRendererContext::_clear() {
+  _width = 0;
+  _height = 0;
+  _dataTableMap.clear();
+  _scaleConfigMap.clear();
+  _geomConfigs.clear();
+  _eventCallbacksMap.clear();
+}
+
+void QueryRendererContext::_clearGpuResources() {
+  _perGpuData.clear();
+}
+
+void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData,
+                                             const std::unordered_set<GpuId>& unusedGpus) {
+  // CHECK(_perGpuData.size() == qrmPerGpuData.size());
+  // for (size_t i = 0; i < qrmPerGpuData.size(); ++i) {
+  //   _perGpuData[i].qrmGpuData = &qrmPerGpuData[i];
+  // }
+
+  for (const auto& itr : qrPerGpuData) {
+    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+      _perGpuData.insert({itr.first, PerGpuData(itr.second.qrmGpuData)});
+    }
   }
+
+  for (auto gpuId : unusedGpus) {
+    _perGpuData.erase(gpuId);
+  }
+}
+
+bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
+  return (_dataTableMap.find(tableName) != _dataTableMap.end());
 }
 
 QueryDataTableVBOShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
@@ -442,6 +520,42 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
   }
 
   return rtn;
+}
+
+QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(const GpuId& gpuId) const {
+  // TODO(croot): make thread safe?
+
+  PerGpuDataMap::const_iterator itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                    "Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
+  return itr->second.qrmGpuData->queryResultBufferPtr;
+}
+
+std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
+  std::map<GpuId, QueryVertexBufferShPtr> rtn;
+
+  for (auto& itr : _perGpuData) {
+    // rtn.insert({itr.first,
+    // std::static_pointer_cast<QueryVertexBuffer>(itr.second.qrmGpuData->queryResultBufferPtr)});
+    rtn.insert({itr.first, itr.second.qrmGpuData->queryResultBufferPtr});
+  }
+
+  return rtn;
+}
+
+bool QueryRendererContext::isJSONCacheUpToDate(const rapidjson::Pointer& objPath, const rapidjson::Value& obj) {
+  if (!_jsonCache) {
+    return false;
+  }
+
+  const rapidjson::Value* cachedVal = GetValueByPointer(*_jsonCache, objPath);
+
+  // TODO(croot): throw an exception or just return false?
+  RUNTIME_EX_ASSERT(cachedVal != nullptr,
+                    "The path " + RapidJSONUtils::getPointerPath(objPath) + " is not a valid path in the cached json.");
+
+  return (cachedVal ? (*cachedVal == obj) : false);
 }
 
 void QueryRendererContext::subscribeToRefEvent(RefEventType eventType,
@@ -561,32 +675,32 @@ QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
                                        const rapidjson::Pointer& objPath,
                                        const QueryRendererContextShPtr& ctx,
                                        const std::string& name) {
-  // std::string tableName(name);
-  // if (!tableName.length()) {
-  //   tableName = getDataTableNameFromJSONObj(obj);
-  // } else {
-  //   RUNTIME_EX_ASSERT(obj.IsObject(), "Cannot create data table - A data object in the JSON must be an object.");
-  // }
+  std::string tableName(name);
+  if (!tableName.length()) {
+    tableName = getDataTableNameFromJSONObj(obj);
+  } else {
+    RUNTIME_EX_ASSERT(obj.IsObject(), "Cannot create data table - A data object in the JSON must be an object.");
+  }
 
-  // RUNTIME_EX_ASSERT(tableName.length(),
-  //                   "Cannot create data table - The data table has an empty name. It must have a name.");
+  RUNTIME_EX_ASSERT(tableName.length(),
+                    "Cannot create data table - The data table has an empty name. It must have a name.");
 
-  // QueryDataTableType tableType = getDataTableTypeFromJSONObj(obj);
-  // switch (tableType) {
-  //   case QueryDataTableType::SQLQUERY:
-  //     return QueryDataTableVBOShPtr(new SqlQueryDataTable(ctx, tableName, obj, objPath,
-  //     ctx->getQueryResultVertexBuffer()));
-  //   case QueryDataTableType::EMBEDDED:
-  //   case QueryDataTableType::URL:
-  //     return QueryDataTableVBOShPtr(
-  //         new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
-  //   default:
-  //     THROW_RUNTIME_EX(
-  //         "Cannot create data table \"" + tableName +
-  //         "\". It is not a supported table. Supported tables must have an \"sql\", \"values\" or \"url\" property.");
-  // }
+  QueryDataTableType tableType = getDataTableTypeFromJSONObj(obj);
+  switch (tableType) {
+    case QueryDataTableType::SQLQUERY:
+      return QueryDataTableVBOShPtr(
+          new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));
+    case QueryDataTableType::EMBEDDED:
+    case QueryDataTableType::URL:
+      return QueryDataTableVBOShPtr(
+          new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
+    default:
+      THROW_RUNTIME_EX(
+          "Cannot create data table \"" + tableName +
+          "\". It is not a supported table. Supported tables must have an \"sql\", \"values\" or \"url\" property.");
+  }
 
-  // return QueryDataTableVBOShPtr(nullptr);
+  return QueryDataTableVBOShPtr(nullptr);
 }
 
 }  // namespace QueryRenderer

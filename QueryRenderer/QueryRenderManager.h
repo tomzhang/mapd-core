@@ -7,7 +7,7 @@
 #include "Types.h"
 #include <Rendering/Types.h>
 #include <unordered_map>
-#include <vector>
+#include <map>
 #include <utility>  // std::pair
 #include <mutex>
 
@@ -39,7 +39,11 @@ class QueryRenderManager {
     // QueryRendererFboShPtr rendererFboPtr;
 
     PerGpuData() : queryResultBufferPtr(nullptr), windowPtr(nullptr), rendererPtr(nullptr) {}
+    PerGpuData(const PerGpuData& data)
+        : queryResultBufferPtr(data.queryResultBufferPtr), windowPtr(data.windowPtr), rendererPtr(data.rendererPtr) {}
   };
+
+  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
   explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
                               const Executor* executor,
@@ -49,7 +53,7 @@ class QueryRenderManager {
   ~QueryRenderManager();
 
 #ifdef HAVE_CUDA
-  CudaHandle getCudaHandle();
+  CudaHandle getCudaHandle(const GpuId& gpuId = 0);
 #endif
 
   bool inDebugMode() const;
@@ -97,7 +101,7 @@ class QueryRenderManager {
   mutable QueryRenderer* _activeRenderer;
   mutable UserWidgetPair _activeUserWidget;
 
-  std::vector<PerGpuData> _perGpuData;
+  PerGpuDataMap _perGpuData;
 
   void _initialize(Rendering::WindowManager& windowMgr, int numGpus, size_t queryResultBufferSize);
 

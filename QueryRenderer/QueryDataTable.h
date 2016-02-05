@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYDATATABLE_H_
 
 #include "Types.h"
+#include "QueryRenderer.h"
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>
@@ -16,6 +17,7 @@
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
 
+#include <map>
 // #include <string>
 // #include <memory>
 // #include <algorithm>  // minmax_element
@@ -53,21 +55,26 @@ class BaseQueryDataTableVBO {
                         const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,
                         QueryDataTableType type)
-      : _ctx(ctx), _name(name), _vbo(nullptr), _type(type), _jsonPath(objPath) {}
+      : _ctx(ctx), _name(name), _perGpuData(), _type(type), _jsonPath(objPath) {
+    _initGpuResources(ctx, {});
+  }
   explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
                                  const std::string& name,
                                  const rapidjson::Value& obj,
                                  const rapidjson::Pointer& objPath,
                                  QueryDataTableType type,
-                                 const Rendering::GL::Resources::GLVertexBufferShPtr& vbo)
-      : _ctx(ctx), _name(name), _vbo(vbo), _type(type), _jsonPath(objPath) {}
+                                 const std::map<GpuId, QueryVertexBufferShPtr>& vboMap)
+      : BaseQueryDataTableVBO(ctx, name, obj, objPath, type) {
+    _initVBOs(vboMap);
+  }
   virtual ~BaseQueryDataTableVBO() {}
 
   virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
   virtual bool hasColumn(const std::string& columnName) = 0;
-  virtual ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const std::string& columnName) = 0;
+  virtual ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId,
+                                                                           const std::string& columnName) = 0;
   virtual QueryDataType getColumnType(const std::string& columnName) = 0;
-  virtual int numRows() = 0;
+  virtual int numRows(const GpuId& gpuId) = 0;
 
   std::string getName() { return _name; }
   QueryDataTableType getType() { return _type; }
@@ -75,9 +82,47 @@ class BaseQueryDataTableVBO {
  protected:
   QueryRendererContextShPtr _ctx;
   std::string _name;
-  ::Rendering::GL::Resources::GLVertexBufferShPtr _vbo;
+
+  struct PerGpuData {
+    const QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryVertexBufferShPtr vbo;
+
+    PerGpuData() : qrmGpuData(nullptr), vbo(nullptr) {}
+    explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData, const QueryVertexBufferShPtr& vbo = nullptr)
+        : qrmGpuData(qrcGpuData.qrmGpuData), vbo(vbo) {}
+    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), vbo(data.vbo) {}
+    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), vbo(std::move(data.vbo)) {}
+  };
+  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
+
+  PerGpuDataMap _perGpuData;
+
   QueryDataTableType _type;
   rapidjson::Pointer _jsonPath;
+
+ private:
+  void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId>& unusedGpus) {
+    const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+    for (auto& itr : qrcPerGpuData) {
+      if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+        _perGpuData.emplace(itr.first, PerGpuData(itr.second));
+      }
+    }
+
+    for (auto gpuId : unusedGpus) {
+      _perGpuData.erase(gpuId);
+    }
+  }
+
+  void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap) {
+    CHECK(vboMap.size() == _perGpuData.size());
+
+    for (const auto& itr : vboMap) {
+      auto myItr = _perGpuData.find(itr.first);
+      CHECK(myItr != _perGpuData.end());
+      myItr->second.vbo = itr.second;
+    }
+  }
 };
 
 class SqlQueryDataTable : public BaseQueryDataTableVBO {
@@ -86,9 +131,9 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
                     const std::string& name,
                     const rapidjson::Value& obj,
                     const rapidjson::Pointer& objPath,
-                    const ::Rendering::GL::Resources::GLVertexBufferShPtr& vbo,
+                    const std::map<GpuId, QueryVertexBufferShPtr>& vboMap,
                     const std::string& sqlQueryStr = "")
-      : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vbo),
+      : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vboMap),
         _sqlQueryStr(sqlQueryStr),
         _tableName() {
     _initFromJSONObj(obj, objPath);
@@ -96,14 +141,31 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
   ~SqlQueryDataTable() {}
 
   void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
-  bool hasColumn(const std::string& columnName) { return _vbo->hasAttribute(columnName); }
-  ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const std::string& columnName) {
-    RUNTIME_EX_ASSERT(_vbo->hasAttribute(columnName),
-                      "SqlQueryDataTable::hasColumn(): column \"" + columnName + "\" does not exist.");
-    return _vbo;
+  bool hasColumn(const std::string& columnName) {
+    // all vbos should have the same set of columns, so only need to check the first one.
+    auto itr = _perGpuData.begin();
+    CHECK(itr != _perGpuData.end());
+    return itr->second.vbo->hasAttribute(columnName);
   }
+  ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
+    auto itr = _perGpuData.find(gpuId);
+
+    RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot find column data VBO for gpu " + std::to_string(gpuId));
+
+    RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
+                      "SqlQueryDataTable::hasColumn(): column \"" + columnName + "\" does not exist.");
+    return itr->second.vbo->getGLVertexBufferPtr();
+  }
+
   QueryDataType getColumnType(const std::string& columnName);
-  int numRows() { return _vbo->numItems(); }
+  int numRows(const GpuId& gpuId) {
+    auto itr = _perGpuData.find(gpuId);
+
+    RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                      "Cannot find number of rows for column data VBO on gpu " + std::to_string(gpuId));
+
+    return itr->second.vbo->numItems();
+  }
 
   std::string getTableName() { return _tableName; }
 
@@ -219,9 +281,9 @@ class DataTable : public BaseQueryDataTableVBO {
   QueryDataType getColumnType(const std::string& columnName);
   DataColumnShPtr getColumn(const std::string& columnName);
 
-  ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const std::string& columnName);
+  ::Rendering::GL::Resources::GLVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName);
 
-  int numRows() { return _numRows; }
+  int numRows(const GpuId& gpuId) { return _numRows; }
 
  private:
   VboType _vboType;

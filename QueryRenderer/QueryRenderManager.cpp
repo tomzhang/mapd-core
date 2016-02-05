@@ -70,8 +70,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
                           " are available for rendering.");
   }
 
-  _perGpuData.resize(numGpus);
-
   int defaultWidth = 1024, defaultHeight = 1024;  // TODO(croot): expose as a static somewhere?
 
   // setup the window settings
@@ -88,55 +86,63 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
 
   GLRenderer* renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
+
+  PerGpuData gpuData;
   for (int i = 0; i < numGpus; ++i) {
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
-    _perGpuData[i].windowPtr = windowMgr.createWindow(windowSettings);
-    _perGpuData[i].rendererPtr = windowMgr.createRendererForWindow(rendererSettings, _perGpuData[i].windowPtr);
+    gpuData.windowPtr = windowMgr.createWindow(windowSettings);
+    gpuData.rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuData.windowPtr);
 
-    renderer = dynamic_cast<GLRenderer*>(_perGpuData[i].rendererPtr.get());
+    renderer = dynamic_cast<GLRenderer*>(gpuData.rendererPtr.get());
     CHECK(renderer != nullptr);
 
     renderer->makeActiveOnCurrentThread();
-    _perGpuData[i].queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
+    gpuData.queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
+
+    _perGpuData.insert({i, gpuData});
   }
 }
 
-CudaHandle QueryRenderManager::getCudaHandle() {
-  // if (!_queryResultVBOPtr) {
-  //   LOG(FATAL) << "The query render manager is in a corrupt state.";
-  // }
+#ifdef HAVE_CUDA
+CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
+  auto itr = _perGpuData.find(gpuId);
 
-  // std::lock_guard<std::mutex> render_lock(_mtx);
-  // glfwMakeContextCurrent(_windowPtr);
-  // CudaHandle rtn = _queryResultVBOPtr->getCudaHandlePreQuery();
-  // glfwMakeContextCurrent(nullptr);
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
 
-  // return rtn;
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_mtx);
+
+  itr->second.rendererPtr->makeActiveOnCurrentThread(itr->second.windowPtr.get());
+  CudaHandle rtn = itr->second.queryResultBufferPtr->getCudaHandlePreQuery();
+  itr->second.rendererPtr->makeInactive();
+
+  return rtn;
 }
+#endif  // HAVE_CUDA
 
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   // TODO(croot): should we put thread locks in here? that probably makes sense.
 
-  // UserWidgetPair userWidget = std::make_pair(userId, widgetId);
+  UserWidgetPair userWidget = std::make_pair(userId, widgetId);
 
-  // if (userWidget != _activeUserWidget) {
-  //   auto userIter = _rendererDict.find(userId);
+  if (userWidget != _activeUserWidget) {
+    auto userIter = _rendererDict.find(userId);
 
-  //   RUNTIME_EX_ASSERT(userIter != _rendererDict.end(), "User id: " + std::to_string(userId) + " does not exist.");
+    RUNTIME_EX_ASSERT(userIter != _rendererDict.end(), "User id: " + std::to_string(userId) + " does not exist.");
 
-  //   WidgetRendererMap* wfMap = userIter->second.get();
+    WidgetRendererMap* wfMap = userIter->second.get();
 
-  //   auto widgetIter = wfMap->find(widgetId);
+    auto widgetIter = wfMap->find(widgetId);
 
-  //   RUNTIME_EX_ASSERT(
-  //       widgetIter != wfMap->end(),
-  //       "Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) + " does not exist.");
+    RUNTIME_EX_ASSERT(
+        widgetIter != wfMap->end(),
+        "Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) + " does not exist.");
 
-  //   _activeRenderer = widgetIter->second.get();
-  //   _activeUserWidget = userWidget;
-  // }
+    _activeRenderer = widgetIter->second.get();
+    _activeUserWidget = userWidget;
+  }
 }
 
 void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPair) {
@@ -183,7 +189,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
 
   // (*wfMap)[widgetId] = QueryRendererUqPtr(
   //     new QueryRenderer(executor_, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
-  (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(_perGpuData, doHitTest, doDepthTest));
+  (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(doHitTest, doDepthTest));
   // new QueryRenderer(executor_, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
 
   // TODO(croot): should we set this as active the newly added ids as active?
@@ -215,6 +221,7 @@ void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
     _activeRenderer = nullptr;
   }
 }
+
 void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
   removeUserWidget(userWidgetPair.first, userWidgetPair.second);
 }
@@ -249,7 +256,14 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
     CHECK(executor != nullptr);
     // _activeRenderer->updateQueryResultBufferPostQuery(
     //     dataLayoutPtr->convertToBufferLayout(), dataLayoutPtr->numRows, dataLayoutPtr->invalidKey);
-    _activeRenderer->updateQueryResultBufferPostQuery(dataLayoutPtr);
+    _activeRenderer->updateQueryResultBufferPostQuery(dataLayoutPtr, _perGpuData);
+  } else {
+    CHECK(_perGpuData.size());
+
+    // uses the first gpu as the default.
+    // TODO(croot): expose a way to specify which gpu to use?
+    auto itr = _perGpuData.begin();
+    _activeRenderer->activateGpu(itr->first, _perGpuData);
   }
 
   _activeRenderer->setJSONDocument(jsonDocumentPtr, false);

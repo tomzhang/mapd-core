@@ -1,7 +1,9 @@
 #ifndef QUERYRENDERER_QUERYDATALAYOUT_H_
 #define QUERYRENDERER_QUERYDATALAYOUT_H_
 
+#include "Types.h"
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
+#include <map>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -13,7 +15,9 @@ struct QueryDataLayout {
   enum class AttrType { UINT = 0, INT, FLOAT, DOUBLE, UINT64, INT64 };
   enum class LayoutType { INTERLEAVED = 0, SEQUENTIAL };
 
-  size_t numRows;
+  typedef std::map<GpuId, size_t> PerGpuDataMap;
+
+  PerGpuDataMap numRowsPerGpuBufferMap;
 
   // TODO(croot): add size_t numKeys --- each row can have
   // multiple keys. This value would indicate how many.
@@ -27,7 +31,7 @@ struct QueryDataLayout {
   std::unordered_map<std::string, std::string> attrAliasToName;
   LayoutType layoutType;
 
-  QueryDataLayout(const size_t numRows,
+  QueryDataLayout(const std::map<GpuId, size_t> numRowsPerGpuBufferMap,
                   const std::vector<std::string>& attrNames,
                   const std::vector<AttrType>& attrTypes,
                   const std::unordered_map<std::string, std::string>& attrAliasToName,

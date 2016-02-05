@@ -3,15 +3,68 @@
 
 namespace QueryRenderer {
 
+QueryVertexBuffer::QueryVertexBuffer(VboType type) : _type(type) {
+}
+
+// QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, GLenum usage) : _vbo(nullptr) {
+// }
+
+QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage, VboType type)
+    : QueryVertexBuffer(type) {
+  _initBuffer(renderer, usage, numBytes);
+}
+
+QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+                                     const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+                                     GLenum usage,
+                                     VboType type)
+    : QueryVertexBuffer(type) {
+  _initBuffer(renderer, usage, 0, layoutPtr);
+}
+
+QueryVertexBuffer::~QueryVertexBuffer() {
+}
+
+void QueryVertexBuffer::_initBuffer(Rendering::GL::GLRenderer* renderer,
+                                    GLenum usage,
+                                    size_t numBytes,
+                                    const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) {
+  if (!_vbo) {
+    Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+
+    if (numBytes > 0) {
+      _vbo = rsrcMgr->createVertexBuffer(numBytes, usage);
+    } else if (layoutPtr) {
+      _vbo = rsrcMgr->createVertexBuffer(layoutPtr, usage);
+    } else {
+      _vbo = rsrcMgr->createVertexBuffer(usage);
+    }
+  }
+}
+
+bool QueryVertexBuffer::hasAttribute(const std::string& attrName) const {
+  CHECK(_vbo);
+  return _vbo->hasAttribute(attrName);
+}
+
+size_t QueryVertexBuffer::numItems() const {
+  CHECK(_vbo);
+  return _vbo->numItems();
+}
+
+::Rendering::GL::Resources::GLBufferAttrType QueryVertexBuffer::getAttributeType(const std::string& attrName) const {
+  CHECK(_vbo);
+  return _vbo->getAttributeType(attrName);
+}
+
 QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage)
-    : _vbo(nullptr),
+    : QueryVertexBuffer(renderer, numBytes, usage),
       _isActive(false),
 #ifdef HAVE_CUDA
       // _cudaResource(nullptr),
       _cudaResourceMap()
 #endif
 {
-  _initBuffer(renderer, numBytes, usage);
 }
 
 QueryResultVertexBuffer::~QueryResultVertexBuffer() {
@@ -140,12 +193,5 @@ void QueryResultVertexBuffer::_unmapCudaGraphicsResource(CUgraphicsResource& rsr
   // TODO(croot): throw an error if nothing to unmap?
 }
 #endif  // HAVE_CUDA
-
-void QueryResultVertexBuffer::_initBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage) {
-  if (!_vbo) {
-    Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
-    _vbo = rsrcMgr->createVertexBuffer(numBytes, usage);
-  }
-}
 
 }  // namespace QueryRenderer

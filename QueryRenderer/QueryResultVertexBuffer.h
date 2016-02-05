@@ -45,9 +45,54 @@ struct CudaHandle {
 };
 #endif
 
+class QueryVertexBuffer {
+ public:
+  enum class VboType { QUERY_VBO = 0, QUERY_RESULT_VBO };
+
+  explicit QueryVertexBuffer(VboType type = VboType::QUERY_VBO);
+
+  // explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, GLenum usage = GL_STATIC_DRAW);
+  explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+                             size_t numBytes,
+                             GLenum usage = GL_STATIC_DRAW,
+                             VboType type = VboType::QUERY_VBO);
+  explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+                             const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+                             GLenum usage = GL_STATIC_DRAW,
+                             VboType type = VboType::QUERY_VBO);
+
+  // template <typename T>
+  // explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+  //                            const std::vector<T>& data,
+  //                            const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+  //                            GLenum usage = GL_STATIC_DRAW)
+  //     : QueryVertexBuffer(renderer, layoutPtr, usage) {
+  //   // TODO(croot): validate that the data and the layout align
+  //   // NOTE: _size will be set in the bufferData() call
+  //   _vbo->bufferData((void*)&data[0], data.size(), sizeof(T));
+  // }
+
+  ~QueryVertexBuffer();
+
+  bool hasAttribute(const std::string& attrName) const;
+  size_t numItems() const;
+  ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const;
+  ::Rendering::GL::Resources::GLVertexBufferShPtr getGLVertexBufferPtr() const { return _vbo; }
+
+ protected:
+  Rendering::GL::Resources::GLVertexBufferShPtr _vbo;
+
+ private:
+  VboType _type;
+  void _initBuffer(Rendering::GL::GLRenderer* renderer,
+                   GLenum usage,
+                   size_t numBytes = 0,
+                   const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr = nullptr);
+};
+
 // TODO(croot): create a base VBO class that both the QueryResultVertexBuffer and VertexBuffer classes can
 // inherit from
-class QueryResultVertexBuffer {
+class QueryResultVertexBuffer : public QueryVertexBuffer {
  public:
   explicit QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer,
                                    size_t numBytes,
@@ -62,7 +107,6 @@ class QueryResultVertexBuffer {
   void updatePostQuery(const Rendering::GL::Resources::GLBufferLayoutShPtr& bufferLayout, size_t numRows);
 
  private:
-  Rendering::GL::Resources::GLVertexBufferShPtr _vbo;
   bool _isActive;
 
 #ifdef HAVE_CUDA
@@ -78,8 +122,6 @@ class QueryResultVertexBuffer {
 
   void _unmapCudaGraphicsResource(CUgraphicsResource& rsrc);
 #endif  // HAVE_CUDA
-
-  void _initBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage);
 };
 
 }  // namespace QueryRenderer

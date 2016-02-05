@@ -5,15 +5,21 @@
 
 namespace QueryRenderer {
 
+typedef size_t GpuId;
+
 struct PngData;
 class QueryRenderManager;
 
 class QueryRenderer;
 typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
 
+class QueryVertexBuffer;
+typedef std::shared_ptr<QueryVertexBuffer> QueryVertexBufferShPtr;
+
 class QueryResultVertexBuffer;
 typedef std::shared_ptr<QueryResultVertexBuffer> QueryResultVertexBufferShPtr;
 
+enum class RefEventType { UPDATE = 0, REMOVE, REPLACE, ALL };
 class QueryRendererContext;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 

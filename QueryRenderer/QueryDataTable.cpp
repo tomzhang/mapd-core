@@ -96,7 +96,11 @@ void SqlQueryDataTable::updateFromJSONObj(const rapidjson::Value& obj, const rap
 }
 
 QueryDataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
-  GLBufferAttrType attrType = _vbo->getAttributeType(columnName);
+  // all vbos should have the same set of columns, so only need to check the first one.
+  auto itr = _perGpuData.begin();
+  CHECK(itr != _perGpuData.end());
+
+  GLBufferAttrType attrType = itr->second.vbo->getAttributeType(columnName);
   switch (attrType) {
     case GLBufferAttrType::UINT:
       return QueryDataType::UINT;
@@ -311,7 +315,7 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
   return *itr;
 }
 
-GLVertexBufferShPtr DataTable::getColumnDataVBO(const std::string& columnName) {
+GLVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
   // if (_vbo == nullptr) {
   //     GLBufferLayoutShPtr vboLayoutPtr;
   //     switch (_vboType) {

@@ -1611,165 +1611,163 @@ PointMark::~PointMark() {
 }
 
 void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  // // TODO(croot): move "properties" to a const somewhere
-  // std::string propertiesProp = "properties";
+  // TODO(croot): move "properties" to a const somewhere
+  std::string propertiesProp = "properties";
 
-  //   rapidjson::Value::ConstMemberIterator mitr;
+  rapidjson::Value::ConstMemberIterator mitr;
 
-  //   RUNTIME_EX_ASSERT((mitr = obj.FindMember(propertiesProp.c_str())) != obj.MemberEnd(),
-  //                     "JSON parse error - mark objects must have a \"properties\" property.");
+  RUNTIME_EX_ASSERT((mitr = obj.FindMember(propertiesProp.c_str())) != obj.MemberEnd(),
+                    "JSON parse error - mark objects must have a \"properties\" property.");
 
-  //   const rapidjson::Value& propObj = mitr->value;
+  const rapidjson::Value& propObj = mitr->value;
 
-  //   if (!_ctx->isJSONCacheUpToDate(_propertiesJsonPath, propObj)) {
-  //     std::vector<BaseRenderProperty*> usedProps{&x, &y, &size, &fillColor};  // TODO(croot) add z
+  if (!_ctx->isJSONCacheUpToDate(_propertiesJsonPath, propObj)) {
+    std::vector<BaseRenderProperty*> usedProps{&x, &y, &size, &fillColor};  // TODO(croot) add z
 
-  //     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
+    _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
 
-  //     RUNTIME_EX_ASSERT(propObj.IsObject(),
-  //                       "JSON parse error - The \"properties\" property of marks must be a json object.");
+    RUNTIME_EX_ASSERT(propObj.IsObject(),
+                      "JSON parse error - The \"properties\" property of marks must be a json object.");
 
-  //     // TODO(croot): move "x" to a const somewhere
-  //     std::string xProp = "x";
-  //     RUNTIME_EX_ASSERT((mitr = propObj.FindMember(xProp.c_str())) != propObj.MemberEnd(),
-  //                       "JSON parse error - \"" + xProp + "\" mark property must exist for point marks.");
+    // TODO(croot): move "x" to a const somewhere
+    std::string xProp = "x";
+    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(xProp.c_str())) != propObj.MemberEnd(),
+                      "JSON parse error - \"" + xProp + "\" mark property must exist for point marks.");
 
-  //     if (!_ctx->isJSONCacheUpToDate(_xJsonPath, mitr->value)) {
-  //       _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
-  //       RUNTIME_EX_ASSERT(
-  //           (mitr->value.IsObject() || mitr->value.IsNumber()),
-  //           "JSON parse error - \"" + xProp + "\" mark property must be a scale/data reference or a number.");
-  //       x.initializeFromJSONObj(mitr->value, _xJsonPath, _dataPtr);
-  //     } else {
-  //       _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
-  //     }
+    if (!_ctx->isJSONCacheUpToDate(_xJsonPath, mitr->value)) {
+      _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
+      RUNTIME_EX_ASSERT(
+          (mitr->value.IsObject() || mitr->value.IsNumber()),
+          "JSON parse error - \"" + xProp + "\" mark property must be a scale/data reference or a number.");
+      x.initializeFromJSONObj(mitr->value, _xJsonPath, _dataPtr);
+    } else {
+      _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
+    }
 
-  //     // TODO(croot): move "y" to a const somewhere
-  //     std::string yProp = "y";
-  //     RUNTIME_EX_ASSERT((mitr = propObj.FindMember(yProp.c_str())) != propObj.MemberEnd(),
-  //                       "JSON parse error - \"" + yProp + "\" mark property must exist for point marks.");
+    // TODO(croot): move "y" to a const somewhere
+    std::string yProp = "y";
+    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(yProp.c_str())) != propObj.MemberEnd(),
+                      "JSON parse error - \"" + yProp + "\" mark property must exist for point marks.");
 
-  //     if (!_ctx->isJSONCacheUpToDate(_yJsonPath, mitr->value)) {
-  //       _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
-  //       RUNTIME_EX_ASSERT(
-  //           (mitr->value.IsObject() || mitr->value.IsNumber()),
-  //           "JSON parse error - \"" + yProp + "\" mark property must be a scale/data reference or a number.");
-  //       y.initializeFromJSONObj(mitr->value, _yJsonPath, _dataPtr);
-  //     } else {
-  //       _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
-  //     }
+    if (!_ctx->isJSONCacheUpToDate(_yJsonPath, mitr->value)) {
+      _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
+      RUNTIME_EX_ASSERT(
+          (mitr->value.IsObject() || mitr->value.IsNumber()),
+          "JSON parse error - \"" + yProp + "\" mark property must be a scale/data reference or a number.");
+      y.initializeFromJSONObj(mitr->value, _yJsonPath, _dataPtr);
+    } else {
+      _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
+    }
 
-  //     // TODO(croot): move "z" to a const somewhere
-  //     std::string zProp = "z";
-  //     if ((mitr = propObj.FindMember(zProp.c_str())) != propObj.MemberEnd()) {
-  //       if (!_ctx->isJSONCacheUpToDate(_zJsonPath, mitr->value)) {
-  //         _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
-  //         RUNTIME_EX_ASSERT(
-  //             (mitr->value.IsObject() || mitr->value.IsNumber()),
-  //             "JSON parse error - \"" + zProp + "\" mark property must be a scale/data reference or a number.");
-  //         z.initializeFromJSONObj(mitr->value, _zJsonPath, _dataPtr);
-  //       } else {
-  //         _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
-  //       }
+    // TODO(croot): move "z" to a const somewhere
+    std::string zProp = "z";
+    if ((mitr = propObj.FindMember(zProp.c_str())) != propObj.MemberEnd()) {
+      if (!_ctx->isJSONCacheUpToDate(_zJsonPath, mitr->value)) {
+        _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
+        RUNTIME_EX_ASSERT(
+            (mitr->value.IsObject() || mitr->value.IsNumber()),
+            "JSON parse error - \"" + zProp + "\" mark property must be a scale/data reference or a number.");
+        z.initializeFromJSONObj(mitr->value, _zJsonPath, _dataPtr);
+      } else {
+        _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
+      }
 
-  //       usedProps.push_back(&z);
-  //     } else {
-  //       // empty the json path for z
-  //       _zJsonPath = rapidjson::Pointer();
-  //     }
+      usedProps.push_back(&z);
+    } else {
+      // empty the json path for z
+      _zJsonPath = rapidjson::Pointer();
+    }
 
-  //     // TODO(croot): move "size" to a const somewhere
-  //     std::string sizeProp = "size";
-  //     RUNTIME_EX_ASSERT((mitr = propObj.FindMember(sizeProp.c_str())) != propObj.MemberEnd(),
-  //                       "JSON parse error - \"" + sizeProp + "\" mark property must exist for point marks.");
+    // TODO(croot): move "size" to a const somewhere
+    std::string sizeProp = "size";
+    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(sizeProp.c_str())) != propObj.MemberEnd(),
+                      "JSON parse error - \"" + sizeProp + "\" mark property must exist for point marks.");
 
-  //     if (!_ctx->isJSONCacheUpToDate(_sizeJsonPath, mitr->value)) {
-  //       _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
-  //       RUNTIME_EX_ASSERT(
-  //           (mitr->value.IsObject() || mitr->value.IsNumber()),
-  //           "JSON parse error - \"" + sizeProp + "\" mark property must be a scale/data reference or a number.");
-  //       size.initializeFromJSONObj(mitr->value, _sizeJsonPath, _dataPtr);
-  //     } else {
-  //       _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
-  //     }
+    if (!_ctx->isJSONCacheUpToDate(_sizeJsonPath, mitr->value)) {
+      _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
+      RUNTIME_EX_ASSERT(
+          (mitr->value.IsObject() || mitr->value.IsNumber()),
+          "JSON parse error - \"" + sizeProp + "\" mark property must be a scale/data reference or a number.");
+      size.initializeFromJSONObj(mitr->value, _sizeJsonPath, _dataPtr);
+    } else {
+      _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
+    }
 
-  //     // TODO(croot): move "fillColor" to a const somewhere
-  //     std::string fillColorProp = "fillColor";
-  //     RUNTIME_EX_ASSERT((mitr = propObj.FindMember(fillColorProp.c_str())) != propObj.MemberEnd(),
-  //                       "JSON parse error - \"" + fillColorProp + "\" mark property must exist for point marks.");
+    // TODO(croot): move "fillColor" to a const somewhere
+    std::string fillColorProp = "fillColor";
+    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(fillColorProp.c_str())) != propObj.MemberEnd(),
+                      "JSON parse error - \"" + fillColorProp + "\" mark property must exist for point marks.");
 
-  //     if (!_ctx->isJSONCacheUpToDate(_fillColorJsonPath, mitr->value)) {
-  //       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
-  //       RUNTIME_EX_ASSERT(
-  //           (mitr->value.IsObject() || mitr->value.IsString()),
-  //           "JSON parse error - \"" + fillColorProp + "\" mark property must be a scale/data reference or a
-  //           string.");
-  //       fillColor.initializeFromJSONObj(mitr->value, _fillColorJsonPath, _dataPtr);
-  //     } else {
-  //       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
-  //     }
+    if (!_ctx->isJSONCacheUpToDate(_fillColorJsonPath, mitr->value)) {
+      _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
+      RUNTIME_EX_ASSERT(
+          (mitr->value.IsObject() || mitr->value.IsString()),
+          "JSON parse error - \"" + fillColorProp + "\" mark property must be a scale/data reference or a string.");
+      fillColor.initializeFromJSONObj(mitr->value, _fillColorJsonPath, _dataPtr);
+    } else {
+      _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
+    }
 
-  //     if (_ctx->doHitTest()) {
-  //       // TODO(croot): move "id" to a const somewhere
-  //       std::string idProp = "id";
+    if (_ctx->doHitTest()) {
+      // TODO(croot): move "id" to a const somewhere
+      std::string idProp = "id";
 
-  //       if ((mitr = propObj.FindMember(idProp.c_str())) != propObj.MemberEnd()) {
-  //         if (!_ctx->isJSONCacheUpToDate(_idJsonPath, mitr->value)) {
-  //           _idJsonPath = _propertiesJsonPath.Append(idProp.c_str(), idProp.length());
-  //           RUNTIME_EX_ASSERT(
-  //               mitr->value.IsObject(),
-  //               "JSON parse error - \"id\" is a special mark property that must be defined by a data reference.");
-  //           id.initializeFromJSONObj(mitr->value, _idJsonPath, _dataPtr);
-  //         } else {
-  //           // update the json path, if it's been changed
-  //           _idJsonPath = _propertiesJsonPath.Append(idProp.c_str(), idProp.length());
-  //         }
-  //       } else {
-  //         // clear out the json path
-  //         _idJsonPath = rapidjson::Pointer();
-  //         if (_dataPtr != nullptr) {
-  //           id.initializeFromData(DataTable::defaultIdColumnName, _dataPtr);
-  //         } else {
-  //           id.initializeValue(0);  // reaching here "should" guarantee that there's only
-  //                                   // 1 row of data
-  //         }
-  //       }
+      if ((mitr = propObj.FindMember(idProp.c_str())) != propObj.MemberEnd()) {
+        if (!_ctx->isJSONCacheUpToDate(_idJsonPath, mitr->value)) {
+          _idJsonPath = _propertiesJsonPath.Append(idProp.c_str(), idProp.length());
+          RUNTIME_EX_ASSERT(
+              mitr->value.IsObject(),
+              "JSON parse error - \"id\" is a special mark property that must be defined by a data reference.");
+          id.initializeFromJSONObj(mitr->value, _idJsonPath, _dataPtr);
+        } else {
+          // update the json path, if it's been changed
+          _idJsonPath = _propertiesJsonPath.Append(idProp.c_str(), idProp.length());
+        }
+      } else {
+        // clear out the json path
+        _idJsonPath = rapidjson::Pointer();
+        if (_dataPtr != nullptr) {
+          id.initializeFromData(DataTable::defaultIdColumnName, _dataPtr);
+        } else {
+          id.initializeValue(0);  // reaching here "should" guarantee that there's only
+                                  // 1 row of data
+        }
+      }
 
-  //       usedProps.push_back(&id);
-  //     } else {
-  //       // clear out id path
-  //       _idJsonPath = rapidjson::Pointer();
-  //     }
+      usedProps.push_back(&id);
+    } else {
+      // clear out id path
+      _idJsonPath = rapidjson::Pointer();
+    }
 
-  //     // TODO(croot): put the following in the BaseMark class somewhere so that all
-  //     // future marks (lines, polys) will pick up this code.
-  //     GLVertexBufferShPtr vboPtr;
-  //     static const BaseVertexBuffer::VertexBufferType resultVBO =
-  //         BaseVertexBuffer::VertexBufferType::QUERY_RESULT_VERTEX_BUFFER;
-  //     if ((((vboPtr = x.getVboPtr()) && vboPtr->type() == resultVBO) ||
-  //          ((vboPtr = y.getVboPtr()) && vboPtr->type() == resultVBO) ||
-  //          ((vboPtr = size.getVboPtr()) && vboPtr->type() == resultVBO) ||
-  //          // TODO(croot): what if we have multiple sqls? How do we handle the "key" value then?
-  //          ((vboPtr = fillColor.getVboPtr()) && vboPtr->type() == resultVBO)) &&
-  //         vboPtr->hasAttribute(key.getName())) {
-  //       key.initializeFromData(key.getName(), _dataPtr);
-  //       usedProps.push_back(&key);
-  //     }
+    // TODO(croot): put the following in the BaseMark class somewhere so that all
+    // future marks (lines, polys) will pick up this code.
+    GLVertexBufferShPtr vboPtr;
+    static const QueryVertexBuffer::VboType resultVBO = QueryVertexBuffer::VboType::QUERY_RESULT_VBO;
+    if ((((vboPtr = x.getVboPtr()) && vboPtr->type() == resultVBO) ||
+         ((vboPtr = y.getVboPtr()) && vboPtr->type() == resultVBO) ||
+         ((vboPtr = size.getVboPtr()) && vboPtr->type() == resultVBO) ||
+         // TODO(croot): what if we have multiple sqls? How do we handle the "key" value then?
+         ((vboPtr = fillColor.getVboPtr()) && vboPtr->type() == resultVBO)) &&
+        vboPtr->hasAttribute(key.getName())) {
+      key.initializeFromData(key.getName(), _dataPtr);
+      usedProps.push_back(&key);
+    }
 
-  //     // Now update which props are vbo-defined, and which will be uniforms
-  //     _vboProps.clear();
-  //     _uniformProps.clear();
+    // Now update which props are vbo-defined, and which will be uniforms
+    _vboProps.clear();
+    _uniformProps.clear();
 
-  //     for (const auto& prop : usedProps) {
-  //       if (prop->hasVboPtr()) {
-  //         _vboProps.push_back(prop);
-  //       } else {
-  //         _uniformProps.push_back(prop);
-  //       }
-  //     }
-  //   } else {
-  //     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
-  //   }
+    for (const auto& prop : usedProps) {
+      if (prop->hasVboPtr()) {
+        _vboProps.push_back(prop);
+      } else {
+        _uniformProps.push_back(prop);
+      }
+    }
+  } else {
+    _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
+  }
 }
 
 void PointMark::_updateShader() {
