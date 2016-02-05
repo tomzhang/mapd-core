@@ -57,6 +57,16 @@ size_t QueryVertexBuffer::numItems() const {
   return _vbo->getAttributeType(attrName);
 }
 
+::Rendering::GL::TypeGLShPtr QueryVertexBuffer::getAttributeTypeGL(const std::string& attrName) const {
+  CHECK(_vbo);
+  return _vbo->getAttributeTypeGL(attrName);
+}
+
+void QueryVertexBuffer::bufferData(void* data, size_t numItems, size_t numBytesPerItem) {
+  CHECK(_vbo);
+  return _vbo->bufferData(data, numItems, numBytesPerItem);
+}
+
 QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage)
     : QueryVertexBuffer(renderer, numBytes, usage),
       _isActive(false),

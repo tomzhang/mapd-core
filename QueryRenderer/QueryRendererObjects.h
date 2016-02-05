@@ -374,14 +374,16 @@ class BaseRenderProperty {
         _name(name),
         _useScale(useScale),
         _vboAttrName(""),
-        _vboPtr(nullptr),
+        _perGpuData(),
         _vboInitType(VboInitType::UNDEFINED),
         _dataPtr(nullptr),
         _ctx(ctx),
         _inType(nullptr),
         _outType(nullptr),
         _scaleConfigPtr(nullptr),
-        _flexibleType(flexibleType) {}
+        _flexibleType(flexibleType) {
+    _initGpuResources(ctx, {});
+  }
 
   virtual ~BaseRenderProperty() {
     // std::cerr << "IN BaseRenderProperty DESTRUCTOR " << _name << std::endl;
@@ -392,9 +394,10 @@ class BaseRenderProperty {
                              const QueryDataTableVBOShPtr& dataPtr);
   void initializeFromData(const std::string& columnName, const QueryDataTableVBOShPtr& dataPtr);
 
-  int size() const {
-    if (_vboPtr) {
-      return _vboPtr->numItems();
+  int size(const GpuId& gpuId) const {
+    auto itr = _perGpuData.find(gpuId);
+    if (itr != _perGpuData.end()) {
+      return itr->second.vbo->numItems();
     }
     return 0;
   }
@@ -411,8 +414,37 @@ class BaseRenderProperty {
 
   std::string getOutGLSLType() const;
 
-  bool hasVboPtr() { return (_vboPtr != nullptr); }
-  ::Rendering::GL::Resources::GLVertexBufferShPtr getVboPtr() const { return _vboPtr; }
+  bool hasVboPtr() {
+    for (auto& itr : _perGpuData) {
+      if (itr.second.vbo != nullptr) {
+        return true;
+      }
+    }
+    return false;
+  }
+  bool hasVboPtr(const GpuId& gpuId) {
+    auto itr = _perGpuData.find(gpuId);
+
+    return (itr != _perGpuData.end() && itr->second.vbo != nullptr);
+  }
+
+  QueryVertexBufferShPtr getVboPtr(const GpuId& gpuId) const {
+    auto itr = _perGpuData.find(gpuId);
+    if (itr != _perGpuData.end()) {
+      return itr->second.vbo;
+    }
+
+    return nullptr;
+  }
+
+  QueryVertexBufferShPtr getVboPtr() const {
+    auto itr = _perGpuData.begin();
+    if (itr != _perGpuData.end()) {
+      return itr->second.vbo;
+    }
+
+    return nullptr;
+  }
 
   bool usesScaleConfig() { return (_scaleConfigPtr != nullptr); }
 
@@ -441,7 +473,21 @@ class BaseRenderProperty {
   bool _useScale;
 
   std::string _vboAttrName;
-  ::Rendering::GL::Resources::GLVertexBufferShPtr _vboPtr;
+
+  struct PerGpuData {
+    const QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryVertexBufferShPtr vbo;
+
+    PerGpuData() : qrmGpuData(nullptr), vbo(nullptr) {}
+    explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData, const QueryVertexBufferShPtr& vbo = nullptr)
+        : qrmGpuData(qrcGpuData.qrmGpuData), vbo(vbo) {}
+    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), vbo(data.vbo) {}
+    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), vbo(std::move(data.vbo)) {}
+  };
+  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
+
+  PerGpuDataMap _perGpuData;
+
   VboInitType _vboInitType;
   QueryDataTableVBOShPtr _dataPtr;
 
@@ -470,6 +516,30 @@ class BaseRenderProperty {
   virtual void _initTypeFromVbo() = 0;
   virtual void _verifyScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
+
+ private:
+  void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId> unusedGpus) {
+    const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+    for (auto& itr : qrcPerGpuData) {
+      if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+        _perGpuData.emplace(itr.first, PerGpuData(itr.second));
+      }
+    }
+
+    for (auto gpuId : unusedGpus) {
+      _perGpuData.erase(gpuId);
+    }
+  }
+
+  void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap) {
+    CHECK(vboMap.size() == _perGpuData.size());
+
+    for (const auto& itr : vboMap) {
+      auto myItr = _perGpuData.find(itr.first);
+      CHECK(myItr != _perGpuData.end());
+      myItr->second.vbo = itr.second;
+    }
+  }
 };
 
 template <typename T, int numComponents = 1>
@@ -575,7 +645,21 @@ class BaseMark {
 
   QueryDataTableVBOShPtr _dataPtr;
 
-  ::Rendering::GL::Resources::GLShaderShPtr _shaderPtr;
+  struct PerGpuData {
+    const QueryRenderManager::PerGpuData* qrmGpuData;
+    ::Rendering::GL::Resources::GLShaderShPtr shaderPtr;
+
+    PerGpuData() : qrmGpuData(nullptr), shaderPtr(nullptr) {}
+    explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData,
+                        const ::Rendering::GL::Resources::GLShaderShPtr& shaderPtr = nullptr)
+        : qrmGpuData(qrcGpuData.qrmGpuData), shaderPtr(shaderPtr) {}
+    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), shaderPtr(data.shaderPtr) {}
+    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), shaderPtr(std::move(data.shaderPtr)) {}
+  };
+  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
+
+  PerGpuDataMap _perGpuData;
+
   QueryRendererContextShPtr _ctx;
 
   rapidjson::Pointer _dataPtrJsonPath;
@@ -601,6 +685,19 @@ class BaseMark {
 
   virtual void _initPropertiesForRendering(::Rendering::GL::Resources::GLShader* activeShader) = 0;
   virtual void _bindPropertiesToRenderer(::Rendering::GL::Resources::GLShader* activeShader) = 0;
+
+  void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId> unusedGpus) {
+    const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+    for (auto& itr : qrcPerGpuData) {
+      if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+        _perGpuData.emplace(itr.first, PerGpuData(itr.second));
+      }
+    }
+
+    for (auto gpuId : unusedGpus) {
+      _perGpuData.erase(gpuId);
+    }
+  }
 
   // protected:
   //     typedef std::unique_ptr<Shader> ShaderPtr;

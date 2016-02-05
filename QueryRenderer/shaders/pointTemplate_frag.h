@@ -9,7 +9,7 @@ struct PointTemplate_Frag {
 };
 
 const std::string PointTemplate_Frag::source =
-    "#version 410 core\n"
+    "#version 450 core\n"
     "\n"
     "layout(location = 0) out vec4 color;\n"
     "layout(location = 1) out uint id;\n"

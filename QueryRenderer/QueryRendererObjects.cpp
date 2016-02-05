@@ -9,6 +9,8 @@
 
 #include <Rendering/Renderer/GL/TypeGL.h>
 #include <Rendering/Renderer/GL/Resources/GLShader.h>
+#include <Rendering/Renderer/GL/GLRenderer.h>
+#include <Rendering/Renderer/GL/GLResourceManager.h>
 
 #include <boost/algorithm/string/replace.hpp>
 // #include <boost/algorithm/string/find.hpp>
@@ -30,6 +32,10 @@ namespace QueryRenderer {
 using ::Rendering::Objects::ColorRGBA;
 using ::Rendering::GL::BaseTypeGL;
 using ::Rendering::GL::TypeGLShPtr;
+
+using ::Rendering::GL::GLRenderer;
+using ::Rendering::GL::GLResourceManagerShPtr;
+
 using ::Rendering::GL::Resources::GLShader;
 using ::Rendering::GL::Resources::GLVertexBufferShPtr;
 using ::Rendering::GL::Resources::GLBufferAttrType;
@@ -1227,7 +1233,8 @@ void BaseRenderProperty::initializeFromData(const std::string& columnName, const
 
   _dataPtr = dataPtr;
   _vboAttrName = columnName;
-  _vboPtr = dataPtr->getColumnDataVBO(columnName);
+
+  _initVBOs(_dataPtr->getColumnDataVBOs(columnName));
   _vboInitType = VboInitType::FROM_DATAREF;
 
   _prntMark->setPropsDirty();
@@ -1372,7 +1379,10 @@ void RenderProperty<T, numComponents>::initializeValue(const T& val) {
     _inType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
     _outType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
 
-    _vboPtr = nullptr;
+    for (auto& itr : _perGpuData) {
+      itr.second.vbo = nullptr;
+    }
+
     _vboInitType = VboInitType::FROM_VALUE;
     _prntMark->setPropsDirty();
   } else {
@@ -1385,12 +1395,12 @@ void RenderProperty<T, numComponents>::initializeValue(const T& val) {
 template <typename T, int numComponents>
 void RenderProperty<T, numComponents>::bindUniformToRenderer(GLShader* activeShader,
                                                              const std::string& uniformAttrName) const {
-  RUNTIME_EX_ASSERT(_vboPtr == nullptr,
-                    "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
-                    "vertex buffers defined for uniform properties.");
+  // RUNTIME_EX_ASSERT(_vboPtr == nullptr,
+  //                   "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
+  //                   "vertex buffers defined for uniform properties.");
 
-  // TODO(croot): deal with numComponents here by using a vector instead?
-  activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal);
+  // // TODO(croot): deal with numComponents here by using a vector instead?
+  // activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal);
 }
 
 template <typename T, int numComponents>
@@ -1406,11 +1416,16 @@ void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
   // i.e. this is already defined in BufferLayout.h, so let's find a
   // good way to consolidate these definitions
 
+  // TODO(croot): make thread safe
+
   if (_vboInitType != VboInitType::FROM_VALUE) {
     _inType.reset(new ::Rendering::GL::TypeGL<float, 4>());
     _outType.reset(new ::Rendering::GL::TypeGL<float, 4>());
 
-    _vboPtr = nullptr;
+    for (auto& itr : _perGpuData) {
+      itr.second.vbo = nullptr;
+    }
+
     _vboInitType = VboInitType::FROM_VALUE;
     _prntMark->setPropsDirty();
   } else {
@@ -1423,12 +1438,12 @@ void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
 template <>
 void RenderProperty<ColorRGBA, 1>::bindUniformToRenderer(GLShader* activeShader,
                                                          const std::string& uniformAttrName) const {
-  RUNTIME_EX_ASSERT(_vboPtr == nullptr,
-                    "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
-                    "vertex buffers defined for uniform properties.");
+  // RUNTIME_EX_ASSERT(_vboPtr == nullptr,
+  //                   "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
+  //                   "vertex buffers defined for uniform properties.");
 
-  // TODO(croot): deal with numComponents here by using a vector instead?
-  activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArray());
+  // // TODO(croot): deal with numComponents here by using a vector instead?
+  // activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArray());
 }
 
 template <>
@@ -1447,10 +1462,12 @@ void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value&
 
 template <typename T, int numComponents>
 void RenderProperty<T, numComponents>::_initTypeFromVbo() {
-  RUNTIME_EX_ASSERT(_vboPtr != nullptr,
+  auto itr = _perGpuData.begin();
+
+  RUNTIME_EX_ASSERT((itr != _perGpuData.end() && itr->second.vbo != nullptr),
                     "Vertex buffer is uninitialized. Cannot initialize type for mark property \"" + _name + "\".");
 
-  TypeGLShPtr vboType = _vboPtr->getAttributeTypeGL(_vboAttrName);
+  TypeGLShPtr vboType = itr->second.vbo->getAttributeTypeGL(_vboAttrName);
 
   if (_flexibleType) {
     _inType = vboType;
@@ -1507,13 +1524,14 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       key(this, "key", ctx, false, false),
       _invalidKey(ctx->getInvalidKey()),
       _dataPtr(nullptr),
-      _shaderPtr(nullptr),
+      _perGpuData(),
       _ctx(ctx),
       _shaderDirty(true),
       _propsDirty(true),
       _vboProps(),
       _uniformProps(),
       _vao(0) {
+  _initGpuResources(_ctx, {});
 }
 
 BaseMark::BaseMark(GeomType geomType,
@@ -1742,13 +1760,13 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     // TODO(croot): put the following in the BaseMark class somewhere so that all
     // future marks (lines, polys) will pick up this code.
-    GLVertexBufferShPtr vboPtr;
+    QueryVertexBufferShPtr vboPtr;
     static const QueryVertexBuffer::VboType resultVBO = QueryVertexBuffer::VboType::QUERY_RESULT_VBO;
-    if ((((vboPtr = x.getVboPtr()) && vboPtr->type() == resultVBO) ||
-         ((vboPtr = y.getVboPtr()) && vboPtr->type() == resultVBO) ||
-         ((vboPtr = size.getVboPtr()) && vboPtr->type() == resultVBO) ||
+    if ((((vboPtr = x.getVboPtr()) && vboPtr->getType() == resultVBO) ||
+         ((vboPtr = y.getVboPtr()) && vboPtr->getType() == resultVBO) ||
+         ((vboPtr = size.getVboPtr()) && vboPtr->getType() == resultVBO) ||
          // TODO(croot): what if we have multiple sqls? How do we handle the "key" value then?
-         ((vboPtr = fillColor.getVboPtr()) && vboPtr->type() == resultVBO)) &&
+         ((vboPtr = fillColor.getVboPtr()) && vboPtr->getType() == resultVBO)) &&
         vboPtr->hasAttribute(key.getName())) {
       key.initializeFromData(key.getName(), _dataPtr);
       usedProps.push_back(&key);
@@ -1771,121 +1789,127 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 }
 
 void PointMark::_updateShader() {
-  //   // TODO: need to determine a build-appropriate way to access
-  //   // shaders. The best way probably is to create a cmake build
-  //   // script that converts all shaders into their own header
-  //   // files with static strings of the shader's source to access.
+  // TODO: need to determine a build-appropriate way to access
+  // shaders. The best way probably is to create a cmake build
+  // script that converts all shaders into their own header
+  // files with static strings of the shader's source to access.
 
-  //   if (!_shaderDirty) {
-  //     // early out
-  //     return;
-  //   }
+  if (!_shaderDirty) {
+    // early out
+    return;
+  }
 
-  //   std::string vertSrc(PointTemplate_Vert::source);
+  std::string vertSrc(PointTemplate_Vert::source);
 
-  //   std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
+  std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
 
-  //   bool useKey = key.hasVboPtr();
-  //   boost::replace_first(vertSrc, "<useKey>", std::to_string(useKey));
+  bool useKey = key.hasVboPtr();
+  boost::replace_first(vertSrc, "<useKey>", std::to_string(useKey));
 
-  //   // update all the types first
-  //   for (auto& prop : props) {
-  //     setRenderPropertyTypeInShaderSrc(*prop, vertSrc);
-  //   }
+  // update all the types first
+  for (auto& prop : props) {
+    setRenderPropertyTypeInShaderSrc(*prop, vertSrc);
+  }
 
-  //   // now set props as uniform or vertex attrs
-  //   for (auto& prop : _vboProps) {
-  //     setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, false);
-  //   }
+  // now set props as uniform or vertex attrs
+  for (auto& prop : _vboProps) {
+    setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, false);
+  }
 
-  //   for (auto& prop : _uniformProps) {
-  //     setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, true);
-  //   }
+  for (auto& prop : _uniformProps) {
+    setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, true);
+  }
 
-  //   if (_ctx->doHitTest()) {
-  //     props.push_back(&id);
-  //   } else {
-  //     // define the id as uniform to get the shader to compile
-  //     setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, true);
-  //   }
+  if (_ctx->doHitTest()) {
+    props.push_back(&id);
+  } else {
+    // define the id as uniform to get the shader to compile
+    setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, true);
+  }
 
-  //   // now insert any additional functionality
-  //   // std::unordered_map<std::string, BaseScale*> visitedScales;
-  //   std::unordered_map<std::string, BaseScale*>::iterator itr;
+  // now insert any additional functionality
+  // std::unordered_map<std::string, BaseScale*> visitedScales;
+  std::unordered_map<std::string, BaseScale*>::iterator itr;
 
-  //   std::string funcName;
-  //   std::string propFuncName;
-  //   str_itr_range funcRange;
+  std::string funcName;
+  std::string propFuncName;
+  str_itr_range funcRange;
 
-  //   for (auto prop : props) {
-  //     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
-  //     if (scalePtr != nullptr) {
-  //       // NOTE: Because the domains of scales can be coerced into
-  //       // the render property's type, we need to provide a new
-  //       // set of GLSL code for each scale reference, even tho
-  //       // it is possible to reference the same scale multiple times.
+  for (auto prop : props) {
+    const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+    if (scalePtr != nullptr) {
+      // NOTE: Because the domains of scales can be coerced into
+      // the render property's type, we need to provide a new
+      // set of GLSL code for each scale reference, even tho
+      // it is possible to reference the same scale multiple times.
 
-  //       // TODO(croot): there are ways we can reduce the amount of
-  //       // shader code here. Domains of certain scales can be coerced,
-  //       // but not all scales, so we can find some optimizations there.
-  //       // Also, ranges can not be coerced, so optimizations can be
-  //       // do there as well, but it is likely rare that the same
-  //       // scale be referenced many times at this point (11/9/15), so
-  //       // it's probably not worth the effort to optimize at this point.
-  //       propFuncName = prop->getGLSLFunc();
+      // TODO(croot): there are ways we can reduce the amount of
+      // shader code here. Domains of certain scales can be coerced,
+      // but not all scales, so we can find some optimizations there.
+      // Also, ranges can not be coerced, so optimizations can be
+      // do there as well, but it is likely rare that the same
+      // scale be referenced many times at this point (11/9/15), so
+      // it's probably not worth the effort to optimize at this point.
+      propFuncName = prop->getGLSLFunc();
 
-  //       funcRange = getGLSLFunctionBounds(vertSrc, propFuncName);
+      funcRange = getGLSLFunctionBounds(vertSrc, propFuncName);
 
-  //       RUNTIME_EX_ASSERT(!funcRange.empty(),
-  //                         "Cannot find a properly defined \"" + propFuncName + "\" function in the vertex shader.");
+      RUNTIME_EX_ASSERT(!funcRange.empty(),
+                        "Cannot find a properly defined \"" + propFuncName + "\" function in the vertex shader.");
 
-  //       std::string scaleCode = scalePtr->getGLSLCode("_" + prop->getName());
+      std::string scaleCode = scalePtr->getGLSLCode("_" + prop->getName());
 
-  //       boost::replace_range(vertSrc, funcRange, scaleCode);
+      boost::replace_range(vertSrc, funcRange, scaleCode);
 
-  //       funcName = scalePtr->getScaleGLSLFuncName("_" + prop->getName());
+      funcName = scalePtr->getScaleGLSLFuncName("_" + prop->getName());
 
-  //       boost::replace_all(
-  //           vertSrc, prop->getGLSLFunc() + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
-  //     }
-  //   }
+      boost::replace_all(
+          vertSrc, prop->getGLSLFunc() + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
+    }
+  }
 
-  //   // std::string fragSrc = getShaderCodeFromFile(pointFragmentShaderFilename);
-  //   std::string fragSrc(PointTemplate_Frag::source);
+  // std::string fragSrc = getShaderCodeFromFile(pointFragmentShaderFilename);
+  std::string fragSrc(PointTemplate_Frag::source);
 
-  //   // static int CROOTcnt = 0;
-  //   // CROOTcnt++;
-  //   // if (CROOTcnt == 1) {
-  //   //   std::ofstream shadersrcstream;
-  //   //   shadersrcstream.open("shadersource.vert");
-  //   //   shadersrcstream << vertSrc;
-  //   //   shadersrcstream.close();
-  //   // }
+  // static int CROOTcnt = 0;
+  // CROOTcnt++;
+  // if (CROOTcnt == 1) {
+  //   std::ofstream shadersrcstream;
+  //   shadersrcstream.open("shadersource.vert");
+  //   shadersrcstream << vertSrc;
+  //   shadersrcstream.close();
+  // }
 
-  //   // now build the shader object
-  //   // TODO: How would we share shaders across different
-  //   // query renderers?
-  //   _shaderPtr.reset(new Shader(vertSrc, fragSrc));
+  // now build the shader object
+  // TODO(croot): How would we share shaders across different
+  // query renderers?
 
-  //   _shaderDirty = false;
+  for (auto& itr : _perGpuData) {
+    CHECK(itr.second.qrmGpuData != nullptr && itr.second.qrmGpuData->rendererPtr != nullptr);
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+    GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+    itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+  }
 
-  //   // set the props dirty to force a rebind with the new shader
-  //   setPropsDirty();
+  _shaderDirty = false;
+
+  // set the props dirty to force a rebind with the new shader
+  setPropsDirty();
 }
 
 void PointMark::_initPropertiesForRendering(GLShader* activeShader) {
-  int cnt = 0;
-  int vboSize = 0;
-  for (auto& itr : _vboProps) {
-    cnt++;
-    if (cnt == 1) {
-      vboSize = itr->size();
-    } else {
-      RUNTIME_EX_ASSERT(itr->size() == vboSize,
-                        "Invalid point mark. The sizes of the vertex buffer attributes do not match.");
-    }
-    itr->bindToRenderer(activeShader);
-  }
+  // int cnt = 0;
+  // int vboSize = 0;
+  // for (auto& itr : _vboProps) {
+  //   cnt++;
+  //   if (cnt == 1) {
+  //     vboSize = itr->size();
+  //   } else {
+  //     RUNTIME_EX_ASSERT(itr->size() == vboSize,
+  //                       "Invalid point mark. The sizes of the vertex buffer attributes do not match.");
+  //   }
+  //   itr->bindToRenderer(activeShader);
+  // }
 }
 
 void PointMark::_bindPropertiesToRenderer(GLShader* activeShader) {

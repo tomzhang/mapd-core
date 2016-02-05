@@ -17,6 +17,8 @@ using ::Rendering::Objects::ColorRGBA;
 using ::Rendering::GL::Resources::GLBufferAttrType;
 using ::Rendering::GL::Resources::GLVertexBufferShPtr;
 
+using ::Rendering::GL::GLRenderer;
+
 using ::Rendering::GL::Resources::GLSequentialBufferLayout;
 using ::Rendering::GL::Resources::GLInterleavedBufferLayout;
 using ::Rendering::GL::Resources::GLBufferLayoutShPtr;
@@ -315,144 +317,185 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
   return *itr;
 }
 
-GLVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
-  // if (_vbo == nullptr) {
-  //     GLBufferLayoutShPtr vboLayoutPtr;
-  //     switch (_vboType) {
-  //       case VboType::SEQUENTIAL: {
-  //         GLSequentialBufferLayout* vboLayout = new GLSequentialBufferLayout();
+std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataTable::_createVBOData() {
+  GLBufferLayoutShPtr vboLayoutPtr;
+  QueryVertexBufferShPtr vbo;
 
-  //         ColumnMap::iterator itr;
-  //         int numBytes = 0;
-  //         int numBytesPerItem = 0;
+  switch (_vboType) {
+    case VboType::SEQUENTIAL: {
+      GLSequentialBufferLayout* vboLayout = new GLSequentialBufferLayout();
 
-  //         // build up the layout of the vertex buffer
-  //         for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
-  //           switch ((*itr)->getColumnType()) {
-  //             case QueryDataType::UINT:
-  //               vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::UINT);
-  //               break;
-  //             case QueryDataType::INT:
-  //               vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::INT);
-  //               break;
-  //             case QueryDataType::FLOAT:
-  //               vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::FLOAT);
-  //               break;
-  //             case QueryDataType::DOUBLE:
-  //               vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::DOUBLE);
-  //               break;
-  //             case QueryDataType::COLOR:
-  //               vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::VEC4F);
-  //               break;
-  //             default:
-  //               THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
-  //                                "\" is not supported. Cannot build vertex buffer.");
-  //               break;
-  //           }
+      ColumnMap::iterator itr;
+      int numBytes = 0;
+      int numBytesPerItem = 0;
 
-  //           TypelessColumnData data = (*itr)->getTypelessColumnData();
-  //           numBytes += data.numItems * data.numBytesPerItem;
-  //           numBytesPerItem += data.numBytesPerItem;
-  //         }
+      // build up the layout of the vertex buffer
+      for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
+        switch ((*itr)->getColumnType()) {
+          case QueryDataType::UINT:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::UINT);
+            break;
+          case QueryDataType::INT:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::INT);
+            break;
+          case QueryDataType::FLOAT:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::FLOAT);
+            break;
+          case QueryDataType::DOUBLE:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::DOUBLE);
+            break;
+          case QueryDataType::COLOR:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::VEC4F);
+            break;
+          default:
+            THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
+                             "\" is not supported. Cannot build vertex buffer.");
+            break;
+        }
 
-  //         // now cpy the column data into one big buffer, sequentially, and
-  //         // buffer it all to the gpu via the VBO.
-  //         // char byteData[numBytes];
-  //         std::unique_ptr<char[]> byteDataPtr(new char[numBytes]);
-  //         char* byteData = byteDataPtr.get();
+        TypelessColumnData data = (*itr)->getTypelessColumnData();
+        numBytes += data.numItems * data.numBytesPerItem;
+        numBytesPerItem += data.numBytesPerItem;
+      }
 
-  //         // float byteData[numBytes/sizeof(float)];
-  //         // memset(byteData, 0x0, numBytes);
-  //         // memset(&byteData[0], 0x0, numBytes);
-  //         memset(byteData, 0x0, numBytes);
+      // now cpy the column data into one big buffer, sequentially, and
+      // buffer it all to the gpu via the VBO.
+      // char byteData[numBytes];
+      std::unique_ptr<char[]> byteDataPtr(new char[numBytes]);
+      char* byteData = byteDataPtr.get();
 
-  //         int startIdx = 0;
-  //         for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
-  //           TypelessColumnData data = (*itr)->getTypelessColumnData();
-  //           memcpy(&byteData[startIdx], data.data, data.numItems * data.numBytesPerItem);
+      // float byteData[numBytes/sizeof(float)];
+      // memset(byteData, 0x0, numBytes);
+      // memset(&byteData[0], 0x0, numBytes);
+      memset(byteData, 0x0, numBytes);
 
-  //           startIdx += data.numItems * data.numBytesPerItem;
-  //           // startIdx += data.numItems;
-  //         }
+      int startIdx = 0;
+      for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
+        TypelessColumnData data = (*itr)->getTypelessColumnData();
+        memcpy(&byteData[startIdx], data.data, data.numItems * data.numBytesPerItem);
 
-  //         vboLayoutPtr.reset(vboLayout);
-  //         // // vboLayoutPtr.reset(dynamic_cast<BaseBufferLayout *>(vboLayout));
+        startIdx += data.numItems * data.numBytesPerItem;
+        // startIdx += data.numItems;
+      }
 
-  //         _vbo.reset(new GLVertexBuffer(vboLayoutPtr));
-  //         _vbo->bufferData(byteData, _numRows, numBytesPerItem);
+      vboLayoutPtr.reset(vboLayout);
 
-  //       } break;
+      return std::make_pair(vboLayoutPtr, std::make_pair(std::move(byteDataPtr), numBytesPerItem));
 
-  //       case VboType::INTERLEAVED: {
-  //         InterleavedBufferLayout* vboLayout = new InterleavedBufferLayout();
+    } break;
 
-  //         ColumnMap::iterator itr;
-  //         int numBytes = 0;
+    case VboType::INTERLEAVED: {
+      GLInterleavedBufferLayout* vboLayout = new GLInterleavedBufferLayout();
 
-  //         std::vector<TypelessColumnData> columnData(_columns.size());
+      ColumnMap::iterator itr;
+      int numBytes = 0;
 
-  //         // build up the layout of the vertex buffer
-  //         for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
-  //           switch ((*itr)->getColumnType()) {
-  //             case DataType::UINT:
-  //               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::UINT);
-  //               break;
-  //             case DataType::INT:
-  //               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::INT);
-  //               break;
-  //             case DataType::FLOAT:
-  //               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::FLOAT);
-  //               break;
-  //             case DataType::DOUBLE:
-  //               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::DOUBLE);
-  //               break;
-  //             case DataType::COLOR:
-  //               vboLayout->addAttribute((*itr)->columnName, BufferAttrType::VEC4F);
-  //               break;
-  //             default:
-  //               THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
-  //                                "\" is not supported. Cannot build vertex buffer.");
-  //               break;
-  //           }
+      std::vector<TypelessColumnData> columnData(_columns.size());
 
-  //           int idx = itr - _columns.begin();
-  //           columnData[idx] = (*itr)->getTypelessColumnData();
-  //           numBytes += columnData[idx].numItems * columnData[idx].numBytesPerItem;
-  //         }
+      // build up the layout of the vertex buffer
+      for (itr = _columns.begin(); itr != _columns.end(); ++itr) {
+        switch ((*itr)->getColumnType()) {
+          case QueryDataType::UINT:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::UINT);
+            break;
+          case QueryDataType::INT:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::INT);
+            break;
+          case QueryDataType::FLOAT:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::FLOAT);
+            break;
+          case QueryDataType::DOUBLE:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::DOUBLE);
+            break;
+          case QueryDataType::COLOR:
+            vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::VEC4F);
+            break;
+          default:
+            THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
+                             "\" is not supported. Cannot build vertex buffer.");
+            break;
+        }
 
-  //         // now cpy the column data into one big buffer, interleaving the data, and
-  //         // buffer it all to the gpu via the VBO.
-  //         // char byteData[numBytes];
-  //         std::unique_ptr<char[]> byteDataPtr(new char[numBytes]);
-  //         char* byteData = byteDataPtr.get();
-  //         memset(byteData, 0x0, numBytes);
+        int idx = itr - _columns.begin();
+        columnData[idx] = (*itr)->getTypelessColumnData();
+        numBytes += columnData[idx].numItems * columnData[idx].numBytesPerItem;
+      }
 
-  //         int startIdx = 0;
-  //         for (int i = 0; i < _numRows; ++i) {
-  //           for (size_t j = 0; j < columnData.size(); ++j) {
-  //             int bytesPerItem = columnData[j].numBytesPerItem;
-  //             memcpy(&byteData[startIdx], static_cast<char*>(columnData[j].data) + (i * bytesPerItem), bytesPerItem);
-  //             startIdx += bytesPerItem;
-  //           }
-  //         }
+      // now cpy the column data into one big buffer, interleaving the data, and
+      // buffer it all to the gpu via the VBO.
+      // char byteData[numBytes];
+      std::unique_ptr<char[]> byteDataPtr(new char[numBytes]);
+      char* byteData = byteDataPtr.get();
+      memset(byteData, 0x0, numBytes);
 
-  //         vboLayoutPtr.reset(vboLayout);
-  //         _vbo.reset(new GLVertexBuffer(vboLayoutPtr));
-  //         _vbo->bufferData(byteData, _numRows, vboLayout->getBytesPerVertex());
+      int startIdx = 0;
+      for (int i = 0; i < _numRows; ++i) {
+        for (size_t j = 0; j < columnData.size(); ++j) {
+          int bytesPerItem = columnData[j].numBytesPerItem;
+          memcpy(&byteData[startIdx], static_cast<char*>(columnData[j].data) + (i * bytesPerItem), bytesPerItem);
+          startIdx += bytesPerItem;
+        }
+      }
 
-  //       } break;
-  //       case VboType::INDIVIDUAL:
-  //         // TODO: What kind of data structure should we do in this case? Should we do
-  //         // one big unordered map, but there's only one item in the SEQUENTIAL &
-  //         // INTERLEAVED case?
-  //         break;
-  //     }
-  //   }
+      vboLayoutPtr.reset(vboLayout);
 
-  //   RUNTIME_EX_ASSERT(_vbo->hasAttribute(columnName),
-  //                     "DataTable::getColumnVBO(): column \"" + columnName + "\" does not exist.");
+      return std::make_pair(vboLayoutPtr, std::make_pair(std::move(byteDataPtr), vboLayout->getNumBytesPerVertex()));
 
-  //   return _vbo;
+    } break;
+    case VboType::INDIVIDUAL:
+      // TODO: What kind of data structure should we do in this case? Should we do
+      // one big unordered map, but there's only one item in the SEQUENTIAL &
+      // INTERLEAVED case?
+      break;
+  }
+
+  return std::make_pair(nullptr, std::make_pair(nullptr, 0));
+}
+
+QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
+  auto itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get column data vbo for gpu " + std::to_string(gpuId));
+
+  if (itr->second.vbo == nullptr) {
+    CHECK(itr->second.qrmGpuData && itr->second.qrmGpuData->rendererPtr);
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+    CHECK(renderer != nullptr);
+
+    std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData = _createVBOData();
+
+    itr->second.vbo.reset(new QueryVertexBuffer(renderer, vboData.first));
+    itr->second.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
+  }
+
+  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
+                    "DataTable::getColumnVBO(): column \"" + columnName + "\" does not exist.");
+
+  return itr->second.vbo;
+}
+
+std::map<GpuId, QueryVertexBufferShPtr> DataTable::getColumnDataVBOs(const std::string& columnName) {
+  std::map<GpuId, QueryVertexBufferShPtr> rtn;
+  std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData;
+
+  for (auto& itr : _perGpuData) {
+    if (itr.second.vbo == nullptr) {
+      CHECK(itr.second.qrmGpuData && itr.second.qrmGpuData->rendererPtr);
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+      CHECK(renderer != nullptr);
+
+      if (vboData.first == nullptr) {
+        vboData = _createVBOData();
+      }
+
+      itr.second.vbo.reset(new QueryVertexBuffer(renderer, vboData.first));
+      itr.second.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
+    }
+
+    rtn.insert({itr.first, itr.second.vbo});
+  }
+
+  return rtn;
 }
 
 void DataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {

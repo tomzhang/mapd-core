@@ -11,7 +11,7 @@ struct PointTemplate_Vert {
 const std::string PointTemplate_Vert::source =
     "// VERTEX SHADER\n"
     "\n"
-    "#version 410 core\n"
+    "#version 450 core\n"
     "\n"
     "#define useUx <useUx>\n"
     "#define inTx <inTxType>\n"

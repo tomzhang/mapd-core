@@ -76,8 +76,12 @@ class QueryVertexBuffer {
 
   bool hasAttribute(const std::string& attrName) const;
   size_t numItems() const;
+  VboType getType() const { return _type; }
   ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const;
+  ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const;
   ::Rendering::GL::Resources::GLVertexBufferShPtr getGLVertexBufferPtr() const { return _vbo; }
+
+  void bufferData(void* data, size_t numItems, size_t numBytesPerItem);
 
  protected:
   Rendering::GL::Resources::GLVertexBufferShPtr _vbo;
