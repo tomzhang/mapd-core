@@ -11,6 +11,7 @@ namespace State {
 
 class GLBindState {
  public:
+  Resources::GLVertexBufferWkPtr boundVbo;
   Resources::GLFramebufferWkPtr boundReadFbo;
   Resources::GLFramebufferWkPtr boundDrawFbo;
 
@@ -21,9 +22,14 @@ class GLBindState {
   ~GLBindState();
 
   void bindResource(const Resources::GLResourceShPtr& rsrc);
+
+  void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
   void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fbRsrc);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
   void bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc);
+
+  Resources::GLVertexBufferShPtr getBoundVbo() const;
+  bool hasBoundVbo() const;
 
   Resources::GLFramebufferShPtr getBoundFbo(const Resources::FboBind bindType) const;
   bool hasBoundFbo(const Resources::FboBind bindType) const;

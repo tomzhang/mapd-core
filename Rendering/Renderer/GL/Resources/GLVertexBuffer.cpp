@@ -67,11 +67,11 @@ void GLVertexBuffer::setBufferLayout(const GLBufferLayoutShPtr& layoutPtr, size_
   _numItems = numItems;
 }
 
-inline int GLVertexBuffer::numAttributes() const {
+int GLVertexBuffer::numAttributes() const {
   return (_layoutPtr ? _layoutPtr->numAttributes() : 0);
 }
 
-inline int GLVertexBuffer::numItems() const {
+int GLVertexBuffer::numItems() const {
   return _numItems;
 }
 

@@ -39,6 +39,11 @@ using ::Rendering::GL::GLResourceManagerShPtr;
 using ::Rendering::GL::Resources::GLShader;
 using ::Rendering::GL::Resources::GLVertexBufferShPtr;
 using ::Rendering::GL::Resources::GLBufferAttrType;
+using ::Rendering::GL::Resources::GLVertexArray;
+
+using ::Rendering::GL::Resources::VboAttrToShaderAttrPair;
+using ::Rendering::GL::Resources::VboAttrToShaderAttrList;
+using ::Rendering::GL::Resources::VboAttrToShaderAttrMap;
 
 typedef std::string::iterator str_itr;
 typedef boost::iterator_range<str_itr> str_itr_range;
@@ -239,11 +244,14 @@ std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
 }
 
 template <typename T>
-bool ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
+void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
                                                     const rapidjson::Pointer& objPath,
                                                     const QueryRendererContextShPtr& ctx,
-                                                    BaseScale::ScaleType type) {
-  bool rtn = false;
+                                                    BaseScale::ScaleType type,
+                                                    bool& sizeChanged,
+                                                    bool& valsChanged) {
+  sizeChanged = false;
+  valsChanged = false;
 
   rapidjson::Value::ConstMemberIterator mitr;
   rapidjson::Value::ConstValueIterator vitr;
@@ -325,14 +333,16 @@ bool ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
       newSz = _vectorPtr->size();
     }
 
-    // only need to mark the data as changed if it requires a shader change,
-    // which means the amount of data has changed
-    rtn = (prevSz != newSz);
+    // only need to regenerate the shader if the size of the
+    // scale data changed, but we need to update any coerced
+    // values if the scale's values changed, which means
+    // we need to distinguish between when the size of the
+    // data changed vs only the values changed.
+    valsChanged = true;
+    sizeChanged = (prevSz != newSz);
   }
 
   updateJSONPath(objPath);
-
-  return rtn;
 }
 
 template <typename T>
@@ -531,16 +541,16 @@ bool Scale<DomainType, RangeType>::updateFromJSONObj(const rapidjson::Value& obj
   bool rtn = BaseScale::_initFromJSONObj(obj, objPath);
 
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    _domainDataChanged = _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type);
-    _rangeDataChanged = _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type);
+    _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged);
+    _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged);
 
     if (_type == BaseScale::ScaleType::ORDINAL) {
       _setDefaultFromJSONObj(obj, objPath);
     }
 
-    rtn = rtn || _domainDataChanged || _rangeDataChanged;
+    rtn = rtn || hasDomainDataChanged() || hasRangeDataChanged();
   } else if (_jsonPath != objPath) {
-    _domainDataChanged = _rangeDataChanged = false;
+    _domainSizeChanged = _domainValsChanged = _rangeSizeChanged = _rangeValsChanged = true;
 
     _domainPtr.updateJSONPath(objPath);
     _rangePtr.updateJSONPath(objPath);
@@ -1395,12 +1405,8 @@ void RenderProperty<T, numComponents>::initializeValue(const T& val) {
 template <typename T, int numComponents>
 void RenderProperty<T, numComponents>::bindUniformToRenderer(GLShader* activeShader,
                                                              const std::string& uniformAttrName) const {
-  // RUNTIME_EX_ASSERT(_vboPtr == nullptr,
-  //                   "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
-  //                   "vertex buffers defined for uniform properties.");
-
-  // // TODO(croot): deal with numComponents here by using a vector instead?
-  // activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal);
+  // TODO(croot): deal with numComponents here by using a vector instead?
+  activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal);
 }
 
 template <typename T, int numComponents>
@@ -1438,12 +1444,8 @@ void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
 template <>
 void RenderProperty<ColorRGBA, 1>::bindUniformToRenderer(GLShader* activeShader,
                                                          const std::string& uniformAttrName) const {
-  // RUNTIME_EX_ASSERT(_vboPtr == nullptr,
-  //                   "BaseRenderProperty::bindUniformToRenderer(): A vertex buffer is defined. There should be no "
-  //                   "vertex buffers defined for uniform properties.");
-
-  // // TODO(croot): deal with numComponents here by using a vector instead?
-  // activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArray());
+  // TODO(croot): deal with numComponents here by using a vector instead?
+  activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArray());
 }
 
 template <>
@@ -1503,7 +1505,7 @@ void RenderProperty<T, numComponents>::_scaleRefUpdateCB(RefEventType refEventTy
     case RefEventType::UPDATE:
       _scaleConfigPtr->updateScaleRef(scalePtr);
 
-      if (scalePtr->hasClampChanged() || scalePtr->hasDomainDataChanged() || scalePtr->hasRangeDataChanged()) {
+      if (scalePtr->hasClampChanged() || scalePtr->hasDomainChangedInSize() || scalePtr->hasRangeChangedInSize()) {
         _prntMark->setShaderDirty();
       }
       break;
@@ -1529,8 +1531,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _shaderDirty(true),
       _propsDirty(true),
       _vboProps(),
-      _uniformProps(),
-      _vao(0) {
+      _uniformProps() {
   _initGpuResources(_ctx, {});
 }
 
@@ -1543,9 +1544,6 @@ BaseMark::BaseMark(GeomType geomType,
 }
 
 BaseMark::~BaseMark() {
-  if (_vao) {
-    MAPD_CHECK_GL_ERROR(glDeleteVertexArrays(1, &_vao));
-  }
 }
 
 void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
@@ -1574,37 +1572,44 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Po
   }
 }
 
-void BaseMark::_buildVertexArrayObjectFromProperties(GLShader* activeShader) {
+void BaseMark::_buildVertexArrayObjectFromProperties() {
   if (!_propsDirty) {
     // early out
     return;
   }
 
-  if (_vao) {
-    MAPD_CHECK_GL_ERROR(glDeleteVertexArrays(1, &_vao));
-    _vao = 0;
+  // TODO(croot): make thread safe?
+  GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
+  GLRenderer* currRenderer = nullptr;
+  for (auto& itr : _perGpuData) {
+    currRenderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+
+    currRenderer->makeActiveOnCurrentThread();
+
+    CHECK(itr.second.shaderPtr != nullptr);
+    CHECK(currRenderer != nullptr);
+
+    currRenderer->bindShader(itr.second.shaderPtr);
+
+    // build property map for how vertex buffer attributes will
+    // be bound to shader attributes
+    VboAttrToShaderAttrMap attrMap;
+    _addPropertiesToAttrMap(itr.first, attrMap);
+
+    GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
+
+    itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
   }
 
-  MAPD_CHECK_GL_ERROR(glGenVertexArrays(1, &_vao));
-  MAPD_CHECK_GL_ERROR(glBindVertexArray(_vao));
-
-  _initPropertiesForRendering(activeShader);
-
-  // reset so no VAO is bound
-  // TODO: Actually look for a currently bound vao at start of function and reset to that?
-  // NOTE: No need to unbind at this point since we're going directly into rendering
-  // after this function?
-  // MAPD_CHECK_GL_ERROR(glBindVertexArray(0));
+  if (currRenderer && prevRenderer != currRenderer) {
+    if (prevRenderer) {
+      prevRenderer->makeActiveOnCurrentThread();
+    } else {
+      currRenderer->makeInactive();
+    }
+  }
 
   _propsDirty = false;
-}
-
-void BaseMark::_bindToRenderer(GLShader* activeShader) {
-  _buildVertexArrayObjectFromProperties(activeShader);
-
-  MAPD_CHECK_GL_ERROR(glBindVertexArray(_vao));
-
-  _bindPropertiesToRenderer(activeShader);
 }
 
 PointMark::PointMark(const rapidjson::Value& obj,
@@ -1884,11 +1889,28 @@ void PointMark::_updateShader() {
   // TODO(croot): How would we share shaders across different
   // query renderers?
 
+  // TODO(croot): Make thread safe?
+
+  GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
+  GLRenderer* currRenderer = nullptr;
   for (auto& itr : _perGpuData) {
     CHECK(itr.second.qrmGpuData != nullptr && itr.second.qrmGpuData->rendererPtr != nullptr);
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
-    GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+    currRenderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+
+    currRenderer->makeActiveOnCurrentThread();
+    GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
     itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+
+    // TODO(croot): should I make make the current thread
+    // have an inactive renderer?
+  }
+
+  if (currRenderer && prevRenderer != currRenderer) {
+    if (prevRenderer) {
+      prevRenderer->makeActiveOnCurrentThread();
+    } else {
+      currRenderer->makeInactive();
+    }
   }
 
   _shaderDirty = false;
@@ -1897,22 +1919,24 @@ void PointMark::_updateShader() {
   setPropsDirty();
 }
 
-void PointMark::_initPropertiesForRendering(GLShader* activeShader) {
-  // int cnt = 0;
-  // int vboSize = 0;
-  // for (auto& itr : _vboProps) {
-  //   cnt++;
-  //   if (cnt == 1) {
-  //     vboSize = itr->size();
-  //   } else {
-  //     RUNTIME_EX_ASSERT(itr->size() == vboSize,
-  //                       "Invalid point mark. The sizes of the vertex buffer attributes do not match.");
-  //   }
-  //   itr->bindToRenderer(activeShader);
-  // }
+void PointMark::_addPropertiesToAttrMap(const GpuId& gpuId, VboAttrToShaderAttrMap& attrMap) {
+  int cnt = 0;
+  int vboSize = 0;
+  for (auto& itr : _vboProps) {
+    cnt++;
+    if (cnt == 1) {
+      vboSize = itr->size(gpuId);
+    } else {
+      RUNTIME_EX_ASSERT(itr->size(gpuId) == vboSize,
+                        "Invalid point mark. The sizes of the vertex buffer attributes do not match.");
+    }
+
+    itr->addToVboAttrMap(gpuId, attrMap);
+    // itr->bindToRenderer(activeShader);
+  }
 }
 
-void PointMark::_bindPropertiesToRenderer(GLShader* activeShader) {
+void PointMark::_bindUniformProperties(GLShader* activeShader) {
   // TODO(croot): create a static invalidKeyAttrName string on the class
   static const std::string invalidKeyAttrName = "invalidKey";
   if (key.hasVboPtr()) {
@@ -1947,29 +1971,34 @@ void PointMark::_bindPropertiesToRenderer(GLShader* activeShader) {
   }
 }
 
-void PointMark::draw() {
-  //   // make sure the shader is up-to-date
-  //   _updateShader();
+void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
+  // NOTE: shader should have been updated before calling this
+  auto itr = _perGpuData.find(gpuId);
 
-  //   // now bind the shader
-  //   _shaderPtr->bindToRenderer();
+  ::Rendering::Renderer* rndr = itr->second.qrmGpuData->rendererPtr.get();
+  CHECK(itr->second.qrmGpuData && itr->second.shaderPtr && rndr == renderer);
 
-  //   _bindToRenderer(_shaderPtr.get());
+  // now bind the shader
+  renderer->bindShader(itr->second.shaderPtr);
+  renderer->bindVertexArray(itr->second.vaoPtr);
 
-  //   // TODO: render state stack -- push/pop
-  //   MAPD_CHECK_GL_ERROR(glEnable(GL_PROGRAM_POINT_SIZE));
+  _bindUniformProperties(itr->second.shaderPtr.get());
 
-  //   // now draw points
-  //   // TODO: What about the possibility of index buffers?
-  //   // Probably don't have to worry about them here since
-  //   // we're specifically looking at a point config that
-  //   // is deemed not to have any index buffers, but we
-  //   // need to have a way to generically draw bound buffers
-  //   // which would be best with a renderer class
-  //   MAPD_CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, x.size()));
+  // TODO: render state stack -- push/pop
+  renderer->enable(GL_PROGRAM_POINT_SIZE);
 
-  //   // unset state
-  //   MAPD_CHECK_GL_ERROR(glDisable(GL_PROGRAM_POINT_SIZE));
+  // now draw points
+  // TODO: What about the possibility of index buffers?
+  // Probably don't have to worry about them here since
+  // we're specifically looking at a point config that
+  // is deemed not to have any index buffers, but we
+  // need to have a way to generically draw bound buffers
+  // which would be best with a renderer class
+  // MAPD_CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, x.size()));
+  renderer->drawVertexBuffers(GL_POINTS, 0, x.size(gpuId));
+
+  // unset state
+  renderer->disable(GL_PROGRAM_POINT_SIZE);
 }
 
 bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {

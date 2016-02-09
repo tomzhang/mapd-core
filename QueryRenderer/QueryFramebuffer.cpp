@@ -12,15 +12,16 @@ namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
+using ::Rendering::GL::Resources::FboBind;
 using ::Rendering::GL::Resources::GLFramebufferAttachmentMap;
 
 QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, bool doHitTest, bool doDepthTest)
-    : _rgbaTex(nullptr),
+    : _doHitTest(doHitTest),
+      _doDepthTest(doDepthTest),
+      _rgbaTex(nullptr),
       _idTex(nullptr),
       _rbo(nullptr),
-      _fbo(nullptr),
-      _doHitTest(doHitTest),
-      _doDepthTest(doDepthTest) {
+      _fbo(nullptr) {
   _init(renderer, width, height);
 }
 
@@ -60,14 +61,20 @@ int QueryFramebuffer::getHeight() const {
   return _fbo->getHeight();
 }
 
-// void QueryFramebuffer::bindToRenderer(BindType bindType) {
-//   MAPD_CHECK_GL_ERROR(glBindFramebuffer(static_cast<int>(bindType), _fbo));
-//   // _attachmentManager.enableAttachments();
+void QueryFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
+  renderer->bindFramebuffer(bindType, _fbo);
+}
 
-//   // TODO: How do we properly deal with the state machine
-//   if (_renderBuffers[DEPTH_BUFFER]) {
-//     MAPD_CHECK_GL_ERROR(glEnable(GL_DEPTH_TEST));
-//   }
-// }
+std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx,
+                                                                 size_t starty,
+                                                                 size_t width,
+                                                                 size_t height) {
+  std::shared_ptr<unsigned char> pixels(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
+  unsigned char* rawPixels = pixels.get();
+
+  _fbo->readPixels(GL_COLOR_ATTACHMENT0, startx, starty, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rawPixels);
+
+  return pixels;
+}
 
 }  // namespace QueryRenderer

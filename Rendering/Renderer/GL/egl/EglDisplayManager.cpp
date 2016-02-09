@@ -36,7 +36,7 @@ static size_t getNumDevices() {
   return getEglDeviceInfo().numDevices;
 }
 
-static EGLDisplay getEGLDisplayFromDevice(int device) {
+static EGLDisplay getEGLDisplayFromDevice(size_t device) {
   static const PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
       (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
 

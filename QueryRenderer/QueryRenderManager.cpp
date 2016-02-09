@@ -9,7 +9,7 @@
 // #include "QueryFramebuffer.h"
 
 // #include <GL/glew.h>
-#include <png.h>
+// #include <png.h>
 
 // #include <glog/logging.h>
 // #include <time.h>
@@ -281,13 +281,11 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
 }
 
 void QueryRenderManager::render() {
-  // RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
-  //                   "render(): There is no active user/widget id. Must set a user/widget id active before
-  //                   rendering.");
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
-  // std::lock_guard<std::mutex> render_lock(_mtx);
-  // glfwMakeContextCurrent(_windowPtr);
-  // _activeRenderer->render();
+  std::lock_guard<std::mutex> render_lock(_mtx);
+  _activeRenderer->render();
 
   // if (_debugMode) {
   //   MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
@@ -312,26 +310,26 @@ void QueryRenderManager::render() {
   //                                         GL_COLOR_BUFFER_BIT,
   //                                         GL_NEAREST));
   // }
-
-  // glfwSwapBuffers(_windowPtr);
-  // glfwMakeContextCurrent(nullptr);
 }
 
-static void writePngData(png_structp png_ptr, png_bytep data, png_size_t length) {
-  std::vector<char>* pngData = reinterpret_cast<std::vector<char>*>(png_get_io_ptr(png_ptr));
-  size_t currSz = pngData->size();
-  pngData->resize(currSz + length);
-  std::memcpy(&(*pngData)[0] + currSz, data, length);
-}
+// static void writePngData(png_structp png_ptr, png_bytep data, png_size_t length) {
+//   std::vector<char>* pngData = reinterpret_cast<std::vector<char>*>(png_get_io_ptr(png_ptr));
+//   size_t currSz = pngData->size();
+//   pngData->resize(currSz + length);
+//   std::memcpy(&(*pngData)[0] + currSz, data, length);
+// }
 
-static void flushPngData(png_structp png_ptr) {
-  // Do nothing
-  (void)png_ptr; /* Stifle compiler warning */
-}
+// static void flushPngData(png_structp png_ptr) {
+//   // Do nothing
+//   (void)png_ptr; /* Stifle compiler warning */
+// }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
-  // RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
-  //                   "There is no active user/widget id. Must set a user/widget id active before rendering.");
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "There is no active user/widget id. Must set a user/widget id active before rendering.");
+
+  std::lock_guard<std::mutex> render_lock(_mtx);
+  return _activeRenderer->renderToPng();
 
   // RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
   //                   "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " +

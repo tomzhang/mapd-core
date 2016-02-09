@@ -87,6 +87,14 @@ class GLFramebuffer : public GLResource {
   int getWidth() const;
   int getHeight() const;
 
+  void readPixels(GLenum attachment,
+                  size_t startx,
+                  size_t starty,
+                  size_t width,
+                  size_t height,
+                  GLenum format,
+                  GLenum type,
+                  GLvoid* data);
   void resize(int width, int height);
 
  private:

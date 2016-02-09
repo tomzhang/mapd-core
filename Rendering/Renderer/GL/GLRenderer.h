@@ -62,14 +62,20 @@ class GLRenderer : public Renderer {
   void enable(GLenum attr);
   void disable(GLenum attr);
 
-  void setBlendFunc(GLenum srcFactor, GLenum dstFactor);
+  void setBlendFunc(GLenum srcFactor, GLenum dstFactor, int drawBufferId = -1);
+  void setBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha, int drawBufferId = -1);
 
-  void drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw);
+  void setBlendEquation(GLenum mode, int drawBufferId = -1);
+  void setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int drawBufferId = -1);
 
   void bindResource(const Resources::GLResourceShPtr& rsrc);
+  void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
   void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fboRsrc);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
   void bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc);
+
+  Resources::GLVertexBufferShPtr getBoundVbo() const;
+  bool hasBoundVbo() const;
 
   Resources::GLFramebufferShPtr getBoundFbo(Resources::FboBind bindType) const;
   bool hasBoundFbo(Resources::FboBind bindType) const;
@@ -80,7 +86,9 @@ class GLRenderer : public Renderer {
   Resources::GLVertexArrayShPtr getBoundVertexArray() const;
   bool hasBoundVertexArray() const;
 
-  static const GLRenderer* getCurrentThreadRenderer();
+  void drawVertexBuffers(GLenum primitiveMode, int startIndex = 0, int numItemsToDraw = -1);
+
+  static GLRenderer* getCurrentThreadRenderer();
 
  protected:
   // GLRenderer(const WindowShPtr& parentWindowPtr);

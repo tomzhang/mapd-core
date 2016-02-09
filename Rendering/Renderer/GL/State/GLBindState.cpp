@@ -1,5 +1,6 @@
 #include "GLBindState.h"
 #include "../MapDGL.h"
+#include "../Resources/GLVertexBuffer.h"
 #include "../Resources/GLResource.h"
 #include "../Resources/GLFramebuffer.h"
 #include "../Resources/GLShader.h"
@@ -28,6 +29,22 @@ void GLBindState::bindResource(const Resources::GLResourceShPtr& rsrc) {
       THROW_RUNTIME_EX("Cannot bind unsupported resource of type " + Rendering::GL::Resources::to_string(type) +
                        " to renderer.");
       break;
+  }
+}
+
+void GLBindState::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc) {
+  GLuint vboId = (vboRsrc ? vboRsrc->getId() : 0);
+
+  bool bind = (boundVbo.owner_before(vboRsrc) || vboRsrc.owner_before(boundVbo));
+
+  if (bind) {
+    if (vboRsrc) {
+      vboRsrc->validateRenderer(_prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, vboId));
+
+    boundVbo = vboRsrc;
   }
 }
 
@@ -106,6 +123,14 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
   }
 }
 
+Resources::GLVertexBufferShPtr GLBindState::getBoundVbo() const {
+  return boundVbo.lock();
+}
+
+bool GLBindState::hasBoundVbo() const {
+  return boundVbo.lock() != nullptr;
+}
+
 Resources::GLFramebufferShPtr GLBindState::getBoundFbo(const Resources::FboBind bindType) const {
   switch (bindType) {
     case Resources::FboBind::READ:
@@ -120,6 +145,7 @@ Resources::GLFramebufferShPtr GLBindState::getBoundFbo(const Resources::FboBind 
           "The bound read and draw framebuffers are different. Please specify which framebuffer (READ or DRAW) you "
           "wish to accees.");
   }
+  return nullptr;
 }
 
 bool GLBindState::hasBoundFbo(const Resources::FboBind bindType) const {
@@ -131,6 +157,8 @@ bool GLBindState::hasBoundFbo(const Resources::FboBind bindType) const {
     case Resources::FboBind::READ_AND_DRAW:
       return (boundReadFbo.lock() != nullptr && boundDrawFbo.lock() != nullptr);
   }
+
+  return false;
 }
 
 }  // namespace State

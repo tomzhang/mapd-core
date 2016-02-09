@@ -18,8 +18,8 @@
 
 namespace QueryRenderer {
 
-enum TextureBuffers { COLOR_BUFFER = 0, ID_BUFFER, MAX_TEXTURE_BUFFERS = ID_BUFFER };
-enum RenderBuffers { DEPTH_BUFFER = 0, MAX_RENDER_BUFFERS = DEPTH_BUFFER };
+enum class FboColorBuffer { COLOR_BUFFER = 0, ID_BUFFER, MAX_TEXTURE_BUFFERS = ID_BUFFER };
+enum class FboRenderBuffer { DEPTH_BUFFER = 0, MAX_RENDER_BUFFERS = DEPTH_BUFFER };
 
 ///////////////////////////////////////////////////////////////////////
 /**
@@ -38,7 +38,11 @@ class QueryFramebuffer {
   ~QueryFramebuffer();
 
   void resize(int width, int height);
-  // void bindToRenderer(BindType bindType = BindType::READ_AND_DRAW);
+  void bindToRenderer(
+      ::Rendering::GL::GLRenderer* renderer,
+      ::Rendering::GL::Resources::FboBind bindType = ::Rendering::GL::Resources::FboBind::READ_AND_DRAW);
+
+  std::shared_ptr<unsigned char> readColorBuffer(size_t startx, size_t starty, size_t width, size_t height);
 
   int getWidth() const;
   int getHeight() const;

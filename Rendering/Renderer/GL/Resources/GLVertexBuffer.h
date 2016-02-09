@@ -23,8 +23,8 @@ class GLVertexBuffer : public GLBaseBuffer {
 
   GLBufferAttrType getAttributeType(const std::string& attrName) const;
 
-  inline int numAttributes() const;
-  inline int numItems() const;
+  int numAttributes() const;
+  int numItems() const;
 
   const GLBufferAttrInfo& operator[](size_t i) const;
 

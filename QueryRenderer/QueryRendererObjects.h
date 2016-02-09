@@ -114,8 +114,12 @@ class BaseScale {
   virtual bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
 
   bool hasClampChanged() { return _clampChanged; }
-  bool hasDomainDataChanged() { return _domainDataChanged; }
-  bool hasRangeDataChanged() { return _rangeDataChanged; }
+  bool hasDomainChangedInSize() { return _domainSizeChanged; }
+  bool hasDomainValsChanged() { return _domainValsChanged; }
+  bool hasDomainDataChanged() { return _domainSizeChanged || _domainValsChanged; }
+  bool hasRangeChangedInSize() { return _rangeSizeChanged; }
+  bool hasRangeValsChanged() { return _rangeValsChanged; }
+  bool hasRangeDataChanged() { return _rangeSizeChanged || _rangeValsChanged; }
 
  protected:
   std::string _name;
@@ -128,11 +132,13 @@ class BaseScale {
   // to handle type-ness.
   QueryDataType _domainDataType;
   ::Rendering::GL::TypeGLShPtr _domainTypeGL;
-  bool _domainDataChanged;
+  bool _domainSizeChanged;
+  bool _domainValsChanged;
 
   QueryDataType _rangeDataType;
   ::Rendering::GL::TypeGLShPtr _rangeTypeGL;
-  bool _rangeDataChanged;
+  bool _rangeSizeChanged;
+  bool _rangeValsChanged;
 
   QueryRendererContextShPtr _ctx;
 
@@ -156,10 +162,12 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
       : BaseScaleDomainRangeData(name, useString), _vectorPtr(new std::vector<T>(size)), _cachedTypeGL(nullptr) {}
   ~ScaleDomainRangeData() {}
 
-  bool initializeFromJSONObj(const rapidjson::Value& obj,
+  void initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
                              const QueryRendererContextShPtr& ctx,
-                             BaseScale::ScaleType type);
+                             BaseScale::ScaleType type,
+                             bool& sizeChanged,
+                             bool& valsChanged);
   void updateJSONPath(const rapidjson::Pointer& objPath);
 
   int size() { return (_vectorPtr == nullptr ? 0 : _vectorPtr->size()); }
@@ -451,10 +459,20 @@ class BaseRenderProperty {
   // ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
   const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
 
-  void bindToRenderer(::Rendering::GL::Resources::GLShader* activeShader) const {
-    // RUNTIME_EX_ASSERT(_vboPtr != nullptr,
-    //                   "BaseRenderProperty::bindToRenderer(): A vertex buffer is not defined. Cannot bind to
-    //                   renderer.");
+  void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const {
+    auto itr = _perGpuData.find(gpuId);
+
+    RUNTIME_EX_ASSERT(itr->second.vbo != nullptr,
+                      "BaseRenderProperty::addToVboAttrMap(): A vertex buffer is not defined. Cannot add vbo attrs to "
+                      "vbo->shader attr map.");
+
+    ::Rendering::GL::Resources::GLVertexBufferShPtr glVbo = itr->second.vbo->getGLVertexBufferPtr();
+    auto attrMapItr = attrMap.find(glVbo);
+    if (attrMapItr == attrMap.end()) {
+      attrMap.insert({glVbo, {{_vboAttrName, _name}}});
+    } else {
+      attrMapItr->second.push_back({_vboAttrName, _name});
+    }
 
     // _vboPtr->bindToRenderer(activeShader, _vboAttrName, _name);
   }
@@ -626,11 +644,16 @@ class BaseMark {
   // virtual void _pushDomainItem(const rapidjson::Value& item) = 0;
 
   // virtual std::pair<std::string, std::string> buildShaderSource() = 0;
-  virtual void draw() = 0;
+  virtual void draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) = 0;
 
   void setInvalidKey(const int64_t invalidKey) { _invalidKey = invalidKey; }
 
   virtual bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+
+  virtual void update() {
+    _updateShader();
+    _buildVertexArrayObjectFromProperties();
+  }
 
  protected:
   GeomType _type;
@@ -648,6 +671,7 @@ class BaseMark {
   struct PerGpuData {
     const QueryRenderManager::PerGpuData* qrmGpuData;
     ::Rendering::GL::Resources::GLShaderShPtr shaderPtr;
+    ::Rendering::GL::Resources::GLVertexArrayShPtr vaoPtr;
 
     PerGpuData() : qrmGpuData(nullptr), shaderPtr(nullptr) {}
     explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData,
@@ -672,19 +696,17 @@ class BaseMark {
   std::vector<BaseRenderProperty*> _vboProps;
   std::vector<BaseRenderProperty*> _uniformProps;
 
-  void _bindToRenderer(::Rendering::GL::Resources::GLShader* activeShader);
   void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
  private:
-  GLuint _vao;  // opengl vertex array object id
-
-  void _buildVertexArrayObjectFromProperties(::Rendering::GL::Resources::GLShader* activeShader);
+  void _buildVertexArrayObjectFromProperties();
 
   virtual void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
   virtual void _updateShader() = 0;
 
-  virtual void _initPropertiesForRendering(::Rendering::GL::Resources::GLShader* activeShader) = 0;
-  virtual void _bindPropertiesToRenderer(::Rendering::GL::Resources::GLShader* activeShader) = 0;
+  virtual void _addPropertiesToAttrMap(const GpuId& gpuId,
+                                       ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) = 0;
+  virtual void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) = 0;
 
   void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId> unusedGpus) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
@@ -712,7 +734,7 @@ class PointMark : public BaseMark {
   PointMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, const QueryRendererContextShPtr& ctx);
   ~PointMark();
 
-  void draw();
+  void draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) final;
 
   bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
@@ -738,8 +760,8 @@ class PointMark : public BaseMark {
   void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   void _updateShader();
 
-  void _initPropertiesForRendering(::Rendering::GL::Resources::GLShader* activeShader);
-  void _bindPropertiesToRenderer(::Rendering::GL::Resources::GLShader* activeShader);
+  void _addPropertiesToAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap);
+  void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);
 };
 
 BaseMark::GeomType getMarkTypeFromJSONObj(const rapidjson::Value& obj);

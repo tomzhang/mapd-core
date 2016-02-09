@@ -206,7 +206,51 @@ int GLFramebuffer::getHeight() const {
   return 0;
 }
 
+void GLFramebuffer::readPixels(GLenum attachment,
+                               size_t startx,
+                               size_t starty,
+                               size_t width,
+                               size_t height,
+                               GLenum format,
+                               GLenum type,
+                               GLvoid* data) {
+  // TODO(croot): should we worry about which renderer here? Or is always defaulting to
+  // the parent renderer ok? If it isn't, we either need to pass the renderer as a default
+  // argument, or supply an api to the renderer directly, which will then call this function
+  // which would be private.
+
+  RUNTIME_EX_ASSERT(
+      _attachmentManager.hasAttachment(attachment),
+      "Error trying to read pixels from fbo attachment " + std::to_string(attachment) + ". Attachment doesn't exist.");
+
+  validateUsability();
+
+  GLint currReadBuffer, currReadFbo;
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &currReadFbo));
+
+  bool bind = (currReadFbo != static_cast<GLint>(_fbo));
+  if (bind) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo));
+  }
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_BUFFER, &currReadBuffer));
+  MAPD_CHECK_GL_ERROR(glReadBuffer(attachment));
+  MAPD_CHECK_GL_ERROR(glReadPixels(startx, starty, width, height, format, type, data));
+
+  if (currReadBuffer != static_cast<GLint>(attachment)) {
+    MAPD_CHECK_GL_ERROR(glReadBuffer(currReadBuffer));
+  }
+
+  if (bind) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, currReadFbo));
+  }
+}
+
 void GLFramebuffer::resize(int width, int height) {
+  // TODO(croot): should we worry about which renderer here? Or is always defaulting to
+  // the parent renderer ok?
+
   for (auto& tex : _textureBuffers) {
     tex->resize(width, height);
   }

@@ -21,6 +21,7 @@ void GLBaseBuffer::_initResource() {
 
   if (!_bufferId) {
     MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_bufferId));
+    std::cerr << "CROOT - initialized buffer: " << _bufferId << std::endl;
   }
 }
 

@@ -59,6 +59,7 @@ class QueryRenderer {
   void activateGpu(const GpuId& gpuId, QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
 
   void render();
+  PngData renderToPng(int compressionLevel = -1);
 
   unsigned int getIdAt(int x, int y);
 
@@ -82,6 +83,9 @@ class QueryRenderer {
   void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
   void _initFromJSON(const std::string& configJSON, bool forceUpdate = false);
   void _resizeFramebuffers(int width, int height);
+
+  void _update();
+  void _renderGpu(PerGpuDataMap::iterator& itr);
 
   friend class QueryRendererContext;
 };
@@ -194,6 +198,8 @@ class QueryRendererContext {
   void _initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData, const std::unordered_set<GpuId>& unusedGpus);
 
   void _fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj);
+
+  void _update();
 };
 
 std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj);

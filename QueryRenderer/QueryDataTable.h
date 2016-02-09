@@ -164,6 +164,8 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
     for (auto& itr : _perGpuData) {
       rtn.insert({itr.first, itr.second.vbo});
     }
+
+    return rtn;
   }
 
   QueryDataType getColumnType(const std::string& columnName);

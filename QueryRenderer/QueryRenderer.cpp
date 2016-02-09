@@ -2,8 +2,10 @@
 #include "QueryFramebuffer.h"
 #include "QueryDataTable.h"
 #include "QueryRendererObjects.h"
+#include <Rendering/Window.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
+#include <png.h>
 // #include "MapDGL.h"
 // #include "QueryRenderer.h"
 // #include "RapidJSONUtils.h"
@@ -18,7 +20,10 @@
 
 namespace QueryRenderer {
 
+using ::Rendering::WindowShPtr;
+using ::Rendering::RendererShPtr;
 using ::Rendering::GL::GLRenderer;
+using ::Rendering::GL::Resources::FboBind;
 
 QueryRenderer::QueryRenderer(bool doHitTest, bool doDepthTest)
     : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData() {
@@ -397,24 +402,242 @@ void QueryRenderer::activateGpu(const GpuId& gpuId, QueryRenderManager::PerGpuDa
   _initGpuResources({gpuId}, qrmPerGpuData);
 }
 
+void QueryRenderer::_update() {
+  _ctx->_update();
+}
+
+void QueryRenderer::_renderGpu(PerGpuDataMap::iterator& itr) {
+  // TODO(croot): make thread safe?
+
+  CHECK(itr != _perGpuData.end());
+  CHECK(itr->second.qrmGpuData != nullptr);
+
+  const GpuId& gpuId = itr->first;
+  WindowShPtr& windowPtr = itr->second.qrmGpuData->windowPtr;
+  RendererShPtr& rendererPtr = itr->second.qrmGpuData->rendererPtr;
+
+  CHECK(windowPtr != nullptr && rendererPtr != nullptr);
+
+  GLRenderer* renderer = dynamic_cast<GLRenderer*>(rendererPtr.get());
+  CHECK(renderer != nullptr);
+
+  QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+
+  RUNTIME_EX_ASSERT(
+      framebufferPtr != nullptr,
+      "QueryRenderer: The framebuffer is not initialized for gpu " + std::to_string(gpuId) + ". Cannot render.");
+
+  renderer->makeActiveOnCurrentThread(windowPtr.get());
+
+  framebufferPtr->bindToRenderer(renderer);
+
+  // TODO(croot): enable a push/pop state stack for the renderer state...
+  renderer->enable(GL_BLEND);
+  renderer->setBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
+  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
+  renderer->setBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+  renderer->setClearColor(0, 0, 0, 0);
+  renderer->setViewport(0, 0, _ctx->_width, _ctx->_height);
+  renderer->clearAll();
+
+  for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+    _ctx->_geomConfigs[i]->draw(renderer, gpuId);
+  }
+
+  windowPtr->swapBuffers();
+
+  renderer->makeInactive();
+}
+
 void QueryRenderer::render() {
-  // RUNTIME_EX_ASSERT(_framebufferPtr != nullptr, "QueryRenderer: The framebuffer is not defined. Cannot render.");
+  // update everything marked dirty before rendering
+  _update();
 
-  // _framebufferPtr->bindToRenderer();
+  int numGpusToRender = _perGpuData.size();
+  if (numGpusToRender) {
+    if (numGpusToRender == 1) {
+      auto itr = _perGpuData.begin();
+      _renderGpu(itr);
+    } else {
+      // TODO(croot) - launch some threads to handle multi-gpu rendering?
+      // Then do a composite, or should I do a composite in the renerToPng?
+    }
+  }
+}
 
-  // MAPD_CHECK_GL_ERROR(glEnable(GL_BLEND));
-  // MAPD_CHECK_GL_ERROR(glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD));
-  // // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
-  // // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
-  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
+static void writePngData(png_structp png_ptr, png_bytep data, png_size_t length) {
+  std::vector<char>* pngData = reinterpret_cast<std::vector<char>*>(png_get_io_ptr(png_ptr));
+  size_t currSz = pngData->size();
+  pngData->resize(currSz + length);
+  std::memcpy(&(*pngData)[0] + currSz, data, length);
+}
 
-  // MAPD_CHECK_GL_ERROR(glClearColor(0, 0, 0, 1));
-  // MAPD_CHECK_GL_ERROR(glViewport(0, 0, _ctx->_width, _ctx->_height));
-  // MAPD_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+static void flushPngData(png_structp png_ptr) {
+  // Do nothing
+  (void)png_ptr; /* Stifle compiler warning */
+}
 
-  // for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
-  //   _ctx->_geomConfigs[i]->draw();
+PngData QueryRenderer::renderToPng(int compressionLevel) {
+  RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
+                    "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " +
+                        "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
+
+  render();
+
+  int width = getWidth();
+  int height = getHeight();
+  std::shared_ptr<unsigned char> pixelsPtr;
+
+  if (_perGpuData.size() == 1) {
+    auto itr = _perGpuData.begin();
+
+    const GpuId& gpuId = itr->first;
+    WindowShPtr& windowPtr = itr->second.qrmGpuData->windowPtr;
+    RendererShPtr& rendererPtr = itr->second.qrmGpuData->rendererPtr;
+
+    CHECK(windowPtr != nullptr && rendererPtr != nullptr);
+
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(rendererPtr.get());
+    CHECK(renderer != nullptr);
+
+    QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+
+    RUNTIME_EX_ASSERT(
+        framebufferPtr != nullptr,
+        "QueryRenderer: The framebuffer is not initialized for gpu " + std::to_string(gpuId) + ". Cannot render.");
+
+    renderer->makeActiveOnCurrentThread(windowPtr.get());
+
+    framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+    pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
+
+    // TODO(croot): perhaps create a read pixels api like the following
+    // Better yet, create a multi-dimensional pixel struct template that
+    // is returned with width/height, number of components, etc.
+    // std::shared_ptr<unsigned char[]> pixels = framebufferPtr->readPixels<unsigned char, 4>(FboBuffer::COLOR_BUFFER,
+    // 0, 0, width, height);
+
+    renderer->makeInactive();
+  }
+
+  // // TODO(croot): Make an improved read-pixels API for framebuffers
+  // // getFramebuffer()->bindToRenderer(BindType::READ);
+  // getFramebuffer()->bindToRenderer(BindType::READ);
+  // MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT0));
+  // MAPD_CHECK_GL_ERROR(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
+
+  // Now build the png stream using libpng
+
+  png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+  assert(png_ptr != nullptr);
+
+  png_infop info_ptr = png_create_info_struct(png_ptr);
+  assert(info_ptr != nullptr);
+
+  // TODO(croot) - rather than going the setjmp route, you can enable the
+  // PNG_SETJMP_NOT_SUPPORTED compiler flag which would result in asserts
+  // when libpng errors, according to its docs.
+  // if (setjmp(png_jmpbuf(png_ptr))) {
+  //   std::cerr << "Got a libpng error" << std::endl;
+  //   // png_destroy_info_struct(png_ptr, &info_ptr);
+  //   png_destroy_write_struct(&png_ptr, &info_ptr);
+  //   assert(false);
   // }
+
+  // using a vector to store the png bytes. I'm doing this to take advantage of the
+  // optimized allocation vectors do when resizing. The only downside of this approach
+  // is that the vector maintains the memory, so I have to copy the vector's internal
+  // memory to my own buffer
+  // TODO(croot) - I could just use a vector of bytes/chars instead of
+  // a shared_ptr<char>(new char[]), but I'd have to be sure to do a "shrink-to-fit" on
+  // the vector if I did this to deallocate any unused memory. This might be just
+  // as costly as a full memcpy --- or maybe not since the vector's memory itself is
+  // also fully deallocated -- this might be a better approach.
+  std::vector<char> pngData;
+
+  png_set_write_fn(png_ptr, &pngData, writePngData, flushPngData);
+
+  // set filtering?
+  png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_NONE);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_SUB);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_UP);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_AVG);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_PAETH);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_ALL_FILTERS);
+
+  // set filter weights/preferences? I can't seem to get this
+  // to make a difference
+  // double weights[3] = {2.0, 1.5, 1.1};
+  // double costs[PNG_FILTER_VALUE_LAST] = {2.0, 2.0, 1.0, 2.0, 2.0};
+  // png_set_filter_heuristics(png_ptr, PNG_FILTER_HEURISTIC_WEIGHTED, 3, weights, costs);
+
+  // set zlib compression level
+  // if (compressionLevel >= 0) {
+  //  png_set_compression_level(png_ptr, compressionLevel);
+  //}
+  png_set_compression_level(png_ptr, compressionLevel);
+
+  // other zlib params?
+  // png_set_compression_mem_level(png_ptr, 8);
+  // png_set_compression_strategy(png_ptr, PNG_Z_DEFAULT_STRATEGY);
+  // png_set_compression_window_bits(png_ptr, 15);
+  // png_set_compression_method(png_ptr, 8);
+  // png_set_compression_buffer_size(png_ptr, 8192);
+
+  // skip the 8 bytes signature?
+  // png_set_sig_bytes(png_ptr, 8);
+
+  int interlace_type = PNG_INTERLACE_NONE;  // or PNG_INTERLACE_ADAM7 if we ever want interlacing
+  png_set_IHDR(png_ptr,
+               info_ptr,
+               width,
+               height,
+               8,
+               PNG_COLOR_TYPE_RGB_ALPHA,
+               interlace_type,
+               PNG_COMPRESSION_TYPE_DEFAULT,
+               PNG_FILTER_TYPE_DEFAULT);
+
+  /* write out the PNG header info (everything up to first IDAT) */
+  png_write_info(png_ptr, info_ptr);
+
+  // make sure < 8-bit images are packed into pixels as tightly as possible - only necessary
+  // for palette images, which we're not doing yet
+  // png_set_packing(png_ptr);
+
+  unsigned char* pixels = pixelsPtr.get();
+  png_byte* row_pointers[height];
+
+  for (int j = 0; j < height; ++j) {
+    // invert j -- input pixel rows go bottom up, where pngs are
+    // defined top-down.
+    row_pointers[j] = &pixels[(height - j - 1) * width * 4];
+  }
+
+  png_write_image(png_ptr, row_pointers);
+
+  // can alternatively write per-row, but this didn't
+  // seem to make a difference. I thought that perhaps
+  // this could be parallelized, but png_write_row() doesn't
+  // appear to be a fixed-function call.
+  // for (j = 0; j < height; ++j) {
+  //   png_write_row(png_ptr, row_pointers[j]);
+  // }
+
+  png_write_end(png_ptr, info_ptr);
+
+  int pngSize = pngData.size();
+  std::shared_ptr<char> pngPtr(new char[pngSize], std::default_delete<char[]>());
+  char* pngDataPtr = pngPtr.get();
+  std::memcpy(pngDataPtr, &pngData[0], pngSize);
+
+  png_destroy_write_struct(&png_ptr, &info_ptr);
+
+  // delete[] pixels;
+
+  return PngData(pngPtr, pngSize);
 }
 
 unsigned int QueryRenderer::getIdAt(int x, int y) {
@@ -635,6 +858,12 @@ void QueryRendererContext::_fireRefEvent(RefEventType eventType, const ScaleShPt
   }
 
   // TODO(croot): throw an error or warning if eventObj not found in map?
+}
+
+void QueryRendererContext::_update() {
+  for (auto& geomConfig : _geomConfigs) {
+    geomConfig->update();
+  }
 }
 
 // void QueryRenderer::_buildShaderFromGeomConfig(const GeomConfigPtr& geomConfigPtr) {

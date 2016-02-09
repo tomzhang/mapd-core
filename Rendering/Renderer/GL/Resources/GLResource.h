@@ -61,6 +61,12 @@ class GLResource {
                       "cleaned up by an outside source.");
   }
 
+  // void validateBound(GLRenderer* renderer = nullptr, bool checkThread = true) {
+  //   validateUsability(renderer, checkThread);
+  //   RUNTIME_EX_ASSERT(renderer->getBoundResource(getResourceType()) != this, "This resource hasn't been properly
+  //   bound to the renderer.");
+  // }
+
   void cleanupResource() {
     if (isUsableOnThread()) {
       _cleanupResource();

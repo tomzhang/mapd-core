@@ -21,7 +21,7 @@ using Resources::GLFramebufferShPtr;
 
 thread_local GLRenderer* _currentRenderer;
 
-const GLRenderer* GLRenderer::getCurrentThreadRenderer() {
+GLRenderer* GLRenderer::getCurrentThreadRenderer() {
   return _currentRenderer;
 }
 
@@ -119,16 +119,48 @@ void GLRenderer::disable(GLenum attr) {
   MAPD_CHECK_GL_ERROR(glDisable(attr));
 }
 
-void GLRenderer::setBlendFunc(GLenum srcFactor, GLenum dstFactor) {
-  MAPD_CHECK_GL_ERROR(glBlendFunc(srcFactor, dstFactor));
+void GLRenderer::setBlendFunc(GLenum srcFactor, GLenum dstFactor, int drawBufferId) {
+  if (drawBufferId >= 0) {
+    MAPD_CHECK_GL_ERROR(glBlendFunci(drawBufferId, srcFactor, dstFactor));
+  } else {
+    MAPD_CHECK_GL_ERROR(glBlendFunc(srcFactor, dstFactor));
+  }
 }
 
-void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {
-  MAPD_CHECK_GL_ERROR(glDrawArrays(primitiveMode, startIndex, numItemsToDraw));
+void GLRenderer::setBlendFuncSeparate(GLenum srcRGB,
+                                      GLenum dstRGB,
+                                      GLenum srcAlpha,
+                                      GLenum dstAlpha,
+                                      int drawBufferId) {
+  if (drawBufferId >= 0) {
+    MAPD_CHECK_GL_ERROR(glBlendFuncSeparatei(drawBufferId, srcRGB, dstRGB, srcAlpha, dstAlpha));
+  } else {
+    MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha));
+  }
+}
+
+void GLRenderer::setBlendEquation(GLenum mode, int drawBufferId) {
+  if (drawBufferId >= 0) {
+    MAPD_CHECK_GL_ERROR(glBlendEquationi(drawBufferId, mode));
+  } else {
+    MAPD_CHECK_GL_ERROR(glBlendEquation(mode));
+  }
+}
+
+void GLRenderer::setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int drawBufferId) {
+  if (drawBufferId >= 0) {
+    MAPD_CHECK_GL_ERROR(glBlendEquationSeparatei(drawBufferId, modeRGB, modeAlpha));
+  } else {
+    MAPD_CHECK_GL_ERROR(glBlendEquationSeparate(modeRGB, modeAlpha));
+  }
 }
 
 void GLRenderer::bindResource(const GLResourceShPtr& rsrc) {
   _bindState.bindResource(rsrc);
+}
+
+void GLRenderer::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc) {
+  _bindState.bindVertexBuffer(vboRsrc);
 }
 
 void GLRenderer::bindFramebuffer(FboBind bindType, const GLFramebufferShPtr& fboRsrc) {
@@ -141,6 +173,14 @@ void GLRenderer::bindShader(const GLShaderShPtr& shaderRsrc) {
 
 void GLRenderer::bindVertexArray(const GLVertexArrayShPtr& vaoRsrc) {
   _bindState.bindVertexArray(vaoRsrc);
+}
+
+Resources::GLVertexBufferShPtr GLRenderer::getBoundVbo() const {
+  return _bindState.getBoundVbo();
+}
+
+bool GLRenderer::hasBoundVbo() const {
+  return _bindState.hasBoundVbo();
 }
 
 GLFramebufferShPtr GLRenderer::getBoundFbo(FboBind bindType) const {
@@ -165,6 +205,19 @@ GLVertexArrayShPtr GLRenderer::getBoundVertexArray() const {
 
 bool GLRenderer::hasBoundVertexArray() const {
   return _bindState.hasBoundVertexArray();
+}
+
+void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {
+  if (numItemsToDraw < 0) {
+    if (hasBoundVertexArray()) {
+      numItemsToDraw = getBoundVertexArray()->numItems();
+    } else {
+      CHECK(hasBoundVbo());
+      numItemsToDraw = getBoundVbo()->numItems();
+    }
+  }
+
+  MAPD_CHECK_GL_ERROR(glDrawArrays(primitiveMode, startIndex, numItemsToDraw));
 }
 
 void GLRenderer::_initGLEW(const GLWindow* primaryWindow) {

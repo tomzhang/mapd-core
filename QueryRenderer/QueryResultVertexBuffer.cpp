@@ -95,21 +95,26 @@ QueryResultVertexBuffer::~QueryResultVertexBuffer() {
   // return to the previous cuda context after
   // unregistering all remaining resources
   // for each context
-  CUcontext currCudaCtx;
-  CUresult result = cuCtxGetCurrent(&currCudaCtx);
-  if (result != CUDA_ERROR_DEINITIALIZED) {
-    // verify that cuda's not being shut down.
-    // This destructor may have been triggered
-    // by a program exit, therefore cuda could
-    // be in shutdown mode before we get here.
+  if (_cudaResourceMap.size()) {
+    CUcontext currCudaCtx;
+    CUresult result = cuCtxGetCurrent(&currCudaCtx);
 
-    checkCudaErrors(result);
-    checkCudaErrors(cuCtxGetCurrent(&currCudaCtx));
-    for (const auto& item : _cudaResourceMap) {
-      checkCudaErrors(cuCtxSetCurrent(item.first));
-      checkCudaErrors(cuGraphicsUnregisterResource(item.second));
+    // NOTE: We're not checking for CUDA_ERROR_NOT_INITIALIZED
+    // since CUDA should have been initialized if there's something in
+    // _cudaResourceMap.
+    if (result != CUDA_ERROR_DEINITIALIZED) {
+      // verify that cuda's not being shut down.
+      // This destructor may have been triggered
+      // by a program exit, therefore cuda could
+      // be in shutdown mode before we get here.
+
+      checkCudaErrors(result);
+      for (const auto& item : _cudaResourceMap) {
+        checkCudaErrors(cuCtxSetCurrent(item.first));
+        checkCudaErrors(cuGraphicsUnregisterResource(item.second));
+      }
+      checkCudaErrors(cuCtxSetCurrent(currCudaCtx));
     }
-    checkCudaErrors(cuCtxSetCurrent(currCudaCtx));
   }
 #endif  // HAVE_CUDA
 }

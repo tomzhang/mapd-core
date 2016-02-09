@@ -20,6 +20,8 @@ class GLVertexArray : public GLResource {
  public:
   ~GLVertexArray();
 
+  size_t numItems() const { return _numItems; }
+
   GLResourceType getResourceType() const final { return GLResourceType::VERTEXARRAY; }
   GLuint getId() const final { return _vao; }
 
@@ -32,6 +34,7 @@ class GLVertexArray : public GLResource {
   explicit GLVertexArray(const RendererWkPtr& rendererPtr, const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap);
 
   GLuint _vao;
+  size_t _numItems;
 
   void _initResource();
   void _cleanupResource() final;
