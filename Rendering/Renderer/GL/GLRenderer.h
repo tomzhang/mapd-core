@@ -101,7 +101,7 @@ class GLRenderer : public Renderer {
 
   static GLRenderer* getCurrentThreadRenderer();
   static Window* getCurrentThreadWindow();
-  static void setInactiveRendererCurrentOnThread();
+  // static void setInactiveRendererCurrentOnThread();
 
  protected:
   // GLRenderer(const WindowShPtr& parentWindowPtr);

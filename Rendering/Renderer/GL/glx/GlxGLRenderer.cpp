@@ -174,6 +174,8 @@ void GlxGLRenderer::_initGLX(const DisplayScreenPair& altDisplayData) {
 
   XSync(dpy, False);
 
+  GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
+
   glXMakeCurrent(dpy, drawable, context);
 
 // now initialize glxew
@@ -194,6 +196,18 @@ void GlxGLRenderer::_initGLX(const DisplayScreenPair& altDisplayData) {
   XSync(dpy, False);
   glXDestroyContext(dpy, context);
   XDestroyWindow(dpy, drawable);
+
+  // clear out the current context since we've messed with it here
+  // TODO(croot): should we preserve the context in the state it
+  // was previously? Also, is it possible by destroying the tmp context
+  // above will restore the previous context state?
+
+  // For some reason the glXMakeCurrent() call below caused a BadMatch (invalid parameter attributes)
+  // error, so commenting it out for now.
+  // glXMakeCurrent(dpy, None, nullptr);
+  if (currRenderer) {
+    currRenderer->makeInactive();
+  }
 
   _glxewInitialized = true;
 }

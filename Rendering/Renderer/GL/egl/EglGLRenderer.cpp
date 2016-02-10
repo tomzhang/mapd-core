@@ -158,10 +158,9 @@ void EglGLRenderer::initializeGL() {
       // TODO(croot): should we set back to whatever the current context
       // was prior to this code? Not sure that's necessary because
       // we set this soon to be build context current upon building
+      _makeInactiveImpl();
       if (currRenderer) {
         currRenderer->makeInactive();
-      } else {
-        _makeInactiveImpl();
       }
 
     } break;

@@ -34,11 +34,11 @@ Window* GLRenderer::getCurrentThreadWindow() {
   return _currentWindow;
 }
 
-static void setInactiveRendererOnCurrentThread() {
-  if (_currentRenderer) {
-    _currentRenderer->makeInactive();
-  }
-}
+// static void setInactiveRendererOnCurrentThread() {
+//   if (_currentRenderer) {
+//     _currentRenderer->makeInactive();
+//   }
+// }
 
 // GLRenderer::GLRenderer(const WindowShPtr& parentWindowPtr) : Renderer(parentWindowPtr), _glewInitialized(false) {
 GLRenderer::GLRenderer(const RendererSettings& settings)
