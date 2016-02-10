@@ -29,7 +29,11 @@ void makeWindowAndContextCurrent(const Rendering::Window* window,
 }
 
 GlxGLRenderer::GlxGLRenderer(const RendererSettings& settings)
-    : GLRenderer(settings), _dpyConnection(nullptr, -1), _fbConfigPtr(nullptr, XFree), _glxewInitialized(false) {
+    : GLRenderer(settings),
+      _glxContext(0),
+      _dpyConnection(nullptr, -1),
+      _fbConfigPtr(nullptr, XFree),
+      _glxewInitialized(false) {
 #ifdef GLEW_MX
   memset(&_glxewContext, 0, sizeof(GLXEWContext));
 #endif
@@ -57,39 +61,14 @@ GlxGLRenderer::~GlxGLRenderer() {
   // #endif
 }
 
-void GlxGLRenderer::makeActiveOnCurrentThread(const Window* window) {
-  // if (isActiveOnCurrentThread() && !_windowsDirty) {
-  //   // already active
-  //   return;
-  // }
-
-  // TODO(croot): Make thread safe?
-  if (!window) {
-    makeWindowAndContextCurrent(getPrimaryWindow(), _dpyConnection.first, _glxContext);
-  } else {
-    for (auto& attachedWindow : _attachedWindows) {
-      if (window == attachedWindow) {
-        makeWindowAndContextCurrent(window, _dpyConnection.first, _glxContext);
-        break;
-      }
-    }
-  }
-
-  GLRenderer::makeActiveOnCurrentThread(window);
-
-  _windowsDirty = false;
+void GlxGLRenderer::_makeActiveOnCurrentThreadImpl(Window* window) {
+  CHECK(_dpyConnection.first && _glxContext);
+  makeWindowAndContextCurrent(window, _dpyConnection.first, _glxContext);
 }
 
-void GlxGLRenderer::makeInactive() {
-  if (!isActiveOnCurrentThread()) {
-    // early out
-    return;
-  }
-
+void GlxGLRenderer::_makeInactiveImpl() {
   CHECK(_dpyConnection.first != nullptr);
   glXMakeCurrent(_dpyConnection.first.get(), None, nullptr);
-
-  GLRenderer::makeInactive();
 }
 
 GLXContext GlxGLRenderer::getGLXContext() const {
@@ -263,9 +242,9 @@ FbConfigShPtr GlxGLRenderer::_chooseFbConfig(const GlxGLWindow* primaryWindow) {
 void GlxGLRenderer::initializeGL() {
   CHECK(!isInitialized());
 
-  const Window* primaryWindow = getPrimaryWindow();
+  Window* primaryWindow = getPrimaryWindow();
   CHECK(primaryWindow);
-  const GlxGLWindow* primaryGlxWindow = dynamic_cast<const GlxGLWindow*>(primaryWindow);
+  GlxGLWindow* primaryGlxWindow = dynamic_cast<GlxGLWindow*>(primaryWindow);
   CHECK(primaryGlxWindow);
 
   _initXDisplay(primaryGlxWindow);

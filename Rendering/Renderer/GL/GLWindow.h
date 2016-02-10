@@ -46,6 +46,7 @@ class GLWindow : public Window {
   // bool isActiveOnCurrentThread() final;
 
   // GLRenderer& getRenderer();
+  // void bindFramebuffer() final;
 
   // TODO(croot): what if we want to blit a color, depth and/or stencil buffer?
   void blitFramebuffer(const Resources::GLFramebufferShPtr& fbo,
@@ -66,6 +67,8 @@ class GLWindow : public Window {
                        int dstFboWidth,
                        int dstFboHeight,
                        GLenum filter = GL_NEAREST);
+
+  // std::shared_ptr<unsigned char> readPixelsRGBA(size_t startx, size_t starty, size_t width, size_t height) final;
 
  protected:
   explicit GLWindow(const WindowSettings& windowSettings, const WindowShPtr& prnt = nullptr);

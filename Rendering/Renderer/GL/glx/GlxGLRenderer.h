@@ -18,9 +18,6 @@ class GlxGLRenderer : public GLRenderer {
   // GlxGLRenderer(const WindowShPtr& parentWindowPtr);  // for delayed initialization
   ~GlxGLRenderer();
 
-  void makeActiveOnCurrentThread(const Window* window = nullptr) final;
-  void makeInactive() final;
-
   GLXContext getGLXContext() const;
   X11DisplayShPtr getXDisplayPtr() const;
   int getXScreenId() const;
@@ -57,6 +54,9 @@ class GlxGLRenderer : public GLRenderer {
   FbConfigShPtr _chooseFbConfig(const GlxGLWindow* primaryWindow);
 
   bool _verifyWindowIsAttachable(const Window* window) final;
+
+  void _makeActiveOnCurrentThreadImpl(Window* glWindow) final;
+  void _makeInactiveImpl() final;
 
   friend class GlxGLWindow;
 };

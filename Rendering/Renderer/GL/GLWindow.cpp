@@ -26,6 +26,15 @@ GLWindow::~GLWindow() {
   std::cerr << "CROOT GLWindow destructor" << std::endl;
 }
 
+// void GLWindow::bindFramebuffer() {
+//   // TODO(croot): expose ways to bind the framebuffer (i.e. READ, DRAW, READ & DRAW)
+//   // TODO(croot): does this break away from the renderer implementation?
+//   // Everything should probably go thru the renderer.
+
+//   // use the default framebuffer
+//   MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+// }
+
 // TODO(croot): what if we want to blit a color, depth and/or stencil buffer?
 void GLWindow::blitFramebuffer(const Resources::GLFramebufferShPtr& fbo,
                                GLenum attachment,

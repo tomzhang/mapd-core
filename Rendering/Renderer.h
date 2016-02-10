@@ -18,9 +18,11 @@ class Renderer {
 
   virtual void initialize() = 0;
 
-  virtual void makeActiveOnCurrentThread(const Window* window = nullptr) = 0;
+  virtual void makeActiveOnCurrentThread(Window* window = nullptr) = 0;
+  void makeActiveOnCurrentThread(const WindowShPtr& window) { makeActiveOnCurrentThread(window.get()); }
   virtual void makeInactive() = 0;
-  virtual bool isActiveOnCurrentThread() = 0;
+  virtual bool isActiveOnCurrentThread(Window* window = nullptr) = 0;
+  bool isActiveOnCurrentThread(const WindowShPtr& window) { return isActiveOnCurrentThread(window.get()); }
 
   virtual void setClearColor(const Objects::ColorRGBA& color) = 0;
   virtual void setClearColor(float r, float g, float b, float a) = 0;
@@ -34,6 +36,7 @@ class Renderer {
   bool isInitialized() { return _initialized; }
 
   Window* getPrimaryWindow();
+  const Window* getPrimaryWindow() const;
   WindowArray getAllWindows();
   int numWindows() const;
 

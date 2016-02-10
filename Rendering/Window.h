@@ -71,6 +71,11 @@ class Window {
   // virtual const Framebuffer* getFramebuffer() const { return nullptr; }
   // virtual Framebuffer* getFramebuffer() { return nullptr; }
 
+  // virtual std::shared_ptr<unsigned char> readPixelsRGB(size_t startx, size_t starty, size_t width, size_t height) =
+  // 0;
+  // virtual std::shared_ptr<unsigned char> readPixelsRGBA(size_t startx, size_t starty, size_t width, size_t height) =
+  // 0;
+
   virtual void swapBuffers() = 0;
 
   // RendererShPtr getRenderer() const;

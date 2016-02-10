@@ -3,6 +3,7 @@
 #include "EglGLWindow.h"
 // #include "EglUtils.h"
 #include "MapDEGL.h"
+#include "../MapDGL.h"
 // #include <EGL/egl.h>
 // #include <GL/glew.h>
 #include <iostream>
@@ -27,8 +28,8 @@ void makeWindowAndContextCurrent(const Rendering::Window* window,
   CHECK(dpyPtr != nullptr);
 
   // TODO(croot): Should we make the opengl api current this every time this renderer is made current?
-  eglBindAPI(EGL_OPENGL_API);
-  eglMakeCurrent(dpyPtr->getEGLDisplay(), surface, surface, eglCtx);
+  MAPD_CHECK_EGL_ERROR(eglBindAPI(EGL_OPENGL_API));
+  MAPD_CHECK_EGL_ERROR(eglMakeCurrent(dpyPtr->getEGLDisplay(), surface, surface, eglCtx));
 }
 
 EglGLRenderer::EglGLRenderer(const RendererSettings& settings) : GLRenderer(settings), _dpyPtr(nullptr), _eglCtx(0) {
@@ -48,51 +49,23 @@ EglGLRenderer::~EglGLRenderer() {
   }
 }
 
-void EglGLRenderer::makeActiveOnCurrentThread(const Window* window) {
-  // TODO(croot): a window and context can be activated
-  // so we need to add the window as a per-thread item.
-
-  // if (isActiveOnCurrentThread() && !_windowsDirty) {
-  //   // already active
-  //   return;
-  // }
-
-  // TODO(croot): Make thread safe?
-  if (!window) {
-    makeWindowAndContextCurrent(getPrimaryWindow(), _dpyPtr, _eglCtx);
-  } else {
-    for (auto& attachedWindow : _attachedWindows) {
-      if (window == attachedWindow) {
-        makeWindowAndContextCurrent(window, _dpyPtr, _eglCtx);
-        break;
-      }
-    }
-  }
-
-  GLRenderer::makeActiveOnCurrentThread(window);
-
-  _windowsDirty = false;
+void EglGLRenderer::_makeActiveOnCurrentThreadImpl(Window* window) {
+  CHECK(_dpyPtr && _eglCtx);
+  makeWindowAndContextCurrent(window, _dpyPtr, _eglCtx);
 }
 
-void EglGLRenderer::makeInactive() {
-  if (!isActiveOnCurrentThread()) {
-    // early out
-    return;
-  }
-
-  CHECK(_dpyPtr != nullptr);
+void EglGLRenderer::_makeInactiveImpl() {
+  CHECK(_dpyPtr);
   MAPD_CHECK_EGL_ERROR(eglMakeCurrent(_dpyPtr->getEGLDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
-
-  GLRenderer::makeInactive();
 }
 
 void EglGLRenderer::initializeGL() {
   CHECK(!isInitialized());
 
-  const Window* primaryWindow = getPrimaryWindow();
+  Window* primaryWindow = getPrimaryWindow();
   CHECK(primaryWindow);
 
-  const EglGLWindow* primaryEglWindow = dynamic_cast<const EglGLWindow*>(primaryWindow);
+  EglGLWindow* primaryEglWindow = dynamic_cast<EglGLWindow*>(primaryWindow);
   CHECK(primaryEglWindow);
 
   _initEGLDisplay(primaryEglWindow);
@@ -148,14 +121,6 @@ void EglGLRenderer::initializeGL() {
                               Settings::to_string(IntSetting::OPENGL_MINOR) + " when " +
                               Settings::to_string(IntSetting::OPENGL_MAJOR) + "is specified.");
 
-        LOG(INFO) << "Renderer Setting: <" << IntSetting::OPENGL_MAJOR << ">.<" << IntSetting::OPENGL_MINOR
-                  << ">: " << majorVersion << "." << minorVersion << ".";
-
-        attributes.push_back(EGL_CONTEXT_MAJOR_VERSION);
-        attributes.push_back(majorVersion);
-        attributes.push_back(EGL_CONTEXT_MINOR_VERSION);
-        attributes.push_back(minorVersion);
-
         break;
       }
 
@@ -167,9 +132,48 @@ void EglGLRenderer::initializeGL() {
     case IntConstant::DEFAULT:
     case IntConstant::AUTO:
     case IntConstant::ON:
-    case IntConstant::OFF:
-      break;
+    case IntConstant::OFF: {
+      // get the latest support GL version. We'll have to create a temporary
+      // context to do so and pull the GL version from that.
+      EGLContext tmpCtx = MAPD_CHECK_EGL_ERROR(eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, NULL));
+
+      GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
+
+      // TODO(croot): should we check for the current bound context and set it back
+      // to the original when we're done?
+      makeWindowAndContextCurrent(primaryWindow, _dpyPtr, tmpCtx);
+
+      const char* glVersion = (const char*)MAPD_CHECK_GL_ERROR(glGetString(GL_VERSION));
+      if (glVersion) {
+        // TODO(croot): store the max glVersion somewhere?
+        sscanf(glVersion, "%d.%d", &majorVersion, &minorVersion);
+
+        // TODO(croo): check that the previous sscanf
+        // always gets
+        // an appropriate major and minor
+      }
+
+      MAPD_CHECK_EGL_ERROR(eglDestroyContext(dpy, tmpCtx));
+
+      // TODO(croot): should we set back to whatever the current context
+      // was prior to this code? Not sure that's necessary because
+      // we set this soon to be build context current upon building
+      if (currRenderer) {
+        currRenderer->makeInactive();
+      } else {
+        _makeInactiveImpl();
+      }
+
+    } break;
   }
+
+  LOG(INFO) << "Renderer Setting: <" << IntSetting::OPENGL_MAJOR << ">.<" << IntSetting::OPENGL_MINOR
+            << ">: " << majorVersion << "." << minorVersion << ".";
+
+  attributes.push_back(EGL_CONTEXT_MAJOR_VERSION);
+  attributes.push_back(majorVersion);
+  attributes.push_back(EGL_CONTEXT_MINOR_VERSION);
+  attributes.push_back(minorVersion);
 
   // always use forward-compatible GL contexts (i.e. deprecate old API)
   // attributes.push_back(EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE);

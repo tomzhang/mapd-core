@@ -62,6 +62,10 @@ void Renderer::detachWindow(Window* window) {
 }
 
 Window* Renderer::getPrimaryWindow() {
+  return const_cast<Window*>(static_cast<const Renderer&>(*this).getPrimaryWindow());
+}
+
+const Window* Renderer::getPrimaryWindow() const {
   if (_attachedWindows.size()) {
     return _attachedWindows[0];
   }

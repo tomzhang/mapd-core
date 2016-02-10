@@ -15,9 +15,6 @@ class EglGLRenderer : public GLRenderer {
   EglDisplayShPtr getEGLDisplayPtr() const { return _dpyPtr; }
   EGLContext getEGLContext() const { return _eglCtx; }
 
-  void makeActiveOnCurrentThread(const Window* window = nullptr) final;
-  void makeInactive() final;
-
  private:
   EglGLRenderer(const RendererSettings& settings);
 
@@ -28,6 +25,9 @@ class EglGLRenderer : public GLRenderer {
   EGLConfig _chooseEGLConfig(const EglGLWindow* primaryWindow);
 
   bool _verifyWindowIsAttachable(const Window* window) final;
+
+  void _makeActiveOnCurrentThreadImpl(Window* window) final;
+  void _makeInactiveImpl() final;
 
   EglDisplayShPtr _dpyPtr;
   EGLContext _eglCtx;

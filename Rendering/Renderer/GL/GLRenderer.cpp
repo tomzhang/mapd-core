@@ -6,6 +6,7 @@
 #include "GLWindow.h"
 #include <thread>
 #include <mutex>
+#include <array>
 #include <iostream>
 
 namespace Rendering {
@@ -19,10 +20,24 @@ using Resources::GLShaderShPtr;
 using Resources::GLVertexArrayShPtr;
 using Resources::GLFramebufferShPtr;
 
+// TODO(croot): make these std::weak_ptr?
 thread_local GLRenderer* _currentRenderer;
+thread_local Window* _currentWindow;
+
+std::mutex GLRenderer::_currRendererMtx;
 
 GLRenderer* GLRenderer::getCurrentThreadRenderer() {
   return _currentRenderer;
+}
+
+Window* GLRenderer::getCurrentThreadWindow() {
+  return _currentWindow;
+}
+
+static void setInactiveRendererOnCurrentThread() {
+  if (_currentRenderer) {
+    _currentRenderer->makeInactive();
+  }
 }
 
 // GLRenderer::GLRenderer(const WindowShPtr& parentWindowPtr) : Renderer(parentWindowPtr), _glewInitialized(false) {
@@ -51,19 +66,61 @@ void GLRenderer::initialize() {
   setInitialized();
 }
 
-void GLRenderer::makeActiveOnCurrentThread(const Window* window) {
-  // threadLocalStorage.set(this);
+void GLRenderer::makeActiveOnCurrentThread(Window* window) {
+  // TODO(croot): a window and context can be activated
+  // so we need to add the window as a per-thread item.
+
+  // TODO(croot): Make thread safe while traversing windows?
+  Window* windowToUse = nullptr;
+  if (!window) {
+    windowToUse = getPrimaryWindow();
+  } else {
+    // TODO(croot): improve this by using a map instead of a list?
+    for (auto& attachedWindow : _attachedWindows) {
+      if (window == attachedWindow) {
+        windowToUse = window;
+        break;
+      }
+    }
+  }
+
+  RUNTIME_EX_ASSERT(windowToUse != nullptr,
+                    "Cannot make renderer active. Window to make active alongside is not an attached window.");
+
+  // GLWindow* glWindow = dynamic_cast<GLWindow*>(window);
+  // CHECK(glWindow != nullptr);
+
+  // lock access to the current renderer / current window
+  std::lock_guard<std::mutex> thread_lock(_currRendererMtx);
+
+  if (_currentRenderer == this && _currentWindow == windowToUse) {
+    // already active
+    return;
+  }
+
+  _makeActiveOnCurrentThreadImpl(windowToUse);
+
   _currentRenderer = this;
+  _currentWindow = windowToUse;
 }
 
 void GLRenderer::makeInactive() {
-  // threadLocalStorage.set(nullptr);
-  _currentRenderer = nullptr;
+  std::lock_guard<std::mutex> thread_lock(_currRendererMtx);
+
+  if (_currentRenderer == this) {
+    _makeInactiveImpl();
+
+    _currentRenderer = nullptr;
+    _currentWindow = nullptr;
+  }
+
+  // TODO(croot): should I throw an error or log a warning
+  // if this renderer isn't current?
 }
 
-bool GLRenderer::isActiveOnCurrentThread() {
-  // return threadLocalStorage.isCurrent(this);
-  return _currentRenderer == this;
+bool GLRenderer::isActiveOnCurrentThread(Window* window) {
+  std::lock_guard<std::mutex> thread_lock(_currRendererMtx);
+  return (_currentRenderer == this && (window ? _currentWindow == window : _currentWindow == getPrimaryWindow()));
 }
 
 GLResourceManagerShPtr GLRenderer::getResourceManager() {
@@ -104,11 +161,22 @@ void GLRenderer::clearAll() {
 }
 
 void GLRenderer::setViewport(int x, int y, int width, int height) {
+  // TODO(croot): support indexed viewports?
   MAPD_CHECK_GL_ERROR(glViewport(x, y, width, height));
 }
 
 void GLRenderer::setViewport(const Viewport& viewport) {
+  // TODO(croot): support indexed viewports?
   MAPD_CHECK_GL_ERROR(glViewport(viewport.getXPos(), viewport.getYPos(), viewport.getWidth(), viewport.getHeight()));
+}
+
+Objects::Viewport GLRenderer::getViewport() const {
+  // TODO(croot): support indexed viewports?
+
+  std::array<int, 4> data;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_VIEWPORT, &data[0]));
+
+  return Objects::Viewport(data);
 }
 
 void GLRenderer::enable(GLenum attr) {
@@ -220,7 +288,31 @@ void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int num
   MAPD_CHECK_GL_ERROR(glDrawArrays(primitiveMode, startIndex, numItemsToDraw));
 }
 
-void GLRenderer::_initGLEW(const GLWindow* primaryWindow) {
+void GLRenderer::getReadFramebufferPixels(GLenum readBuffer,
+                                          size_t startx,
+                                          size_t starty,
+                                          size_t width,
+                                          size_t height,
+                                          GLenum format,
+                                          GLenum type,
+                                          GLvoid* data) {
+  // TODO(croot): validate that this renderer is active on the current thread
+  // Such a test could be made into a macro and is only activated in debug
+  // mode which might be a reasonable option to keep such checks from
+  // bogging the pipe down.
+  // validateActiveRenderer();
+
+  GLint currReadBuffer;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_BUFFER, &currReadBuffer));
+  MAPD_CHECK_GL_ERROR(glReadBuffer(readBuffer));
+  MAPD_CHECK_GL_ERROR(glReadPixels(startx, starty, width, height, format, type, data));
+
+  if (currReadBuffer != static_cast<GLint>(readBuffer)) {
+    MAPD_CHECK_GL_ERROR(glReadBuffer(currReadBuffer));
+  }
+}
+
+void GLRenderer::_initGLEW(GLWindow* primaryWindow) {
   if (_glewInitialized) {
     return;
   }

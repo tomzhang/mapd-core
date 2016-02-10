@@ -2,6 +2,7 @@
 #define RENDERING_OBJECTS_VIEWPORT_H_
 
 #include "../Math/AABox.h"
+#include <array>
 
 namespace Rendering {
 
@@ -13,6 +14,7 @@ class Viewport : public Math::AABox<int, 2> {
 
   Viewport() : Math::AABox<int, 2>() {}
   explicit Viewport(int x, int y, int w, int h) : Math::AABox<int, 2>({x, y, x + w, y + h}) {}
+  explicit Viewport(const std::array<int, 4>& data) : Math::AABox<int, 2>(data) {}
   ~Viewport() {}
 
   int getXPos() const { return _data[MIN_X]; }

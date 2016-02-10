@@ -83,6 +83,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
 
   // create renderer settings that will be compatible with the window's settings.
   RendererSettings rendererSettings(windowSettings);
+  // rendererSettings.setIntSetting(IntSetting::OPENGL_MAJOR, 4);
+  // rendererSettings.setIntSetting(IntSetting::OPENGL_MINOR, 5);
 
   GLRenderer* renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
@@ -99,6 +101,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
     CHECK(renderer != nullptr);
 
     renderer->makeActiveOnCurrentThread();
+
     gpuData.queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
 
     _perGpuData.insert({i, gpuData});

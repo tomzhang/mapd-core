@@ -9,6 +9,7 @@
 #include <GL/glew.h>
 #include <cstdint>
 #include <vector>
+#include <mutex>
 
 namespace Rendering {
 
@@ -19,9 +20,9 @@ class GLRenderer : public Renderer {
   virtual ~GLRenderer();
 
   void initialize() final;
-  virtual void makeActiveOnCurrentThread(const Window* window = nullptr) override;
-  virtual void makeInactive() override;
-  bool isActiveOnCurrentThread() final;
+  void makeActiveOnCurrentThread(Window* window = nullptr) final;
+  void makeInactive() final;
+  bool isActiveOnCurrentThread(Window* window = nullptr) final;
 
   // TODO(croot): add a renderer type enum and get the renderer type?
   bool isGLRenderer() final { return true; }
@@ -58,6 +59,7 @@ class GLRenderer : public Renderer {
 
   void setViewport(int x, int y, int width, int height);
   void setViewport(const Objects::Viewport& viewport);
+  Objects::Viewport getViewport() const;
 
   void enable(GLenum attr);
   void disable(GLenum attr);
@@ -88,13 +90,27 @@ class GLRenderer : public Renderer {
 
   void drawVertexBuffers(GLenum primitiveMode, int startIndex = 0, int numItemsToDraw = -1);
 
+  void getReadFramebufferPixels(GLenum attachment,
+                                size_t startx,
+                                size_t starty,
+                                size_t width,
+                                size_t height,
+                                GLenum format,
+                                GLenum type,
+                                GLvoid* data);
+
   static GLRenderer* getCurrentThreadRenderer();
+  static Window* getCurrentThreadWindow();
+  static void setInactiveRendererCurrentOnThread();
 
  protected:
   // GLRenderer(const WindowShPtr& parentWindowPtr);
   GLRenderer(const RendererSettings& settings);
 
-  void _initGLEW(const GLWindow* primaryWindow = nullptr);
+  virtual void _makeActiveOnCurrentThreadImpl(Window* window) = 0;
+  virtual void _makeInactiveImpl() = 0;
+
+  void _initGLEW(GLWindow* primaryWindow = nullptr);
   void _cleanupResources();
 
   GLResourceManagerShPtr _glRsrcMgrPtr;
@@ -122,6 +138,8 @@ class GLRenderer : public Renderer {
 #endif
 
   State::GLBindState _bindState;
+
+  static std::mutex _currRendererMtx;
 
   friend class GLWindow;
   friend class ::Rendering::WindowManager;
