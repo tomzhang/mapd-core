@@ -28,7 +28,7 @@ if (${RENDERER_TYPE} STREQUAL "OpenGL")
 
   list(APPEND RENDERING_SOURCES Renderer/GL/MapDGL.cpp Renderer/GL/GLWindow.cpp Renderer/GL/GLResourceManager.cpp Renderer/GL/GLRenderer.cpp Renderer/GL/TypeGL.cpp)
   list(APPEND RENDERING_SOURCES Renderer/GL/State/GLBindState.cpp)
-  list(APPEND RENDERING_SOURCES Renderer/GL/Resources/Types.cpp Renderer/GL/Resources/GLBaseBuffer.cpp Renderer/GL/Resources/GLBufferLayout.cpp Renderer/GL/Resources/GLFramebuffer.cpp Renderer/GL/Resources/GLRenderbuffer.cpp Renderer/GL/Resources/GLShader.cpp Renderer/GL/Resources/GLTexture2d.cpp Renderer/GL/Resources/GLVertexArray.cpp Renderer/GL/Resources/GLVertexBuffer.cpp)
+  list(APPEND RENDERING_SOURCES Renderer/GL/Resources/Enums.cpp Renderer/GL/Resources/GLBaseBuffer.cpp Renderer/GL/Resources/GLBufferLayout.cpp Renderer/GL/Resources/GLFramebuffer.cpp Renderer/GL/Resources/GLRenderbuffer.cpp Renderer/GL/Resources/GLShader.cpp Renderer/GL/Resources/GLTexture2d.cpp Renderer/GL/Resources/GLVertexArray.cpp Renderer/GL/Resources/GLVertexBuffer.cpp)
 
   list(APPEND RENDERING_INCLUDE_DIRS "${GL_INCLUDE_DIR}")
   list(APPEND RENDERING_LIBS "${OPENGL_LIBRARIES}")
@@ -88,5 +88,8 @@ target_link_libraries(Rendering ${RENDERING_LIBS})
 target_compile_definitions(Rendering PRIVATE ${RENDERING_DEFS})
 
 # expose the definitions to the parent
+set(RENDERING_INCLUDE_DIRS ${RENDERING_INCLUDE_DIRS} PARENT_SCOPE)
 set(RENDERING_DEFS ${RENDERING_DEFS} PARENT_SCOPE)
+set(_MAPDGL_EGL ${_MAPDGL_EGL} PARENT_SCOPE)
+set(_MAPDGL_X11 ${_MAPDGL_X11} PARENT_SCOPE)
 

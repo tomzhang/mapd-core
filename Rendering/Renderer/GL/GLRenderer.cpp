@@ -14,11 +14,12 @@ namespace GL {
 
 using Objects::ColorRGBA;
 using Resources::GLResourceShPtr;
+using Resources::GLTexture2dShPtr;
 using Resources::FboBind;
 using Resources::GLFramebufferShPtr;
 using Resources::GLShaderShPtr;
 using Resources::GLVertexArrayShPtr;
-using Resources::GLFramebufferShPtr;
+using Resources::GLRenderbufferShPtr;
 
 // TODO(croot): make these std::weak_ptr?
 thread_local GLRenderer* _currentRenderer;
@@ -227,6 +228,10 @@ void GLRenderer::bindResource(const GLResourceShPtr& rsrc) {
   _bindState.bindResource(rsrc);
 }
 
+void GLRenderer::bindTexture2d(const GLTexture2dShPtr& texRsrc) {
+  _bindState.bindTexture2d(texRsrc);
+}
+
 void GLRenderer::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc) {
   _bindState.bindVertexBuffer(vboRsrc);
 }
@@ -243,20 +248,32 @@ void GLRenderer::bindVertexArray(const GLVertexArrayShPtr& vaoRsrc) {
   _bindState.bindVertexArray(vaoRsrc);
 }
 
-Resources::GLVertexBufferShPtr GLRenderer::getBoundVbo() const {
-  return _bindState.getBoundVbo();
+void GLRenderer::bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc) {
+  _bindState.bindRenderbuffer(rboRsrc);
 }
 
-bool GLRenderer::hasBoundVbo() const {
-  return _bindState.hasBoundVbo();
+Resources::GLTexture2dShPtr GLRenderer::getBoundTexture2d() const {
+  return _bindState.getBoundTexture2d();
 }
 
-GLFramebufferShPtr GLRenderer::getBoundFbo(FboBind bindType) const {
-  return _bindState.getBoundFbo(bindType);
+bool GLRenderer::hasBoundTexture2d() const {
+  return _bindState.hasBoundTexture2d();
 }
 
-bool GLRenderer::hasBoundFbo(Resources::FboBind bindType) const {
-  return _bindState.hasBoundFbo(bindType);
+Resources::GLVertexBufferShPtr GLRenderer::getBoundVertexBuffer() const {
+  return _bindState.getBoundVertexBuffer();
+}
+
+bool GLRenderer::hasBoundVertexBuffer() const {
+  return _bindState.hasBoundVertexBuffer();
+}
+
+GLFramebufferShPtr GLRenderer::getBoundFramebuffer(FboBind bindType) const {
+  return _bindState.getBoundFramebuffer(bindType);
+}
+
+bool GLRenderer::hasBoundFramebuffer(Resources::FboBind bindType) const {
+  return _bindState.hasBoundFramebuffer(bindType);
 }
 
 GLShaderShPtr GLRenderer::getBoundShader() const {
@@ -275,13 +292,21 @@ bool GLRenderer::hasBoundVertexArray() const {
   return _bindState.hasBoundVertexArray();
 }
 
+GLRenderbufferShPtr GLRenderer::getBoundRenderbuffer() const {
+  return _bindState.getBoundRenderbuffer();
+}
+
+bool GLRenderer::hasBoundRenderbuffer() const {
+  return _bindState.hasBoundRenderbuffer();
+}
+
 void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {
   if (numItemsToDraw < 0) {
     if (hasBoundVertexArray()) {
       numItemsToDraw = getBoundVertexArray()->numItems();
     } else {
-      CHECK(hasBoundVbo());
-      numItemsToDraw = getBoundVbo()->numItems();
+      CHECK(hasBoundVertexBuffer());
+      numItemsToDraw = getBoundVertexBuffer()->numItems();
     }
   }
 

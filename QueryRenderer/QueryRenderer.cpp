@@ -6,6 +6,8 @@
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
 #include <png.h>
+#include <vector>
+#include <thread>
 // #include "MapDGL.h"
 // #include "QueryRenderer.h"
 // #include "RapidJSONUtils.h"
@@ -24,6 +26,134 @@ using ::Rendering::WindowShPtr;
 using ::Rendering::RendererShPtr;
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::Resources::FboBind;
+
+static void writePngData(png_structp png_ptr, png_bytep data, png_size_t length) {
+  std::vector<char>* pngData = reinterpret_cast<std::vector<char>*>(png_get_io_ptr(png_ptr));
+  size_t currSz = pngData->size();
+  pngData->resize(currSz + length);
+  std::memcpy(&(*pngData)[0] + currSz, data, length);
+}
+
+static void flushPngData(png_structp png_ptr) {
+  // Do nothing
+  (void)png_ptr; /* Stifle compiler warning */
+}
+
+static PngData pixelsToPng(int width,
+                           int height,
+                           const std::shared_ptr<unsigned char>& pixelsPtr,
+                           int compressionLevel = -1) {
+  // Now build the png stream using libpng
+
+  png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+  assert(png_ptr != nullptr);
+
+  png_infop info_ptr = png_create_info_struct(png_ptr);
+  assert(info_ptr != nullptr);
+
+  // TODO(croot) - rather than going the setjmp route, you can enable the
+  // PNG_SETJMP_NOT_SUPPORTED compiler flag which would result in asserts
+  // when libpng errors, according to its docs.
+  // if (setjmp(png_jmpbuf(png_ptr))) {
+  //   std::cerr << "Got a libpng error" << std::endl;
+  //   // png_destroy_info_struct(png_ptr, &info_ptr);
+  //   png_destroy_write_struct(&png_ptr, &info_ptr);
+  //   assert(false);
+  // }
+
+  // using a vector to store the png bytes. I'm doing this to take advantage of the
+  // optimized allocation vectors do when resizing. The only downside of this approach
+  // is that the vector maintains the memory, so I have to copy the vector's internal
+  // memory to my own buffer
+  // TODO(croot) - I could just use a vector of bytes/chars instead of
+  // a shared_ptr<char>(new char[]), but I'd have to be sure to do a "shrink-to-fit" on
+  // the vector if I did this to deallocate any unused memory. This might be just
+  // as costly as a full memcpy --- or maybe not since the vector's memory itself is
+  // also fully deallocated -- this might be a better approach.
+  std::vector<char> pngData;
+
+  png_set_write_fn(png_ptr, &pngData, writePngData, flushPngData);
+
+  // set filtering?
+  png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_NONE);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_SUB);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_UP);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_AVG);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_PAETH);
+  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_ALL_FILTERS);
+
+  // set filter weights/preferences? I can't seem to get this
+  // to make a difference
+  // double weights[3] = {2.0, 1.5, 1.1};
+  // double costs[PNG_FILTER_VALUE_LAST] = {2.0, 2.0, 1.0, 2.0, 2.0};
+  // png_set_filter_heuristics(png_ptr, PNG_FILTER_HEURISTIC_WEIGHTED, 3, weights, costs);
+
+  // set zlib compression level
+  // if (compressionLevel >= 0) {
+  //  png_set_compression_level(png_ptr, compressionLevel);
+  //}
+  png_set_compression_level(png_ptr, compressionLevel);
+
+  // other zlib params?
+  // png_set_compression_mem_level(png_ptr, 8);
+  // png_set_compression_strategy(png_ptr, PNG_Z_DEFAULT_STRATEGY);
+  // png_set_compression_window_bits(png_ptr, 15);
+  // png_set_compression_method(png_ptr, 8);
+  // png_set_compression_buffer_size(png_ptr, 8192);
+
+  // skip the 8 bytes signature?
+  // png_set_sig_bytes(png_ptr, 8);
+
+  int interlace_type = PNG_INTERLACE_NONE;  // or PNG_INTERLACE_ADAM7 if we ever want interlacing
+  png_set_IHDR(png_ptr,
+               info_ptr,
+               width,
+               height,
+               8,
+               PNG_COLOR_TYPE_RGB_ALPHA,
+               interlace_type,
+               PNG_COMPRESSION_TYPE_DEFAULT,
+               PNG_FILTER_TYPE_DEFAULT);
+
+  /* write out the PNG header info (everything up to first IDAT) */
+  png_write_info(png_ptr, info_ptr);
+
+  // make sure < 8-bit images are packed into pixels as tightly as possible - only necessary
+  // for palette images, which we're not doing yet
+  // png_set_packing(png_ptr);
+
+  unsigned char* pixels = pixelsPtr.get();
+  png_byte* row_pointers[height];
+
+  for (int j = 0; j < height; ++j) {
+    // invert j -- input pixel rows go bottom up, where pngs are
+    // defined top-down.
+    row_pointers[j] = &pixels[(height - j - 1) * width * 4];
+  }
+
+  png_write_image(png_ptr, row_pointers);
+
+  // can alternatively write per-row, but this didn't
+  // seem to make a difference. I thought that perhaps
+  // this could be parallelized, but png_write_row() doesn't
+  // appear to be a fixed-function call.
+  // for (j = 0; j < height; ++j) {
+  //   png_write_row(png_ptr, row_pointers[j]);
+  // }
+
+  png_write_end(png_ptr, info_ptr);
+
+  int pngSize = pngData.size();
+  std::shared_ptr<char> pngPtr(new char[pngSize], std::default_delete<char[]>());
+  char* pngDataPtr = pngPtr.get();
+  std::memcpy(pngDataPtr, &pngData[0], pngSize);
+
+  png_destroy_write_struct(&png_ptr, &info_ptr);
+
+  // delete[] pixels;
+
+  return PngData(pngPtr, pngSize);
+}
 
 QueryRenderer::QueryRenderer(bool doHitTest, bool doDepthTest)
     : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData() {
@@ -54,32 +184,45 @@ void QueryRenderer::_clearGpuResources() {
   _perGpuData.clear();
 }
 
-void QueryRenderer::_initGpuResources(const std::vector<GpuId>& gpuIds,
-                                      QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
+void QueryRenderer::_updateGpuData(const GpuId& gpuId,
+                                   QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                                   std::unordered_set<GpuId>& unusedGpus) {
+  auto myItr = _perGpuData.find(gpuId);
+  if (myItr == _perGpuData.end()) {
+    auto itr = qrmPerGpuData.find(gpuId);
+    CHECK(itr != qrmPerGpuData.end());
+
+    PerGpuData gpuData;
+
+    gpuData.qrmGpuData = &(itr->second);
+
+    // TODO(croot): validate the QueryRenderManager data is complete?
+    CHECK(itr->second.rendererPtr != nullptr);
+
+    _perGpuData.emplace(gpuId, std::move(gpuData));
+  } else {
+    myItr->second.qrmGpuData->makeActiveOnCurrentThread();
+    myItr->second.framebufferPtr->resize(_ctx->getWidth(), _ctx->getHeight());
+
+    unusedGpus.erase(gpuId);
+  }
+}
+
+void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                                      const std::vector<GpuId>& gpuIds) {
   std::unordered_set<GpuId> unusedGpus;
   unusedGpus.reserve(_perGpuData.size());
   for (const auto& kv : _perGpuData) {
     unusedGpus.insert(kv.first);
   }
 
-  for (auto gpuId : gpuIds) {
-    auto myItr = _perGpuData.find(gpuId);
-    if (myItr == _perGpuData.end()) {
-      auto itr = qrmPerGpuData.find(gpuId);
-      CHECK(itr != qrmPerGpuData.end());
-
-      PerGpuData gpuData;
-
-      gpuData.qrmGpuData = &(itr->second);
-
-      // TODO(croot): validate the QueryRenderManager data is complete?
-      CHECK(itr->second.rendererPtr != nullptr);
-
-      _perGpuData.emplace(gpuId, std::move(gpuData));
-    } else {
-      myItr->second.framebufferPtr->resize(_ctx->getWidth(), _ctx->getHeight());
-
-      unusedGpus.erase(gpuId);
+  if (gpuIds.size()) {
+    for (auto gpuId : gpuIds) {
+      _updateGpuData(gpuId, qrmPerGpuData, unusedGpus);
+    }
+  } else {
+    for (auto& qrmItr : qrmPerGpuData) {
+      _updateGpuData(qrmItr.first, qrmPerGpuData, unusedGpus);
     }
   }
 
@@ -98,6 +241,7 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
       GLRenderer* renderer = dynamic_cast<GLRenderer*>(gpuDataItr.second.qrmGpuData->rendererPtr.get());
       CHECK(renderer != nullptr);
 
+      gpuDataItr.second.makeActiveOnCurrentThread();
       gpuDataItr.second.framebufferPtr.reset(
           new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
     } else {
@@ -381,7 +525,7 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayout
   for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
     gpuIds.push_back(item.first);
   }
-  _initGpuResources(gpuIds, qrmPerGpuData);
+  _initGpuResources(qrmPerGpuData, gpuIds);
   // int numRows = dataLayoutPtr->numRows;
   // _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
   // _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
@@ -398,27 +542,32 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayout
   // }
 }
 
-void QueryRenderer::activateGpu(const GpuId& gpuId, QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
-  _initGpuResources({gpuId}, qrmPerGpuData);
+void QueryRenderer::activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                                 const std::vector<GpuId>& gpusToActivate) {
+  _initGpuResources(qrmPerGpuData, gpusToActivate);
 }
 
 void QueryRenderer::_update() {
   _ctx->_update();
 }
 
-void QueryRenderer::_renderGpu(PerGpuDataMap::iterator& itr) {
+void QueryRenderer::renderGpu(GpuId gpuId,
+                              PerGpuDataMap* gpuDataMap,
+                              QueryRendererContext* ctx,
+                              int r,
+                              int g,
+                              int b,
+                              int a) {
   // TODO(croot): make thread safe?
 
-  CHECK(itr != _perGpuData.end());
-  CHECK(itr->second.qrmGpuData != nullptr);
+  auto itr = gpuDataMap->find(gpuId);
 
-  const GpuId& gpuId = itr->first;
-  WindowShPtr& windowPtr = itr->second.qrmGpuData->windowPtr;
+  CHECK(itr != gpuDataMap->end());
+
+  itr->second.makeActiveOnCurrentThread();
   RendererShPtr& rendererPtr = itr->second.qrmGpuData->rendererPtr;
 
-  CHECK(windowPtr != nullptr && rendererPtr != nullptr);
-
-  GLRenderer* renderer = dynamic_cast<GLRenderer*>(rendererPtr.get());
+  GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
   CHECK(renderer != nullptr);
 
   QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
@@ -426,8 +575,6 @@ void QueryRenderer::_renderGpu(PerGpuDataMap::iterator& itr) {
   RUNTIME_EX_ASSERT(
       framebufferPtr != nullptr,
       "QueryRenderer: The framebuffer is not initialized for gpu " + std::to_string(gpuId) + ". Cannot render.");
-
-  renderer->makeActiveOnCurrentThread(windowPtr.get());
 
   framebufferPtr->bindToRenderer(renderer);
 
@@ -438,15 +585,25 @@ void QueryRenderer::_renderGpu(PerGpuDataMap::iterator& itr) {
   // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
   renderer->setBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-  renderer->setClearColor(0, 0, 0, 0);
-  renderer->setViewport(0, 0, _ctx->_width, _ctx->_height);
+  // renderer->setClearColor(0, 0, 0, 0);
+  renderer->setClearColor(r, b, g, a);
+  renderer->setViewport(0, 0, ctx->_width, ctx->_height);
   renderer->clearAll();
 
-  for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
-    _ctx->_geomConfigs[i]->draw(renderer, gpuId);
+  for (size_t i = 0; i < ctx->_geomConfigs.size(); ++i) {
+    ctx->_geomConfigs[i]->draw(renderer, gpuId);
   }
 
-  windowPtr->swapBuffers();
+  itr->second.qrmGpuData->windowPtr->swapBuffers();
+
+  // CROOT testing code
+  // int width = ctx->getWidth();
+  // int height = ctx->getHeight();
+  // std::shared_ptr<unsigned char> pixelsPtr;
+  // pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
+
+  // PngData pngData = pixelsToPng(width, height, pixelsPtr);
+  // pngData.writeToFile("render_" + std::to_string(gpuId) + ".png");
 
   renderer->makeInactive();
 }
@@ -459,24 +616,44 @@ void QueryRenderer::render() {
   if (numGpusToRender) {
     if (numGpusToRender == 1) {
       auto itr = _perGpuData.begin();
-      _renderGpu(itr);
+      renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
     } else {
       // TODO(croot) - launch some threads to handle multi-gpu rendering?
       // Then do a composite, or should I do a composite in the renerToPng?
+
+      // auto itr = _perGpuData.begin();
+      // int cnt = 0;
+      // for (; itr != _perGpuData.end(); ++itr, ++cnt) {
+      //   if (cnt == 0) {
+      //     _renderGpu(itr, 0, 0, 0, 0);
+      //   } else {
+      //     _renderGpu(itr, 0, 0, 0, 1);
+      //   }
+      // }
+
+      std::vector<std::thread> t(numGpusToRender);
+
+      auto itr = _perGpuData.begin();
+      int idx = 0;
+      for (; itr != _perGpuData.end(); ++itr, ++idx) {
+        // need to clear out the context on the current thread
+        // TODO(croot): do this with a simple function call before going thru
+        // the loop?
+        itr->second.qrmGpuData->rendererPtr->makeInactive();
+        if (idx == 0) {
+          // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 0); });
+          t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
+        } else {
+          t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 1);
+          // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 1); });
+        }
+      }
+
+      for (idx = 0; idx < numGpusToRender; ++idx) {
+        t[idx].join();
+      }
     }
   }
-}
-
-static void writePngData(png_structp png_ptr, png_bytep data, png_size_t length) {
-  std::vector<char>* pngData = reinterpret_cast<std::vector<char>*>(png_get_io_ptr(png_ptr));
-  size_t currSz = pngData->size();
-  pngData->resize(currSz + length);
-  std::memcpy(&(*pngData)[0] + currSz, data, length);
-}
-
-static void flushPngData(png_structp png_ptr) {
-  // Do nothing
-  (void)png_ptr; /* Stifle compiler warning */
 }
 
 PngData QueryRenderer::renderToPng(int compressionLevel) {
@@ -488,156 +665,36 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 
   int width = getWidth();
   int height = getHeight();
+
+  auto itr = _perGpuData.begin();
+
+  const GpuId& gpuId = itr->first;
+  itr->second.makeActiveOnCurrentThread();
+  GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+  CHECK(renderer != nullptr);
+
   std::shared_ptr<unsigned char> pixelsPtr;
+  QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+  framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+  pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-  if (_perGpuData.size() == 1) {
-    auto itr = _perGpuData.begin();
+  // width = itr->second.qrmGpuData->windowPtr->getWidth();
+  // height = itr->second.qrmGpuData->windowPtr->getHeight();
+  // std::shared_ptr<unsigned char> pixelsPtr(new unsigned char[width * height * 4],
+  //                                          std::default_delete<unsigned char[]>());
+  // unsigned char* pixels = pixelsPtr.get();
 
-    const GpuId& gpuId = itr->first;
-    WindowShPtr& windowPtr = itr->second.qrmGpuData->windowPtr;
-    RendererShPtr& rendererPtr = itr->second.qrmGpuData->rendererPtr;
+  // renderer->getReadFramebufferPixels(GL_BACK, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-    CHECK(windowPtr != nullptr && rendererPtr != nullptr);
+  // TODO(croot): perhaps create a read pixels api like the following
+  // Better yet, create a multi-dimensional pixel struct template that
+  // is returned with width/height, number of components, etc.
+  // std::shared_ptr<unsigned char[]> pixels = framebufferPtr->readPixels<unsigned char, 4>(FboBuffer::COLOR_BUFFER,
+  // 0, 0, width, height);
 
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(rendererPtr.get());
-    CHECK(renderer != nullptr);
+  renderer->makeInactive();
 
-    QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
-
-    RUNTIME_EX_ASSERT(
-        framebufferPtr != nullptr,
-        "QueryRenderer: The framebuffer is not initialized for gpu " + std::to_string(gpuId) + ". Cannot render.");
-
-    renderer->makeActiveOnCurrentThread(windowPtr.get());
-
-    framebufferPtr->bindToRenderer(renderer, FboBind::READ);
-    pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
-
-    // TODO(croot): perhaps create a read pixels api like the following
-    // Better yet, create a multi-dimensional pixel struct template that
-    // is returned with width/height, number of components, etc.
-    // std::shared_ptr<unsigned char[]> pixels = framebufferPtr->readPixels<unsigned char, 4>(FboBuffer::COLOR_BUFFER,
-    // 0, 0, width, height);
-
-    renderer->makeInactive();
-  }
-
-  // // TODO(croot): Make an improved read-pixels API for framebuffers
-  // // getFramebuffer()->bindToRenderer(BindType::READ);
-  // getFramebuffer()->bindToRenderer(BindType::READ);
-  // MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT0));
-  // MAPD_CHECK_GL_ERROR(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
-
-  // Now build the png stream using libpng
-
-  png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-  assert(png_ptr != nullptr);
-
-  png_infop info_ptr = png_create_info_struct(png_ptr);
-  assert(info_ptr != nullptr);
-
-  // TODO(croot) - rather than going the setjmp route, you can enable the
-  // PNG_SETJMP_NOT_SUPPORTED compiler flag which would result in asserts
-  // when libpng errors, according to its docs.
-  // if (setjmp(png_jmpbuf(png_ptr))) {
-  //   std::cerr << "Got a libpng error" << std::endl;
-  //   // png_destroy_info_struct(png_ptr, &info_ptr);
-  //   png_destroy_write_struct(&png_ptr, &info_ptr);
-  //   assert(false);
-  // }
-
-  // using a vector to store the png bytes. I'm doing this to take advantage of the
-  // optimized allocation vectors do when resizing. The only downside of this approach
-  // is that the vector maintains the memory, so I have to copy the vector's internal
-  // memory to my own buffer
-  // TODO(croot) - I could just use a vector of bytes/chars instead of
-  // a shared_ptr<char>(new char[]), but I'd have to be sure to do a "shrink-to-fit" on
-  // the vector if I did this to deallocate any unused memory. This might be just
-  // as costly as a full memcpy --- or maybe not since the vector's memory itself is
-  // also fully deallocated -- this might be a better approach.
-  std::vector<char> pngData;
-
-  png_set_write_fn(png_ptr, &pngData, writePngData, flushPngData);
-
-  // set filtering?
-  png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_NONE);
-  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_SUB);
-  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_UP);
-  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_AVG);
-  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_FILTER_PAETH);
-  // png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, PNG_ALL_FILTERS);
-
-  // set filter weights/preferences? I can't seem to get this
-  // to make a difference
-  // double weights[3] = {2.0, 1.5, 1.1};
-  // double costs[PNG_FILTER_VALUE_LAST] = {2.0, 2.0, 1.0, 2.0, 2.0};
-  // png_set_filter_heuristics(png_ptr, PNG_FILTER_HEURISTIC_WEIGHTED, 3, weights, costs);
-
-  // set zlib compression level
-  // if (compressionLevel >= 0) {
-  //  png_set_compression_level(png_ptr, compressionLevel);
-  //}
-  png_set_compression_level(png_ptr, compressionLevel);
-
-  // other zlib params?
-  // png_set_compression_mem_level(png_ptr, 8);
-  // png_set_compression_strategy(png_ptr, PNG_Z_DEFAULT_STRATEGY);
-  // png_set_compression_window_bits(png_ptr, 15);
-  // png_set_compression_method(png_ptr, 8);
-  // png_set_compression_buffer_size(png_ptr, 8192);
-
-  // skip the 8 bytes signature?
-  // png_set_sig_bytes(png_ptr, 8);
-
-  int interlace_type = PNG_INTERLACE_NONE;  // or PNG_INTERLACE_ADAM7 if we ever want interlacing
-  png_set_IHDR(png_ptr,
-               info_ptr,
-               width,
-               height,
-               8,
-               PNG_COLOR_TYPE_RGB_ALPHA,
-               interlace_type,
-               PNG_COMPRESSION_TYPE_DEFAULT,
-               PNG_FILTER_TYPE_DEFAULT);
-
-  /* write out the PNG header info (everything up to first IDAT) */
-  png_write_info(png_ptr, info_ptr);
-
-  // make sure < 8-bit images are packed into pixels as tightly as possible - only necessary
-  // for palette images, which we're not doing yet
-  // png_set_packing(png_ptr);
-
-  unsigned char* pixels = pixelsPtr.get();
-  png_byte* row_pointers[height];
-
-  for (int j = 0; j < height; ++j) {
-    // invert j -- input pixel rows go bottom up, where pngs are
-    // defined top-down.
-    row_pointers[j] = &pixels[(height - j - 1) * width * 4];
-  }
-
-  png_write_image(png_ptr, row_pointers);
-
-  // can alternatively write per-row, but this didn't
-  // seem to make a difference. I thought that perhaps
-  // this could be parallelized, but png_write_row() doesn't
-  // appear to be a fixed-function call.
-  // for (j = 0; j < height; ++j) {
-  //   png_write_row(png_ptr, row_pointers[j]);
-  // }
-
-  png_write_end(png_ptr, info_ptr);
-
-  int pngSize = pngData.size();
-  std::shared_ptr<char> pngPtr(new char[pngSize], std::default_delete<char[]>());
-  char* pngDataPtr = pngPtr.get();
-  std::memcpy(pngDataPtr, &pngData[0], pngSize);
-
-  png_destroy_write_struct(&png_ptr, &info_ptr);
-
-  // delete[] pixels;
-
-  return PngData(pngPtr, pngSize);
+  return pixelsToPng(width, height, pixelsPtr, compressionLevel);
 }
 
 unsigned int QueryRenderer::getIdAt(int x, int y) {

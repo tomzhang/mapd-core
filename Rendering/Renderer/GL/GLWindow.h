@@ -10,6 +10,8 @@
 #include "../../Window.h"
 #include "Resources/Types.h"
 
+#include <GL/glew.h>
+
 namespace Rendering {
 
 using Objects::Viewport;

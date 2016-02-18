@@ -217,6 +217,7 @@ void GlxGLWindow::_initXDisplay(X11DisplayManager& displayMgr) {
 FbConfigShPtr GlxGLWindow::_chooseFbConfig(GlxGLRenderer* renderer) {
   CHECK(_dpyConnection.first != nullptr);
   Display* dpy = _dpyConnection.first.get();
+  int screen = _dpyConnection.second;
 
   RUNTIME_EX_ASSERT(GLXEW_VERSION_1_3 || GLXEW_SGIX_fbconfig,
                     "Error: GlxGLWindow: GLX framebuffer config support required!");
@@ -276,8 +277,6 @@ FbConfigShPtr GlxGLWindow::_chooseFbConfig(GlxGLRenderer* renderer) {
 
   // NOTE: the default screen will be that which is set in the GPU_ID setting of the window
   // settings.
-  const int screen = DefaultScreen(dpy);
-
   int nConfigs = 0;
 
   // make a unique ptr to the config ptrs created in the above chooseFBConfig() call
@@ -382,6 +381,7 @@ void GlxGLWindow::_initSwap(GlxGLRenderer* renderer) {
 bool GlxGLWindow::_configureWindow(GlxGLRenderer* renderer, const FbConfigShPtr& fbConfigPtr, X11ID& drawable) {
   CHECK(_dpyConnection.first != nullptr);
   Display* dpy = _dpyConnection.first.get();
+  int screen = _dpyConnection.second;
 
   CHECK(fbConfigPtr != nullptr);
 
@@ -406,8 +406,6 @@ bool GlxGLWindow::_configureWindow(GlxGLRenderer* renderer, const FbConfigShPtr&
   bool showDecoration = isSettingActive(_settings, IntSetting::USE_DECORATION, true);
 
   // if (isFullscreen) {
-  //   const int screen = DefaultScreen(dpy);
-
   //   w = DisplayWidth(dpy, screen);
   //   h = DisplayHeight(dpy, screen);
   //   x = 0;
@@ -462,6 +460,7 @@ X11ID GlxGLWindow::_createGlxWindow(GlxGLRenderer* renderer,
   // CHECK(!pbuffer);
   CHECK(_dpyConnection.first != nullptr);
   Display* dpy = _dpyConnection.first.get();
+  int screen = _dpyConnection.second;
 
   CHECK(fbConfigPtr != nullptr);
   GLXFBConfig* fbConfig = fbConfigPtr.get();
@@ -483,7 +482,6 @@ X11ID GlxGLWindow::_createGlxWindow(GlxGLRenderer* renderer,
   XVisualInfo* visInfo = visInfoUqPtr.get();
 
   // NOTE: the default screen will be that set with the GPU_ID of the window settings
-  const int screen = DefaultScreen(dpy);
   ::Window prnt = RootWindow(dpy, screen);
 
   XSetWindowAttributes wa;

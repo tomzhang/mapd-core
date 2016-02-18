@@ -23,6 +23,7 @@ class GLTexture2d : public GLResource {
   GLenum getPixelFormat() { return _pixelFormat; }
   GLenum getPixelType() { return _pixelType; }
   int getNumSamples() { return _numSamples; }
+  GLenum getTarget() { return _target; }
 
   void resize(int width, int height);
 

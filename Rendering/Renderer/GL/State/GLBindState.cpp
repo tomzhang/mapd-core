@@ -1,10 +1,12 @@
 #include "GLBindState.h"
 #include "../MapDGL.h"
+#include "../Resources/GLTexture2d.h"
 #include "../Resources/GLVertexBuffer.h"
 #include "../Resources/GLResource.h"
 #include "../Resources/GLFramebuffer.h"
 #include "../Resources/GLShader.h"
 #include "../Resources/GLVertexArray.h"
+#include "../Resources/GLRenderbuffer.h"
 
 namespace Rendering {
 namespace GL {
@@ -29,6 +31,40 @@ void GLBindState::bindResource(const Resources::GLResourceShPtr& rsrc) {
       THROW_RUNTIME_EX("Cannot bind unsupported resource of type " + Rendering::GL::Resources::to_string(type) +
                        " to renderer.");
       break;
+  }
+}
+
+void GLBindState::bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc) {
+  // TODO(croot): Currently binding a texture2d will handle both multi-sampled
+  // and non-multi-sampled textures. But do we want to separate the two? Is
+  // there ever a case where we'd want to bind a non multi-sampled and a mult-
+  // sampled texture at the same time?
+
+  GLuint texId = 0;
+  GLuint multiSampleTexId = 0;
+
+  if (texRsrc) {
+    switch (texRsrc->getTarget()) {
+      case GL_TEXTURE_2D_MULTISAMPLE:
+        multiSampleTexId = texRsrc->getId();
+      case GL_TEXTURE_2D:
+        texId = texRsrc->getId();
+      default:
+        CHECK(false);
+    }
+  }
+
+  bool bind = (boundTex2d.owner_before(texRsrc) || texRsrc.owner_before(boundTex2d));
+
+  if (bind) {
+    if (texRsrc) {
+      texRsrc->validateRenderer(_prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, multiSampleTexId));
+    MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, texId));
+
+    boundTex2d = texRsrc;
   }
 }
 
@@ -123,15 +159,39 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
   }
 }
 
-Resources::GLVertexBufferShPtr GLBindState::getBoundVbo() const {
+void GLBindState::bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc) {
+  GLuint rbo = (rboRsrc ? rboRsrc->getId() : 0);
+
+  bool bind = (boundRbo.owner_before(rboRsrc) || rboRsrc.owner_before(boundRbo));
+
+  if (bind) {
+    if (rboRsrc) {
+      rboRsrc->validateRenderer(_prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, rbo));
+
+    boundRbo = rboRsrc;
+  }
+}
+
+Resources::GLTexture2dShPtr GLBindState::getBoundTexture2d() const {
+  return boundTex2d.lock();
+}
+
+bool GLBindState::hasBoundTexture2d() const {
+  return boundTex2d.lock() != nullptr;
+}
+
+Resources::GLVertexBufferShPtr GLBindState::getBoundVertexBuffer() const {
   return boundVbo.lock();
 }
 
-bool GLBindState::hasBoundVbo() const {
+bool GLBindState::hasBoundVertexBuffer() const {
   return boundVbo.lock() != nullptr;
 }
 
-Resources::GLFramebufferShPtr GLBindState::getBoundFbo(const Resources::FboBind bindType) const {
+Resources::GLFramebufferShPtr GLBindState::getBoundFramebuffer(const Resources::FboBind bindType) const {
   switch (bindType) {
     case Resources::FboBind::READ:
       return boundReadFbo.lock();
@@ -148,7 +208,7 @@ Resources::GLFramebufferShPtr GLBindState::getBoundFbo(const Resources::FboBind 
   return nullptr;
 }
 
-bool GLBindState::hasBoundFbo(const Resources::FboBind bindType) const {
+bool GLBindState::hasBoundFramebuffer(const Resources::FboBind bindType) const {
   switch (bindType) {
     case Resources::FboBind::READ:
       return boundReadFbo.lock() != nullptr;
@@ -159,6 +219,30 @@ bool GLBindState::hasBoundFbo(const Resources::FboBind bindType) const {
   }
 
   return false;
+}
+
+Resources::GLShaderShPtr GLBindState::getBoundShader() const {
+  return boundShader.lock();
+}
+
+bool GLBindState::hasBoundShader() const {
+  return boundShader.lock() != nullptr;
+}
+
+Resources::GLVertexArrayShPtr GLBindState::getBoundVertexArray() const {
+  return boundVao.lock();
+}
+
+bool GLBindState::hasBoundVertexArray() const {
+  return boundVao.lock() != nullptr;
+}
+
+Resources::GLRenderbufferShPtr GLBindState::getBoundRenderbuffer() const {
+  return boundRbo.lock();
+}
+
+bool GLBindState::hasBoundRenderbuffer() const {
+  return boundRbo.lock() != nullptr;
 }
 
 }  // namespace State

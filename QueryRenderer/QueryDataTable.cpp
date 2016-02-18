@@ -480,7 +480,8 @@ std::map<GpuId, QueryVertexBufferShPtr> DataTable::getColumnDataVBOs(const std::
 
   for (auto& itr : _perGpuData) {
     if (itr.second.vbo == nullptr) {
-      CHECK(itr.second.qrmGpuData && itr.second.qrmGpuData->rendererPtr);
+      itr.second.makeActiveOnCurrentThread();
+
       GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
       CHECK(renderer != nullptr);
 

@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYFRAMEBUFFER_H_
 
 #include <Rendering/Renderer/GL/Types.h>
+#include <Rendering/Renderer/GL/Resources/Enums.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 // #include <vector>
 // #include <unordered_map>
@@ -47,6 +48,21 @@ class QueryFramebuffer {
   int getWidth() const;
   int getHeight() const;
 
+  GLuint getId(FboColorBuffer buffer);
+  GLuint getId(FboRenderBuffer buffer);
+
+  static ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(
+      ::Rendering::GL::GLResourceManagerShPtr& rsrcMgr,
+      FboColorBuffer texType,
+      size_t width,
+      size_t height);
+
+  static ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(
+      ::Rendering::GL::GLResourceManagerShPtr& rsrcMgr,
+      FboRenderBuffer rboType,
+      size_t width,
+      size_t height);
+
  private:
   bool _doHitTest, _doDepthTest;
 
@@ -72,7 +88,6 @@ class QueryFramebuffer {
 
 typedef std::unique_ptr<QueryFramebuffer> QueryFramebufferUqPtr;
 typedef std::shared_ptr<QueryFramebuffer> QueryFramebufferShPtr;
-
 }  // namespace QueryRenderer
 
 #endif  // QUERYRENDERER_QUERYFRAMEBUFFER_H_

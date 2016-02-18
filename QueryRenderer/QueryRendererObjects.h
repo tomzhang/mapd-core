@@ -493,7 +493,7 @@ class BaseRenderProperty {
   std::string _vboAttrName;
 
   struct PerGpuData {
-    const QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryRenderManager::PerGpuData* qrmGpuData;
     QueryVertexBufferShPtr vbo;
 
     PerGpuData() : qrmGpuData(nullptr), vbo(nullptr) {}
@@ -501,6 +501,11 @@ class BaseRenderProperty {
         : qrmGpuData(qrcGpuData.qrmGpuData), vbo(vbo) {}
     PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), vbo(data.vbo) {}
     PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), vbo(std::move(data.vbo)) {}
+
+    void makeActiveOnCurrentThread() {
+      CHECK(qrmGpuData);
+      qrmGpuData->makeActiveOnCurrentThread();
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
@@ -669,7 +674,7 @@ class BaseMark {
   QueryDataTableVBOShPtr _dataPtr;
 
   struct PerGpuData {
-    const QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryRenderManager::PerGpuData* qrmGpuData;
     ::Rendering::GL::Resources::GLShaderShPtr shaderPtr;
     ::Rendering::GL::Resources::GLVertexArrayShPtr vaoPtr;
 
@@ -679,6 +684,11 @@ class BaseMark {
         : qrmGpuData(qrcGpuData.qrmGpuData), shaderPtr(shaderPtr) {}
     PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), shaderPtr(data.shaderPtr) {}
     PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), shaderPtr(std::move(data.shaderPtr)) {}
+
+    void makeActiveOnCurrentThread() {
+      CHECK(qrmGpuData);
+      qrmGpuData->makeActiveOnCurrentThread();
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 

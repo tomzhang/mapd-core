@@ -33,10 +33,13 @@ EglGLWindow::~EglGLWindow() {
 void EglGLWindow::_initEGLDisplay(EglDisplayManager& displayMgr) {
   std::string displayStr = _settings.getStrSetting(StrSetting::DISPLAY);
 
-  size_t deviceNum = (displayStr.length() ? std::stoi(displayStr) : 0);
+  int gpuId = _settings.getIntSetting(IntSetting::GPU_ID);
+  if (gpuId < 0) {
+    gpuId = 0;
+  }
 
-  _dpyPtr = displayMgr.connectToDisplay(deviceNum);
-  RUNTIME_EX_ASSERT(_dpyPtr, "EglGLWindow: Cannot connect to device " + std::to_string(deviceNum));
+  _dpyPtr = displayMgr.connectToDisplay(gpuId);
+  RUNTIME_EX_ASSERT(_dpyPtr, "EglGLWindow: Cannot connect to device " + std::to_string(gpuId));
 }
 
 void EglGLWindow::_init(Renderer* renderer) {

@@ -71,22 +71,30 @@ class GLRenderer : public Renderer {
   void setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int drawBufferId = -1);
 
   void bindResource(const Resources::GLResourceShPtr& rsrc);
+  void bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc);
   void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
   void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fboRsrc);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
   void bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc);
+  void bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc);
 
-  Resources::GLVertexBufferShPtr getBoundVbo() const;
-  bool hasBoundVbo() const;
+  Resources::GLTexture2dShPtr getBoundTexture2d() const;
+  bool hasBoundTexture2d() const;
 
-  Resources::GLFramebufferShPtr getBoundFbo(Resources::FboBind bindType) const;
-  bool hasBoundFbo(Resources::FboBind bindType) const;
+  Resources::GLVertexBufferShPtr getBoundVertexBuffer() const;
+  bool hasBoundVertexBuffer() const;
+
+  Resources::GLFramebufferShPtr getBoundFramebuffer(Resources::FboBind bindType) const;
+  bool hasBoundFramebuffer(Resources::FboBind bindType) const;
 
   Resources::GLShaderShPtr getBoundShader() const;
   bool hasBoundShader() const;
 
   Resources::GLVertexArrayShPtr getBoundVertexArray() const;
   bool hasBoundVertexArray() const;
+
+  Resources::GLRenderbufferShPtr getBoundRenderbuffer() const;
+  bool hasBoundRenderbuffer() const;
 
   void drawVertexBuffers(GLenum primitiveMode, int startIndex = 0, int numItemsToDraw = -1);
 

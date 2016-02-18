@@ -1,21 +1,27 @@
 find_package(Boost COMPONENTS filesystem system regex REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(PNG REQUIRED)
-find_package(GLFW3 REQUIRED)
 find_package(Glog REQUIRED)
 find_package(CUDA REQUIRED)
 
-include_directories(${Boost_INCLUDE_DIR})
-include_directories(${GL_INCLUDE_DIR})
-include_directories(${GLEW_INCLUDE_DIR})
-include_directories(${PNG_INCLUDE_DIR})
-include_directories(${GLFW3_INCLUDE_DIR})
-include_directories(${CUDA_INCLUDE_DIR})
-include_directories(${Glog_INCLUDE_DIR})
-include_directories(ThirdParty/rapidjson)
+set(QUERY_RENDERER_SOURCES QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp QueryDataTable.cpp RapidJSONUtils.cpp QueryResultVertexBuffer.cpp QueryDataLayout.cpp QueryRenderCompositor.cpp)
+
+set(QUERY_RENDERER_LIBS ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARIES} ${CUDA_LIBRARIES} ${Glog_LIBRARIES})
+
+set(QUERY_RENDERER_INCLUDE_DIRS ${Boost_INCLUDE_DIR} ${GL_INCLUDE_DIR} ${PNG_INCLUDE_DIR} ${CUDA_INCLUDE_DIR} ${Glog_INCLUDE_DIR} ThirdParty/rapidjson)
+
+if (_MAPDGL_X11)
+  list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${X11_X11_INCLUDE_PATH}")
+  list(APPEND QUERY_RENDERER_LIBS "${X11_X11_LIB}")
+  list(APPEND QUERY_RENDERER_SOURCES)
+elseif (_MAPDGL_EGL)
+  list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${EGL_INCLUDE_DIR}")
+  list(APPEND QUERY_RENDERER_LIBS "${EGL_LIBRARY}")
+  list(APPEND QUERY_RENDERER_SOURCES egl/EglQueryRenderCompositor.cpp)
+endif()
 
 
-add_library(QueryRenderer QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp QueryDataTable.cpp RapidJSONUtils.cpp QueryResultVertexBuffer.cpp QueryDataLayout.cpp)
-
-target_link_libraries(QueryRenderer ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARIES} ${GLFW3_LIBRARIES} ${CUDA_LIBRARIES} ${Glog_LIBRARIES})
+add_library(QueryRenderer ${QUERY_RENDERER_SOURCES})
+target_include_directories(QueryRenderer PRIVATE ${QUERY_RENDERER_INCLUDE_DIRS} ${RENDERING_INCLUDE_DIRS})
+target_link_libraries(QueryRenderer ${QUERY_RENDERER_LIBS})
 target_compile_definitions(QueryRenderer PRIVATE ${RENDERING_DEFS})

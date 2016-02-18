@@ -4,6 +4,7 @@
 #include "GLResource.h"
 #include "Types.h"
 
+#include <GL/glew.h>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/random_access_index.hpp>
@@ -70,6 +71,8 @@ class AttachmentContainer {
 };
 
 }  // namespace detail
+
+typedef std::map<GLenum, GLResourceShPtr> GLFramebufferAttachmentMap;
 
 ///////////////////////////////////////////////////////////////////////
 /**

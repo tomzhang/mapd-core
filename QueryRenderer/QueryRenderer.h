@@ -56,7 +56,7 @@ class QueryRenderer {
   void updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr,
                                         QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
 
-  void activateGpu(const GpuId& gpuId, QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
+  void activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData, const std::vector<GpuId>& gpusToActivate = {});
 
   void render();
   PngData renderToPng(int compressionLevel = -1);
@@ -71,6 +71,11 @@ class QueryRenderer {
     PerGpuData() : qrmGpuData(nullptr), framebufferPtr(nullptr) {}
     PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
                                              framebufferPtr(std::move(data.framebufferPtr)) {}
+
+    void makeActiveOnCurrentThread() {
+      CHECK(qrmGpuData);
+      qrmGpuData->makeActiveOnCurrentThread();
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
@@ -79,14 +84,21 @@ class QueryRenderer {
 
   void _clear();
   void _clearGpuResources();
-  void _initGpuResources(const std::vector<GpuId>& gpuIds, QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
+  void _initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData, const std::vector<GpuId>& gpuIds);
+  void _updateGpuData(const GpuId& gpuId,
+                      QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                      std::unordered_set<GpuId>& unusedGpus);
   void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
   void _initFromJSON(const std::string& configJSON, bool forceUpdate = false);
   void _resizeFramebuffers(int width, int height);
 
   void _update();
-  void _renderGpu(PerGpuDataMap::iterator& itr);
+  // PngData _renderToPng(int width,
+  //                      int height,
+  //                      const std::shared_ptr<unsigned char>& pixelsPtr,
+  //                      int compressionLevel = -1);
 
+  static void renderGpu(GpuId gpuId, PerGpuDataMap* gpuDataMap, QueryRendererContext* ctx, int r, int g, int b, int a);
   friend class QueryRendererContext;
 };
 

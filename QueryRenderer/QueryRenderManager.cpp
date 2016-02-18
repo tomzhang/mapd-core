@@ -97,10 +97,10 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
     gpuData.windowPtr = windowMgr.createWindow(windowSettings);
     gpuData.rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuData.windowPtr);
 
+    gpuData.makeActiveOnCurrentThread();
+
     renderer = dynamic_cast<GLRenderer*>(gpuData.rendererPtr.get());
     CHECK(renderer != nullptr);
-
-    renderer->makeActiveOnCurrentThread();
 
     gpuData.queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
 
@@ -265,8 +265,9 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 
     // uses the first gpu as the default.
     // TODO(croot): expose a way to specify which gpu to use?
-    auto itr = _perGpuData.begin();
-    _activeRenderer->activateGpu(itr->first, _perGpuData);
+    // auto itr = _perGpuData.begin();
+    // _activeRenderer->activateGpus(_perGpuData, itr->first);
+    _activeRenderer->activateGpus(_perGpuData);
   }
 
   _activeRenderer->setJSONDocument(jsonDocumentPtr, false);

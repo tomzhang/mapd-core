@@ -84,7 +84,7 @@ class BaseQueryDataTableVBO {
   std::string _name;
 
   struct PerGpuData {
-    const QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryRenderManager::PerGpuData* qrmGpuData;
     QueryVertexBufferShPtr vbo;
 
     PerGpuData() : qrmGpuData(nullptr), vbo(nullptr) {}
@@ -92,6 +92,11 @@ class BaseQueryDataTableVBO {
         : qrmGpuData(qrcGpuData.qrmGpuData), vbo(vbo) {}
     PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), vbo(data.vbo) {}
     PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), vbo(std::move(data.vbo)) {}
+
+    void makeActiveOnCurrentThread() {
+      CHECK(qrmGpuData);
+      qrmGpuData->makeActiveOnCurrentThread();
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 

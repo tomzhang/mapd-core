@@ -29,6 +29,7 @@
 
 namespace QueryRenderer {
 
+using ::Rendering::Window;
 using ::Rendering::Objects::ColorRGBA;
 using ::Rendering::GL::BaseTypeGL;
 using ::Rendering::GL::TypeGLShPtr;
@@ -1579,15 +1580,17 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
   }
 
   // TODO(croot): make thread safe?
-  GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
+  // GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
+  // Window* prevWindow = GLRenderer::getCurrentThreadWindow();
   GLRenderer* currRenderer = nullptr;
+
   for (auto& itr : _perGpuData) {
+    itr.second.makeActiveOnCurrentThread();
+
     currRenderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
 
-    currRenderer->makeActiveOnCurrentThread();
-
-    CHECK(itr.second.shaderPtr != nullptr);
     CHECK(currRenderer != nullptr);
+    CHECK(itr.second.shaderPtr != nullptr);
 
     currRenderer->bindShader(itr.second.shaderPtr);
 
@@ -1601,13 +1604,13 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
     itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
   }
 
-  if (currRenderer && prevRenderer != currRenderer) {
-    if (prevRenderer) {
-      prevRenderer->makeActiveOnCurrentThread();
-    } else {
-      currRenderer->makeInactive();
-    }
-  }
+  // if (currRenderer && prevRenderer != currRenderer) {
+  //   if (prevRenderer) {
+  //     prevRenderer->makeActiveOnCurrentThread(prevWindow);
+  //   } else {
+  //     currRenderer->makeInactive();
+  //   }
+  // }
 
   _propsDirty = false;
 }
@@ -1894,10 +1897,9 @@ void PointMark::_updateShader() {
   GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
   GLRenderer* currRenderer = nullptr;
   for (auto& itr : _perGpuData) {
-    CHECK(itr.second.qrmGpuData != nullptr && itr.second.qrmGpuData->rendererPtr != nullptr);
+    itr.second.makeActiveOnCurrentThread();
     currRenderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
 
-    currRenderer->makeActiveOnCurrentThread();
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
     itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
 

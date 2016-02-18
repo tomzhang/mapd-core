@@ -41,6 +41,12 @@ class QueryRenderManager {
     PerGpuData() : queryResultBufferPtr(nullptr), windowPtr(nullptr), rendererPtr(nullptr) {}
     PerGpuData(const PerGpuData& data)
         : queryResultBufferPtr(data.queryResultBufferPtr), windowPtr(data.windowPtr), rendererPtr(data.rendererPtr) {}
+
+    void makeActiveOnCurrentThread() {
+      CHECK(windowPtr && rendererPtr);
+
+      rendererPtr->makeActiveOnCurrentThread(windowPtr);
+    }
   };
 
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;

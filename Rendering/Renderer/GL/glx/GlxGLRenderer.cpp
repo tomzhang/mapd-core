@@ -321,7 +321,16 @@ void GlxGLRenderer::initializeGL() {
       case IntConstant::DEFAULT:
       case IntConstant::AUTO:
       case IntConstant::ON:
-      case IntConstant::OFF:
+      case IntConstant::OFF: {
+        // create a temporary context to get gl info
+        GLXContext tmpCtx = glXCreateContextAttribsARB(dpy, fbConfig[0], shCtx, True, NULL);
+
+        GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
+
+        // TODO(croot): should we check for the current bound context and set it back
+        // to the original when we're done?
+        makeWindowAndContextCurrent(primaryWindow, _dpyConnection.first, tmpCtx);
+
         const char* glVersion = (const char*)glGetString(GL_VERSION);
         if (glVersion) {
           // TODO(croot): store the max glVersion somewhere?
@@ -331,6 +340,17 @@ void GlxGLRenderer::initializeGL() {
           // always gets
           // an appropriate major and minor
         }
+
+        // TODO(croot): should we set back to whatever the current context
+        // was prior to this code? Not sure that's necessary because
+        // we set this soon to be build context current upon building
+        _makeInactiveImpl();
+        if (currRenderer) {
+          currRenderer->makeInactive();
+        }
+
+        glXDestroyContext(dpy, tmpCtx);
+      } break;
     }
 
     LOG(INFO) << "Renderer Setting: <" << IntSetting::OPENGL_MAJOR << ">.<" << IntSetting::OPENGL_MINOR

@@ -1,20 +1,12 @@
-#ifndef RENDERING_GL_RESOURCES_GLRESOURCETYPES_H_
-#define RENDERING_GL_RESOURCES_GLRESOURCETYPES_H_
+#ifndef RENDERING_GL_RESOURCES_TYPES_H_
+#define RENDERING_GL_RESOURCES_TYPES_H_
 
-#include <GL/glew.h>
 #include <memory>
-#include <map>
 #include <string>
 
 namespace Rendering {
 namespace GL {
 namespace Resources {
-
-enum class GLResourceType { SHADER = 0, FRAMEBUFFER, RENDERBUFFER, TEXTURE_2D, VERTEXBUFFER, VERTEXARRAY };
-
-enum class GLBufferType { VERTEX_BUFFER = 0 };
-
-enum class FboBind { READ = GL_READ_FRAMEBUFFER, DRAW = GL_DRAW_FRAMEBUFFER, READ_AND_DRAW = GL_FRAMEBUFFER };
 
 class GLResource;
 typedef std::weak_ptr<GLResource> GLResourceWkPtr;
@@ -27,7 +19,6 @@ typedef std::shared_ptr<GLShader> GLShaderShPtr;
 class GLFramebuffer;
 typedef std::weak_ptr<GLFramebuffer> GLFramebufferWkPtr;
 typedef std::shared_ptr<GLFramebuffer> GLFramebufferShPtr;
-typedef std::map<GLenum, GLResourceShPtr> GLFramebufferAttachmentMap;
 
 class GLRenderbuffer;
 typedef std::weak_ptr<GLRenderbuffer> GLRenderbufferWkPtr;
@@ -61,12 +52,8 @@ class GLVertexArray;
 typedef std::weak_ptr<GLVertexArray> GLVertexArrayWkPtr;
 typedef std::shared_ptr<GLVertexArray> GLVertexArrayShPtr;
 
-std::string to_string(const GLResourceType value);
-
 }  // namespace GL
 }  // namespace Resources
 }  // namespace Rendering
 
-std::ostream& operator<<(std::ostream& os, const Rendering::GL::Resources::GLResourceType value);
-
-#endif  // RENDERING_GL_RESOURCES_GLRESOURCETYPES_H_
+#endif  // RENDERING_GL_RESOURCES_TYPES_H_
