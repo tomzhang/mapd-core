@@ -5,6 +5,7 @@
 #include "QueryDataLayout.h"
 #include "QueryResultVertexBuffer.h"
 #include "Types.h"
+#include "PngData.h"
 #include <Rendering/Types.h>
 #include <unordered_map>
 #include <map>
@@ -16,15 +17,6 @@
 class Executor;
 
 namespace QueryRenderer {
-
-struct PngData {
-  std::shared_ptr<char> pngDataPtr;
-  int pngSize;
-
-  PngData(const std::shared_ptr<char>& pngDataPtr, int pngSize) : pngDataPtr(pngDataPtr), pngSize(pngSize) {}
-
-  void writeToFile(const std::string& filename);
-};
 
 typedef std::pair<int, int> UserWidgetPair;
 typedef std::unordered_map<int, QueryRendererUqPtr> WidgetRendererMap;

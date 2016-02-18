@@ -15,7 +15,7 @@
 // #include <time.h>
 // #include <iostream>
 // #include <stdexcept>
-#include <fstream>
+// #include <fstream>
 // #include <sstream>
 // #include <map>
 // #include "rapidjson/document.h"
@@ -33,12 +33,6 @@ using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
 
 const UserWidgetPair QueryRenderManager::_emptyUserWidget = std::make_pair(-1, -1);
-
-void PngData::writeToFile(const std::string& filename) {
-  std::ofstream pngFile(filename, std::ios::binary);
-  pngFile.write(pngDataPtr.get(), pngSize);
-  pngFile.close();
-}
 
 // QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode) : _debugMode(debugMode),
 // _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultVBOPtr(nullptr) {
