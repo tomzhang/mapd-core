@@ -18,8 +18,10 @@ class GLResource {
   virtual GLResourceType getResourceType() const = 0;
   virtual GLuint getId() const = 0;
 
-  bool isUsable() { return (!_rendererPtr.expired() && _usable); }
-  bool isUsableOnThread() { return (isUsable() && _rendererPtr.lock()->isActiveOnCurrentThread()); }
+  bool isUsable() const { return (!_rendererPtr.expired() && _usable); }
+  bool isUsableOnThread() const { return (isUsable() && _rendererPtr.lock()->isActiveOnCurrentThread()); }
+  Renderer* getRenderer() { return _rendererPtr.lock().get(); }
+  GLRenderer* getGLRenderer() { return dynamic_cast<GLRenderer*>(_rendererPtr.lock().get()); }
 
  protected:
   GLResource(const RendererWkPtr& rendererPtr) : _rendererPtr(), _usable(false) {

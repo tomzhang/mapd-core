@@ -17,7 +17,7 @@ if (_MAPDGL_X11)
 elseif (_MAPDGL_EGL)
   list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${EGL_INCLUDE_DIR}")
   list(APPEND QUERY_RENDERER_LIBS "${EGL_LIBRARY}")
-  list(APPEND QUERY_RENDERER_SOURCES egl/EglQueryRenderCompositor.cpp)
+  list(APPEND QUERY_RENDERER_SOURCES egl/EglQueryRenderCompositorImpl.cpp)
 endif()
 
 

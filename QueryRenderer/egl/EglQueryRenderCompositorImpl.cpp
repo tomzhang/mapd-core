@@ -1,6 +1,7 @@
+#include "../QueryRenderer.h"
 #include <Rendering/Renderer/GL/egl/EglGLRenderer.h>
 #include "../QueryFramebuffer.h"
-#include "EglQueryRenderCompositor.h"
+#include "EglQueryRenderCompositorImpl.h"
 #include <Rendering/RenderError.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 #include <Rendering/Renderer/GL/egl/EglDisplayManager.h>
@@ -8,7 +9,7 @@
 // #include <GL/glext.h>
 
 namespace QueryRenderer {
-
+namespace Impl {
 namespace EGL {
 
 using ::Rendering::GL::EGL::EglGLRenderer;
@@ -35,24 +36,21 @@ EglImage::~EglImage() {
 
   CHECK(eglDestroyImageKHR);
 
-  eglDestroyImage(displayPtr->getEGLDisplay(), img);
+  eglDestroyImageKHR(displayPtr->getEGLDisplay(), img);
 }
 
-EglQueryRenderCompositor::EglQueryRenderCompositor(::Rendering::GL::GLRenderer* renderer,
-                                                   size_t width,
-                                                   size_t height,
-                                                   size_t numSamples,
-                                                   bool doHitTest,
-                                                   bool doDepthTest)
-    : QueryRenderCompositor(renderer, width, height, numSamples, doHitTest, doDepthTest),
+EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(::Rendering::GL::GLRenderer* renderer,
+                                                           size_t width,
+                                                           size_t height,
+                                                           size_t numSamples,
+                                                           bool doHitTest,
+                                                           bool doDepthTest)
+    : QueryRenderCompositorImpl(renderer, width, height, numSamples, doHitTest, doDepthTest),
       _rgbaEglImgPtr(nullptr),
-      _idEglImgPtr(nullptr) {
-  // _depthEglImgPtr(nullptr) {
-
+      _idEglImgPtr(nullptr),
+      _depthEglImgPtr(nullptr) {
   EglGLRenderer* eglRenderer = dynamic_cast<EglGLRenderer*>(renderer);
-  CHECK(eglRenderer);
-
-  CHECK(_framebufferPtr);
+  CHECK(eglRenderer && _framebufferPtr);
 
   _rgbaEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
                                     eglRenderer->getEGLContext(),
@@ -65,14 +63,17 @@ EglQueryRenderCompositor::EglQueryRenderCompositor(::Rendering::GL::GLRenderer* 
   }
 }
 
-EglQueryRenderCompositor::~EglQueryRenderCompositor() {
+EglQueryRenderCompositorImpl::~EglQueryRenderCompositorImpl() {
 }
 
-void EglQueryRenderCompositor::resize(size_t width, size_t height) {
+void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
+  // TODO(croot): do we need to do anything here? I think the resize of the parent
+  // class's framebuffer will handle the resize appropriately for us.
+  // THROW_RUNTIME_EX("EglQueryRenderCompositorImpl::_resizeImpl() not implemented yet");
 }
 
-GLTexture2dShPtr EglQueryRenderCompositor::_createFboTexture2dImpl(::Rendering::GL::GLRenderer* renderer,
-                                                                   FboColorBuffer texType) {
+GLTexture2dShPtr EglQueryRenderCompositorImpl::createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
+                                                                  FboColorBuffer texType) {
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
   GLTexture2dShPtr tex = QueryFramebuffer::createFboTexture2d(rsrcMgr, texType, getWidth(), getHeight());
@@ -93,8 +94,8 @@ GLTexture2dShPtr EglQueryRenderCompositor::_createFboTexture2dImpl(::Rendering::
   return tex;
 }
 
-GLRenderbufferShPtr EglQueryRenderCompositor::_createFboRenderbufferImpl(::Rendering::GL::GLRenderer* renderer,
-                                                                         FboRenderBuffer rboType) {
+GLRenderbufferShPtr EglQueryRenderCompositorImpl::createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
+                                                                        FboRenderBuffer rboType) {
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
   GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, getWidth(), getHeight());
@@ -105,6 +106,21 @@ GLRenderbufferShPtr EglQueryRenderCompositor::_createFboRenderbufferImpl(::Rende
   return rbo;
 }
 
-}  // namespace EGL
+void EglQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
+  QueryRendererContext* ctx = queryRenderer->getContext();
+  QueryRenderer::PerGpuDataMap* perGpuData = queryRenderer->getPerGpuData();
 
+  auto itr = perGpuData->begin();
+  int cnt = 0;
+  for (; itr != perGpuData->end(); ++itr, ++cnt) {
+    if (cnt == 0) {
+      QueryRenderer::renderGpu(itr->first, perGpuData, ctx, 0, 0, 0, 0);
+    } else {
+      QueryRenderer::renderGpu(itr->first, perGpuData, ctx, 0, 0, 0, 1);
+    }
+  }
+}
+
+}  // namespace EGL
+}  // namespace Impl
 }  // namespace QueryRenderer

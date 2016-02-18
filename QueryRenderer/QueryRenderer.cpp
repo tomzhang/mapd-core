@@ -2,6 +2,7 @@
 #include "QueryFramebuffer.h"
 #include "QueryDataTable.h"
 #include "QueryRendererObjects.h"
+#include "QueryRenderCompositor.h"
 #include <Rendering/Window.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
@@ -156,7 +157,7 @@ static PngData pixelsToPng(int width,
 }
 
 QueryRenderer::QueryRenderer(bool doHitTest, bool doDepthTest)
-    : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData() {
+    : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData(), _compositorPtr(nullptr) {
 }
 
 QueryRenderer::QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -232,6 +233,27 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerG
   }
 
   _ctx->_initGpuResources(_perGpuData, unusedGpus);
+
+  // TODO(croot): the compositor will need to be pulled out to the QueryRenderManager
+  // level if/when we store a large framebuffer for all connected users to use.
+  if (_perGpuData.size() > 1) {
+    // NOTE: since we're using a map to store the per gpu data, the first item
+    // will be the lowest active gpu id.
+    auto itr = _perGpuData.begin();
+    if (!_compositorPtr) {
+      _compositorPtr.reset(
+          new QueryRenderCompositor(this,
+                                    dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get()),
+                                    _ctx->getWidth(),
+                                    _ctx->getHeight(),
+                                    // TODO(croot): should we support num samples
+                                    1,  //_ctx->getNumSamples(),
+                                    _ctx->doHitTest(),
+                                    _ctx->doDepthTest()));
+    }
+  } else {
+    _compositorPtr.reset(nullptr);
+  }
 }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
@@ -247,6 +269,12 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
     } else {
       gpuDataItr.second.framebufferPtr->resize(width, height);
     }
+  }
+
+  // TODO(croot): the compositor will need to be pulled out to the QueryRenderManager
+  // level if/when we store a large framebuffer for all connected users to use.
+  if (_compositorPtr) {
+    _compositorPtr->resize(width, height);
   }
 }
 
@@ -585,10 +613,12 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
   renderer->setBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-  // renderer->setClearColor(0, 0, 0, 0);
-  renderer->setClearColor(r, b, g, a);
   renderer->setViewport(0, 0, ctx->_width, ctx->_height);
-  renderer->clearAll();
+  if (r >= 0 && g >= 0 && b >= 0 && a >= 0) {
+    // renderer->setClearColor(0, 0, 0, 0);
+    renderer->setClearColor(r, b, g, a);
+    renderer->clearAll();
+  }
 
   for (size_t i = 0; i < ctx->_geomConfigs.size(); ++i) {
     ctx->_geomConfigs[i]->draw(renderer, gpuId);
@@ -621,37 +651,52 @@ void QueryRenderer::render() {
       // TODO(croot) - launch some threads to handle multi-gpu rendering?
       // Then do a composite, or should I do a composite in the renerToPng?
 
+      CHECK(_compositorPtr);
+
+      _compositorPtr->render();
+
       // auto itr = _perGpuData.begin();
       // int cnt = 0;
       // for (; itr != _perGpuData.end(); ++itr, ++cnt) {
       //   if (cnt == 0) {
-      //     _renderGpu(itr, 0, 0, 0, 0);
+      //     renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
       //   } else {
-      //     _renderGpu(itr, 0, 0, 0, 1);
+      //     renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 1);
       //   }
       // }
 
-      std::vector<std::thread> t(numGpusToRender);
+      // NOTE: threaded rendering like what is setup in the commented code
+      // below is surprisingly slow on greendragon.
+      // I'm not sure what the reason is - perhaps the driver has issues
+      // with multi-threading like this?
+      // I would suspect threaded rendering like this if the contexts were
+      // on the same GPU, but not if each rendering context is on a separate
+      // GPU... Hmmm.
+      //
+      // Anyway, doing it sequentially should be fine as OpenGL calls are
+      // asynchronous, and we have to do a composite one gpu/layer at a time in
+      // the end anyway.
+      // std::vector<std::thread> t(numGpusToRender);
 
-      auto itr = _perGpuData.begin();
-      int idx = 0;
-      for (; itr != _perGpuData.end(); ++itr, ++idx) {
-        // need to clear out the context on the current thread
-        // TODO(croot): do this with a simple function call before going thru
-        // the loop?
-        itr->second.qrmGpuData->rendererPtr->makeInactive();
-        if (idx == 0) {
-          // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 0); });
-          t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
-        } else {
-          t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 1);
-          // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 1); });
-        }
-      }
+      // auto itr = _perGpuData.begin();
+      // int idx = 0;
+      // for (; itr != _perGpuData.end(); ++itr, ++idx) {
+      //   // need to clear out the context on the current thread
+      //   // TODO(croot): do this with a simple function call before going thru
+      //   // the loop?
+      //   itr->second.qrmGpuData->rendererPtr->makeInactive();
+      //   if (idx == 0) {
+      //     // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 0); });
+      //     t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
+      //   } else {
+      //     t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 1);
+      //     // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 1); });
+      //   }
+      // }
 
-      for (idx = 0; idx < numGpusToRender; ++idx) {
-        t[idx].join();
-      }
+      // for (idx = 0; idx < numGpusToRender; ++idx) {
+      //   t[idx].join();
+      // }
     }
   }
 }

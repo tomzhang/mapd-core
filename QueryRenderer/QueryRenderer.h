@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include "QueryRenderManager.h"
+#include "QueryRenderCompositor.h"
 
 // #include "QueryRendererError.h"
 // #include "QueryDataLayout.h"
@@ -34,6 +35,21 @@ namespace QueryRenderer {
 
 class QueryRenderer {
  public:
+  struct PerGpuData {
+    QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryFramebufferUqPtr framebufferPtr;
+
+    PerGpuData() : qrmGpuData(nullptr), framebufferPtr(nullptr) {}
+    PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
+                                             framebufferPtr(std::move(data.framebufferPtr)) {}
+
+    void makeActiveOnCurrentThread() {
+      CHECK(qrmGpuData);
+      qrmGpuData->makeActiveOnCurrentThread();
+    }
+  };
+  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
+
   explicit QueryRenderer(bool doHitTest = false, bool doDepthTest = false);
 
   explicit QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -63,24 +79,21 @@ class QueryRenderer {
 
   unsigned int getIdAt(int x, int y);
 
+  PerGpuDataMap* getPerGpuData() { return &_perGpuData; }
+  QueryRendererContext* getContext() { return _ctx.get(); }
+
+  static void renderGpu(GpuId gpuId,
+                        PerGpuDataMap* gpuDataMap,
+                        QueryRendererContext* ctx,
+                        int r = -1,
+                        int g = -1,
+                        int b = -1,
+                        int a = -1);
+
  private:
-  struct PerGpuData {
-    QueryRenderManager::PerGpuData* qrmGpuData;
-    QueryFramebufferUqPtr framebufferPtr;
-
-    PerGpuData() : qrmGpuData(nullptr), framebufferPtr(nullptr) {}
-    PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
-                                             framebufferPtr(std::move(data.framebufferPtr)) {}
-
-    void makeActiveOnCurrentThread() {
-      CHECK(qrmGpuData);
-      qrmGpuData->makeActiveOnCurrentThread();
-    }
-  };
-  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
-
   std::shared_ptr<QueryRendererContext> _ctx;
   PerGpuDataMap _perGpuData;
+  std::unique_ptr<QueryRenderCompositor> _compositorPtr;
 
   void _clear();
   void _clearGpuResources();
@@ -98,8 +111,8 @@ class QueryRenderer {
   //                      const std::shared_ptr<unsigned char>& pixelsPtr,
   //                      int compressionLevel = -1);
 
-  static void renderGpu(GpuId gpuId, PerGpuDataMap* gpuDataMap, QueryRendererContext* ctx, int r, int g, int b, int a);
   friend class QueryRendererContext;
+  friend class QueryRenderCompositor;
 };
 
 class QueryRendererContext {

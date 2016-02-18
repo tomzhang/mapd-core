@@ -1,5 +1,5 @@
-#ifndef RAPID_JSON_UTILS_H_
-#define RAPID_JSON_UTILS_H_
+#ifndef QUERYRENDERER_RAPIDJSONUTILS_H_
+#define QUERYRENDERER_RAPIDJSONUTILS_H_
 
 #include "QueryRendererError.h"
 #include <memory>
@@ -53,4 +53,4 @@ struct RapidJSONUtils {
 
 }  // namespace QueryRenderer
 
-#endif  // RAPID_JSON_UTILS_H_
+#endif  // QUERYRENDERER_RAPIDJSONUTILS_H_
