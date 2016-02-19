@@ -115,8 +115,9 @@ set(TIME_LIMITED_NUMBER_OF_DAYS "30" CACHE STRING "Number of days this build is 
 
 option(TIME_LIMITED_BUILD "Build Time Limited Build" OFF)
 if(TIME_LIMITED_BUILD)
-  add_definitions("-DTIME_LIMITED_BUILD")
-  add_definitions(-DTIME_LIMITED_NUMBER_OF_DAYS=${TIME_LIMITED_NUMBER_OF_DAYS})
+  list(APPEND TIME_LIMITED_DEFINITIONS "TIME_LIMITED_BUILD")
+  list(APPEND TIME_LIMITED_DEFINITIONS "TIME_LIMITED_NUMBER_OF_DAYS=${TIME_LIMITED_NUMBER_OF_DAYS}")
+  set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-${TIME_LIMITED_NUMBER_OF_DAYS}d")
 endif()
 
 option(ENABLE_CALCITE "Build Calcite adapter" OFF)
@@ -173,6 +174,7 @@ if(ENABLE_CALCITE)
 endif()
 
 add_executable(mapd_server ${mapd_server_source_files})
+set_target_properties(mapd_server PROPERTIES COMPILE_DEFINITIONS "${TIME_LIMITED_DEFINITIONS}")
 
 add_custom_command(
     DEPENDS ${CMAKE_SOURCE_DIR}/mapd.thrift

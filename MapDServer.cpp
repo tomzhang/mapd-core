@@ -1545,7 +1545,7 @@ int main(int argc, char** argv) {
   // capture build date
   std::string build_date(__DATE__);
   int day_limit = TIME_LIMITED_NUMBER_OF_DAYS;
-  std::cerr << "This is a time limited build, you have " << day_limit << " days from build Date :" << build_date
+  std::cerr << "This is a time limited build, you have " << day_limit << " days from build date: " << build_date
             << std::endl;
   // this is our string in fixed format will always work.... famous last words
   std::tm tm_struct;
@@ -1556,10 +1556,11 @@ int main(int argc, char** argv) {
   time_t current = std::time(0);
   int64_t day_diff = (current - build_day_epoch) / (24 * 60 * 60);
   if (day_diff > day_limit) {
-    std::cerr << "Time Limited build - EXPIRED.  Server cannot start please contact support@mapd.com for extention"
-              << std::endl;
-    ;
-    return 2;
+    std::cerr << "Time limited build - EXPIRED.  Please contact support@mapd.com for an extension." << std::endl;
+    // give users a 5 day grace period
+    if (day_diff > (day_limit + 5)) {
+      return 2;
+    }
   }
 #endif  // TIME_LIMITED_BUILD
 
