@@ -17,11 +17,12 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
                                              size_t numSamples,
                                              bool doHitTest,
                                              bool doDepthTest)
-    : _queryRenderer(prnt),
+    :
 #ifdef MAPDGL_EGL
-      _implPtr(new Impl::EGL::EglQueryRenderCompositorImpl(renderer, width, height, numSamples, doHitTest, doDepthTest))
+      _implPtr(
+          new Impl::EGL::EglQueryRenderCompositorImpl(renderer, width, height, numSamples, doHitTest, doDepthTest)),
 #endif
-{
+      _queryRenderer(prnt) {
 }
 
 QueryRenderCompositor::~QueryRenderCompositor() {
@@ -42,6 +43,21 @@ size_t QueryRenderCompositor::getHeight() {
 //   return _framebufferPtr->getNumSamples();
 // }
 
+bool QueryRenderCompositor::doHitTest() {
+  CHECK(_implPtr);
+  return _implPtr->doHitTest();
+}
+
+bool QueryRenderCompositor::doDepthTest() {
+  CHECK(_implPtr);
+  return _implPtr->doDepthTest();
+}
+
+::Rendering::Renderer* QueryRenderCompositor::getRenderer() {
+  CHECK(_implPtr);
+  return _implPtr->getRenderer();
+}
+
 void QueryRenderCompositor::resize(size_t width, size_t height) {
   CHECK(_implPtr);
   _implPtr->resize(width, height);
@@ -50,6 +66,14 @@ void QueryRenderCompositor::resize(size_t width, size_t height) {
 void QueryRenderCompositor::render() {
   CHECK(_implPtr);
   _implPtr->render(_queryRenderer);
+}
+
+std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t startx,
+                                                                      size_t starty,
+                                                                      int width,
+                                                                      int height) {
+  CHECK(_implPtr);
+  return _implPtr->readColorBuffer(startx, starty, width, height);
 }
 
 ::Rendering::GL::Resources::GLTexture2dShPtr QueryRenderCompositor::createFboTexture2d(

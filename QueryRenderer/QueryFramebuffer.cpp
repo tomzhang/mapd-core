@@ -1,4 +1,5 @@
 #include "QueryFramebuffer.h"
+#include "QueryRenderCompositor.h"
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 
@@ -27,6 +28,16 @@ QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, 
   _init(renderer, width, height);
 }
 
+QueryFramebuffer::QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer)
+    : _doHitTest(compositor->doHitTest()),
+      _doDepthTest(compositor->doDepthTest()),
+      _rgbaTex(nullptr),
+      _idTex(nullptr),
+      _rbo(nullptr),
+      _fbo(nullptr) {
+  _init(compositor, renderer);
+}
+
 QueryFramebuffer::~QueryFramebuffer() {
 }
 
@@ -50,6 +61,25 @@ void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, i
   _fbo = rsrcMgr->createFramebuffer(attachments);
 }
 
+void QueryFramebuffer::_init(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer) {
+  GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+
+  _rgbaTex = compositor->createFboTexture2d(renderer, FboColorBuffer::COLOR_BUFFER);
+  GLFramebufferAttachmentMap attachments({{GL_COLOR_ATTACHMENT0, _rgbaTex}});
+
+  if (_doHitTest) {
+    _idTex = compositor->createFboTexture2d(renderer, FboColorBuffer::ID_BUFFER);
+    attachments.insert({GL_COLOR_ATTACHMENT1, _idTex});
+  }
+
+  if (_doDepthTest) {
+    _rbo = compositor->createFboRenderbuffer(renderer, FboRenderBuffer::DEPTH_BUFFER);
+    attachments.insert({GL_DEPTH_ATTACHMENT, _rbo});
+  }
+
+  _fbo = rsrcMgr->createFramebuffer(attachments);
+}
+
 void QueryFramebuffer::resize(int width, int height) {
   CHECK(_fbo);
   _fbo->resize(width, height);
@@ -61,6 +91,10 @@ int QueryFramebuffer::getWidth() const {
 
 int QueryFramebuffer::getHeight() const {
   return _fbo->getHeight();
+}
+
+::Rendering::Renderer* QueryFramebuffer::getRenderer() {
+  return _fbo->getRenderer();
 }
 
 GLuint QueryFramebuffer::getId(FboColorBuffer buffer) {
@@ -90,14 +124,15 @@ void QueryFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
   renderer->bindFramebuffer(bindType, _fbo);
 }
 
-std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx,
-                                                                 size_t starty,
-                                                                 size_t width,
-                                                                 size_t height) {
-  std::shared_ptr<unsigned char> pixels(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
+std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx, size_t starty, int width, int height) {
+  size_t widthToUse = (width < 0 ? getWidth() : width);
+  size_t heightToUse = (height < 0 ? getHeight() : height);
+
+  std::shared_ptr<unsigned char> pixels(new unsigned char[widthToUse * heightToUse * 4],
+                                        std::default_delete<unsigned char[]>());
   unsigned char* rawPixels = pixels.get();
 
-  _fbo->readPixels(GL_COLOR_ATTACHMENT0, startx, starty, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rawPixels);
+  _fbo->readPixels(GL_COLOR_ATTACHMENT0, startx, starty, widthToUse, heightToUse, GL_RGBA, GL_UNSIGNED_BYTE, rawPixels);
 
   return pixels;
 }

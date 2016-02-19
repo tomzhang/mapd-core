@@ -23,6 +23,7 @@
 
 namespace QueryRenderer {
 
+using ::Rendering::Renderer;
 using ::Rendering::WindowShPtr;
 using ::Rendering::RendererShPtr;
 using ::Rendering::GL::GLRenderer;
@@ -105,7 +106,9 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerG
   }
 
   _ctx->_initGpuResources(_perGpuData, unusedGpus);
+}
 
+void QueryRenderer::_resizeFramebuffers(int width, int height) {
   // TODO(croot): the compositor will need to be pulled out to the QueryRenderManager
   // level if/when we store a large framebuffer for all connected users to use.
   if (_perGpuData.size() > 1) {
@@ -113,22 +116,30 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerG
     // will be the lowest active gpu id.
     auto itr = _perGpuData.begin();
     if (!_compositorPtr) {
+      itr->second.makeActiveOnCurrentThread();
       _compositorPtr.reset(
           new QueryRenderCompositor(this,
                                     dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get()),
-                                    _ctx->getWidth(),
-                                    _ctx->getHeight(),
+                                    width,
+                                    height,
                                     // TODO(croot): should we support num samples
                                     1,  //_ctx->getNumSamples(),
                                     _ctx->doHitTest(),
                                     _ctx->doDepthTest()));
+    } else {
+      // TODO(croot): we need to verify that the compositor is on a GPU that is
+      // still active for this renderer. If not, then we need to build a new compositor
+      // and update all existing framebuffers to refer to this new compositor.
+      // NOTE: we won't have to do this TODO if we move the framebuffers and compositors
+      // to the QueryRenderManager level.
+      // if (_compositorPtr->getRenderer() != itr->second.qrmGpuData->rendererPtr.get()) {
+      // }
+      _compositorPtr->resize(width, height);
     }
   } else {
     _compositorPtr.reset(nullptr);
   }
-}
 
-void QueryRenderer::_resizeFramebuffers(int width, int height) {
   for (auto& gpuDataItr : _perGpuData) {
     if (gpuDataItr.second.framebufferPtr == nullptr) {
       CHECK(gpuDataItr.second.qrmGpuData->rendererPtr != nullptr);
@@ -136,17 +147,16 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
       CHECK(renderer != nullptr);
 
       gpuDataItr.second.makeActiveOnCurrentThread();
-      gpuDataItr.second.framebufferPtr.reset(
-          new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
+
+      if (_compositorPtr) {
+        gpuDataItr.second.framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer));
+      } else {
+        gpuDataItr.second.framebufferPtr.reset(
+            new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
+      }
     } else {
       gpuDataItr.second.framebufferPtr->resize(width, height);
     }
-  }
-
-  // TODO(croot): the compositor will need to be pulled out to the QueryRenderManager
-  // level if/when we store a large framebuffer for all connected users to use.
-  if (_compositorPtr) {
-    _compositorPtr->resize(width, height);
   }
 }
 
@@ -582,34 +592,41 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 
   int width = getWidth();
   int height = getHeight();
-
-  auto itr = _perGpuData.begin();
-
-  const GpuId& gpuId = itr->first;
-  itr->second.makeActiveOnCurrentThread();
-  GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
-  CHECK(renderer != nullptr);
-
   std::shared_ptr<unsigned char> pixelsPtr;
-  QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
-  framebufferPtr->bindToRenderer(renderer, FboBind::READ);
-  pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-  // width = itr->second.qrmGpuData->windowPtr->getWidth();
-  // height = itr->second.qrmGpuData->windowPtr->getHeight();
-  // std::shared_ptr<unsigned char> pixelsPtr(new unsigned char[width * height * 4],
-  //                                          std::default_delete<unsigned char[]>());
-  // unsigned char* pixels = pixelsPtr.get();
+  if (_compositorPtr) {
+    Renderer* renderer = _compositorPtr->getRenderer();
+    renderer->makeActiveOnCurrentThread();
+    pixelsPtr = _compositorPtr->readColorBuffer(0, 0, width, height);
+    renderer->makeInactive();
+  } else {
+    auto itr = _perGpuData.begin();
 
-  // renderer->getReadFramebufferPixels(GL_BACK, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    const GpuId& gpuId = itr->first;
+    itr->second.makeActiveOnCurrentThread();
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+    CHECK(renderer != nullptr);
 
-  // TODO(croot): perhaps create a read pixels api like the following
-  // Better yet, create a multi-dimensional pixel struct template that
-  // is returned with width/height, number of components, etc.
-  // std::shared_ptr<unsigned char[]> pixels = framebufferPtr->readPixels<unsigned char, 4>(FboBuffer::COLOR_BUFFER,
-  // 0, 0, width, height);
+    QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+    framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+    pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-  renderer->makeInactive();
+    // width = itr->second.qrmGpuData->windowPtr->getWidth();
+    // height = itr->second.qrmGpuData->windowPtr->getHeight();
+    // std::shared_ptr<unsigned char> pixelsPtr(new unsigned char[width * height * 4],
+    //                                          std::default_delete<unsigned char[]>());
+    // unsigned char* pixels = pixelsPtr.get();
+
+    // renderer->getReadFramebufferPixels(GL_BACK, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    // TODO(croot): perhaps create a read pixels api like the following
+    // Better yet, create a multi-dimensional pixel struct template that
+    // is returned with width/height, number of components, etc.
+    // std::shared_ptr<unsigned char[]> pixels = framebufferPtr->readPixels<unsigned char, 4>(FboBuffer::COLOR_BUFFER,
+    // 0, 0, width, height);
+
+    renderer->makeInactive();
+  }
 
   return PngData(width, height, pixelsPtr, compressionLevel);
 }

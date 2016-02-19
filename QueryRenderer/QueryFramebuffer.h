@@ -1,6 +1,7 @@
 #ifndef QUERYRENDERER_QUERYFRAMEBUFFER_H_
 #define QUERYRENDERER_QUERYFRAMEBUFFER_H_
 
+#include <Rendering/Renderer.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/Resources/Enums.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
@@ -19,6 +20,8 @@
 
 namespace QueryRenderer {
 
+class QueryRenderCompositor;
+
 enum class FboColorBuffer { COLOR_BUFFER = 0, ID_BUFFER, MAX_TEXTURE_BUFFERS = ID_BUFFER };
 enum class FboRenderBuffer { DEPTH_BUFFER = 0, MAX_RENDER_BUFFERS = DEPTH_BUFFER };
 
@@ -36,6 +39,8 @@ class QueryFramebuffer {
                    int height,
                    bool doHitTest = false,
                    bool doDepthTest = false);
+
+  QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer);
   ~QueryFramebuffer();
 
   void resize(int width, int height);
@@ -43,10 +48,13 @@ class QueryFramebuffer {
       ::Rendering::GL::GLRenderer* renderer,
       ::Rendering::GL::Resources::FboBind bindType = ::Rendering::GL::Resources::FboBind::READ_AND_DRAW);
 
-  std::shared_ptr<unsigned char> readColorBuffer(size_t startx, size_t starty, size_t width, size_t height);
+  std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
   int getWidth() const;
   int getHeight() const;
+  bool doHitTest() const { return _doHitTest; }
+  bool doDepthTest() const { return _doDepthTest; }
+  ::Rendering::Renderer* getRenderer();
 
   GLuint getId(FboColorBuffer buffer);
   GLuint getId(FboRenderBuffer buffer);
@@ -84,6 +92,7 @@ class QueryFramebuffer {
   // AttachmentContainer _attachmentManager;
 
   void _init(::Rendering::GL::GLRenderer* renderer, int width, int height);
+  void _init(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer);
 };
 
 typedef std::unique_ptr<QueryFramebuffer> QueryFramebufferUqPtr;

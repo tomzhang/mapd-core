@@ -8,6 +8,7 @@
 #include "Types.h"
 #include "QueryFramebuffer.h"
 #include <Rendering/RenderError.h>
+#include <Rendering/Types.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <GL/glew.h>
@@ -39,6 +40,29 @@ class QueryRenderCompositorImpl {
     // CHECK(_framebufferPtr);
     // return _framebufferPtr->getNumSamples();
     return 1;
+  }
+
+  bool doHitTest() {
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->doHitTest();
+  }
+
+  bool doDepthTest() {
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->doDepthTest();
+  }
+
+  ::Rendering::Renderer* getRenderer() {
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->getRenderer();
+  }
+
+  std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0,
+                                                 size_t starty = 0,
+                                                 int width = -1,
+                                                 int height = -1) {
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->readColorBuffer(startx, starty, width, height);
   }
 
   virtual ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
@@ -80,10 +104,15 @@ class QueryRenderCompositor {
   size_t getWidth();
   size_t getHeight();
   size_t getNumSamples();
+  bool doHitTest();
+  bool doDepthTest();
+  ::Rendering::Renderer* getRenderer();
 
   void resize(size_t width, size_t height);
 
   void render();
+
+  std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
   ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
                                                                   FboColorBuffer texType);
@@ -110,6 +139,7 @@ class QueryRenderCompositor {
   std::unordered_set<::Rendering::GL::Resources::GLRenderbufferShPtr> _compositeRbos;
 
   QueryRenderer* _queryRenderer;
+  bool _doHitTest, _doDepthTest;
 
   friend class ::QueryRenderer::QueryRenderer;
 };

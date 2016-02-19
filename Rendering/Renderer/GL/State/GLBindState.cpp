@@ -47,8 +47,10 @@ void GLBindState::bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc) {
     switch (texRsrc->getTarget()) {
       case GL_TEXTURE_2D_MULTISAMPLE:
         multiSampleTexId = texRsrc->getId();
+        break;
       case GL_TEXTURE_2D:
         texId = texRsrc->getId();
+        break;
       default:
         CHECK(false);
     }
