@@ -111,7 +111,7 @@ CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_mtx);
 
-  itr->second.rendererPtr->makeActiveOnCurrentThread(itr->second.windowPtr.get());
+  itr->second.makeActiveOnCurrentThread();
   CudaHandle rtn = itr->second.queryResultBufferPtr->getCudaHandlePreQuery();
   itr->second.rendererPtr->makeInactive();
 

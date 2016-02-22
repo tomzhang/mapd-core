@@ -97,6 +97,29 @@ int QueryFramebuffer::getHeight() const {
   return _fbo->getRenderer();
 }
 
+GLTexture2dShPtr QueryFramebuffer::getColorTexture2d(FboColorBuffer texType) {
+  switch (texType) {
+    case FboColorBuffer::COLOR_BUFFER:
+      return _rgbaTex;
+    case FboColorBuffer::ID_BUFFER:
+      return _idTex;
+    default:
+      CHECK(false);
+  }
+  return nullptr;
+}
+
+GLRenderbufferShPtr QueryFramebuffer::getRenderbuffer(FboRenderBuffer rboType) {
+  switch (rboType) {
+    case FboRenderBuffer::DEPTH_BUFFER:
+      return _rbo;
+    default:
+      CHECK(false);
+  }
+
+  return nullptr;
+}
+
 GLuint QueryFramebuffer::getId(FboColorBuffer buffer) {
   switch (buffer) {
     case FboColorBuffer::COLOR_BUFFER:

@@ -107,6 +107,8 @@ class GLRenderer : public Renderer {
                                 GLenum type,
                                 GLvoid* data);
 
+  void getBoundTexture2dPixels(size_t width, size_t height, GLenum format, GLenum type, GLvoid* data);
+
   static GLRenderer* getCurrentThreadRenderer();
   static Window* getCurrentThreadWindow();
   // static void setInactiveRendererCurrentOnThread();

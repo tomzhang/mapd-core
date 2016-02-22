@@ -39,13 +39,14 @@ EglImage::~EglImage() {
   eglDestroyImageKHR(displayPtr->getEGLDisplay(), img);
 }
 
-EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(::Rendering::GL::GLRenderer* renderer,
+EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderer* prnt,
+                                                           ::Rendering::GL::GLRenderer* renderer,
                                                            size_t width,
                                                            size_t height,
                                                            size_t numSamples,
                                                            bool doHitTest,
                                                            bool doDepthTest)
-    : QueryRenderCompositorImpl(renderer, width, height, numSamples, doHitTest, doDepthTest),
+    : QueryRenderCompositorImpl(prnt, renderer, width, height, numSamples, doHitTest, doDepthTest),
       _rgbaEglImgPtr(nullptr),
       _idEglImgPtr(nullptr),
       _depthEglImgPtr(nullptr) {
@@ -60,6 +61,12 @@ EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(::Rendering::GL::GLRe
     _idEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
                                     eglRenderer->getEGLContext(),
                                     _framebufferPtr->getId(FboColorBuffer::ID_BUFFER)));
+  }
+
+  if (doDepthTest) {
+    // TODO(croot): fill this out
+    THROW_RUNTIME_EX("Depth buffer has yet to be implemented for EGL Compositor");
+    //_depthEglImgPtr.reset(new EglImage());
   }
 }
 

@@ -1,5 +1,7 @@
 #include "QueryRenderCompositor.h"
-#ifdef MAPDGL_EGL
+#ifdef MAPDGL_GLX
+#include "glx/GlxQueryRenderCompositorImpl.h"
+#elif MAPDGL_EGL
 #include "egl/EglQueryRenderCompositorImpl.h"
 #endif  // MAPDGL_EGL
 #include <Rendering/RenderError.h>
@@ -18,10 +20,23 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
                                              bool doHitTest,
                                              bool doDepthTest)
     :
-#ifdef MAPDGL_EGL
-      _implPtr(
-          new Impl::EGL::EglQueryRenderCompositorImpl(renderer, width, height, numSamples, doHitTest, doDepthTest)),
-#endif
+#ifdef MAPDGL_GLX
+      _implPtr(new Impl::GLX::GlxQueryRenderCompositorImpl(prnt,
+                                                           renderer,
+                                                           width,
+                                                           height,
+                                                           numSamples,
+                                                           doHitTest,
+                                                           doDepthTest)),
+#elif MAPDGL_EGL
+      _implPtr(new Impl::EGL::EglQueryRenderCompositorImpl(prnt,
+                                                           renderer,
+                                                           width,
+                                                           height,
+                                                           numSamples,
+                                                           doHitTest,
+                                                           doDepthTest)),
+#endif  // MAPDGL_GLX
       _queryRenderer(prnt) {
 }
 

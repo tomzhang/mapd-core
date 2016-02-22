@@ -337,6 +337,31 @@ void GLRenderer::getReadFramebufferPixels(GLenum readBuffer,
   }
 }
 
+void GLRenderer::getBoundTexture2dPixels(size_t width, size_t height, GLenum format, GLenum type, GLvoid* data) {
+  GLTexture2dShPtr boundTex = _bindState.getBoundTexture2d();
+  RUNTIME_EX_ASSERT(boundTex != nullptr,
+                    "Cannot get pixels of bound 2D texture. There isn't a 2D texture currently bound.");
+
+  GLenum target = boundTex->getTarget();
+  RUNTIME_EX_ASSERT(target == GL_TEXTURE_2D,
+                    "Cannot get pixels of bound 2D texture. It is a multi-sample texture. Can only get pixels of a  "
+                    "multi-sampled texture when attached to an FBO");
+
+  size_t texWidth = boundTex->getWidth();
+  size_t texHeight = boundTex->getHeight();
+  RUNTIME_EX_ASSERT(width == texWidth && height == texHeight,
+                    "Cannot get pixels of bound 2D texture. Resolution of output data does not match the resolution of "
+                    "the bound texture: (" +
+                        std::to_string(width) + "x" + std::to_string(height) + " != " + std::to_string(texWidth) + "x" +
+                        std::to_string(texHeight) + ")");
+
+  // TODO(croot): expose mipmap level
+
+  // TODO(croot): check the format & type passed as arguments vs format/type of the texture?
+  // I think a check like that could be useful, but would that limit usage somehow?
+  MAPD_CHECK_GL_ERROR(glGetTexImage(target, 0, format, type, data));
+}
+
 void GLRenderer::_initGLEW(GLWindow* primaryWindow) {
   if (_glewInitialized) {
     return;

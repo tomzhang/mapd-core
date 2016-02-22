@@ -39,6 +39,11 @@ class QueryRenderManager {
 
       rendererPtr->makeActiveOnCurrentThread(windowPtr);
     }
+
+    void makeInactive() {
+      CHECK(rendererPtr);
+      rendererPtr->makeInactive();
+    }
   };
 
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;

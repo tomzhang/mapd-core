@@ -71,6 +71,9 @@ class QueryRenderCompositorImpl {
   virtual ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                                 FboRenderBuffer rboType) = 0;
 
+  virtual void deleteFboTexture2d(const ::Rendering::GL::Resources::GLTexture2dShPtr& texture2dPtr) {}
+  virtual void deleteFboRenderbuffer(const ::Rendering::GL::Resources::GLRenderbufferShPtr& renderbufferPtr) {}
+
   void resize(size_t width, size_t height) {
     CHECK(_framebufferPtr);
     _framebufferPtr->resize(width, height);
@@ -80,7 +83,8 @@ class QueryRenderCompositorImpl {
   virtual void render(QueryRenderer* queryRenderer) = 0;
 
  protected:
-  QueryRenderCompositorImpl(::Rendering::GL::GLRenderer* renderer,
+  QueryRenderCompositorImpl(QueryRenderer* prnt,
+                            ::Rendering::GL::GLRenderer* renderer,
                             size_t width,
                             size_t height,
                             size_t numSamples = 1,

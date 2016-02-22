@@ -56,6 +56,10 @@ class QueryFramebuffer {
   bool doDepthTest() const { return _doDepthTest; }
   ::Rendering::Renderer* getRenderer();
 
+  ::Rendering::GL::Resources::GLTexture2dShPtr getColorTexture2d(FboColorBuffer texType);
+  ::Rendering::GL::Resources::GLRenderbufferShPtr getRenderbuffer(
+      FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER);
+
   GLuint getId(FboColorBuffer buffer);
   GLuint getId(FboRenderBuffer buffer);
 
