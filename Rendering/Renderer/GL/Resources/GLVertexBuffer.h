@@ -25,6 +25,7 @@ class GLVertexBuffer : public GLBaseBuffer {
 
   int numAttributes() const;
   int numItems() const;
+  int numVertices() const;
 
   const GLBufferAttrInfo& operator[](size_t i) const;
 

@@ -14,7 +14,12 @@
 
 #include "rapidjson/document.h"
 
+#ifdef HAVE_CUDA
+#include <CudaMgr/CudaMgr.h>
+#endif  // HAVE_CUDA
+
 class Executor;
+class CudaMgr;
 
 namespace QueryRenderer {
 
@@ -55,10 +60,6 @@ class QueryRenderManager {
                               bool debugMode = false);
   ~QueryRenderManager();
 
-#ifdef HAVE_CUDA
-  CudaHandle getCudaHandle(const GpuId& gpuId = 0);
-#endif
-
   bool inDebugMode() const;
 
   bool hasUser(int userId) const;
@@ -79,9 +80,16 @@ class QueryRenderManager {
 
   void setWidthHeight(int width, int height);
 
+#ifdef HAVE_CUDA
+  CudaHandle getCudaHandle(const GpuId& gpuId);
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                       QueryDataLayout* dataLayoutPtr = nullptr,
+                       QueryDataLayoutShPtr dataLayoutPtr = nullptr,
+                       const CudaMgr_Namespace::CudaMgr* cudaMgr = nullptr,
                        const Executor* executor = nullptr);
+#else
+  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr);
+
+#endif  // HAVE_CUDA
 
   void render();
   PngData renderToPng(int compressionLevel = -1);

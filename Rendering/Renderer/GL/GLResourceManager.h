@@ -6,6 +6,7 @@
 #include "Resources/GLShader.h"
 #include "Resources/GLRenderbuffer.h"
 #include "Resources/GLTexture2d.h"
+#include "Resources/GLTexture2dArray.h"
 #include "Resources/GLFramebuffer.h"
 #include "Resources/GLVertexBuffer.h"
 #include <string>
@@ -20,12 +21,25 @@ class GLResourceManager {
 
   Resources::GLShaderShPtr createShader(const std::string& vertexShaderSrc, const std::string& fragmentShaderSrc);
   Resources::GLRenderbufferShPtr createRenderbuffer(int width, int height, GLenum internalFormat, int numSamples = 1);
-  Resources::GLTexture2dShPtr createTexture2d(int width,
-                                              int height,
-                                              GLenum internalFormat,
-                                              GLenum pixelFormat,
-                                              GLenum pixelType,
-                                              int numSamples = 1);
+  Resources::GLTexture2dShPtr createTexture2d(
+      size_t width,
+      size_t height,
+      GLenum internalFormat,
+      GLenum pixelFormat,
+      GLenum pixelType,
+      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps(),
+      size_t numSamples = 1);
+
+  Resources::GLTexture2dArrayShPtr createTexture2dArray(
+      size_t width,
+      size_t height,
+      size_t depth,
+      GLenum internalFormat,
+      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps(),
+      size_t numSamples = 1);
+
+  Resources::GLTexture2dArrayShPtr createTexture2dArray(const std::vector<Resources::GLTexture2dShPtr>& initTextures);
+
   Resources::GLFramebufferShPtr createFramebuffer(const Resources::GLFramebufferAttachmentMap& attachments);
 
   Resources::GLVertexBufferShPtr createVertexBuffer(GLenum usage = GL_STATIC_DRAW);

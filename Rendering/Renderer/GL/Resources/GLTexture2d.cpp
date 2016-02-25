@@ -14,6 +14,7 @@ static void resizeTexture2d(GLenum& target,
                             GLenum pixelFormat,
                             GLenum pixelType,
                             int numSamples = 1,
+                            GLTexture2dSampleProps* sampleProps = nullptr,
                             bool keepBound = false) {
   int maxSize = -1;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize));
@@ -28,8 +29,8 @@ static void resizeTexture2d(GLenum& target,
   int maxSamples = -1;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_SAMPLES, &maxSamples));
   RUNTIME_EX_ASSERT(numSamples <= maxSamples,
-                    "Cannot resize texture with " + std::to_string(numSamples) + ". The render context only supports " +
-                        std::to_string(maxSamples) + " samples.");
+                    "Cannot resize texture with " + std::to_string(numSamples) +
+                        " samples. The render context only supports " + std::to_string(maxSamples) + " samples.");
 
   GLenum bindingTarget = GL_TEXTURE_BINDING_2D;
 
@@ -57,6 +58,10 @@ static void resizeTexture2d(GLenum& target,
 
   MAPD_CHECK_GL_ERROR(glBindTexture(target, tex));
 
+  if (sampleProps) {
+    sampleProps->apply(target);
+  }
+
   if (numSamples > 1) {
     MAPD_CHECK_GL_ERROR(glTexImage2DMultisample(target, numSamples, internalFormat, width, height, GL_TRUE));
   } else {
@@ -69,19 +74,64 @@ static void resizeTexture2d(GLenum& target,
   }
 }
 
+GLTexture2dSampleProps::GLTexture2dSampleProps()
+    : minFilter(GL_NEAREST), magFilter(GL_LINEAR), wrapS(GL_CLAMP_TO_EDGE), wrapT(GL_CLAMP_TO_EDGE) {
+}
+
+GLTexture2dSampleProps::GLTexture2dSampleProps(GLint minFilter, GLint magFilter, GLint wrapS, GLint wrapT)
+    : minFilter(minFilter), magFilter(magFilter), wrapS(wrapS), wrapT(wrapT) {
+}
+
+GLTexture2dSampleProps::GLTexture2dSampleProps(const GLTexture2dSampleProps& props)
+    : minFilter(props.minFilter), magFilter(props.magFilter), wrapS(props.wrapS), wrapT(props.wrapT) {
+}
+
+GLTexture2dSampleProps::GLTexture2dSampleProps(GLTexture2dSampleProps&& props)
+    : minFilter(std::move(props.minFilter)),
+      magFilter(std::move(props.magFilter)),
+      wrapS(std::move(props.wrapS)),
+      wrapT(std::move(props.wrapT)) {
+}
+
+bool GLTexture2dSampleProps::operator==(const GLTexture2dSampleProps& rhs) const {
+  return (minFilter == rhs.minFilter && magFilter == rhs.magFilter && wrapS == rhs.wrapS && wrapT == rhs.wrapT);
+}
+
+bool GLTexture2dSampleProps::operator!=(const GLTexture2dSampleProps& rhs) const {
+  return !(operator==(rhs));
+}
+
+GLTexture2dSampleProps& GLTexture2dSampleProps::operator=(const GLTexture2dSampleProps& rhs) {
+  minFilter = rhs.minFilter;
+  magFilter = rhs.magFilter;
+  wrapS = rhs.wrapS;
+  wrapT = rhs.wrapT;
+
+  return *this;
+}
+
+void GLTexture2dSampleProps::apply(GLenum target) {
+  MAPD_CHECK_GL_ERROR(glTexParameterf(target, GL_TEXTURE_MIN_FILTER, minFilter));
+  MAPD_CHECK_GL_ERROR(glTexParameterf(target, GL_TEXTURE_MAG_FILTER, magFilter));
+  MAPD_CHECK_GL_ERROR(glTexParameterf(target, GL_TEXTURE_WRAP_S, wrapS));
+  MAPD_CHECK_GL_ERROR(glTexParameterf(target, GL_TEXTURE_WRAP_T, wrapT));
+}
+
 GLTexture2d::GLTexture2d(const RendererWkPtr& rendererPtr,
-                         int width,
-                         int height,
+                         size_t width,
+                         size_t height,
                          GLenum internalFormat,
                          GLenum pixelFormat,
                          GLenum pixelType,
-                         int numSamples)
+                         const GLTexture2dSampleProps& sampleProps,
+                         size_t numSamples)
     : GLResource(rendererPtr),
       _width(width),
       _height(height),
       _internalFormat(internalFormat),
       _pixelFormat(pixelFormat),
       _pixelType(pixelType),
+      _sampleProps(sampleProps),
       _numSamples(numSamples),
       _textureId(0) {
   RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the texture. Dimensions must be > 0");
@@ -106,7 +156,8 @@ void GLTexture2d::_initResource() {
 
   MAPD_CHECK_GL_ERROR(glGenTextures(1, &_textureId));
 
-  resizeTexture2d(_target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples);
+  resizeTexture2d(
+      _target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples, &_sampleProps);
 
   setUsable();
 }
@@ -125,12 +176,14 @@ void GLTexture2d::_makeEmpty() {
   _textureId = 0;
 }
 
-void GLTexture2d::resize(int width, int height) {
+void GLTexture2d::resize(size_t width, size_t height) {
   if (width != _width || height != _height) {
     RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the texture. Dimensions must be > 0");
 
     validateUsability();
 
+    // TODO(croot): do we need to supply the sample props down on a resize or will
+    // the stay intact?
     resizeTexture2d(_target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples);
 
     _width = width;

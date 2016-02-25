@@ -10,6 +10,9 @@ typedef size_t GpuId;
 struct PngData;
 class QueryRenderManager;
 
+struct QueryDataLayout;
+typedef std::shared_ptr<QueryDataLayout> QueryDataLayoutShPtr;
+
 class QueryRenderer;
 typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
 

@@ -8,7 +8,15 @@ namespace Rendering {
 namespace GL {
 namespace Resources {
 
-enum class GLResourceType { SHADER = 0, FRAMEBUFFER, RENDERBUFFER, TEXTURE_2D, VERTEXBUFFER, VERTEXARRAY };
+enum class GLResourceType {
+  SHADER = 0,
+  FRAMEBUFFER,
+  RENDERBUFFER,
+  TEXTURE_2D,
+  TEXTURE_2D_ARRAY,
+  VERTEXBUFFER,
+  VERTEXARRAY
+};
 
 enum class GLBufferType { VERTEX_BUFFER = 0 };
 

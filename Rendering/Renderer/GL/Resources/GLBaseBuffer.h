@@ -13,7 +13,8 @@ class GLBaseBuffer : public GLResource {
  public:
   virtual ~GLBaseBuffer();
 
-  GLuint getId() const final { return _bufferId; };
+  GLuint getId() const final { return _bufferId; }
+  GLenum getTarget() const final { return _target; }
 
   size_t numBytes() const { return _numBytes; }
   GLBufferType type() const { return _type; }

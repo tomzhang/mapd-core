@@ -17,6 +17,7 @@ class GLResource {
 
   virtual GLResourceType getResourceType() const = 0;
   virtual GLuint getId() const = 0;
+  virtual GLenum getTarget() const = 0;
 
   bool isUsable() const { return (!_rendererPtr.expired() && _usable); }
   bool isUsableOnThread() const { return (isUsable() && _rendererPtr.lock()->isActiveOnCurrentThread()); }

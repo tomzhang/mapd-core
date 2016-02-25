@@ -111,6 +111,45 @@ struct Uniform4dAttr : UniformAttrInfo {
     MAPD_CHECK_GL_ERROR(glUniform4dv(location, size, static_cast<const GLdouble*>(data)));
   }
 };
+
+UniformSamplerAttr::UniformSamplerAttr(GLint t, GLint s, GLuint l, GLenum target, GLint startTxImgUnit)
+    : UniformAttrInfo(t, s, l), target(target), startTexImgUnit(startTxImgUnit) {
+}
+
+void UniformSamplerAttr::setAttr(const void* data) {
+  // TODO(croot): throw an warning for 2 samplers bound to the same texture unit?
+  RUNTIME_EX_ASSERT(startTexImgUnit >= GL_TEXTURE0,
+                    "Uniform sampler2d has not been properly initialized with a texture image unit.");
+
+  const GLuint* textureIds = static_cast<const GLuint*>(data);
+  for (int i = 0; i < size; ++i) {
+    // TODO(croot): should I always set the binding point?
+    // i.e. glUniform1i(location, startTexImgUnit + i);
+    // or will doing that once always keep it set for the shader?
+    MAPD_CHECK_GL_ERROR(glActiveTexture(startTexImgUnit + i));
+    MAPD_CHECK_GL_ERROR(glBindTexture(target, textureIds[i]));
+  }
+}
+
+void UniformSamplerAttr::setTexImgUnit(GLint texImgUnit) {
+  GLint maxTexImgUnits;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxTexImgUnits));
+
+  RUNTIME_EX_ASSERT(texImgUnit >= GL_TEXTURE0 && texImgUnit + size <= GL_TEXTURE0 + maxTexImgUnits,
+                    "Invalid start texture image unit set for uniform sampler attr. Start texture image unit: " +
+                        std::to_string(texImgUnit) + " + number of samplers: " + std::to_string(size) +
+                        " is not in the texture image unit range: [" + std::to_string(GL_TEXTURE0) + ", " +
+                        std::to_string(GL_TEXTURE0 + maxTexImgUnits) + "]");
+
+  for (int i = 0; i < size; ++i) {
+    // TODO(croot): use glBindTextures​(GLuint first​, GLsizei count​, const GLuint *textures​) instead as
+    // descrived here: https://www.opengl.org/wiki/Sampler_(GLSL)#Multibind_and_textures
+    MAPD_CHECK_GL_ERROR(glUniform1i(location, texImgUnit + i - GL_TEXTURE0));
+  }
+
+  startTexImgUnit = texImgUnit;
+}
+
 }  // namespace detail
 
 using detail::AttrInfo;
@@ -131,6 +170,7 @@ using detail::Uniform1dAttr;
 using detail::Uniform2dAttr;
 using detail::Uniform3dAttr;
 using detail::Uniform4dAttr;
+using detail::UniformSamplerAttr;
 
 static GLint compileShader(const GLuint& shaderId, const std::string& shaderSrc, std::string& errStr) {
   GLint compiled;
@@ -236,6 +276,64 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     case GL_DOUBLE_VEC4:
       rtn = new Uniform4dAttr(type, size, location);
       break;
+
+    // case GL_SAMPLER_1D:
+    // case GL_SAMPLER_1D_ARRAY:
+
+    // case GL_SAMPLER_1D_SHADOW:
+    // case GL_SAMPLER_1D_ARRAY_SHADOW:
+
+    // case GL_INT_SAMPLER_1D:
+    // case GL_INT_SAMPLER_1D_ARRAY:
+
+    // case GL_UNSIGNED_INT_SAMPLER_1D:
+    // case GL_UNSIGNED_INT_SAMPLER_1D_ARRAY:
+
+    // TODO(croot): for samplers, the texture image unit can be set according to
+    // https://www.opengl.org/wiki/Sampler_(GLSL)#Version_4.20_binding
+    // i.e. layout(binding=0) uniform sampler2D diffuseTex;
+    // but I can't determine how to find out what that binding is with any
+    // of the opengl program introspection methods. So, I may need to do
+    // a scan of the shader source myself to determine that.
+    case GL_SAMPLER_2D:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
+      break;
+    case GL_SAMPLER_2D_ARRAY:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
+      break;
+    // case GL_SAMPLER_2D_MULTISAMPLE:
+    // case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+
+    // case GL_SAMPLER_2D_SHADOW:
+    // case GL_SAMPLER_2D_ARRAY_SHADOW:
+
+    // case GL_INT_SAMPLER_2D:
+    // case GL_INT_SAMPLER_2D_ARRAY:
+    // case GL_INT_SAMPLER_2D_MULTISAMPLE:
+    // case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+
+    // case GL_UNSIGNED_INT_SAMPLER_2D:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+
+    // case GL_SAMPLER_3D:
+    // case GL_INT_SAMPLER_3D:
+    // case GL_UNSIGNED_INT_SAMPLER_3D:
+
+    // case GL_SAMPLER_CUBE:
+    // case GL_SAMPLER_CUBE_SHADOW:
+    // case GL_INT_SAMPLER_CUBE:
+    // case GL_UNSIGNED_INT_SAMPLER_CUBE:
+
+    // case GL_SAMPLER_BUFFER:
+    // case GL_INT_SAMPLER_BUFFER:
+    // case GL_UNSIGNED_INT_SAMPLER_BUFFER:
+
+    // case GL_SAMPLER_2D_RECT:
+    // case GL_SAMPLER_2D_RECT_SHADOW:
+    // case GL_INT_SAMPLER_2D_RECT:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_RECT:
 
     default:
       THROW_RUNTIME_EX("createUniformAttrPtr(): GL type " + std::to_string(type) + " is not yet a supported type.");
@@ -357,6 +455,26 @@ void GLShader::_makeEmpty() {
   _programId = 0;
 }
 
+UniformAttrInfo* GLShader::_validateAttr(const std::string& attrName) {
+  validateUsability();
+
+  auto itr = _uniformAttrs.find(attrName);
+
+  // TODO(croot): check if bound
+  RUNTIME_EX_ASSERT(itr != _uniformAttrs.end(), "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
+
+  return itr->second.get();
+}
+
+UniformSamplerAttr* GLShader::_validateSamplerAttr(const std::string& attrName) {
+  UniformAttrInfo* info = _validateAttr(attrName);
+  UniformSamplerAttr* samplerAttr = dynamic_cast<UniformSamplerAttr*>(info);
+
+  RUNTIME_EX_ASSERT(samplerAttr != nullptr, "Uniform attribute: " + attrName + " is not a sampler attribute.");
+
+  return samplerAttr;
+}
+
 std::string GLShader::getVertexSource() const {
   return getShaderSource(_vertShaderId);
 }
@@ -378,6 +496,27 @@ GLint GLShader::getUniformAttributeGLType(const std::string& attrName) {
       "GLShader::getUniformAttributeGLType(): uniform attribute \"" + attrName + "\" does not exist in shader.");
 
   return iter->second->type;
+}
+
+void GLShader::setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc) {
+  switch (rsrc->getResourceType()) {
+    case GLResourceType::TEXTURE_2D:
+    case GLResourceType::TEXTURE_2D_ARRAY: {
+      UniformSamplerAttr* samplerAttr = _validateSamplerAttr(attrName);
+      RUNTIME_EX_ASSERT(samplerAttr->target == rsrc->getTarget(),
+                        "Attr mismatch. Sampler expects a " + std::to_string(samplerAttr->target) +
+                            " but the texture is a " + std::to_string(rsrc->getTarget()));
+      GLuint id = rsrc->getId();
+      samplerAttr->setAttr((void*)(&id));
+    } break;
+    default:
+      THROW_RUNTIME_EX("Attr mismatch. Invalid resource type: " + to_string(rsrc->getResourceType()));
+  }
+}
+
+void GLShader::setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit) {
+  UniformSamplerAttr* samplerAttr = _validateSamplerAttr(attrName);
+  samplerAttr->setTexImgUnit(startTexImageUnit);
 }
 
 GLuint GLShader::getVertexAttributeLocation(const std::string& attrName) const {

@@ -2,12 +2,16 @@
 #include <Rendering/Renderer/GL/glx/GlxGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "GlxQueryRenderCompositorImpl.h"
+#include "shaders/compositor_vert.h"
+#include "shaders/compositor_frag.h"
 #include <Rendering/RenderError.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
+#include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
+#include <Rendering/Renderer/GL/Resources/GLTexture2d.h>
 #include <Rendering/Renderer/GL/glx/X11DisplayManager.h>
 #include "../PngData.h"
-// #include <GL/gl.h>
-// #include <GL/glext.h>
+
+#include <iostream>
 
 namespace QueryRenderer {
 namespace Impl {
@@ -18,8 +22,22 @@ using ::Rendering::GL::GLX::X11DisplayShPtr;
 
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
-using ::Rendering::GL::Resources::GLTexture2dShPtr;
+
 using ::Rendering::GL::Resources::GLRenderbufferShPtr;
+using ::Rendering::GL::Resources::GLInterleavedBufferLayout;
+using ::Rendering::GL::Resources::GLInterleavedBufferLayoutShPtr;
+using ::Rendering::GL::Resources::GLShaderShPtr;
+using ::Rendering::GL::Resources::GLTexture2dShPtr;
+using ::Rendering::GL::Resources::GLTexture2dArrayShPtr;
+using ::Rendering::GL::Resources::GLVertexBufferShPtr;
+using ::Rendering::GL::Resources::GLVertexArrayShPtr;
+
+using ::Rendering::GL::Resources::GLTexture2dSampleProps;
+
+#ifdef GLEW_MX
+#undef glxewGetContext
+#define glxewGetContext _renderer->glxewGetContext
+#endif
 
 GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
                                                            ::Rendering::GL::GLRenderer* renderer,
@@ -29,6 +47,12 @@ GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
                                                            bool doHitTest,
                                                            bool doDepthTest)
     : QueryRenderCompositorImpl(prnt, renderer, width, height, numSamples, doHitTest, doDepthTest),
+      _renderer(nullptr),
+      _rectvbo(nullptr),
+      _shader(nullptr),
+      _vao(nullptr),
+      _rgbaTextureArray(nullptr),
+      _idTextureArray(nullptr),
       _rgbaTextures(),
       _idTextures(),
       _rbos() {
@@ -36,74 +60,84 @@ GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
   CHECK(_renderer != nullptr);
 
   RUNTIME_EX_ASSERT(
-      glXCopyImageSubDataNV,
+      GLXEW_NV_copy_image,
       "NV_copy_image GLX extension is not supported. Cannot initialize compositor for multi-gpu rendering.");
+
+  _initResources(prnt);
+}
+
+void GlxQueryRenderCompositorImpl::_initResources(QueryRenderer* queryRenderer) {
+  _renderer->makeActiveOnCurrentThread();
+  GLResourceManagerShPtr rsrcMgr = _renderer->getResourceManager();
+
+  // create a rectangle vertex buffer that will cover the entire buffer
+  // and textured with the textures from all the gpus
+  GLInterleavedBufferLayoutShPtr bufferLayout(new GLInterleavedBufferLayout());
+  bufferLayout->addAttribute<float, 2>("pos");
+  bufferLayout->addAttribute<float, 2>("texCoords");
+  _rectvbo = rsrcMgr->createVertexBuffer<float>(
+      {-1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0}, bufferLayout);
+
+  _shader = rsrcMgr->createShader(Compositor_vert::source, Compositor_frag::source);
+  _renderer->bindShader(_shader);
+  _shader->setSamplerTextureImageUnit("texArraySampler", GL_TEXTURE0);
+  _vao = rsrcMgr->createVertexArray({{_rectvbo, {}}});
+
+  size_t width = getWidth();
+  size_t height = getHeight();
+  size_t depth = queryRenderer->getPerGpuData()->size();
+  GLTexture2dSampleProps sampleProps;
+  size_t numSamples = getNumSamples();
+
+  _rgbaTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_RGBA8, sampleProps, numSamples);
+
+  if (doHitTest()) {
+    _idTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, sampleProps, numSamples);
+  }
 }
 
 GlxQueryRenderCompositorImpl::~GlxQueryRenderCompositorImpl() {
 }
 
 void GlxQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
-  for (auto& rgbaItr : _rgbaTextures) {
-    rgbaItr.second->resize(width, height);
-  }
-
-  for (auto& idItr : _idTextures) {
-    idItr.second->resize(width, height);
-  }
-
-  for (auto& rboItr : _rbos) {
-    rboItr.second->resize(width, height);
+  if (_rgbaTextureArray) {
+    _rgbaTextureArray->resize(width, height);
   }
 }
 
 GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
                                                                   FboColorBuffer texType) {
-  int width = getWidth();
-  int height = getHeight();
+  size_t width = getWidth();
+  size_t height = getHeight();
 
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
   GLTexture2dShPtr tex = QueryFramebuffer::createFboTexture2d(rsrcMgr, texType, width, height);
 
-  _renderer->makeActiveOnCurrentThread();
-  GLResourceManagerShPtr myRsrcMgr = _renderer->getResourceManager();
-  GLTexture2dShPtr myTex = QueryFramebuffer::createFboTexture2d(myRsrcMgr, texType, width, height);
-
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
-      _rgbaTextures.insert({tex, myTex});
+      _rgbaTextures.insert({tex, _rgbaTextures.size()});
       break;
     case FboColorBuffer::ID_BUFFER:
-      _idTextures.insert({tex, myTex});
+      _idTextures.insert({tex, _idTextures.size()});
       break;
     default:
       CHECK(false);
   }
-
-  // reset the active renderer
-  renderer->makeActiveOnCurrentThread();
 
   return tex;
 }
 
 GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                         FboRenderBuffer rboType) {
-  int width = getWidth();
-  int height = getHeight();
+  size_t width = getWidth();
+  size_t height = getHeight();
 
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
-  GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, getWidth(), getHeight());
+  GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, width, height);
 
-  _renderer->makeActiveOnCurrentThread();
-  GLResourceManagerShPtr myRsrcMgr = _renderer->getResourceManager();
-  GLRenderbufferShPtr myRbo = QueryFramebuffer::createFboRenderbuffer(myRsrcMgr, rboType, width, height);
-
-  _rbos.insert({rbo, myRbo});
-
-  // reset the active renderer
-  renderer->makeActiveOnCurrentThread();
+  _rbos.insert({rbo, _rbos.size()});
 
   return rbo;
 }
@@ -131,8 +165,18 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   size_t width = ctx->getWidth();
   size_t height = ctx->getHeight();
 
+  int idx;
+
   GLTexture2dShPtr rgbaTex, idTex;
   GLRenderbufferShPtr depthRbo;
+
+  CHECK(_rgbaTextures.size() == _rgbaTextureArray->getDepth());
+  if (doHitTest) {
+    CHECK(_idTextures.size() == _idTextureArray->getDepth());
+  }
+  // if (doDepthTest) {
+  //   CHECK(_rbos.size() == _)
+  // }
 
   auto itr = perGpuData->begin();
   int cnt = 0;
@@ -155,8 +199,11 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
     // or will the copy take care of that for us?
 
     rgbaTex = itr->second.framebufferPtr->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
+
     auto rgbaItr = _rgbaTextures.find(rgbaTex);
     CHECK(rgbaItr != _rgbaTextures.end());
+
+    idx = rgbaItr->second;
 
     glXCopyImageSubDataNV(displayPtr.get(),
                           glxCtx,
@@ -167,36 +214,44 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
                           0,
                           0,
                           myGlxCtx,
-                          rgbaItr->second->getId(),
-                          rgbaItr->second->getTarget(),
+                          _rgbaTextureArray->getId(),
+                          _rgbaTextureArray->getTarget(),
                           0,
                           0,
                           0,
-                          0,
+                          idx,
                           width,
                           height,
-                          0);
-
-    _renderer->makeActiveOnCurrentThread();
-    _renderer->bindTexture2d(rgbaItr->second);
-
-    std::shared_ptr<unsigned char> pixels(new unsigned char[width * height * 4],
-                                          std::default_delete<unsigned char[]>());
-    unsigned char* rawPixels = pixels.get();
-    _renderer->getBoundTexture2dPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, rawPixels);
-
-    PngData pngData(width, height, pixels);
-    pngData.writeToFile("color_" + std::to_string(itr->first) + ".png");
+                          1);
 
     if (doHitTest) {
       idTex = itr->second.framebufferPtr->getColorTexture2d(FboColorBuffer::ID_BUFFER);
     }
 
-    if (doDepthTest) {
-      depthRbo = itr->second.framebufferPtr->getRenderbuffer(FboRenderBuffer::DEPTH_BUFFER);
-    }
-    // glXCopyImageSubDataNV,
+    // if (doDepthTest) {
+    //   depthRbo = itr->second.framebufferPtr->getRenderbuffer(FboRenderBuffer::DEPTH_BUFFER);
+    // }
   }
+
+  // now do the composite pass
+  // TODO(croo): add a concept of a "pass" to render
+  _renderer->makeActiveOnCurrentThread();
+
+  _framebufferPtr->bindToRenderer(_renderer);
+  _renderer->bindShader(_shader);
+  _renderer->bindVertexArray(_vao);
+
+  // we're doing the blending manually in the shader, so disable any blending here
+  _renderer->disable(GL_BLEND);
+
+  _renderer->setViewport(0, 0, getWidth(), getHeight());
+  _renderer->setClearColor(0, 0, 0, 0);
+  _renderer->clearAll();
+
+  _shader->setSamplerAttribute("texArraySampler", _rgbaTextureArray);
+  _shader->setUniformAttribute("texArraySize", _rgbaTextureArray->getDepth());
+
+  _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
 }
 
 }  // namespace GLX

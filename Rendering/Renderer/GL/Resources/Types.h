@@ -12,6 +12,7 @@ class GLResource;
 typedef std::weak_ptr<GLResource> GLResourceWkPtr;
 typedef std::shared_ptr<GLResource> GLResourceShPtr;
 
+struct GLTexture2dSampleProps;
 class GLShader;
 typedef std::weak_ptr<GLShader> GLShaderWkPtr;
 typedef std::shared_ptr<GLShader> GLShaderShPtr;
@@ -27,6 +28,10 @@ typedef std::shared_ptr<GLRenderbuffer> GLRenderbufferShPtr;
 class GLTexture2d;
 typedef std::weak_ptr<GLTexture2d> GLTexture2dWkPtr;
 typedef std::shared_ptr<GLTexture2d> GLTexture2dShPtr;
+
+class GLTexture2dArray;
+typedef std::weak_ptr<GLTexture2dArray> GLTexture2dArrayWkPtr;
+typedef std::shared_ptr<GLTexture2dArray> GLTexture2dArrayShPtr;
 
 class GLBaseBuffer;
 typedef std::weak_ptr<GLBaseBuffer> GLBaseBufferWkPtr;

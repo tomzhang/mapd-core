@@ -6,7 +6,8 @@ namespace Rendering {
 namespace GL {
 namespace Resources {
 
-GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr) : GLResource(rendererPtr), _vao(0), _numItems(0) {
+GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr)
+    : GLResource(rendererPtr), _vao(0), _numItems(0), _numVertices(0) {
   _initResource();
 }
 
@@ -41,6 +42,7 @@ void GLVertexArray::_makeEmpty() {
   _vao = 0;
   _usedVbos.clear();
   _numItems = 0;
+  _numVertices = 0;
 }
 
 void GLVertexArray::validateVBOs() {
@@ -59,7 +61,7 @@ void GLVertexArray::validateVBOs() {
 void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer) {
   // TODO(croot): make this thread safe?
 
-  size_t numVboItems;
+  size_t numVboItems, numVboVertices;
 
   validateRenderer(renderer);
 
@@ -78,6 +80,7 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
 
   _usedVbos.clear();
   _numItems = 0;
+  _numVertices = 0;
 
   GLint currVao, currVbo;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &currVao));
@@ -102,7 +105,9 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
 
     _usedVbos.emplace(vbo);
     numVboItems = vbo->numItems();
+    numVboVertices = vbo->numVertices();
     _numItems = (_numItems == 0 ? numVboItems : std::min(_numItems, numVboItems));
+    _numVertices = (_numVertices == 0 ? numVboVertices : std::min(_numVertices, numVboVertices));
   }
 
   if (currVao != static_cast<GLint>(_vao)) {

@@ -303,10 +303,10 @@ bool GLRenderer::hasBoundRenderbuffer() const {
 void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {
   if (numItemsToDraw < 0) {
     if (hasBoundVertexArray()) {
-      numItemsToDraw = getBoundVertexArray()->numItems();
+      numItemsToDraw = getBoundVertexArray()->numVertices();
     } else {
       CHECK(hasBoundVertexBuffer());
-      numItemsToDraw = getBoundVertexBuffer()->numItems();
+      numItemsToDraw = getBoundVertexBuffer()->numVertices();
     }
   }
 

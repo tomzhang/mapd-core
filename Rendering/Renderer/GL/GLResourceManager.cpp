@@ -10,8 +10,11 @@ using Resources::GLShader;
 using Resources::GLResourceWkPtr;
 using Resources::GLRenderbuffer;
 using Resources::GLRenderbufferShPtr;
+using Resources::GLTexture2dSampleProps;
 using Resources::GLTexture2d;
 using Resources::GLTexture2dShPtr;
+using Resources::GLTexture2dArray;
+using Resources::GLTexture2dArrayShPtr;
 using Resources::GLFramebuffer;
 using Resources::GLFramebufferShPtr;
 using Resources::GLVertexBuffer;
@@ -68,18 +71,43 @@ GLRenderbufferShPtr GLResourceManager::createRenderbuffer(int width,
   return rtn;
 }
 
-GLTexture2dShPtr GLResourceManager::createTexture2d(int width,
-                                                    int height,
+GLTexture2dShPtr GLResourceManager::createTexture2d(size_t width,
+                                                    size_t height,
                                                     GLenum internalFormat,
                                                     GLenum pixelFormat,
                                                     GLenum pixelType,
-                                                    int numSamples) {
+                                                    const GLTexture2dSampleProps& sampleProps,
+                                                    size_t numSamples) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
   GLTexture2dShPtr rtn(
-      new GLTexture2d(_prntRenderer, width, height, internalFormat, pixelFormat, pixelType, numSamples));
+      new GLTexture2d(_prntRenderer, width, height, internalFormat, pixelFormat, pixelType, sampleProps, numSamples));
   _glResources.push_back(GLResourceWkPtr(rtn));
+
+  return rtn;
+}
+
+GLTexture2dArrayShPtr GLResourceManager::createTexture2dArray(size_t width,
+                                                              size_t height,
+                                                              size_t depth,
+                                                              GLenum internalFormat,
+                                                              const GLTexture2dSampleProps& sampleProps,
+                                                              size_t numSamples) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLTexture2dArrayShPtr rtn(
+      new GLTexture2dArray(_prntRenderer, width, height, depth, internalFormat, sampleProps, numSamples));
+
+  return rtn;
+}
+
+GLTexture2dArrayShPtr GLResourceManager::createTexture2dArray(const std::vector<GLTexture2dShPtr>& initTextures) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLTexture2dArrayShPtr rtn(new GLTexture2dArray(_prntRenderer, initTextures));
 
   return rtn;
 }

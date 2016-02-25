@@ -102,23 +102,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
   }
 }
 
-#ifdef HAVE_CUDA
-CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
-  auto itr = _perGpuData.find(gpuId);
-
-  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
-
-  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_mtx);
-
-  itr->second.makeActiveOnCurrentThread();
-  CudaHandle rtn = itr->second.queryResultBufferPtr->getCudaHandlePreQuery();
-  itr->second.rendererPtr->makeInactive();
-
-  return rtn;
-}
-#endif  // HAVE_CUDA
-
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   // TODO(croot): should we put thread locks in here? that probably makes sense.
 
@@ -238,8 +221,24 @@ void QueryRenderManager::removeUser(int userId) {
   }
 }
 
+#ifdef HAVE_CUDA
+CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
+  auto itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
+
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_mtx);
+
+  itr->second.makeActiveOnCurrentThread();
+  CudaHandle rtn = itr->second.queryResultBufferPtr->getCudaHandlePreQuery();
+  itr->second.rendererPtr->makeInactive();
+
+  return rtn;
+}
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                                         QueryDataLayout* dataLayoutPtr,
+                                         QueryDataLayoutShPtr dataLayoutPtr,
+                                         const ::CudaMgr_Namespace::CudaMgr* cudaMgr,
                                          const Executor* executor) {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
@@ -250,10 +249,10 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   // need to update the data layout of the query result buffer before building up
   // from the json obj
   if (dataLayoutPtr) {
-    CHECK(executor != nullptr);
-    // _activeRenderer->updateQueryResultBufferPostQuery(
-    //     dataLayoutPtr->convertToBufferLayout(), dataLayoutPtr->numRows, dataLayoutPtr->invalidKey);
-    _activeRenderer->updateQueryResultBufferPostQuery(dataLayoutPtr, _perGpuData);
+    // CHECK(executor != nullptr);
+    CHECK(cudaMgr != nullptr);
+
+    _activeRenderer->updateQueryResultBufferPostQuery(dataLayoutPtr, cudaMgr, executor, _perGpuData);
   } else {
     CHECK(_perGpuData.size());
 
@@ -266,6 +265,25 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 
   _activeRenderer->setJSONDocument(jsonDocumentPtr, false);
 }
+#else
+void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
+                    "configuring the render.");
+
+  std::lock_guard<std::mutex> render_lock(_mtx);
+
+  CHECK(_perGpuData.size());
+
+  // uses the first gpu as the default.
+  // TODO(croot): expose a way to specify which gpu to use?
+  // auto itr = _perGpuData.begin();
+  // _activeRenderer->activateGpus(_perGpuData, itr->first);
+  _activeRenderer->activateGpus(_perGpuData);
+
+  _activeRenderer->setJSONDocument(jsonDocumentPtr, false);
+}
+#endif  // HAVE_CUDA
 
 void QueryRenderManager::setWidthHeight(int width, int height) {
   // RUNTIME_EX_ASSERT(_activeRenderer != nullptr,

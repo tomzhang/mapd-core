@@ -17,6 +17,7 @@ class GLRenderbuffer : public GLResource {
 
   GLResourceType getResourceType() const final { return GLResourceType::RENDERBUFFER; }
   GLuint getId() const final { return _bufferId; }
+  GLenum getTarget() const final { return GL_RENDERBUFFER; }
 
   int getWidth() { return _width; }
   int getHeight() { return _height; }

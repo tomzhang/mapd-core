@@ -7,10 +7,10 @@ using Rendering::GL::Resources::GLInterleavedBufferLayout;
 using Rendering::GL::Resources::GLSequentialBufferLayout;
 using Rendering::GL::Resources::GLBufferAttrType;
 
-QueryDataLayout::QueryDataLayout(const PerGpuDataMap numRowsPerGpuBufferMap,
+QueryDataLayout::QueryDataLayout(const PerGpuDataMap& numRowsPerGpuBufferMap,
                                  const std::vector<std::string>& attrNames,
                                  const std::vector<AttrType>& attrTypes,
-                                 const std::unordered_map<std::string, std::string>& attrAliasToName,
+                                 // const std::unordered_map<std::string, std::string>& attrAliasToName,
                                  const size_t numKeys,
                                  const int64_t invalidKey,
                                  const LayoutType layoutType)
@@ -19,7 +19,7 @@ QueryDataLayout::QueryDataLayout(const PerGpuDataMap numRowsPerGpuBufferMap,
       invalidKey(invalidKey),
       attrNames(attrNames),
       attrTypes(attrTypes),
-      attrAliasToName(attrAliasToName),
+      // attrAliasToName(attrAliasToName),
       layoutType(layoutType) {
   RUNTIME_EX_ASSERT(
       attrNames.size() == attrTypes.size(),

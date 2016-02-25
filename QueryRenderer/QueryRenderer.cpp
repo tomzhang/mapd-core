@@ -429,13 +429,31 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
   _initFromJSON(jsonDocumentPtr, forceUpdate);
 }
 
-void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr,
+#ifdef HAVE_CUDA
+void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
+                                                     const ::CudaMgr_Namespace::CudaMgr* cudaMgr,
+                                                     const Executor* executor,
                                                      QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
   std::vector<GpuId> gpuIds;
   for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
     gpuIds.push_back(item.first);
   }
-  _initGpuResources(qrmPerGpuData, gpuIds);
+
+  activateGpus(qrmPerGpuData, gpuIds);
+
+  // now update the query result buffers
+  _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
+  _ctx->_invalidKey = dataLayoutPtr->invalidKey;
+  _ctx->_queryDataLayoutPtr = dataLayoutPtr;
+  _ctx->executor_ = executor;
+  for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
+    auto itr = _perGpuData.find(item.first);
+    CHECK(itr != _perGpuData.end());
+    cudaMgr->setContext(itr->first);
+    itr->second.makeActiveOnCurrentThread();
+    itr->second.qrmGpuData->queryResultBufferPtr->updatePostQuery(_ctx->_queryResultBufferLayout, item.second);
+  }
+
   // int numRows = dataLayoutPtr->numRows;
   // _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
   // _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
@@ -451,6 +469,7 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayout* dataLayout
   //   _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
   // }
 }
+#endif  // HAVE_CUDA
 
 void QueryRenderer::activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
                                  const std::vector<GpuId>& gpusToActivate) {
@@ -514,7 +533,7 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   // std::shared_ptr<unsigned char> pixelsPtr;
   // pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-  // PngData pngData = pixelsToPng(width, height, pixelsPtr);
+  // PngData pngData(width, height, pixelsPtr);
   // pngData.writeToFile("render_" + std::to_string(gpuId) + ".png");
 
   renderer->makeInactive();

@@ -41,17 +41,20 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
                                bool doHitTest = false,
                                bool doDepthTest = false);
 
+  void _initResources(QueryRenderer* queryRenderer);
   void _resizeImpl(size_t width, size_t height) final;
 
   ::Rendering::GL::GLX::GlxGLRenderer* _renderer;
+  ::Rendering::GL::Resources::GLVertexBufferShPtr _rectvbo;
+  ::Rendering::GL::Resources::GLShaderShPtr _shader;
+  ::Rendering::GL::Resources::GLVertexArrayShPtr _vao;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _rgbaTextureArray;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _idTextureArray;
+  // ::Rendering::GL::Resources::GLTexture2dArrayShPtr _depthTextureArray;
 
-  // TODO(croot): Should we have a texture for each gpu, or can we get away with just one?
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2dShPtr, ::Rendering::GL::Resources::GLTexture2dShPtr>
-      _rgbaTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2dShPtr, ::Rendering::GL::Resources::GLTexture2dShPtr>
-      _idTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLRenderbufferShPtr, ::Rendering::GL::Resources::GLRenderbufferShPtr>
-      _rbos;
+  std::unordered_map<::Rendering::GL::Resources::GLTexture2dShPtr, int> _rgbaTextures;
+  std::unordered_map<::Rendering::GL::Resources::GLTexture2dShPtr, int> _idTextures;
+  std::unordered_map<::Rendering::GL::Resources::GLRenderbufferShPtr, int> _rbos;
 
   friend class ::QueryRenderer::QueryRenderCompositor;
 };

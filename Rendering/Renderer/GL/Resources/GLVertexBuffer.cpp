@@ -75,6 +75,14 @@ int GLVertexBuffer::numItems() const {
   return _numItems;
 }
 
+int GLVertexBuffer::numVertices() const {
+  RUNTIME_EX_ASSERT(_layoutPtr != nullptr,
+                    "The vertex buffer has not been properly initialized with a layout. Cannot retrieve the number of "
+                    "vertices in the buffer.");
+
+  return numBytes() / _layoutPtr->getNumBytesPerVertex();
+}
+
 const GLBufferAttrInfo& GLVertexBuffer::operator[](size_t i) const {
   RUNTIME_EX_ASSERT(_layoutPtr != nullptr,
                     "The vertex buffer has not been properly initialized. Cannot retrieve attribute at index " +

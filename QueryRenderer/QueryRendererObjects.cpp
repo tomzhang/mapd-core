@@ -1058,7 +1058,7 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
       "The render property \"" + _rndrPropPtr->getName() +
           "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
 
-  const std::unique_ptr<QueryDataLayout>& queryDataLayoutPtr = _ctx->getQueryDataLayout();
+  const QueryDataLayoutShPtr& queryDataLayoutPtr = _ctx->getQueryDataLayout();
   CHECK(queryDataLayoutPtr != nullptr);
 
   std::vector<std::string>& vec = domainData->getVectorData();

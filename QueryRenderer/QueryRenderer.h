@@ -22,6 +22,11 @@
 #include <unordered_map>
 #include <set>
 #include <vector>
+
+#ifdef HAVE_CUDA
+#include <CudaMgr/CudaMgr.h>
+#endif  // HAVE_CUDA
+
 // #include <cstdint>
 // #include <limits>
 
@@ -69,8 +74,12 @@ class QueryRenderer {
   void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
-  void updateQueryResultBufferPostQuery(QueryDataLayout* dataLayoutPtr,
+#ifdef HAVE_CUDA
+  void updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
+                                        const ::CudaMgr_Namespace::CudaMgr* cudaMgr,
+                                        const Executor* executor,
                                         QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
+#endif  // HAVE_CUDA
 
   void activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData, const std::vector<GpuId>& gpusToActivate = {});
 
@@ -176,7 +185,7 @@ class QueryRendererContext {
   void subscribeToRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
   void unsubscribeFromRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
 
-  const std::unique_ptr<QueryDataLayout>& getQueryDataLayout() { return _queryDataLayoutPtr; }
+  const QueryDataLayoutShPtr& getQueryDataLayout() { return _queryDataLayoutPtr; }
 
   friend class QueryRenderer;
 
@@ -216,7 +225,7 @@ class QueryRendererContext {
 
   EventCallbacksMap _eventCallbacksMap;
 
-  std::unique_ptr<QueryDataLayout> _queryDataLayoutPtr;
+  QueryDataLayoutShPtr _queryDataLayoutPtr;
 
   void _clear();
   void _clearGpuResources();

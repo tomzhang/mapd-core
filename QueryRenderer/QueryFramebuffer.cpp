@@ -166,7 +166,7 @@ GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rs
                                                       size_t height) {
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
-      return rsrcMgr->createTexture2d(width, height, GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
+      return rsrcMgr->createTexture2d(width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
     case FboColorBuffer::ID_BUFFER:
       return rsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT);
     default:

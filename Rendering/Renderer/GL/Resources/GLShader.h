@@ -38,6 +38,16 @@ struct UniformAttrInfo : AttrInfo {
   virtual void setAttr(const void* data) = 0;
 };
 
+struct UniformSamplerAttr : UniformAttrInfo {
+  UniformSamplerAttr(GLint t, GLint s, GLuint l, GLenum target, GLint startTxImgUnit = -1);
+
+  void setAttr(const void* data);
+  void setTexImgUnit(GLint texImgUnit);
+
+  GLenum target;
+  GLint startTexImgUnit;
+};
+
 }  // namespace detail
 
 // enum { ATTR_TYPE = 0, ATTR_SIZE, ATTR_LOC };
@@ -48,6 +58,7 @@ class GLShader : public GLResource {
 
   GLResourceType getResourceType() const final { return GLResourceType::SHADER; }
   GLuint getId() const final { return _programId; }
+  GLenum getTarget() const final { return GL_SHADER; }
 
   std::string getVertexSource() const;
   std::string getFragmentSource() const;
@@ -58,16 +69,7 @@ class GLShader : public GLResource {
 
   template <typename T>
   void setUniformAttribute(const std::string& attrName, T attrValue) {
-    validateUsability();
-
-    UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
-
-    // TODO: check if bound
-
-    RUNTIME_EX_ASSERT(iter != _uniformAttrs.end(),
-                      "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
-
-    detail::UniformAttrInfo* info = iter->second.get();
+    detail::UniformAttrInfo* info = _validateAttr(attrName);
 
     GLint attrSz = info->size;
     RUNTIME_EX_ASSERT(attrSz == 1,
@@ -82,39 +84,21 @@ class GLShader : public GLResource {
 
   template <typename T>
   void setUniformAttribute(const std::string& attrName, const std::vector<T>& attrValue) {
-    validateUsability();
-
-    UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
-
-    // TODO: check if bound
-
-    RUNTIME_EX_ASSERT(iter != _uniformAttrs.end(),
-                      "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
-
-    detail::UniformAttrInfo* info = iter->second.get();
+    detail::UniformAttrInfo* info = _validateAttr(attrName);
 
     GLuint attrSz = info->size;
     RUNTIME_EX_ASSERT(attrSz == attrValue.size(),
                       "Uniform attribute: " + attrName + " is not the appropriate size. It is size " +
                           std::to_string(attrValue.size()) + " but should be " + std::to_string(attrSz) + ".");
 
-    // TODO: check type mismatch?
+    // TODO: check type mismatch?re2
     info->setAttr((void*)(&attrValue[0]));
     // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
 
   template <typename T, size_t N>
   void setUniformAttribute(const std::string& attrName, const std::array<T, N>& attrValue) {
-    validateUsability();
-
-    UniformAttrMap::const_iterator iter = _uniformAttrs.find(attrName);
-
-    // TODO: check if bound
-
-    RUNTIME_EX_ASSERT(iter != _uniformAttrs.end(),
-                      "Uniform attribute \"" + attrName + "\" is not defined in the shader.");
-
-    detail::UniformAttrInfo* info = iter->second.get();
+    detail::UniformAttrInfo* info = _validateAttr(attrName);
 
     GLuint attrSz = info->size;
     RUNTIME_EX_ASSERT(attrSz == N,
@@ -125,6 +109,9 @@ class GLShader : public GLResource {
     info->setAttr((void*)(&attrValue[0]));
     // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
+
+  void setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc);
+  void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
 
   GLuint getVertexAttributeLocation(const std::string& attrName) const;
 
@@ -145,6 +132,8 @@ class GLShader : public GLResource {
   void _initResource(const std::string& vertSrc, const std::string& fragSrc);
   void _cleanupResource() final;
   void _makeEmpty() final;
+  detail::UniformAttrInfo* _validateAttr(const std::string& attrName);
+  detail::UniformSamplerAttr* _validateSamplerAttr(const std::string& attrName);
 
   friend class ::Rendering::GL::GLResourceManager;
 };
