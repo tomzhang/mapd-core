@@ -39,9 +39,16 @@ class QueryRenderManager {
     PerGpuData(const PerGpuData& data)
         : queryResultBufferPtr(data.queryResultBufferPtr), windowPtr(data.windowPtr), rendererPtr(data.rendererPtr) {}
 
+    ~PerGpuData() {
+      // need to make active to properly destroy gpu resources
+      // TODO(croot): uncomment this if we have GL resources at
+      // this level (i.e. a framebuffer or a compositor per gpu)
+      // TODO(croot): reset to previously active renderer?
+      // makeActiveOnCurrentThread();
+    }
+
     void makeActiveOnCurrentThread() {
       CHECK(windowPtr && rendererPtr);
-
       rendererPtr->makeActiveOnCurrentThread(windowPtr);
     }
 
@@ -49,9 +56,18 @@ class QueryRenderManager {
       CHECK(rendererPtr);
       rendererPtr->makeInactive();
     }
+
+    Rendering::Renderer* getRenderer() {
+      if (rendererPtr) {
+        return rendererPtr.get();
+      }
+      return nullptr;
+    }
   };
 
-  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
+  typedef std::shared_ptr<PerGpuData> PerGpuDataShPtr;
+  typedef std::weak_ptr<PerGpuData> PerGpuDataWkPtr;
+  typedef std::map<GpuId, PerGpuDataShPtr> PerGpuDataMap;
 
   explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
                               const Executor* executor,

@@ -4,7 +4,6 @@
 #include "GlxGLRenderer.h"
 #include "X11DisplayManager.h"
 #include <X11/Xresource.h>
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -19,7 +18,6 @@ X11WindowManagerImpl::X11WindowManagerImpl() : _displayMgr() {
 }
 
 X11WindowManagerImpl::~X11WindowManagerImpl() {
-  std::cerr << "CROOT - X11WindowManager X11WindowManagerImpl destructor" << std::endl;
 }
 
 std::string X11WindowManagerImpl::getName() const {

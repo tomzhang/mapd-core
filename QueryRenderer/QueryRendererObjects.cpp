@@ -1584,10 +1584,14 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
   // Window* prevWindow = GLRenderer::getCurrentThreadWindow();
   GLRenderer* currRenderer = nullptr;
 
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    itr.second.makeActiveOnCurrentThread();
+    qrmGpuData = itr.second.getQRMGpuData();
+    CHECK(qrmGpuData);
 
-    currRenderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+    qrmGpuData->makeActiveOnCurrentThread();
+
+    currRenderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
 
     CHECK(currRenderer != nullptr);
     CHECK(itr.second.shaderPtr != nullptr);
@@ -1896,9 +1900,11 @@ void PointMark::_updateShader() {
 
   GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
   GLRenderer* currRenderer = nullptr;
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    itr.second.makeActiveOnCurrentThread();
-    currRenderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+    qrmGpuData = itr.second.getQRMGpuData();
+    qrmGpuData->makeActiveOnCurrentThread();
+    currRenderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
     itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
@@ -1976,9 +1982,13 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
 void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   // NOTE: shader should have been updated before calling this
   auto itr = _perGpuData.find(gpuId);
+  CHECK(itr != _perGpuData.end());
 
-  ::Rendering::Renderer* rndr = itr->second.qrmGpuData->rendererPtr.get();
-  CHECK(itr->second.qrmGpuData && itr->second.shaderPtr && rndr == renderer);
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+  CHECK(qrmGpuData);
+
+  ::Rendering::Renderer* rndr = qrmGpuData->rendererPtr.get();
+  CHECK(itr->second.shaderPtr && rndr == renderer);
 
   // now bind the shader
   renderer->bindShader(itr->second.shaderPtr);

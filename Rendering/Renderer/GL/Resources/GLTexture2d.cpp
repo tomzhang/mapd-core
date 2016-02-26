@@ -1,6 +1,5 @@
 #include "GLTexture2d.h"
 #include "../MapDGL.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -139,7 +138,6 @@ GLTexture2d::GLTexture2d(const RendererWkPtr& rendererPtr,
 }
 
 GLTexture2d::~GLTexture2d() {
-  std::cerr << "CROOT - GLTexture2d destructor" << std::endl;
   cleanupResource();
 }
 

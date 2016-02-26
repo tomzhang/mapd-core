@@ -1,6 +1,5 @@
 #include "GLResourceManager.h"
 #include "GLRenderer.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -30,7 +29,6 @@ GLResourceManager::GLResourceManager(const RendererShPtr& prnt) : _prntRenderer(
 }
 
 GLResourceManager::~GLResourceManager() {
-  std::cerr << "CROOT - in GLResourceManager destructor" << std::endl;
   _cleanupResources();
 }
 

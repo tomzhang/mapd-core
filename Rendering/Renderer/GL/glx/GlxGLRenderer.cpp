@@ -4,7 +4,6 @@
 // #include "../Settings.h"
 #include "GlxUtils.h"
 #include <glog/logging.h>
-#include <iostream>
 
 namespace Rendering {
 
@@ -45,8 +44,6 @@ GlxGLRenderer::GlxGLRenderer(const RendererSettings& settings)
 // }
 
 GlxGLRenderer::~GlxGLRenderer() {
-  std::cerr << "CROOT GlxGLRenderer Destructor" << std::endl;
-
   if (_glxContext) {
     CHECK(_dpyConnection.first != nullptr);
 
@@ -99,10 +96,6 @@ GLXEWContext* GlxGLRenderer::glxewGetContext() {
 #endif
 
 void GlxGLRenderer::_initXDisplay(const GlxGLWindow* primaryWindow) {
-  // std::string displayStr = _settings.getStrSetting(StrSetting::DISPLAY);
-  // _dpyConnection.first.reset(XOpenDisplay(displayStr.length() ? displayStr.c_str() : nullptr),
-  // CROOTXCloseRendererDisplay);
-
   CHECK(_dpyConnection.first == nullptr);
 
   _dpyConnection.first = primaryWindow->getXDisplayPtr();

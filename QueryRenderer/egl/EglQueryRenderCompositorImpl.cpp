@@ -40,17 +40,17 @@ EglImage::~EglImage() {
 }
 
 EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderer* prnt,
-                                                           ::Rendering::GL::GLRenderer* renderer,
+                                                           ::Rendering::RendererShPtr& rendererPtr,
                                                            size_t width,
                                                            size_t height,
                                                            size_t numSamples,
                                                            bool doHitTest,
                                                            bool doDepthTest)
-    : QueryRenderCompositorImpl(prnt, renderer, width, height, numSamples, doHitTest, doDepthTest),
+    : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest),
       _rgbaEglImgPtr(nullptr),
       _idEglImgPtr(nullptr),
       _depthEglImgPtr(nullptr) {
-  EglGLRenderer* eglRenderer = dynamic_cast<EglGLRenderer*>(renderer);
+  EglGLRenderer* eglRenderer = dynamic_cast<EglGLRenderer*>(rendererPtr.get());
   CHECK(eglRenderer && _framebufferPtr);
 
   _rgbaEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),

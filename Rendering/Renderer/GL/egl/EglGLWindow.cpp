@@ -4,7 +4,6 @@
 #include "EglUtils.h"
 #include "MapDEGL.h"
 #include <string>
-#include <iostream>
 
 namespace Rendering {
 
@@ -23,7 +22,6 @@ EglGLWindow::EglGLWindow(const Settings::WindowSettings& windowSettings,
 }
 
 EglGLWindow::~EglGLWindow() {
-  std::cerr << "CROOT EglGLWindow destructor" << std::endl;
   if (_surface && _dpyPtr) {
     eglDestroySurface(_dpyPtr->getEGLDisplay(), _surface);
     _surface = 0;

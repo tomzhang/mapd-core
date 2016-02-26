@@ -11,8 +11,6 @@
 #include <Rendering/Renderer/GL/glx/X11DisplayManager.h>
 #include "../PngData.h"
 
-#include <iostream>
-
 namespace QueryRenderer {
 namespace Impl {
 namespace GLX {
@@ -40,13 +38,14 @@ using ::Rendering::GL::Resources::GLTexture2dSampleProps;
 #endif
 
 GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
-                                                           ::Rendering::GL::GLRenderer* renderer,
+                                                           ::Rendering::RendererShPtr& rendererPtr,
                                                            size_t width,
                                                            size_t height,
                                                            size_t numSamples,
                                                            bool doHitTest,
                                                            bool doDepthTest)
-    : QueryRenderCompositorImpl(prnt, renderer, width, height, numSamples, doHitTest, doDepthTest),
+    : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest),
+      _rendererPtr(rendererPtr),
       _renderer(nullptr),
       _rectvbo(nullptr),
       _shader(nullptr),
@@ -56,7 +55,8 @@ GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
       _rgbaTextures(),
       _idTextures(),
       _rbos() {
-  _renderer = dynamic_cast<GlxGLRenderer*>(renderer);
+  CHECK(rendererPtr);
+  _renderer = dynamic_cast<GlxGLRenderer*>(rendererPtr.get());
   CHECK(_renderer != nullptr);
 
   RUNTIME_EX_ASSERT(
@@ -97,6 +97,11 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderer* queryRenderer) 
 }
 
 GlxQueryRenderCompositorImpl::~GlxQueryRenderCompositorImpl() {
+  // need to make the renderer active to properly delete the GL resources
+  // TODO(croot): reset to previously active renderer?
+  if (!_rendererPtr.expired()) {
+    _renderer->makeActiveOnCurrentThread();
+  }
 }
 
 void GlxQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
@@ -116,10 +121,10 @@ GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
 
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
-      _rgbaTextures.insert({tex, _rgbaTextures.size()});
+      _rgbaTextures.insert({tex.get(), {tex, _rgbaTextures.size()}});
       break;
     case FboColorBuffer::ID_BUFFER:
-      _idTextures.insert({tex, _idTextures.size()});
+      _idTextures.insert({tex.get(), {tex, _idTextures.size()}});
       break;
     default:
       CHECK(false);
@@ -137,7 +142,7 @@ GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Render
 
   GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, width, height);
 
-  _rbos.insert({rbo, _rbos.size()});
+  _rbos.insert({rbo.get(), {rbo, _rbos.size()}});
 
   return rbo;
 }
@@ -160,7 +165,7 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   X11DisplayShPtr myDisplayPtr = _renderer->getXDisplayPtr();
 
   bool doHitTest = ctx->doHitTest();
-  bool doDepthTest = ctx->doDepthTest();
+  // bool doDepthTest = ctx->doDepthTest();
 
   size_t width = ctx->getWidth();
   size_t height = ctx->getHeight();
@@ -181,7 +186,13 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   auto itr = perGpuData->begin();
   int cnt = 0;
   for (; itr != perGpuData->end(); ++itr, ++cnt) {
-    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+    QueryRenderer::renderGpu(itr->first, perGpuData, ctx, 0, 0, 0, 0);
+  }
+
+  itr = perGpuData->begin();
+  cnt = 0;
+  for (; itr != perGpuData->end(); ++itr, ++cnt) {
+    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>(itr->second.getQRMGpuData()->rendererPtr.get());
     CHECK(glxRenderer != nullptr);
 
     GLXContext glxCtx = glxRenderer->getGLXContext();
@@ -189,21 +200,15 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
 
     CHECK(displayPtr == myDisplayPtr);
 
-    if (cnt == 0) {
-      QueryRenderer::renderGpu(itr->first, perGpuData, ctx, 0, 0, 0, 0);
-    } else {
-      QueryRenderer::renderGpu(itr->first, perGpuData, ctx, 0, 0, 0, 0);
-    }
-
     // TODO(croot): do we need to do a flush/finish before copying?
     // or will the copy take care of that for us?
 
     rgbaTex = itr->second.framebufferPtr->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
 
-    auto rgbaItr = _rgbaTextures.find(rgbaTex);
+    auto rgbaItr = _rgbaTextures.find(rgbaTex.get());
     CHECK(rgbaItr != _rgbaTextures.end());
 
-    idx = rgbaItr->second;
+    idx = rgbaItr->second.second;
 
     glXCopyImageSubDataNV(displayPtr.get(),
                           glxCtx,

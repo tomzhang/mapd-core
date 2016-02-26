@@ -3,7 +3,6 @@
 #include "GLFramebuffer.h"
 #include "GLTexture2d.h"
 #include "GLRenderbuffer.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -90,7 +89,6 @@ GLFramebuffer::GLFramebuffer(const RendererWkPtr& rendererPtr, const GLFramebuff
 }
 
 GLFramebuffer::~GLFramebuffer() {
-  std::cerr << "CROOT - GLFramebuffer destructor" << std::endl;
   cleanupResource();
 }
 

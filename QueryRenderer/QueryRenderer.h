@@ -41,16 +41,25 @@ namespace QueryRenderer {
 class QueryRenderer {
  public:
   struct PerGpuData {
-    QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
     QueryFramebufferUqPtr framebufferPtr;
 
-    PerGpuData() : qrmGpuData(nullptr), framebufferPtr(nullptr) {}
+    PerGpuData() : qrmGpuData(), framebufferPtr(nullptr) {}
     PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
                                              framebufferPtr(std::move(data.framebufferPtr)) {}
+    ~PerGpuData() {
+      // need to make active to properly destroy gpu resources
+      // TODO(croot): reset to previously active renderer?
+      makeActiveOnCurrentThread();
+    }
+
+    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() const { return qrmGpuData.lock(); }
 
     void makeActiveOnCurrentThread() {
-      CHECK(qrmGpuData);
-      qrmGpuData->makeActiveOnCurrentThread();
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        qrmGpuDataShPtr->makeActiveOnCurrentThread();
+      }
     }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
@@ -127,12 +136,14 @@ class QueryRenderer {
 class QueryRendererContext {
  public:
   struct PerGpuData {
-    QueryRenderManager::PerGpuData* qrmGpuData;
+    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
 
-    PerGpuData() : qrmGpuData(nullptr) {}
-    PerGpuData(QueryRenderManager::PerGpuData* qrmGpuData) : qrmGpuData(qrmGpuData) {}
+    PerGpuData() : qrmGpuData() {}
+    PerGpuData(const QueryRenderManager::PerGpuDataWkPtr& qrmGpuData) : qrmGpuData(qrmGpuData) {}
     PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData) {}
     PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)) {}
+
+    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() const { return qrmGpuData.lock(); }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 

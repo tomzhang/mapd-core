@@ -68,14 +68,14 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
 
     PerGpuData gpuData;
 
-    gpuData.qrmGpuData = &(itr->second);
+    gpuData.qrmGpuData = itr->second;
 
     // TODO(croot): validate the QueryRenderManager data is complete?
-    CHECK(itr->second.rendererPtr != nullptr);
+    CHECK(itr->second->rendererPtr != nullptr);
 
     _perGpuData.emplace(gpuId, std::move(gpuData));
   } else {
-    myItr->second.qrmGpuData->makeActiveOnCurrentThread();
+    myItr->second.makeActiveOnCurrentThread();
     myItr->second.framebufferPtr->resize(_ctx->getWidth(), _ctx->getHeight());
 
     unusedGpus.erase(gpuId);
@@ -111,21 +111,23 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerG
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
   // TODO(croot): the compositor will need to be pulled out to the QueryRenderManager
   // level if/when we store a large framebuffer for all connected users to use.
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+
   if (_perGpuData.size() > 1) {
     // NOTE: since we're using a map to store the per gpu data, the first item
     // will be the lowest active gpu id.
     auto itr = _perGpuData.begin();
     if (!_compositorPtr) {
       itr->second.makeActiveOnCurrentThread();
-      _compositorPtr.reset(
-          new QueryRenderCompositor(this,
-                                    dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get()),
-                                    width,
-                                    height,
-                                    // TODO(croot): should we support num samples
-                                    1,  //_ctx->getNumSamples(),
-                                    _ctx->doHitTest(),
-                                    _ctx->doDepthTest()));
+      qrmGpuData = itr->second.getQRMGpuData();
+      _compositorPtr.reset(new QueryRenderCompositor(this,
+                                                     qrmGpuData->rendererPtr,
+                                                     width,
+                                                     height,
+                                                     // TODO(croot): should we support num samples
+                                                     1,  //_ctx->getNumSamples(),
+                                                     _ctx->doHitTest(),
+                                                     _ctx->doDepthTest()));
     } else {
       // TODO(croot): we need to verify that the compositor is on a GPU that is
       // still active for this renderer. If not, then we need to build a new compositor
@@ -142,8 +144,9 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
 
   for (auto& gpuDataItr : _perGpuData) {
     if (gpuDataItr.second.framebufferPtr == nullptr) {
-      CHECK(gpuDataItr.second.qrmGpuData->rendererPtr != nullptr);
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(gpuDataItr.second.qrmGpuData->rendererPtr.get());
+      qrmGpuData = gpuDataItr.second.getQRMGpuData();
+      CHECK(qrmGpuData->rendererPtr != nullptr);
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
       CHECK(renderer != nullptr);
 
       gpuDataItr.second.makeActiveOnCurrentThread();
@@ -446,12 +449,13 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataL
   _ctx->_invalidKey = dataLayoutPtr->invalidKey;
   _ctx->_queryDataLayoutPtr = dataLayoutPtr;
   _ctx->executor_ = executor;
+
   for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
     auto itr = _perGpuData.find(item.first);
     CHECK(itr != _perGpuData.end());
     cudaMgr->setContext(itr->first);
     itr->second.makeActiveOnCurrentThread();
-    itr->second.qrmGpuData->queryResultBufferPtr->updatePostQuery(_ctx->_queryResultBufferLayout, item.second);
+    itr->second.getQRMGpuData()->queryResultBufferPtr->updatePostQuery(_ctx->_queryResultBufferLayout, item.second);
   }
 
   // int numRows = dataLayoutPtr->numRows;
@@ -493,10 +497,11 @@ void QueryRenderer::renderGpu(GpuId gpuId,
 
   CHECK(itr != gpuDataMap->end());
 
-  itr->second.makeActiveOnCurrentThread();
-  RendererShPtr& rendererPtr = itr->second.qrmGpuData->rendererPtr;
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
 
-  GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+  itr->second.makeActiveOnCurrentThread();
+
+  GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
   CHECK(renderer != nullptr);
 
   QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
@@ -525,7 +530,8 @@ void QueryRenderer::renderGpu(GpuId gpuId,
     ctx->_geomConfigs[i]->draw(renderer, gpuId);
   }
 
-  itr->second.qrmGpuData->windowPtr->swapBuffers();
+  // NOTE: We're not swapping buffers because we're using pbuffers
+  // qrmGpuData->windowPtr->swapBuffers();
 
   // CROOT testing code
   // int width = ctx->getWidth();
@@ -536,7 +542,7 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   // PngData pngData(width, height, pixelsPtr);
   // pngData.writeToFile("render_" + std::to_string(gpuId) + ".png");
 
-  renderer->makeInactive();
+  // renderer->makeInactive();
 }
 
 void QueryRenderer::render() {
@@ -617,34 +623,22 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     Renderer* renderer = _compositorPtr->getRenderer();
     renderer->makeActiveOnCurrentThread();
     pixelsPtr = _compositorPtr->readColorBuffer(0, 0, width, height);
-    renderer->makeInactive();
+    // renderer->makeInactive();
   } else {
     auto itr = _perGpuData.begin();
 
-    const GpuId& gpuId = itr->first;
+    QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+
+    // const GpuId& gpuId = itr->first;
     itr->second.makeActiveOnCurrentThread();
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
     CHECK(renderer != nullptr);
 
     QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
     framebufferPtr->bindToRenderer(renderer, FboBind::READ);
     pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-    // width = itr->second.qrmGpuData->windowPtr->getWidth();
-    // height = itr->second.qrmGpuData->windowPtr->getHeight();
-    // std::shared_ptr<unsigned char> pixelsPtr(new unsigned char[width * height * 4],
-    //                                          std::default_delete<unsigned char[]>());
-    // unsigned char* pixels = pixelsPtr.get();
-
-    // renderer->getReadFramebufferPixels(GL_BACK, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-    // TODO(croot): perhaps create a read pixels api like the following
-    // Better yet, create a multi-dimensional pixel struct template that
-    // is returned with width/height, number of components, etc.
-    // std::shared_ptr<unsigned char[]> pixels = framebufferPtr->readPixels<unsigned char, 4>(FboBuffer::COLOR_BUFFER,
-    // 0, 0, width, height);
-
-    renderer->makeInactive();
+    // renderer->makeInactive();
   }
 
   return PngData(width, height, pixelsPtr, compressionLevel);
@@ -762,16 +756,21 @@ QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(co
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     "Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
-  return itr->second.qrmGpuData->queryResultBufferPtr;
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+  CHECK(qrmGpuData);
+  return qrmGpuData->queryResultBufferPtr;
 }
 
 std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
   std::map<GpuId, QueryVertexBufferShPtr> rtn;
 
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
     // rtn.insert({itr.first,
     // std::static_pointer_cast<QueryVertexBuffer>(itr.second.qrmGpuData->queryResultBufferPtr)});
-    rtn.insert({itr.first, itr.second.qrmGpuData->queryResultBufferPtr});
+    qrmGpuData = itr.second.getQRMGpuData();
+    CHECK(qrmGpuData);
+    rtn.insert({itr.first, qrmGpuData->queryResultBufferPtr});
   }
 
   return rtn;

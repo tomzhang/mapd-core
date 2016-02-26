@@ -7,7 +7,6 @@
 #include <X11/Xatom.h>
 #include <vector>
 #include <string>
-#include <iostream>
 #include "../../../RenderError.h"
 
 namespace Rendering {
@@ -36,7 +35,6 @@ GlxGLWindow::GlxGLWindow(const WindowSettings& windowSettings,
 }
 
 GlxGLWindow::~GlxGLWindow() {
-  std::cerr << "CROOT GlxGLWindow Destructor" << std::endl;
   if (_xDrawable && _dpyConnection.first) {
     // TODO(croot): what if the drawable is a fbo or pbuffer?
     // TODO(croot): This may not be the best place to call
@@ -381,7 +379,7 @@ void GlxGLWindow::_initSwap(GlxGLRenderer* renderer) {
 bool GlxGLWindow::_configureWindow(GlxGLRenderer* renderer, const FbConfigShPtr& fbConfigPtr, X11ID& drawable) {
   CHECK(_dpyConnection.first != nullptr);
   Display* dpy = _dpyConnection.first.get();
-  int screen = _dpyConnection.second;
+  // int screen = _dpyConnection.second;
 
   CHECK(fbConfigPtr != nullptr);
 

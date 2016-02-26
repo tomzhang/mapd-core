@@ -1,6 +1,5 @@
 #include "Window.h"
 #include "Renderer.h"
-#include <iostream>
 
 namespace Rendering {
 
@@ -22,8 +21,6 @@ Window::Window(RendererType type, const WindowSettings& windowSettings, const Wi
 // }
 
 Window::~Window() {
-  std::cerr << "CROOT - Window destructor" << std::endl;
-
   for (const auto& renderer : _attachedRenderers) {
     renderer->detachWindow(this);
   }

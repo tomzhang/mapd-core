@@ -111,7 +111,7 @@ struct X11AllGpuInfo {
                       "an X11 display. Error:\n\n" +
                           result);
 
-    std::cout << "CROOT - nvidia-settings: " << result.length() << " " << result << std::endl;
+    // std::cout << "CROOT - nvidia-settings: " << result.length() << " " << result << std::endl;
   }
 
   std::string displayStr;
@@ -166,11 +166,6 @@ std::pair<std::string, int> getKeyAndDefaultScreenFromDisplayStr(const std::stri
   return std::make_pair(hostname + connectionStr + display, defaultScreen);
 }
 
-void CROOTTest(Display* dpy) {
-  std::cerr << "CROOT - closing display" << std::endl;
-  XCloseDisplay(dpy);
-}
-
 void validateScreenForDisplay(Display* dpy, int screen) {
   int screenCnt = XScreenCount(dpy);
   RUNTIME_EX_ASSERT(screen < screenCnt,
@@ -201,7 +196,7 @@ X11DisplayShPtr openDisplayWithDefaultScreen(const std::string& displayStr,
     validateScreenForDisplay(dpy, defaultScreen);
   }
 
-  X11DisplayShPtr rtn(dpy, CROOTTest);
+  X11DisplayShPtr rtn(dpy, XCloseDisplay);
   displayPtr = rtn;
 
   return rtn;

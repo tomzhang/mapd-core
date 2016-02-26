@@ -457,9 +457,11 @@ QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get column data vbo for gpu " + std::to_string(gpuId));
 
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   if (itr->second.vbo == nullptr) {
-    CHECK(itr->second.qrmGpuData && itr->second.qrmGpuData->rendererPtr);
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second.qrmGpuData->rendererPtr.get());
+    qrmGpuData = itr->second.getQRMGpuData();
+    CHECK(qrmGpuData && qrmGpuData->rendererPtr);
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
     CHECK(renderer != nullptr);
 
     std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData = _createVBOData();
@@ -478,11 +480,12 @@ std::map<GpuId, QueryVertexBufferShPtr> DataTable::getColumnDataVBOs(const std::
   std::map<GpuId, QueryVertexBufferShPtr> rtn;
   std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData;
 
+  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
     if (itr.second.vbo == nullptr) {
       itr.second.makeActiveOnCurrentThread();
 
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.qrmGpuData->rendererPtr.get());
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
       CHECK(renderer != nullptr);
 
       if (vboData.first == nullptr) {

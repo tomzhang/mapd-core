@@ -1,6 +1,5 @@
 #include "GLVertexArray.h"
 #include "GLVertexBuffer.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -17,7 +16,6 @@ GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr, const VboAttrToSh
 }
 
 GLVertexArray::~GLVertexArray() {
-  std::cerr << "CROOT - GLVertexArray destructor" << std::endl;
   cleanupResource();
 }
 

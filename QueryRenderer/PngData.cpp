@@ -22,8 +22,21 @@ static void flushPngData(png_structp png_ptr) {
   (void)png_ptr; /* Stifle compiler warning */
 }
 
+PngData::PngData() : pngDataPtr(nullptr), pngSize(0) {
+}
+
+PngData::PngData(const PngData& pngData) : pngDataPtr(pngData.pngDataPtr), pngSize(pngData.pngSize) {
+}
+
+PngData::PngData(PngData&& pngData) : pngDataPtr(std::move(pngData.pngDataPtr)), pngSize(std::move(pngData.pngSize)) {
+}
+
 PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pixelsPtr, int compressionLevel)
     : pngDataPtr(nullptr), pngSize(0) {
+  if (!pixelsPtr) {
+    throw std::runtime_error("Cannot create PngData(). The pixels are empty.");
+  }
+
   if (compressionLevel < -1 || compressionLevel > 9) {
     throw std::runtime_error("Invalid compression level argument " + std::to_string(compressionLevel) +
                              ". Must be a value between 0 and 9 and -1 would mean use default.");
@@ -135,7 +148,22 @@ PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pi
   png_destroy_write_struct(&png_ptr, &info_ptr);
 }
 
+PngData& PngData::operator=(const PngData& pngData) {
+  pngDataPtr = pngData.pngDataPtr;
+  pngSize = pngData.pngSize;
+  return *this;
+}
+
+PngData& PngData::operator=(PngData&& pngData) {
+  pngDataPtr = std::move(pngData.pngDataPtr);
+  pngSize = std::move(pngData.pngSize);
+  return *this;
+}
+
 void PngData::writeToFile(const std::string& filename) {
+  if (!pngDataPtr) {
+    throw std::runtime_error("Cannot write file " + filename + ". The pixels are empty.");
+  }
   std::ofstream pngFile(filename, std::ios::binary);
   pngFile.write(pngDataPtr.get(), pngSize);
   pngFile.close();

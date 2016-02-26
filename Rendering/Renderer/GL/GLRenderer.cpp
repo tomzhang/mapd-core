@@ -7,7 +7,6 @@
 #include <thread>
 #include <mutex>
 #include <array>
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -50,7 +49,6 @@ GLRenderer::GLRenderer(const RendererSettings& settings)
 }
 
 GLRenderer::~GLRenderer() {
-  std::cerr << "CROOT GLRenderer destructor" << std::endl;
   _glewInitialized = false;
 
   // #ifdef GLEW_MX

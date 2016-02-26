@@ -13,7 +13,7 @@ using ::Rendering::GL::Resources::GLTexture2dShPtr;
 using ::Rendering::GL::Resources::GLRenderbufferShPtr;
 
 QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
-                                             GLRenderer* renderer,
+                                             ::Rendering::RendererShPtr& rendererPtr,
                                              size_t width,
                                              size_t height,
                                              size_t numSamples,
@@ -22,7 +22,7 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
     :
 #ifdef MAPDGL_GLX
       _implPtr(new Impl::GLX::GlxQueryRenderCompositorImpl(prnt,
-                                                           renderer,
+                                                           rendererPtr,
                                                            width,
                                                            height,
                                                            numSamples,
@@ -30,7 +30,7 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
                                                            doDepthTest)),
 #elif MAPDGL_EGL
       _implPtr(new Impl::EGL::EglQueryRenderCompositorImpl(prnt,
-                                                           renderer,
+                                                           rendererPtr,
                                                            width,
                                                            height,
                                                            numSamples,
@@ -95,21 +95,23 @@ std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t sta
     ::Rendering::GL::GLRenderer* renderer,
     FboColorBuffer texType) {
   GLTexture2dShPtr rtn = _implPtr->createFboTexture2d(renderer, texType);
-  _compositeTextures.insert(rtn);
+  _compositeTextures.insert({rtn.get(), rtn});
   return rtn;
 }
 
 ::Rendering::GL::Resources::GLRenderbufferShPtr QueryRenderCompositor::createFboRenderbuffer(GLRenderer* renderer,
                                                                                              FboRenderBuffer rboType) {
   GLRenderbufferShPtr rtn = _implPtr->createFboRenderbuffer(renderer, rboType);
-  _compositeRbos.insert(rtn);
+  _compositeRbos.insert({rtn.get(), rtn});
   return rtn;
 }
 
 void QueryRenderCompositor::deleteFboTexture2d(const GLTexture2dShPtr& texture2dPtr) {
+  THROW_RUNTIME_EX("QueryRenderCompositor::deleteFboTexture2d() has yet to be implemented.");
 }
 
 void QueryRenderCompositor::deleteFboRenderbuffer(const GLRenderbufferShPtr& renderbufferPtr) {
+  THROW_RUNTIME_EX("QueryRenderCompositor::deleteFboRenderbuffer() has yet to be implemented.");
 }
 
 }  // namespace QueryRenderer

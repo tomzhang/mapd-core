@@ -3,7 +3,6 @@
 // #include "GLRenderer.h"
 #include "Resources/GLFramebuffer.h"
 #include "../../Settings/WindowSettings.h"
-#include <iostream>
 
 namespace Rendering {
 
@@ -23,7 +22,6 @@ GLWindow::GLWindow(const WindowSettings& windowSettings, const WindowShPtr& prnt
 // }
 
 GLWindow::~GLWindow() {
-  std::cerr << "CROOT GLWindow destructor" << std::endl;
 }
 
 // void GLWindow::bindFramebuffer() {

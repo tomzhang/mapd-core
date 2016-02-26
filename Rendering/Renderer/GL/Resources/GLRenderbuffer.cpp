@@ -1,6 +1,5 @@
 #include "GLRenderbuffer.h"
 #include "../MapDGL.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -64,7 +63,6 @@ GLRenderbuffer::GLRenderbuffer(const RendererWkPtr& rendererPtr,
 }
 
 GLRenderbuffer::~GLRenderbuffer() {
-  std::cerr << "CROOT - GLRenderbuffer destructor" << std::endl;
   cleanupResource();
 }
 

@@ -1,5 +1,4 @@
 #include "GLVertexBuffer.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -22,7 +21,6 @@ GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr, const GLBufferL
 }
 
 GLVertexBuffer::~GLVertexBuffer() {
-  std::cerr << "CROOT - GLVertexBuffer destructor" << std::endl;
   cleanupResource();
 }
 

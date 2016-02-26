@@ -1,7 +1,6 @@
 #include "../MapDGL.h"
 #include "GLShader.h"
 #include <boost/algorithm/string/predicate.hpp>
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -351,7 +350,6 @@ GLShader::GLShader(const RendererWkPtr& rendererPtr,
 }
 
 GLShader::~GLShader() {
-  std::cerr << "CROOT - GLShader destructor" << std::endl;
   cleanupResource();
 }
 
@@ -430,17 +428,14 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
 
 void GLShader::_cleanupResource() {
   if (_vertShaderId) {
-    std::cerr << "CROOT - GLShader cleanup vertex shader resource" << std::endl;
     MAPD_CHECK_GL_ERROR(glDeleteShader(_vertShaderId));
   }
 
   if (_fragShaderId) {
-    std::cerr << "CROOT - GLShader cleanup fragment shader resource" << std::endl;
     MAPD_CHECK_GL_ERROR(glDeleteShader(_fragShaderId));
   }
 
   if (_programId) {
-    std::cerr << "CROOT - GLShader cleanup shader program resource" << std::endl;
     MAPD_CHECK_GL_ERROR(glDeleteProgram(_programId));
   }
 

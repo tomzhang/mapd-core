@@ -34,7 +34,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
 
  private:
   GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
-                               ::Rendering::GL::GLRenderer* renderer,
+                               ::Rendering::RendererShPtr& rendererPtr,
                                size_t width,
                                size_t height,
                                size_t numSamples = 1,
@@ -44,6 +44,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   void _initResources(QueryRenderer* queryRenderer);
   void _resizeImpl(size_t width, size_t height) final;
 
+  ::Rendering::RendererWkPtr _rendererPtr;
   ::Rendering::GL::GLX::GlxGLRenderer* _renderer;
   ::Rendering::GL::Resources::GLVertexBufferShPtr _rectvbo;
   ::Rendering::GL::Resources::GLShaderShPtr _shader;
@@ -52,9 +53,12 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _idTextureArray;
   // ::Rendering::GL::Resources::GLTexture2dArrayShPtr _depthTextureArray;
 
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2dShPtr, int> _rgbaTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2dShPtr, int> _idTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLRenderbufferShPtr, int> _rbos;
+  std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
+                     std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _rgbaTextures;
+  std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
+                     std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _idTextures;
+  std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*,
+                     std::pair<::Rendering::GL::Resources::GLRenderbufferWkPtr, int>> _rbos;
 
   friend class ::QueryRenderer::QueryRenderCompositor;
 };

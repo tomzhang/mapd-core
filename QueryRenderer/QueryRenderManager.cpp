@@ -83,22 +83,23 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
   GLRenderer* renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
 
-  PerGpuData gpuData;
+  PerGpuDataShPtr gpuDataPtr;
   for (int i = 0; i < numGpus; ++i) {
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
-    gpuData.windowPtr = windowMgr.createWindow(windowSettings);
-    gpuData.rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuData.windowPtr);
+    gpuDataPtr.reset(new PerGpuData());
+    gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);
+    gpuDataPtr->rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuDataPtr->windowPtr);
 
-    gpuData.makeActiveOnCurrentThread();
+    gpuDataPtr->makeActiveOnCurrentThread();
 
-    renderer = dynamic_cast<GLRenderer*>(gpuData.rendererPtr.get());
+    renderer = dynamic_cast<GLRenderer*>(gpuDataPtr->rendererPtr.get());
     CHECK(renderer != nullptr);
 
-    gpuData.queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
+    gpuDataPtr->queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
 
-    _perGpuData.insert({i, gpuData});
+    _perGpuData.insert({i, gpuDataPtr});
   }
 }
 
@@ -230,9 +231,9 @@ CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_mtx);
 
-  itr->second.makeActiveOnCurrentThread();
-  CudaHandle rtn = itr->second.queryResultBufferPtr->getCudaHandlePreQuery();
-  itr->second.rendererPtr->makeInactive();
+  itr->second->makeActiveOnCurrentThread();
+  CudaHandle rtn = itr->second->queryResultBufferPtr->getCudaHandlePreQuery();
+  itr->second->rendererPtr->makeInactive();
 
   return rtn;
 }
@@ -345,7 +346,7 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   std::lock_guard<std::mutex> render_lock(_mtx);
-  return _activeRenderer->renderToPng();
+  return _activeRenderer->renderToPng(compressionLevel);
 
   // RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
   //                   "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " +

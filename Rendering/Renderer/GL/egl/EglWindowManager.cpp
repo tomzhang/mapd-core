@@ -1,7 +1,6 @@
 #include "EglWindowManager.h"
 #include "EglGLWindow.h"
 #include "EglGLRenderer.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -14,7 +13,6 @@ EglWindowManagerImpl::EglWindowManagerImpl() {
 }
 
 EglWindowManagerImpl::~EglWindowManagerImpl() {
-  std::cerr << "CROOT - EglWindowManager EglWindowManagerImpl destructor" << std::endl;
 }
 
 std::string EglWindowManagerImpl::getName() const {

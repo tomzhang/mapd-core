@@ -1,6 +1,5 @@
 #include "Renderer.h"
 #include "Window.h"
-#include <iostream>
 
 namespace Rendering {
 
@@ -10,7 +9,6 @@ Renderer::Renderer(const RendererSettings& settings) : _attachedWindows(), _init
 }
 
 Renderer::~Renderer() {
-  std::cerr << "CROOT - Renderer Destructor" << std::endl;
   for (const auto& window : _attachedWindows) {
     window->detachRenderer(this, true);
   }

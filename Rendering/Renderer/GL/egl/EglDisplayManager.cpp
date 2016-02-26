@@ -6,7 +6,6 @@
 #include "MapDEGL.h"
 #include "../../../RenderError.h"
 #include <vector>
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -19,7 +18,7 @@ struct EglDeviceInfo {
 
     RUNTIME_EX_ASSERT(eglQueryDevicesEXT, "EGL_EXT_device_enumeration extension is not supported.");
     MAPD_CHECK_EGL_ERROR(eglQueryDevicesEXT(maxDevices, &eglDevices[0], reinterpret_cast<int*>(&numDevices)));
-    std::cerr << "CROOT - num devices on machine: " << numDevices << std::endl;
+    // std::cerr << "CROOT - num devices on machine: " << numDevices << std::endl;
   }
 
   std::vector<EGLDeviceEXT> eglDevices;
@@ -40,18 +39,6 @@ static EGLDisplay getEGLDisplayFromDevice(size_t device) {
   static const PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
       (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
 
-  // EGLDisplay CROOTdpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-  // int eglMajorVersion, eglMinorVersion;
-  // eglInitialize(CROOTdpy, &eglMajorVersion, &eglMinorVersion);
-  // const char* clientApis = eglQueryString(CROOTdpy, EGL_CLIENT_APIS);
-  // const char* vendor = eglQueryString(CROOTdpy, EGL_VENDOR);
-  // const char* version = eglQueryString(CROOTdpy, EGL_VERSION);
-  // const char* extensions = eglQueryString(CROOTdpy, EGL_EXTENSIONS);
-  // // std::string extensionsStr(extensions);
-  // std::cerr << "CROOT egl: " << eglMajorVersion << "." << eglMinorVersion << std::endl;
-  // std::cerr << "CROOT egl clientApis: " << clientApis << ", vendor: " << vendor << ", version: " << version
-  //           << ", extensions: " << extensions << std::endl;
-
   const EglDeviceInfo info = getEglDeviceInfo();
 
   RUNTIME_EX_ASSERT(device < info.numDevices,
@@ -64,18 +51,12 @@ EglDisplay::EglDisplay(EGLDisplay& eglDpy) : _dpy(eglDpy) {
 }
 
 EglDisplay::~EglDisplay() {
-  std::cerr << "CROOT EglDisplay Destructor" << std::endl;
   EGLBoolean hasErrors = MAPD_CHECK_EGL_ERROR(eglTerminate(_dpy));
   RUNTIME_EX_ASSERT(hasErrors == EGL_TRUE, "EGL error tyring to terminate EGL display.");
 }
 
 EGLDisplay EglDisplay::getEGLDisplay() {
   return _dpy;
-}
-
-void CROOTEGLTest(EGLDisplay* dpy) {
-  std::cerr << "CROOT - closing EGL display" << std::endl;
-  RUNTIME_EX_ASSERT(eglTerminate(*dpy) == EGL_TRUE, "Error trying to terminate EGL display.");
 }
 
 static EglDisplayShPtr openEGLDisplay(size_t deviceNum, int& eglMajorVersion, int& eglMinorVersion) {

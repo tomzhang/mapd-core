@@ -6,7 +6,6 @@
 #include "../MapDGL.h"
 // #include <EGL/egl.h>
 // #include <GL/glew.h>
-#include <iostream>
 
 namespace Rendering {
 
@@ -36,8 +35,6 @@ EglGLRenderer::EglGLRenderer(const RendererSettings& settings) : GLRenderer(sett
 }
 
 EglGLRenderer::~EglGLRenderer() {
-  std::cerr << "CROOT EglGLRenderer Destructor" << std::endl;
-
   if (_eglCtx) {
     CHECK(_dpyPtr != nullptr);
 

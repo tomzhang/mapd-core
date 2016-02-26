@@ -17,8 +17,6 @@
 #include "Renderer/GL/egl/EglWindowManager.h"
 #endif  // MAPDGL_GLX
 
-#include <iostream>
-
 namespace Rendering {
 
 using Settings::WindowSettings;
@@ -41,7 +39,6 @@ WindowManager::WindowManager() : _implPtr(nullptr) {
 }
 
 WindowManager::~WindowManager() {
-  std::cerr << "CROOT - Window Manager destructor" << std::endl;
 }
 
 size_t WindowManager::getNumGpus() const {

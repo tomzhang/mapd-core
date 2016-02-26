@@ -19,10 +19,24 @@ class Renderer {
   virtual void initialize() = 0;
 
   virtual void makeActiveOnCurrentThread(Window* window = nullptr) = 0;
-  void makeActiveOnCurrentThread(const WindowShPtr& window) { makeActiveOnCurrentThread(window.get()); }
+  void makeActiveOnCurrentThread(const WindowShPtr& window) {
+    if (window && !window) {
+      makeActiveOnCurrentThread(window.get());
+    } else {
+      makeActiveOnCurrentThread();
+    }
+  }
+
   virtual void makeInactive() = 0;
   virtual bool isActiveOnCurrentThread(Window* window = nullptr) = 0;
-  bool isActiveOnCurrentThread(const WindowShPtr& window) { return isActiveOnCurrentThread(window.get()); }
+
+  bool isActiveOnCurrentThread(const WindowShPtr& window) {
+    if (window) {
+      return isActiveOnCurrentThread(window.get());
+    } else {
+      return isActiveOnCurrentThread();
+    }
+  }
 
   virtual void setClearColor(const Objects::ColorRGBA& color) = 0;
   virtual void setClearColor(float r, float g, float b, float a) = 0;

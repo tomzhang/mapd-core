@@ -1,6 +1,5 @@
 #include "GLTexture2dArray.h"
 #include "../MapDGL.h"
-#include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -129,7 +128,6 @@ GLTexture2dArray::GLTexture2dArray(const RendererWkPtr& rendererPtr, const std::
 }
 
 GLTexture2dArray::~GLTexture2dArray() {
-  std::cerr << "CROOT - GLTexture2dArray destructor" << std::endl;
   cleanupResource();
 }
 

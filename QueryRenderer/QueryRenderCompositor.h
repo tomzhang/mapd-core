@@ -11,6 +11,7 @@
 #include <Rendering/Types.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
+#include <Rendering/Renderer/GL/GLRenderer.h>
 #include <GL/glew.h>
 #include <unordered_set>
 #include <memory>
@@ -84,14 +85,18 @@ class QueryRenderCompositorImpl {
 
  protected:
   QueryRenderCompositorImpl(QueryRenderer* prnt,
-                            ::Rendering::GL::GLRenderer* renderer,
+                            ::Rendering::RendererShPtr rendererPtr,
                             size_t width,
                             size_t height,
                             size_t numSamples = 1,
                             bool doHitTest = false,
                             bool doDepthTest = false)
-      : _framebufferPtr(new QueryFramebuffer(renderer, width, height, doHitTest, doDepthTest)) {}
-
+      : _framebufferPtr(nullptr) {
+    CHECK(rendererPtr);
+    ::Rendering::GL::GLRenderer* renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(rendererPtr.get());
+    CHECK(renderer);
+    _framebufferPtr.reset(new QueryFramebuffer(renderer, width, height, doHitTest, doDepthTest));
+  }
   QueryFramebufferUqPtr _framebufferPtr;
 
   virtual void _resizeImpl(size_t width, size_t height) = 0;
@@ -130,7 +135,7 @@ class QueryRenderCompositor {
 
  private:
   QueryRenderCompositor(QueryRenderer* prnt,
-                        ::Rendering::GL::GLRenderer* renderer,
+                        ::Rendering::RendererShPtr& rendererPtr,
                         size_t width,
                         size_t height,
                         size_t numSamples = 1,
@@ -139,8 +144,10 @@ class QueryRenderCompositor {
 
   std::unique_ptr<Impl::QueryRenderCompositorImpl> _implPtr;
 
-  std::unordered_set<::Rendering::GL::Resources::GLTexture2dShPtr> _compositeTextures;
-  std::unordered_set<::Rendering::GL::Resources::GLRenderbufferShPtr> _compositeRbos;
+  std::unordered_map<::Rendering::GL::Resources::GLTexture2d*, ::Rendering::GL::Resources::GLTexture2dWkPtr>
+      _compositeTextures;
+  std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*, ::Rendering::GL::Resources::GLRenderbufferWkPtr>
+      _compositeRbos;
 
   QueryRenderer* _queryRenderer;
   bool _doHitTest, _doDepthTest;
