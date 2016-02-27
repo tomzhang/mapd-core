@@ -160,6 +160,30 @@ std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx, 
   return pixels;
 }
 
+std::shared_ptr<unsigned int> QueryFramebuffer::readIdBuffer(size_t startx, size_t starty, int width, int height) {
+  RUNTIME_EX_ASSERT(_idTex != nullptr,
+                    "QueryFramebuffer: The framebuffer was not setup to write an ID map. Cannot retrieve ID at pixel.");
+
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  size_t widthToUse = (width < 0 ? myWidth : width);
+  size_t heightToUse = (height < 0 ? myHeight : height);
+
+  RUNTIME_EX_ASSERT(
+      startx + widthToUse <= myWidth && starty + heightToUse <= myHeight,
+      "QueryFramebuffer: bounds of the pixels to read extend beyond the bounds of the image. Cannot get ids.");
+
+  std::shared_ptr<unsigned int> pixels(new unsigned int[widthToUse * heightToUse],
+                                       std::default_delete<unsigned int[]>());
+  unsigned int* rawPixels = pixels.get();
+
+  _fbo->readPixels(
+      GL_COLOR_ATTACHMENT1, startx, starty, widthToUse, heightToUse, GL_RED_INTEGER, GL_UNSIGNED_INT, rawPixels);
+
+  return pixels;
+}
+
 GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rsrcMgr,
                                                       FboColorBuffer texType,
                                                       size_t width,

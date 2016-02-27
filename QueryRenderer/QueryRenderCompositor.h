@@ -66,6 +66,11 @@ class QueryRenderCompositorImpl {
     return _framebufferPtr->readColorBuffer(startx, starty, width, height);
   }
 
+  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1) {
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->readIdBuffer(startx, starty, width, height);
+  }
+
   virtual ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
                                                                           FboColorBuffer texType) = 0;
 
@@ -122,6 +127,8 @@ class QueryRenderCompositor {
   void render();
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+
+  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
   ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
                                                                   FboColorBuffer texType);

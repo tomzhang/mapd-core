@@ -80,7 +80,8 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderer* queryRenderer) 
 
   _shader = rsrcMgr->createShader(Compositor_vert::source, Compositor_frag::source);
   _renderer->bindShader(_shader);
-  _shader->setSamplerTextureImageUnit("texArraySampler", GL_TEXTURE0);
+  _shader->setSamplerTextureImageUnit("rgbaArraySampler", GL_TEXTURE0);
+  _shader->setSamplerTextureImageUnit("idArraySampler", GL_TEXTURE1);
   _vao = rsrcMgr->createVertexArray({{_rectvbo, {}}});
 
   size_t width = getWidth();
@@ -231,6 +232,28 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
 
     if (doHitTest) {
       idTex = itr->second.framebufferPtr->getColorTexture2d(FboColorBuffer::ID_BUFFER);
+
+      auto idItr = _idTextures.find(idTex.get());
+      CHECK(idItr != _idTextures.end());
+
+      glXCopyImageSubDataNV(displayPtr.get(),
+                            glxCtx,
+                            idTex->getId(),
+                            idTex->getTarget(),
+                            0,
+                            0,
+                            0,
+                            0,
+                            myGlxCtx,
+                            _idTextureArray->getId(),
+                            _idTextureArray->getTarget(),
+                            0,
+                            0,
+                            0,
+                            idx,
+                            width,
+                            height,
+                            1);
     }
 
     // if (doDepthTest) {
@@ -253,8 +276,15 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   _renderer->setClearColor(0, 0, 0, 0);
   _renderer->clearAll();
 
-  _shader->setSamplerAttribute("texArraySampler", _rgbaTextureArray);
-  _shader->setUniformAttribute("texArraySize", _rgbaTextureArray->getDepth());
+  _shader->setSamplerAttribute("rgbaArraySampler", _rgbaTextureArray);
+  _shader->setUniformAttribute("rgbaArraySize", _rgbaTextureArray->getDepth());
+
+  if (doHitTest) {
+    _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
+    _shader->setUniformAttribute("idArraySize", _idTextureArray->getDepth());
+  } else {
+    _shader->setUniformAttribute("idArraySize", 0);
+  }
 
   _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
 }

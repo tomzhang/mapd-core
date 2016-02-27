@@ -91,6 +91,11 @@ std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t sta
   return _implPtr->readColorBuffer(startx, starty, width, height);
 }
 
+std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width, int height) {
+  CHECK(_implPtr);
+  return _implPtr->readIdBuffer(startx, starty, width, height);
+}
+
 ::Rendering::GL::Resources::GLTexture2dShPtr QueryRenderCompositor::createFboTexture2d(
     ::Rendering::GL::GLRenderer* renderer,
     FboColorBuffer texType) {

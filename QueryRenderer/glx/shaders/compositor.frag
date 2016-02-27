@@ -1,9 +1,13 @@
 #version 450 core
 
 layout(location = 0) out vec4 color;
+layout(location = 1) out uint id;
 
-uniform sampler2DArray texArraySampler;
-uniform int texArraySize; // can extract the size of the sampler using the textureSize(...) call, but I'm thinking this could be slightly faster
+uniform sampler2DArray rgbaArraySampler;
+uniform int rgbaArraySize;
+
+uniform usampler2DArray idArraySampler;
+uniform int idArraySize;
 
 in vec2 oTexCoords;
 
@@ -15,9 +19,10 @@ void main() {
     float srcFactorA = 1.0;
     float dstFactorA;
 
-
+    uint primitveId = 0;
     int i = 0;
-    while (i < texArraySize) {
+
+    while (i < rgbaArraySize) {
 
       // doing our own blend here to avoid mulitple texture lookups.
       // We're doing the same blend according to:
@@ -27,7 +32,7 @@ void main() {
       // were to ever change, we'd have to change that here as well.
       // We should look at ways of exposing all those options as subroutines.
 
-      srcColor = texture(texArraySampler, vec3(oTexCoords, i));
+      srcColor = texture(rgbaArraySampler, vec3(oTexCoords, i));
 
       if (srcColor.a > 0.0) {
         if (srcColor.a < 1.0) {
@@ -53,5 +58,10 @@ void main() {
       ++i;
     }
 
+    if (idArraySize > 0) {
+      primitveId = texture(idArraySampler, vec3(oTexCoords, i)).r;
+    }
+
     color = dstColor;
+    id = primitveId;
 }

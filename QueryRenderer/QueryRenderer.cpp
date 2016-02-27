@@ -657,7 +657,30 @@ unsigned int QueryRenderer::getIdAt(int x, int y) {
   // unsigned int id;
   // MAPD_CHECK_GL_ERROR(glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id));
 
-  // return id;
+  std::shared_ptr<unsigned int> idPixelsPtr;
+
+  if (_compositorPtr) {
+    Renderer* renderer = _compositorPtr->getRenderer();
+    renderer->makeActiveOnCurrentThread();
+    idPixelsPtr = _compositorPtr->readIdBuffer(x, y, 1, 1);
+  } else {
+    auto itr = _perGpuData.begin();
+
+    QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+
+    // const GpuId& gpuId = itr->first;
+    itr->second.makeActiveOnCurrentThread();
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
+    CHECK(renderer != nullptr);
+
+    QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+    framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+    idPixelsPtr = framebufferPtr->readIdBuffer(x, y, 1, 1);
+  }
+
+  CHECK(idPixelsPtr);
+
+  return idPixelsPtr.get()[0];
 }
 
 QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)

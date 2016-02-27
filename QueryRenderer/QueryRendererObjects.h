@@ -390,7 +390,7 @@ class BaseRenderProperty {
         _outType(nullptr),
         _scaleConfigPtr(nullptr),
         _flexibleType(flexibleType) {
-    _initGpuResources(ctx, {});
+    _initGpuResources(ctx);
   }
 
   virtual ~BaseRenderProperty() {
@@ -551,7 +551,8 @@ class BaseRenderProperty {
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
 
  private:
-  void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId> unusedGpus) {
+  void _initGpuResources(const QueryRendererContextShPtr& ctx,
+                         const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>()) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
     for (auto& itr : qrcPerGpuData) {
       if (_perGpuData.find(itr.first) == _perGpuData.end()) {
@@ -738,7 +739,8 @@ class BaseMark {
                                        ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) = 0;
   virtual void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) = 0;
 
-  void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId> unusedGpus) {
+  void _initGpuResources(const QueryRendererContextShPtr& ctx,
+                         const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>()) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
     for (auto& itr : qrcPerGpuData) {
       if (_perGpuData.find(itr.first) == _perGpuData.end()) {

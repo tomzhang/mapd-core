@@ -311,8 +311,12 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     // case GL_INT_SAMPLER_2D_MULTISAMPLE:
     // case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
 
-    // case GL_UNSIGNED_INT_SAMPLER_2D:
-    // case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+    case GL_UNSIGNED_INT_SAMPLER_2D:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
+      break;
+    case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
+      break;
     // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
     // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
 

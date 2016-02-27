@@ -50,6 +50,8 @@ class QueryFramebuffer {
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
+  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+
   int getWidth() const;
   int getHeight() const;
   bool doHitTest() const { return _doHitTest; }

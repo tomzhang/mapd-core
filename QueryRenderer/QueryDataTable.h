@@ -56,7 +56,7 @@ class BaseQueryDataTableVBO {
                         const rapidjson::Pointer& objPath,
                         QueryDataTableType type)
       : _ctx(ctx), _name(name), _perGpuData(), _type(type), _jsonPath(objPath) {
-    _initGpuResources(ctx, {});
+    _initGpuResources(ctx);
   }
   explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
                                  const std::string& name,
@@ -116,7 +116,8 @@ class BaseQueryDataTableVBO {
   rapidjson::Pointer _jsonPath;
 
  private:
-  void _initGpuResources(const QueryRendererContextShPtr& ctx, const std::unordered_set<GpuId>& unusedGpus) {
+  void _initGpuResources(const QueryRendererContextShPtr& ctx,
+                         const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>()) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
     for (auto& itr : qrcPerGpuData) {
       if (_perGpuData.find(itr.first) == _perGpuData.end()) {

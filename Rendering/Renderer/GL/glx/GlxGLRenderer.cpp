@@ -280,8 +280,8 @@ void GlxGLRenderer::initializeGL() {
   IntConstant colorType = _settings.getIntSettingAsConstant(IntSetting::BITS_RGBA);
   if (drawableType == IntConstant::PBUFFER &&
       (colorType == IntConstant::RGBA16F || colorType == IntConstant::RGBA32F)) {
-    // renderType = GLX_RGBA_FLOAT_TYPE;
-    renderType = GLX_RGBA_FLOAT_TYPE_ARB;
+    renderType = GLX_RGBA_FLOAT_TYPE;
+    // renderType = GLX_RGBA_FLOAT_TYPE_ARB;
   }
 
   GLXContext glxContext = 0;

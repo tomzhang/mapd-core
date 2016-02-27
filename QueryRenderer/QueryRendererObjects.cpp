@@ -1533,7 +1533,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _propsDirty(true),
       _vboProps(),
       _uniformProps() {
-  _initGpuResources(_ctx, {});
+  _initGpuResources(_ctx);
 }
 
 BaseMark::BaseMark(GeomType geomType,
