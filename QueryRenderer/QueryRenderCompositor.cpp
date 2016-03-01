@@ -9,7 +9,9 @@
 namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
+using ::Rendering::GL::Resources::GLTexture2d;
 using ::Rendering::GL::Resources::GLTexture2dShPtr;
+using ::Rendering::GL::Resources::GLRenderbuffer;
 using ::Rendering::GL::Resources::GLRenderbufferShPtr;
 
 QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
@@ -111,12 +113,49 @@ std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx,
   return rtn;
 }
 
-void QueryRenderCompositor::deleteFboTexture2d(const GLTexture2dShPtr& texture2dPtr) {
-  THROW_RUNTIME_EX("QueryRenderCompositor::deleteFboTexture2d() has yet to be implemented.");
+void QueryRenderCompositor::deleteFboTexture2d(GLTexture2d* texture2dPtr) {
+  CHECK(_implPtr);
+  _implPtr->deleteFboTexture2d(texture2dPtr);
+
+  auto itr = _compositeTextures.find(texture2dPtr);
+  if (itr != _compositeTextures.end()) {
+    _compositeTextures.erase(itr);
+  }
 }
 
-void QueryRenderCompositor::deleteFboRenderbuffer(const GLRenderbufferShPtr& renderbufferPtr) {
-  THROW_RUNTIME_EX("QueryRenderCompositor::deleteFboRenderbuffer() has yet to be implemented.");
+void QueryRenderCompositor::deleteFboRenderbuffer(GLRenderbuffer* renderbufferPtr) {
+  CHECK(_implPtr);
+  _implPtr->deleteFboRenderbuffer(renderbufferPtr);
+
+  auto itr = _compositeRbos.find(renderbufferPtr);
+  if (itr != _compositeRbos.end()) {
+    _compositeRbos.erase(itr);
+  }
+}
+
+void QueryRenderCompositor::cleanupUnusedFbos() {
+  std::vector<GLTexture2d*> unusedTextures;
+  std::vector<GLRenderbuffer*> unusedRbos;
+
+  for (auto& itr : _compositeTextures) {
+    if (itr.second.expired()) {
+      unusedTextures.push_back(itr.first);
+    }
+  }
+
+  for (auto& itr : _compositeRbos) {
+    if (itr.second.expired()) {
+      unusedRbos.push_back(itr.first);
+    }
+  }
+
+  for (auto item : unusedTextures) {
+    deleteFboTexture2d(item);
+  }
+
+  for (auto item : unusedRbos) {
+    deleteFboRenderbuffer(item);
+  }
 }
 
 }  // namespace QueryRenderer

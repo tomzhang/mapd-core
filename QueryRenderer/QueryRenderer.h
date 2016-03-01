@@ -115,10 +115,14 @@ class QueryRenderer {
 
   void _clear();
   void _clearGpuResources();
-  void _initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData, const std::vector<GpuId>& gpuIds);
+  std::unordered_set<GpuId> _initUnusedGpus();
+  void _initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                         const std::vector<GpuId>& gpuIds,
+                         std::unordered_set<GpuId>& unusedGpus);
   void _updateGpuData(const GpuId& gpuId,
                       QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
-                      std::unordered_set<GpuId>& unusedGpus);
+                      std::unordered_set<GpuId>& unusedGpus,
+                      bool update);
   void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
   void _initFromJSON(const std::string& configJSON, bool forceUpdate = false);
   void _resizeFramebuffers(int width, int height);
@@ -144,6 +148,13 @@ class QueryRendererContext {
     PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)) {}
 
     QueryRenderManager::PerGpuDataShPtr getQRMGpuData() const { return qrmGpuData.lock(); }
+
+    void makeActiveOnCurrentThread() const {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        qrmGpuDataShPtr->makeActiveOnCurrentThread();
+      }
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
@@ -241,6 +252,7 @@ class QueryRendererContext {
   void _clear();
   void _clearGpuResources();
   void _initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData, const std::unordered_set<GpuId>& unusedGpus);
+  void _updateConfigGpuResources(const std::unordered_set<GpuId>& unusedGpus);
 
   void _fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj);
 

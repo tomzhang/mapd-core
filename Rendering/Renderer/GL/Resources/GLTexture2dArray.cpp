@@ -187,6 +187,12 @@ void GLTexture2dArray::_rebuild(size_t width, size_t height, size_t depth) {
 }
 
 void GLTexture2dArray::resize(size_t depth) {
+  if (depth != _depth && _textureReferences.size()) {
+    // TODO(croot): create a base TextureArray class and create two derived classes with the different
+    // apis to support instead of this, which isn't ideal.
+    THROW_RUNTIME_EX("Cannot resize a texture array with texture references. Please use the push/pop/insert routines");
+  }
+
   _rebuild(_width, _height, depth);
 }
 
@@ -195,10 +201,22 @@ void GLTexture2dArray::resize(size_t width, size_t height) {
 }
 
 void GLTexture2dArray::resize(size_t width, size_t height, size_t depth) {
+  if (depth != _depth && _textureReferences.size()) {
+    // TODO(croot): create a base TextureArray class and create two derived classes with the different
+    // apis to support instead of this, which isn't ideal.
+    THROW_RUNTIME_EX("Cannot resize a texture array with texture references. Please use the push/pop/insert routines");
+  }
+
   _rebuild(width, height, depth);
 }
 
 void GLTexture2dArray::updateFromTextures() {
+  if (!_textureReferences.size()) {
+    return;
+  }
+
+  CHECK(_textureReferences.size() == _depth);
+
   for (const auto& texture : _textureReferences) {
     // make sure the texture references still align properly
     _validateTexture(texture);

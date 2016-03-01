@@ -56,7 +56,7 @@ class BaseQueryDataTableVBO {
                         const rapidjson::Pointer& objPath,
                         QueryDataTableType type)
       : _ctx(ctx), _name(name), _perGpuData(), _type(type), _jsonPath(objPath) {
-    _initGpuResources(ctx);
+    _initGpuResources(ctx.get());
   }
   explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
                                  const std::string& name,
@@ -116,12 +116,31 @@ class BaseQueryDataTableVBO {
   rapidjson::Pointer _jsonPath;
 
  private:
-  void _initGpuResources(const QueryRendererContextShPtr& ctx,
-                         const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>()) {
+  void _initGpuResources(const QueryRendererContext* ctx,
+                         const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
+                         bool initializing = true) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+
+    bool update = (_perGpuData.size() > 0);
     for (auto& itr : qrcPerGpuData) {
       if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-        _perGpuData.emplace(itr.first, PerGpuData(itr.second));
+        PerGpuData gpuData(itr.second);
+
+        if (update) {
+          switch (getType()) {
+            // case QueryDataTableType::EMBEDDED:
+            // case QueryDataTableType::URL:
+            //   break;
+            case QueryDataTableType::SQLQUERY:
+              gpuData.vbo = itr.second.getQRMGpuData()->queryResultBufferPtr;
+              break;
+            default:
+              THROW_RUNTIME_EX("Unsupported data table type for mult-gpu configuration: " +
+                               std::to_string(static_cast<int>(getType())));
+          }
+        }
+
+        _perGpuData.emplace(itr.first, std::move(gpuData));
       }
     }
 
@@ -139,6 +158,8 @@ class BaseQueryDataTableVBO {
       myItr->second.vbo = itr.second;
     }
   }
+
+  friend class QueryRendererContext;
 };
 
 class SqlQueryDataTable : public BaseQueryDataTableVBO {

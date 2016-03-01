@@ -37,7 +37,7 @@ class GLResource {
   void setUsable() { _usable = true; }
   void setUnusable() { _usable = false; }
 
-  void validateRenderer(GLRenderer* renderer = nullptr, bool checkThread = true) {
+  void validateRenderer(GLRenderer* renderer = nullptr, bool checkThread = true) const {
     GLRenderer* currRenderer = renderer;
 
     RUNTIME_EX_ASSERT(!_rendererPtr.expired(), "The renderer for this resource has been removed. Cannot use resource.");
@@ -56,7 +56,7 @@ class GLResource {
     }
   }
 
-  void validateUsability(GLRenderer* renderer = nullptr, bool checkThread = true) {
+  void validateUsability(GLRenderer* renderer = nullptr, bool checkThread = true) const {
     validateRenderer(renderer, checkThread);
     RUNTIME_EX_ASSERT(_usable == true,
                       "This resource hasn't been properly setup. Cannot use resource. This could be a result of the "

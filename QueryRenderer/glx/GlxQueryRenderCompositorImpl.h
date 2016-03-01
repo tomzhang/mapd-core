@@ -27,8 +27,8 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                         FboRenderBuffer rboType) final;
 
-  void deleteFboTexture2d(const ::Rendering::GL::Resources::GLTexture2dShPtr& texture2dPtr) final;
-  void deleteFboRenderbuffer(const ::Rendering::GL::Resources::GLRenderbufferShPtr& renderbufferPtr) final;
+  void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) final;
+  void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr) final;
 
   void render(QueryRenderer* queryRenderer) final;
 

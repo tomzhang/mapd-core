@@ -17,18 +17,10 @@ static void writePngData(png_structp png_ptr, png_bytep data, png_size_t length)
   std::memcpy(&(*pngData)[0] + currSz, data, length);
 }
 
-static void flushPngData(png_structp png_ptr) {
-  // Do nothing
-  (void)png_ptr; /* Stifle compiler warning */
+static void flushPngData(png_structp) {
 }
 
 PngData::PngData() : pngDataPtr(nullptr), pngSize(0) {
-}
-
-PngData::PngData(const PngData& pngData) : pngDataPtr(pngData.pngDataPtr), pngSize(pngData.pngSize) {
-}
-
-PngData::PngData(PngData&& pngData) : pngDataPtr(std::move(pngData.pngDataPtr)), pngSize(std::move(pngData.pngSize)) {
 }
 
 PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pixelsPtr, int compressionLevel)
@@ -146,18 +138,6 @@ PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pi
   std::memcpy(pngRawData, &pngData[0], pngSize);
 
   png_destroy_write_struct(&png_ptr, &info_ptr);
-}
-
-PngData& PngData::operator=(const PngData& pngData) {
-  pngDataPtr = pngData.pngDataPtr;
-  pngSize = pngData.pngSize;
-  return *this;
-}
-
-PngData& PngData::operator=(PngData&& pngData) {
-  pngDataPtr = std::move(pngData.pngDataPtr);
-  pngSize = std::move(pngData.pngSize);
-  return *this;
 }
 
 void PngData::writeToFile(const std::string& filename) {

@@ -60,7 +60,8 @@ void QueryRenderer::_clearGpuResources() {
 
 void QueryRenderer::_updateGpuData(const GpuId& gpuId,
                                    QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
-                                   std::unordered_set<GpuId>& unusedGpus) {
+                                   std::unordered_set<GpuId>& unusedGpus,
+                                   bool update) {
   auto myItr = _perGpuData.find(gpuId);
   if (myItr == _perGpuData.end()) {
     auto itr = qrmPerGpuData.find(gpuId);
@@ -73,6 +74,20 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
     // TODO(croot): validate the QueryRenderManager data is complete?
     CHECK(itr->second->rendererPtr != nullptr);
 
+    if (update) {
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second->rendererPtr.get());
+      CHECK(renderer != nullptr);
+
+      itr->second->makeActiveOnCurrentThread();
+
+      if (_compositorPtr) {
+        gpuData.framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer));
+      } else {
+        gpuData.framebufferPtr.reset(new QueryFramebuffer(
+            renderer, _ctx->getWidth(), _ctx->getHeight(), _ctx->doHitTest(), _ctx->doDepthTest()));
+      }
+    }
+
     _perGpuData.emplace(gpuId, std::move(gpuData));
   } else {
     myItr->second.makeActiveOnCurrentThread();
@@ -82,21 +97,26 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
   }
 }
 
-void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
-                                      const std::vector<GpuId>& gpuIds) {
+std::unordered_set<GpuId> QueryRenderer::_initUnusedGpus() {
   std::unordered_set<GpuId> unusedGpus;
   unusedGpus.reserve(_perGpuData.size());
   for (const auto& kv : _perGpuData) {
     unusedGpus.insert(kv.first);
   }
+  return unusedGpus;
+}
 
+void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                                      const std::vector<GpuId>& gpuIds,
+                                      std::unordered_set<GpuId>& unusedGpus) {
+  bool update = (_perGpuData.size() > 0);
   if (gpuIds.size()) {
     for (auto gpuId : gpuIds) {
-      _updateGpuData(gpuId, qrmPerGpuData, unusedGpus);
+      _updateGpuData(gpuId, qrmPerGpuData, unusedGpus, update);
     }
   } else {
     for (auto& qrmItr : qrmPerGpuData) {
-      _updateGpuData(qrmItr.first, qrmPerGpuData, unusedGpus);
+      _updateGpuData(qrmItr.first, qrmPerGpuData, unusedGpus, update);
     }
   }
 
@@ -106,6 +126,10 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerG
   }
 
   _ctx->_initGpuResources(_perGpuData, unusedGpus);
+
+  if (_compositorPtr) {
+    _compositorPtr->cleanupUnusedFbos();
+  }
 }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
@@ -442,7 +466,8 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataL
     gpuIds.push_back(item.first);
   }
 
-  activateGpus(qrmPerGpuData, gpuIds);
+  std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
+  _initGpuResources(qrmPerGpuData, gpuIds, unusedGpus);
 
   // now update the query result buffers
   _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
@@ -457,6 +482,10 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataL
     itr->second.makeActiveOnCurrentThread();
     itr->second.getQRMGpuData()->queryResultBufferPtr->updatePostQuery(_ctx->_queryResultBufferLayout, item.second);
   }
+
+  // now update the gpu resources for data, scale, and geom configs
+  // This needs to be done after the queryResultBuffers are updated.
+  _ctx->_updateConfigGpuResources(unusedGpus);
 
   // int numRows = dataLayoutPtr->numRows;
   // _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
@@ -477,7 +506,8 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataL
 
 void QueryRenderer::activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
                                  const std::vector<GpuId>& gpusToActivate) {
-  _initGpuResources(qrmPerGpuData, gpusToActivate);
+  std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
+  _initGpuResources(qrmPerGpuData, gpusToActivate, unusedGpus);
 }
 
 void QueryRenderer::_update() {
@@ -619,7 +649,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   int height = getHeight();
   std::shared_ptr<unsigned char> pixelsPtr;
 
-  if (_compositorPtr) {
+  if (_perGpuData.size() > 1) {
     Renderer* renderer = _compositorPtr->getRenderer();
     renderer->makeActiveOnCurrentThread();
     pixelsPtr = _compositorPtr->readColorBuffer(0, 0, width, height);
@@ -739,6 +769,20 @@ void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPer
 
   for (auto gpuId : unusedGpus) {
     _perGpuData.erase(gpuId);
+  }
+}
+
+void QueryRendererContext::_updateConfigGpuResources(const std::unordered_set<GpuId>& unusedGpus) {
+  for (auto dataItr : _dataTableMap) {
+    dataItr.second->_initGpuResources(this, unusedGpus, false);
+  }
+
+  // for (auto scaleItr : _scaleConfigMap) {
+  //   scaleItr.second->_initGpuResources(qrPerGpuData, unusedGpus);
+  // }
+
+  for (auto geomItr : _geomConfigs) {
+    geomItr->_initGpuResources(this, unusedGpus, false);
   }
 }
 

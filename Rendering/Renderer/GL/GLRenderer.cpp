@@ -381,7 +381,20 @@ void GLRenderer::_initGLEW(GLWindow* primaryWindow) {
 }
 
 void GLRenderer::_cleanupResources() {
+  // need to make ourselves current to cleanup resources
+  GLRenderer* currRenderer = nullptr;
+  Window* currWindow = nullptr;
+  if (!isActiveOnCurrentThread()) {
+    currRenderer = getCurrentThreadRenderer();
+    currWindow = getCurrentThreadWindow();
+  }
+
+  makeActiveOnCurrentThread();
   _glRsrcMgrPtr->_cleanupResources();
+
+  if (currRenderer) {
+    currRenderer->makeActiveOnCurrentThread(currWindow);
+  }
 }
 
 /**

@@ -76,7 +76,7 @@ class GLShader : public GLResource {
                       "Uniform attribute \"" + attrName +
                           "\" is not the appropriate size. It is size 1 but should be " + std::to_string(attrSz) + ".");
 
-    // TODO: check type mismatch?
+    // TODO(croot): check type mismatch?
     // setUniformByLocation(attrLoc, 1, &attrValue);
     // iter->(*second)();
     info->setAttr((void*)&attrValue);
@@ -91,7 +91,7 @@ class GLShader : public GLResource {
                       "Uniform attribute: " + attrName + " is not the appropriate size. It is size " +
                           std::to_string(attrValue.size()) + " but should be " + std::to_string(attrSz) + ".");
 
-    // TODO: check type mismatch?re2
+    // TODO(croot): check type mismatch?re2
     info->setAttr((void*)(&attrValue[0]));
     // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
@@ -105,12 +105,14 @@ class GLShader : public GLResource {
                       "Uniform attribute: " + attrName + " is not the appropriate size. It is size " +
                           std::to_string(N) + " but should be " + std::to_string(attrSz) + ".");
 
-    // TODO: check type mismatch?
+    // TODO(croot): check type mismatch?
     info->setAttr((void*)(&attrValue[0]));
     // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
 
   void setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc);
+
+  // TODO(croot):
   void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
 
   GLuint getVertexAttributeLocation(const std::string& attrName) const;

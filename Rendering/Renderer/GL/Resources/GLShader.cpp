@@ -200,7 +200,7 @@ static std::string getShaderSource(const GLuint& shaderId) {
   GLint sourceLen;
   MAPD_CHECK_GL_ERROR(glGetShaderiv(shaderId, GL_SHADER_SOURCE_LENGTH, &sourceLen));
 
-  std::unique_ptr<GLchar[]> source(new GLchar[sourceLen]);
+  std::shared_ptr<GLchar> source(new GLchar[sourceLen], std::default_delete<GLchar[]>());
   MAPD_CHECK_GL_ERROR(glGetShaderSource(shaderId, sourceLen, NULL, source.get()));
 
   return std::string(source.get());
@@ -475,10 +475,12 @@ UniformSamplerAttr* GLShader::_validateSamplerAttr(const std::string& attrName) 
 }
 
 std::string GLShader::getVertexSource() const {
+  validateUsability();
   return getShaderSource(_vertShaderId);
 }
 
 std::string GLShader::getFragmentSource() const {
+  validateUsability();
   return getShaderSource(_fragShaderId);
 }
 

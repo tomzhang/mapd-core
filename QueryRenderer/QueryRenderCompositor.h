@@ -77,8 +77,8 @@ class QueryRenderCompositorImpl {
   virtual ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                                 FboRenderBuffer rboType) = 0;
 
-  virtual void deleteFboTexture2d(const ::Rendering::GL::Resources::GLTexture2dShPtr& texture2dPtr) {}
-  virtual void deleteFboRenderbuffer(const ::Rendering::GL::Resources::GLRenderbufferShPtr& renderbufferPtr) {}
+  virtual void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) {}
+  virtual void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr) {}
 
   void resize(size_t width, size_t height) {
     CHECK(_framebufferPtr);
@@ -137,8 +137,10 @@ class QueryRenderCompositor {
       ::Rendering::GL::GLRenderer* renderer,
       FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER);
 
-  void deleteFboTexture2d(const ::Rendering::GL::Resources::GLTexture2dShPtr& texture2dPtr);
-  void deleteFboRenderbuffer(const ::Rendering::GL::Resources::GLRenderbufferShPtr& renderbufferPtr);
+  void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr);
+  void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr);
+
+  void cleanupUnusedFbos();
 
  private:
   QueryRenderCompositor(QueryRenderer* prnt,

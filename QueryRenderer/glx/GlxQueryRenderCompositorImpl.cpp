@@ -148,14 +148,52 @@ GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Render
   return rbo;
 }
 
-void GlxQueryRenderCompositorImpl::deleteFboTexture2d(
-    const ::Rendering::GL::Resources::GLTexture2dShPtr& texture2dPtr) {
-  THROW_RUNTIME_EX("deleteFboTexture2d() method is not yet implemented");
+void GlxQueryRenderCompositorImpl::deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) {
+  // TODO(croot): make thread safe?
+  auto rgbaItr = _rgbaTextures.find(texture2dPtr);
+  if (rgbaItr == _rgbaTextures.end()) {
+    auto idItr = _idTextures.find(texture2dPtr);
+    if (idItr != _idTextures.end()) {
+      int idx = idItr->second.second;
+      _idTextures.erase(idItr);
+
+      for (auto& idLoopItr : _idTextures) {
+        if (idLoopItr.second.second > idx) {
+          idLoopItr.second.second -= 1;
+        }
+      }
+    }
+
+    CHECK(_idTextureArray);
+    _idTextureArray->resize(_idTextures.size());
+  } else {
+    int idx = rgbaItr->second.second;
+    _rgbaTextures.erase(rgbaItr);
+
+    for (auto& rgbaLoopItr : _rgbaTextures) {
+      if (rgbaLoopItr.second.second > idx) {
+        rgbaLoopItr.second.second -= 1;
+      }
+    }
+  }
 }
 
-void GlxQueryRenderCompositorImpl::deleteFboRenderbuffer(
-    const ::Rendering::GL::Resources::GLRenderbufferShPtr& renderbufferPtr) {
-  THROW_RUNTIME_EX("deleteFboRenderbuffer() method is not yet implemented");
+void GlxQueryRenderCompositorImpl::deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr) {
+  // TODO(croot): make thread safe?
+  auto rboItr = _rbos.find(renderbufferPtr);
+  if (rboItr != _rbos.end()) {
+    int idx = rboItr->second.second;
+    _rbos.erase(rboItr);
+
+    for (auto& rboLoopItr : _rbos) {
+      if (rboLoopItr.second.second > idx) {
+        rboLoopItr.second.second -= 1;
+      }
+    }
+
+    // TODO(croot): need to resize the depth texture array, if/when
+    // that gets implemented.
+  }
 }
 
 void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
@@ -176,9 +214,20 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   GLTexture2dShPtr rgbaTex, idTex;
   GLRenderbufferShPtr depthRbo;
 
-  CHECK(_rgbaTextures.size() == _rgbaTextureArray->getDepth());
+  CHECK(_rgbaTextureArray && _rgbaTextures.size());
+  if (_rgbaTextureArray->getDepth() != _rgbaTextures.size()) {
+    _renderer->makeActiveOnCurrentThread();
+    _rgbaTextureArray->resize(_rgbaTextures.size());
+    CHECK(_rgbaTextures.size() == _rgbaTextureArray->getDepth());
+  }
+
   if (doHitTest) {
-    CHECK(_idTextures.size() == _idTextureArray->getDepth());
+    CHECK(_idTextureArray && _idTextures.size() && _idTextures.size() == _rgbaTextures.size());
+    if (_idTextureArray->getDepth() != _idTextures.size()) {
+      _renderer->makeActiveOnCurrentThread();
+      _idTextureArray->resize(_idTextures.size());
+      CHECK(_idTextures.size() == _idTextureArray->getDepth());
+    }
   }
   // if (doDepthTest) {
   //   CHECK(_rbos.size() == _)

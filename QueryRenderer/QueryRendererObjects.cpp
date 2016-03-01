@@ -1,11 +1,11 @@
 #include "QueryRendererObjects.h"
 #include "QueryRenderer.h"
-// #include "ShaderUtils.h"
 #include "shaders/pointTemplate_vert.h"
 #include "shaders/pointTemplate_frag.h"
 #include "shaders/linearScaleTemplate_vert.h"
 #include "shaders/ordinalScaleTemplate_vert.h"
-// // #include "../QueryEngine/Execute.h"
+
+// #include "../QueryEngine/Execute.h"
 
 #include <Rendering/Renderer/GL/TypeGL.h>
 #include <Rendering/Renderer/GL/Resources/GLShader.h>
@@ -1064,6 +1064,7 @@ void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRange
   std::vector<std::string>& vec = domainData->getVectorData();
   _coercedDomainData.reset(
       new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
+
   // std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
   // for (size_t i = 0; i < vec.size(); ++i) {
   //   // get data from the executor
@@ -1533,7 +1534,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _propsDirty(true),
       _vboProps(),
       _uniformProps() {
-  _initGpuResources(_ctx);
+  _initGpuResources(_ctx.get());
 }
 
 BaseMark::BaseMark(GeomType geomType,
@@ -1801,7 +1802,7 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 }
 
 void PointMark::_updateShader() {
-  // TODO: need to determine a build-appropriate way to access
+  // TODO(croot): need to determine a build-appropriate way to access
   // shaders. The best way probably is to create a cmake build
   // script that converts all shaders into their own header
   // files with static strings of the shader's source to access.
