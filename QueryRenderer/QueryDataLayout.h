@@ -34,7 +34,7 @@ struct QueryDataLayout {
   QueryDataLayout(const PerGpuDataMap& numRowsPerGpuBufferMap,
                   const std::vector<std::string>& attrNames,
                   const std::vector<AttrType>& attrTypes,
-                  // const std::unordered_map<std::string, std::string>& attrAliasToName,
+                  const std::unordered_map<std::string, std::string>& attrAliasToName,
                   const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant
                                              // except the first key, which would be the one to check the invalid key
                                              // against.

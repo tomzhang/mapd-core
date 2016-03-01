@@ -69,14 +69,13 @@ class QueryRenderManager {
   typedef std::weak_ptr<PerGpuData> PerGpuDataWkPtr;
   typedef std::map<GpuId, PerGpuDataShPtr> PerGpuDataMap;
 
-  explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
-                              const Executor* executor,
-                              int numGpus = -1,                       // < 0 means use all available GPUs
-                              size_t queryResultBufferSize = 500000,  // only applicable if a GPU or CUDA_INTEROP render
-                              bool debugMode = false);
+  explicit QueryRenderManager(int numGpus = -1, int startGpu = 0, size_t queryResultBufferSize = 500000);
+  explicit QueryRenderManager(
+      Rendering::WindowManager& windowMgr,
+      int numGpus = -1,  // < 0 means use all available GPUs
+      int startGpu = 0,
+      size_t queryResultBufferSize = 500000);  // only applicable if a GPU or CUDA_INTEROP render
   ~QueryRenderManager();
-
-  bool inDebugMode() const;
 
   bool hasUser(int userId) const;
   bool hasUserWidget(int userId, int widgetId) const;
@@ -122,7 +121,6 @@ class QueryRenderManager {
  private:
   static const UserWidgetPair _emptyUserWidget;
 
-  bool _debugMode;
   RendererTable _rendererDict;
 
   mutable QueryRenderer* _activeRenderer;
@@ -130,12 +128,10 @@ class QueryRenderManager {
 
   PerGpuDataMap _perGpuData;
 
-  void _initialize(Rendering::WindowManager& windowMgr, int numGpus, size_t queryResultBufferSize);
+  void _initialize(Rendering::WindowManager& windowMgr, int numGpus, int startGpu, size_t queryResultBufferSize);
 
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
-
-  const Executor* executor_;
 
   std::mutex _mtx;
 };

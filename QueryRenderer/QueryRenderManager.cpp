@@ -34,35 +34,44 @@ using ::Rendering::GL::GLResourceManagerShPtr;
 
 const UserWidgetPair QueryRenderManager::_emptyUserWidget = std::make_pair(-1, -1);
 
-// QueryRenderManager::QueryRenderManager(int queryResultBufferSize, bool debugMode) : _debugMode(debugMode),
-// _activeRenderer(nullptr), _windowPtr(nullptr, glfwDestroyWindow), _queryResultVBOPtr(nullptr) {
-QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
-                                       const Executor* executor,
-                                       int numGpus,
-                                       size_t queryResultBufferSize,
-                                       bool debugMode)
+QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryResultBufferSize) {
+  // NOTE: this constructor needs to be used on the main thread as that is a requirement
+  // for a window manager instance.
+  ::Rendering::WindowManager windowMgr;
+  _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize);
+}
 
-    : _debugMode(debugMode),
-      _activeRenderer(nullptr),
-      _activeUserWidget(_emptyUserWidget),
-      _perGpuData(),
-      executor_(executor) {
-  _initialize(windowMgr, numGpus, queryResultBufferSize);
+QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
+                                       int numGpus,
+                                       int startGpu,
+                                       size_t queryResultBufferSize)
+
+    : _activeRenderer(nullptr), _activeUserWidget(_emptyUserWidget), _perGpuData() {
+  _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize);
 }
 
 QueryRenderManager::~QueryRenderManager() {
 }
 
-void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int numGpus, size_t queryResultBufferSize) {
+void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
+                                     int numGpus,
+                                     int startGpu,
+                                     size_t queryResultBufferSize) {
   int maxNumGpus = windowMgr.getNumGpus();
-  if (numGpus < 0) {
-    numGpus = maxNumGpus;
+
+  if (numGpus <= 0) {
+    numGpus = maxNumGpus - startGpu;
+    startGpu = 0;  // if using all available gpus, we must start on gpu 0
   } else {
+    RUNTIME_EX_ASSERT(startGpu < maxNumGpus,
+                      "Invalid start GPU: " + std::to_string(startGpu) + ". There is only " +
+                          std::to_string(maxNumGpus) + " GPU" + (maxNumGpus > 1 ? "s" : "") + " available.");
     RUNTIME_EX_ASSERT(numGpus <= maxNumGpus,
                       "QueryRenderManager initialization is requesting the use of " + std::to_string(numGpus) + "GPU" +
                           (maxNumGpus > 1 ? "s" : "") + " but only " + std::to_string(maxNumGpus) +
                           " are available for rendering.");
   }
+  LOG(INFO) << "Using " << numGpus << " GPUs for rendering." << std::endl;
 
   int defaultWidth = 1024, defaultHeight = 1024;  // TODO(croot): expose as a static somewhere?
 
@@ -84,7 +93,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr, int nu
   GLResourceManagerShPtr rsrcMgrPtr;
 
   PerGpuDataShPtr gpuDataPtr;
-  for (int i = 0; i < numGpus; ++i) {
+  int endGpu = startGpu + numGpus;
+  for (int i = startGpu; i < endGpu; ++i) {
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
@@ -130,10 +140,6 @@ void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPai
   setActiveUserWidget(userWidgetPair.first, userWidgetPair.second);
 }
 
-bool QueryRenderManager::inDebugMode() const {
-  return (_debugMode == true);
-}
-
 bool QueryRenderManager::hasUser(int userId) const {
   return (_rendererDict.find(userId) != _rendererDict.end());
 }
@@ -168,10 +174,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
                           std::to_string(widgetId) + " already exists.");
   }
 
-  // (*wfMap)[widgetId] = QueryRendererUqPtr(
-  //     new QueryRenderer(executor_, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
   (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(doHitTest, doDepthTest));
-  // new QueryRenderer(executor_, _queryResultVBOPtr, doHitTest, doDepthTest, (_debugMode ? _windowPtr : nullptr)));
 
   // TODO(croot): should we set this as active the newly added ids as active?
   // setActiveUserWidget(userId, widgetId);
@@ -287,14 +290,12 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 #endif  // HAVE_CUDA
 
 void QueryRenderManager::setWidthHeight(int width, int height) {
-  // RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
-  //                   "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
-  //                   "setting width/height.");
+  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+                    "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
+                    "setting width/height.");
 
-  // std::lock_guard<std::mutex> render_lock(_mtx);
-  // glfwMakeContextCurrent(_windowPtr);
-  // _activeRenderer->setWidthHeight(width, height, (_debugMode ? _windowPtr : nullptr));
-  // glfwMakeContextCurrent(nullptr);
+  std::lock_guard<std::mutex> render_lock(_mtx);
+  _activeRenderer->setWidthHeight(width, height);
 }
 
 void QueryRenderManager::render() {
@@ -303,30 +304,6 @@ void QueryRenderManager::render() {
 
   std::lock_guard<std::mutex> render_lock(_mtx);
   _activeRenderer->render();
-
-  // if (_debugMode) {
-  //   MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
-  //   MAPD_CHECK_GL_ERROR(glDrawBuffer(GL_BACK));
-
-  //   // TODO(croot): need an API to set the framebuffer's read buffer
-  //   _activeRenderer->getFramebuffer()->bindToRenderer(BindType::READ);
-  //   MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT0));
-
-  //   int framebufferWidth, framebufferHeight;
-  //   // glfwGetFramebufferSize(_windowPtr.get(), &framebufferWidth, &framebufferHeight);
-  //   MAPD_CHECK_GL_ERROR(glfwGetFramebufferSize(_windowPtr, &framebufferWidth, &framebufferHeight));
-
-  //   MAPD_CHECK_GL_ERROR(glBlitFramebuffer(0,
-  //                                         0,
-  //                                         framebufferWidth,
-  //                                         framebufferHeight,
-  //                                         0,
-  //                                         0,
-  //                                         framebufferWidth,
-  //                                         framebufferHeight,
-  //                                         GL_COLOR_BUFFER_BIT,
-  //                                         GL_NEAREST));
-  // }
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {

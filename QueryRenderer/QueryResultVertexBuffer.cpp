@@ -145,6 +145,10 @@ void QueryResultVertexBuffer::checkCudaErrors(CUresult result) {
 CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {
   // Handling the state of the buffer since the GL VBO needs to be mapped/unmapped to/from a CUDA buffer.
   // Managing the state ensures that the mapping/unmapping is done in the appropriate order.
+
+  // TODO(croot): make thread safe? There is already a mutex in the QueryRenderManager class
+  // so it is essentially thread safe now, but perhaps that mutex should be
+  // here, or an additional one here. Might improve thread performance.
   RUNTIME_EX_ASSERT(!_isActive, "Query result buffer is already in use. Cannot access cuda handle.");
 
   // now map the buffer for cuda

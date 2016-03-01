@@ -141,8 +141,8 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
     // NOTE: since we're using a map to store the per gpu data, the first item
     // will be the lowest active gpu id.
     auto itr = _perGpuData.begin();
+    itr->second.makeActiveOnCurrentThread();
     if (!_compositorPtr) {
-      itr->second.makeActiveOnCurrentThread();
       qrmGpuData = itr->second.getQRMGpuData();
       _compositorPtr.reset(new QueryRenderCompositor(this,
                                                      qrmGpuData->rendererPtr,
@@ -167,13 +167,13 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
   }
 
   for (auto& gpuDataItr : _perGpuData) {
+    gpuDataItr.second.makeActiveOnCurrentThread();
+
     if (gpuDataItr.second.framebufferPtr == nullptr) {
       qrmGpuData = gpuDataItr.second.getQRMGpuData();
       CHECK(qrmGpuData->rendererPtr != nullptr);
       GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
       CHECK(renderer != nullptr);
-
-      gpuDataItr.second.makeActiveOnCurrentThread();
 
       if (_compositorPtr) {
         gpuDataItr.second.framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer));
