@@ -106,6 +106,7 @@ include_directories(ThirdParty/rapidjson)
 option(ENABLE_RENDERING "Build backend renderer" OFF)
 if(ENABLE_RENDERING)
     add_definitions("-DHAVE_RENDERING")
+    ADD_SUBDIRECTORY    (Rendering)
     ADD_SUBDIRECTORY    (QueryRenderer)
 
     set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-render")
@@ -159,6 +160,8 @@ endif()
 
 set(MAPD_LIBRARIES Shared Catalog SqliteConnector Parser Analyzer Planner
     QueryEngine DataMgr Fragmenter Chunk)
+
+set(MAPD_RENDERING_LIBRARIES Rendering QueryRenderer)
 
 if(ENABLE_CALCITE)
     list(APPEND MAPD_LIBRARIES Calcite)
