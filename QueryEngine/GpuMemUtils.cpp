@@ -19,6 +19,57 @@ RenderAllocator::RenderAllocator(int8_t* preallocated_ptr,
 #endif
 }
 
+RenderAllocatorMap::RenderAllocatorMap(::CudaMgr_Namespace::CudaMgr* cuda_mgr,
+                                       ::QueryRenderer::QueryRenderManager* render_manager,
+                                       const unsigned block_size_x,
+                                       const unsigned grid_size_x)
+    : cuda_mgr_(cuda_mgr), render_manager_(render_manager) {
+  CHECK(cuda_mgr_ && render_manager_);
+
+#ifdef HAVE_RENDERING
+  std::vector<size_t> devices = render_manager_->getAllGpuIds();
+  for (auto& device_id : devices) {
+    cuda_mgr_->setContext(device_id);
+    auto cudaHandle = render_manager_->getCudaHandle(device_id);
+    render_allocator_map_.insert(
+        {device_id,
+         RenderAllocator(static_cast<int8_t*>(cudaHandle.handle), cudaHandle.numBytes, block_size_x, grid_size_x)});
+  }
+#endif
+}
+
+RenderAllocatorMap::~RenderAllocatorMap() {
+#ifdef HAVE_RENDERING
+  for (auto itr : render_allocator_map_) {
+    cuda_mgr_->setContext(itr.first);
+    render_manager_->setCudaHandleUsedBytes(itr.first, 0);
+  }
+#endif
+}
+
+RenderAllocator* RenderAllocatorMap::getRenderAllocator(size_t device_id) {
+  return (*this)[device_id];
+}
+
+RenderAllocator* RenderAllocatorMap::operator[](size_t device_id) {
+  auto itr = render_allocator_map_.find(device_id);
+
+  CHECK(itr != render_allocator_map_.end()) << "Device id " << device_id << " not found in RenderAllocatorMap.";
+
+  return &(itr->second);
+}
+
+void RenderAllocatorMap::prepForRendering() {
+#ifdef HAVE_RENDERING
+  for (auto itr : render_allocator_map_) {
+    cuda_mgr_->setContext(itr.first);
+    render_manager_->setCudaHandleUsedBytes(itr.first, itr.second.getAllocatedSize());
+  }
+
+  render_allocator_map_.clear();
+#endif
+}
+
 CUdeviceptr alloc_gpu_mem(Data_Namespace::DataMgr* data_mgr,
                           const size_t num_bytes,
                           const int device_id,

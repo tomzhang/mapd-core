@@ -50,9 +50,7 @@
 #include <fcntl.h>
 
 #ifdef HAVE_RENDERING
-#include <GLFW/glfw3.h>
-#include <GL/glew.h>
-#include <time.h>
+#include "QueryRenderer/QueryRenderManager.h"
 #endif  // HAVE_RENDERING
 
 using namespace ::apache::thrift;
@@ -63,13 +61,6 @@ using namespace ::apache::thrift::server;
 using boost::shared_ptr;
 
 #define INVALID_SESSION_ID -1
-
-void mainGLFWErrorCallback(int error, const char* errstr) {
-  // TODO(croot): should we throw an exception?
-  // NOTE: There are cases when an error is caught here, but
-  // is not fatal -- i.e. putting GLFW in headless mode.
-  LOG(ERROR) << "GLFW error: 0x" << std::hex << error << ": " << errstr << std::endl;
-}
 
 class MapDHandler : virtual public MapDIf {
  public:
@@ -99,14 +90,12 @@ class MapDHandler : virtual public MapDIf {
         allow_multifrag_(allow_multifrag),
         read_only_(read_only),
         allow_loop_joins_(allow_loop_joins),
-        enable_rendering_(enable_rendering),
-        window_ptr_(nullptr),
 #ifdef HAVE_CALCITE
-        render_mem_bytes_(render_mem_bytes),
+        enable_rendering_(enable_rendering),
         calcite_(calcite_port, base_data_path_),
         legacy_syntax_(legacy_syntax) {
 #else
-        render_mem_bytes_(render_mem_bytes) {
+        enable_rendering_(enable_rendering) {
 #endif  // HAVE_CALCITE
     LOG(INFO) << "MapD Server " << MapDRelease;
     if (executor_device == "gpu") {
@@ -114,17 +103,16 @@ class MapDHandler : virtual public MapDIf {
       LOG(INFO) << "Started in GPU Mode" << std::endl;
       cpu_mode_only_ = false;
 
-      // init glfw for rendering queries
-      // TODO(croot): can do this for cpu queries
-      // probably too
+#ifdef HAVE_RENDERING
       if (enable_rendering_) {
         try {
-          initGLFW();
+          render_manager_.reset(new ::QueryRenderer::QueryRenderManager(num_gpus, start_gpu, render_mem_bytes));
         } catch (const std::exception& e) {
           enable_rendering_ = false;
           LOG(ERROR) << "Backend rendering disabled: " << e.what();
         }
       }
+#endif
     } else if (executor_device == "hybrid") {
       executor_device_type_ = ExecutorDeviceType::Hybrid;
       LOG(INFO) << "Started in Hybrid Mode" << std::endl;
@@ -141,14 +129,7 @@ class MapDHandler : virtual public MapDIf {
     import_path_ = boost::filesystem::path(base_data_path_) / "mapd_import";
   }
 
-  ~MapDHandler() {
-#ifdef HAVE_RENDERING
-    if (window_ptr_) {
-      glfwTerminate();
-    }
-#endif  // HAVE_RENDERING
-    LOG(INFO) << "mapd_server exits." << std::endl;
-  }
+  ~MapDHandler() { LOG(INFO) << "mapd_server exits." << std::endl; }
 
   void check_read_only(const std::string& str) {
     if (read_only_) {
@@ -383,7 +364,7 @@ class MapDHandler : virtual public MapDIf {
     auto session_it = get_session_it(session);
     auto session_info_ptr = session_it->second.get();
     auto& cat = session_info_ptr->get_catalog();
-    auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, window_ptr_, render_mem_bytes_);
+    auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
     CHECK(executor);
     CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
     set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
@@ -810,8 +791,11 @@ class MapDHandler : virtual public MapDIf {
                                                 jit_debug_ ? "mapdquery" : "",
                                                 0,
                                                 0,
-                                                window_ptr_,
-                                                render_mem_bytes_);
+#ifdef HAVE_RENDERING
+                                                render_manager_.get());
+#else
+                                                nullptr);
+#endif
 
           auto clock_begin = timer_start();
           auto results = executor->execute(root_plan,
@@ -978,53 +962,6 @@ class MapDHandler : virtual public MapDIf {
  private:
   typedef std::map<TSessionId, std::shared_ptr<Catalog_Namespace::SessionInfo>> SessionMap;
 
-  void initGLFW() {
-#ifdef HAVE_RENDERING
-    // set the error callback
-    glfwSetErrorCallback(mainGLFWErrorCallback);
-
-    if (!glfwInit()) {
-      std::runtime_error err("GLFW error: Couldn't initialize GLFW");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-    // window_ptr_.reset(glfwCreateWindow(1, 1, "", nullptr, nullptr));
-    window_ptr_ = glfwCreateWindow(1, 1, "", nullptr, nullptr);
-    if (!window_ptr_) {
-      // TODO(croot): is this necessary? Will the error callback catch
-      // all possible errors?
-      std::runtime_error err("GLFW error: Couldn\'t create a window.");
-      LOG(ERROR) << err.what();
-      throw err;
-    }
-
-    glfwMakeContextCurrent(window_ptr_);
-
-    glewExperimental = GL_TRUE;  // needed for core profile
-    GLenum err = glewInit();
-    if (err != 0) {
-      char errstr[512];
-      snprintf(errstr, sizeof(errstr), "%s", glewGetErrorString(err));
-      std::runtime_error err(std::string("GLEW error: Couldn\'t initialize glew. ") + errstr);
-      LOG(ERROR) << err.what();
-      throw err;
-    }
-
-    // glGetError();  // clear error code - this always throws error but seems to not matter
-
-    // indicates how many frames to wait until buffers are swapped.
-    glfwSwapInterval(1);
-#else   // HAVE_RENDERING
-    throw std::runtime_error("Backend rendering disabled in this build.");
-#endif  // HAVE_RENDERING
-  }
-
   SessionMap::iterator get_session_it(const TSessionId session) {
     auto session_it = sessions_.find(session);
     if (session_it == sessions_.end()) {
@@ -1083,13 +1020,8 @@ class MapDHandler : virtual public MapDIf {
     const auto& cat = session_info.get_catalog();
     const auto ra = ra_interpret(query_ast, cat);
     auto ed_list = get_execution_descriptors(ra.get());
-    auto executor = Executor::getExecutor(cat.get_currentDB().dbId,
-                                          jit_debug_ ? "/tmp" : "",
-                                          jit_debug_ ? "mapdquery" : "",
-                                          0,
-                                          0,
-                                          window_ptr_,
-                                          render_mem_bytes_);
+    auto executor = Executor::getExecutor(
+        cat.get_currentDB().dbId, jit_debug_ ? "/tmp" : "", jit_debug_ ? "mapdquery" : "", 0, 0, nullptr);
     RelAlgExecutor ra_executor(executor.get(), cat);
     const auto result = ra_executor.executeRelAlgSeq(ed_list, {executor_device_type, true, ExecutorOptLevel::Default});
     convert_rows(_return, result.getTargetsMeta(), result.getRows(), column_format);
@@ -1106,8 +1038,11 @@ class MapDHandler : virtual public MapDIf {
                                           jit_debug_ ? "mapdquery" : "",
                                           0,
                                           0,
-                                          window_ptr_,
-                                          render_mem_bytes_);
+#ifdef HAVE_RENDERING
+                                          render_manager_.get());
+#else
+                                          nullptr);
+#endif
     ResultRows results({}, nullptr, nullptr, executor_device_type);
     _return.execution_time_ms += measure<>::execution([&]() {
       results = executor->execute(root_plan,
@@ -1383,8 +1318,9 @@ class MapDHandler : virtual public MapDIf {
   bool cpu_mode_only_;
   mapd_shared_mutex rw_mutex_;
   std::mutex calcite_mutex_;
-  GLFWwindow* window_ptr_;
-  const size_t render_mem_bytes_;
+#ifdef HAVE_RENDERING
+  std::unique_ptr<::QueryRenderer::QueryRenderManager> render_manager_;
+#endif
 #ifdef HAVE_CALCITE
   Calcite calcite_;
   const bool legacy_syntax_;

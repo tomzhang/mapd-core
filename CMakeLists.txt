@@ -109,6 +109,8 @@ if(ENABLE_RENDERING)
     ADD_SUBDIRECTORY    (Rendering)
     ADD_SUBDIRECTORY    (QueryRenderer)
 
+    set(MAPD_RENDERING_LIBRARIES QueryRenderer Rendering)
+
     set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-render")
 endif()
 
@@ -161,10 +163,13 @@ endif()
 set(MAPD_LIBRARIES Shared Catalog SqliteConnector Parser Analyzer Planner
     QueryEngine DataMgr Fragmenter Chunk)
 
-set(MAPD_RENDERING_LIBRARIES Rendering QueryRenderer)
 
 if(ENABLE_CALCITE)
     list(APPEND MAPD_LIBRARIES Calcite)
+endif()
+
+if (ENABLE_RENDERING)
+    list(APPEND MAPD_LIBRARIES "${MAPD_RENDERING_LIBRARIES}")
 endif()
 
 enable_testing()

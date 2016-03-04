@@ -1,14 +1,6 @@
 #ifndef QUERYENGINE_EXECUTE_H
 #define QUERYENGINE_EXECUTE_H
 
-#ifdef HAVE_RENDERING
-#include "../QueryRenderer/QueryRenderManager.h"
-#include "../QueryRenderer/QueryDataLayout.h"
-#include <GLFW/glfw3.h>
-#else
-typedef void GLFWwindow;
-#endif  // HAVE_RENDERING
-
 #include "GroupByAndAggregate.h"
 #include "InValuesBitmap.h"
 #include "JoinHashTable.h"
@@ -217,16 +209,14 @@ class Executor {
            const size_t grid_size_x,
            const std::string& debug_dir,
            const std::string& debug_file,
-           GLFWwindow* prnt_window,
-           const size_t render_mem_bytes);
+           ::QueryRenderer::QueryRenderManager* render_manager);
 
   static std::shared_ptr<Executor> getExecutor(const int db_id,
                                                const std::string& debug_dir = "",
                                                const std::string& debug_file = "",
                                                const size_t block_size_x = 0,
                                                const size_t grid_size_x = 0,
-                                               GLFWwindow* prntWindow = nullptr,
-                                               const size_t render_mem_bytes = 0);
+                                               ::QueryRenderer::QueryRenderManager* render_manager = nullptr);
 
   static void nukeCacheOfExecutors() {
     std::lock_guard<std::mutex> flush_lock(execute_mutex_);  // don't want native code to vanish while executing
@@ -251,7 +241,7 @@ class Executor {
   int32_t getStringId(const std::string& table_name,
                       const std::string& col_name,
                       const std::string& col_val,
-                      const MapD_Renderer::QueryDataLayout*) const;
+                      const ::QueryRenderer::QueryDataLayout*) const;
 #endif  // HAVE_RENDERING
 
   StringDictionary* getStringDictionary(const int dictId,
@@ -352,7 +342,7 @@ class Executor {
                                const bool allow_multifrag,
                                const bool just_explain,
                                const bool allow_loop_joins,
-                               RenderAllocator* render_allocator);
+                               RenderAllocatorMap* render_allocator_map);
 
   struct RelAlgExecutionUnit {
     const std::vector<ScanDescriptor> scan_ids;
@@ -412,7 +402,7 @@ class Executor {
     std::vector<std::mutex> query_context_mutexes_;
     const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner_;
     int32_t* error_code_;
-    RenderAllocator* render_allocator_;
+    RenderAllocatorMap* render_allocator_map_;
     std::vector<std::pair<ResultRows, std::vector<size_t>>> all_fragment_results_;
 
    public:
@@ -424,7 +414,7 @@ class Executor {
                       const size_t context_count,
                       const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner,
                       int32_t* error_code,
-                      RenderAllocator* render_allocator);
+                      RenderAllocatorMap* render_allocator_map);
 
     ExecutionDispatch(const ExecutionDispatch&) = delete;
 
@@ -468,7 +458,7 @@ class Executor {
                              const ExecutionOptions& options,
                              const Catalog_Namespace::Catalog&,
                              std::shared_ptr<RowSetMemoryOwner>,
-                             RenderAllocator* render_allocator);
+                             RenderAllocatorMap* render_allocator_map);
 
   ResultRows executeExplain(const ExecutionDispatch&);
 
@@ -484,7 +474,7 @@ class Executor {
 
   std::string renderRows(const std::vector<std::shared_ptr<Analyzer::TargetEntry>>& targets,
                          const std::string& config_json,
-                         const size_t used_bytes,
+                         RenderAllocatorMap* render_allocator_map,
                          const int session_id,
                          const int render_widget_id);
 
@@ -564,7 +554,7 @@ class Executor {
                                  const bool was_auto_device,
                                  const uint32_t start_rowid,
                                  const uint32_t num_tables,
-                                 RenderAllocator* render_allocator);
+                                 RenderAllocatorMap* render_allocator_map);
   int32_t executePlanWithoutGroupBy(const CompilationResult&,
                                     const bool hoist_literals,
                                     ResultRows& results,
@@ -578,7 +568,7 @@ class Executor {
                                     const int device_id,
                                     const uint32_t start_rowid,
                                     const uint32_t num_tables,
-                                    RenderAllocator* render_allocator);
+                                    RenderAllocatorMap* render_allocator_map);
   int64_t getJoinHashTablePtr(const ExecutorDeviceType device_type, const int device_id);
   ResultRows reduceMultiDeviceResults(std::vector<std::pair<ResultRows, std::vector<size_t>>>& all_fragment_results,
                                       std::shared_ptr<RowSetMemoryOwner>,
@@ -893,9 +883,7 @@ class Executor {
   std::map<CodeCacheKey, std::pair<CodeCacheVal, llvm::Module*>> cpu_code_cache_;
   std::map<CodeCacheKey, std::pair<CodeCacheVal, llvm::Module*>> gpu_code_cache_;
 
-#ifdef HAVE_RENDERING
-  std::unique_ptr<MapD_Renderer::QueryRenderManager> render_manager_;
-#endif  // HAVE_RENDERING
+  ::QueryRenderer::QueryRenderManager* render_manager_;
 
   const size_t small_groups_buffer_entry_count_{512};
   const size_t render_small_groups_buffer_entry_count_{2 * 1024 * 1024};
@@ -908,7 +896,7 @@ class Executor {
   const int db_id_;
   const Catalog_Namespace::Catalog* catalog_;
 
-  static std::map<std::pair<int, GLFWwindow*>, std::shared_ptr<Executor>> executors_;
+  static std::map<std::pair<int, ::QueryRenderer::QueryRenderManager*>, std::shared_ptr<Executor>> executors_;
   static std::mutex execute_mutex_;
   static mapd_shared_mutex executors_cache_mutex_;
 
