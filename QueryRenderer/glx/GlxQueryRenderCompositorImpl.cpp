@@ -109,6 +109,11 @@ void GlxQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
   if (_rgbaTextureArray) {
     _rgbaTextureArray->resize(width, height);
   }
+
+  if (_idTextureArray) {
+    CHECK(doHitTest());
+    _idTextureArray->resize(width, height);
+  }
 }
 
 GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::GL::GLRenderer* renderer,

@@ -3,17 +3,28 @@
 #include "GlxGLWindow.h"
 #include "GlxGLRenderer.h"
 #include "X11DisplayManager.h"
+#include "../../../RenderError.h"
 #include <X11/Xresource.h>
 
 namespace Rendering {
 namespace GL {
 namespace GLX {
 
+static int internalX11ErrorHandler(Display* dpy, XErrorEvent* errEvt) {
+  char errtext[1024];
+  XGetErrorText(dpy, errEvt->error_code, errtext, 1024);
+  // CHECK(false) << "X11/Glx error caught on resource id: " << errEvt->resourceid << ". Error text: " << errtext;
+  THROW_RUNTIME_EX("X11/Glx error caught on resource id: " + std::to_string(errEvt->resourceid) + ". Error text: " +
+                   errtext);
+  return errEvt->error_code;
+}
+
 X11WindowManagerImpl::X11WindowManagerImpl() : _displayMgr() {
   // #ifdef MAPDGL_MULTITHREADED
   //   XInitThreads();
   // #endif
 
+  XSetErrorHandler(internalX11ErrorHandler);
   XInitThreads();
 }
 

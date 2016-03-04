@@ -457,13 +457,14 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
 }
 
 #ifdef HAVE_CUDA
-void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
-                                                     const ::CudaMgr_Namespace::CudaMgr* cudaMgr,
-                                                     const Executor* executor,
-                                                     QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
+void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
+                                           const Executor* executor,
+                                           QueryRenderManager::PerGpuDataMap& qrmPerGpuData) {
   std::vector<GpuId> gpuIds;
-  for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
-    gpuIds.push_back(item.first);
+  for (const auto& kv : qrmPerGpuData) {
+    if (kv.second->queryResultBufferPtr->getNumUsedBytes() > 0) {
+      gpuIds.push_back(kv.first);
+    }
   }
 
   std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
@@ -475,12 +476,10 @@ void QueryRenderer::updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataL
   _ctx->_queryDataLayoutPtr = dataLayoutPtr;
   _ctx->executor_ = executor;
 
-  for (auto& item : dataLayoutPtr->numRowsPerGpuBufferMap) {
-    auto itr = _perGpuData.find(item.first);
+  for (auto gpuId : gpuIds) {
+    auto itr = _perGpuData.find(gpuId);
     CHECK(itr != _perGpuData.end());
-    cudaMgr->setContext(itr->first);
-    itr->second.makeActiveOnCurrentThread();
-    itr->second.getQRMGpuData()->queryResultBufferPtr->updatePostQuery(_ctx->_queryResultBufferLayout, item.second);
+    itr->second.getQRMGpuData()->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
   }
 
   // now update the gpu resources for data, scale, and geom configs
@@ -575,7 +574,7 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   // renderer->makeInactive();
 }
 
-void QueryRenderer::render() {
+void QueryRenderer::render(bool inactivateRendererOnThread) {
   // update everything marked dirty before rendering
   _update();
 
@@ -636,6 +635,11 @@ void QueryRenderer::render() {
       // }
     }
   }
+
+  if (inactivateRendererOnThread) {
+    GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
+    currRenderer->makeInactive();
+  }
 }
 
 PngData QueryRenderer::renderToPng(int compressionLevel) {
@@ -643,7 +647,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
                     "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " +
                         "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
 
-  render();
+  render(false);
 
   int width = getWidth();
   int height = getHeight();
@@ -653,7 +657,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     Renderer* renderer = _compositorPtr->getRenderer();
     renderer->makeActiveOnCurrentThread();
     pixelsPtr = _compositorPtr->readColorBuffer(0, 0, width, height);
-    // renderer->makeInactive();
+    renderer->makeInactive();
   } else {
     auto itr = _perGpuData.begin();
 
@@ -668,7 +672,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     framebufferPtr->bindToRenderer(renderer, FboBind::READ);
     pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-    // renderer->makeInactive();
+    renderer->makeInactive();
   }
 
   return PngData(width, height, pixelsPtr, compressionLevel);
@@ -693,6 +697,7 @@ unsigned int QueryRenderer::getIdAt(int x, int y) {
     Renderer* renderer = _compositorPtr->getRenderer();
     renderer->makeActiveOnCurrentThread();
     idPixelsPtr = _compositorPtr->readIdBuffer(x, y, 1, 1);
+    renderer->makeInactive();
   } else {
     auto itr = _perGpuData.begin();
 
@@ -706,6 +711,7 @@ unsigned int QueryRenderer::getIdAt(int x, int y) {
     QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
     framebufferPtr->bindToRenderer(renderer, FboBind::READ);
     idPixelsPtr = framebufferPtr->readIdBuffer(x, y, 1, 1);
+    itr->second.makeInactive();
   }
 
   CHECK(idPixelsPtr);

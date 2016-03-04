@@ -61,6 +61,13 @@ class QueryRenderer {
         qrmGpuDataShPtr->makeActiveOnCurrentThread();
       }
     }
+
+    void makeInactive() {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        qrmGpuDataShPtr->makeInactive();
+      }
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
@@ -84,15 +91,14 @@ class QueryRenderer {
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
 #ifdef HAVE_CUDA
-  void updateQueryResultBufferPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
-                                        const ::CudaMgr_Namespace::CudaMgr* cudaMgr,
-                                        const Executor* executor,
-                                        QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
+  void updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
+                              const Executor* executor,
+                              QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
 #endif  // HAVE_CUDA
 
   void activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData, const std::vector<GpuId>& gpusToActivate = {});
 
-  void render();
+  void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);
 
   unsigned int getIdAt(int x, int y);

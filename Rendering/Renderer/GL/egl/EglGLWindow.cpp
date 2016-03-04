@@ -17,7 +17,7 @@ namespace EGL {
 EglGLWindow::EglGLWindow(const Settings::WindowSettings& windowSettings,
                          EglDisplayManager& displayMgr,
                          const WindowShPtr& prnt)
-    : GLWindow(windowSettings, prnt), _dpyPtr(nullptr), _surface(0), _eglCfg(0) {
+    : GLWindow(windowSettings, prnt), _dpyPtr(nullptr), _gpuId(-1), _surface(0), _eglCfg(0) {
   _initEGLDisplay(displayMgr);
 }
 
@@ -26,6 +26,12 @@ EglGLWindow::~EglGLWindow() {
     eglDestroySurface(_dpyPtr->getEGLDisplay(), _surface);
     _surface = 0;
   }
+}
+
+size_t EglGLWindow::getGpuId() const {
+  RUNTIME_EX_ASSERT(_gpuId >= 0 && _dpyPtr,
+                    "The GLWindow has not been initialized yet. Cannot get the Gpu ID associated with it.");
+  return _dpyConnection.second;
 }
 
 void EglGLWindow::_initEGLDisplay(EglDisplayManager& displayMgr) {
@@ -38,6 +44,8 @@ void EglGLWindow::_initEGLDisplay(EglDisplayManager& displayMgr) {
 
   _dpyPtr = displayMgr.connectToDisplay(gpuId);
   RUNTIME_EX_ASSERT(_dpyPtr, "EglGLWindow: Cannot connect to device " + std::to_string(gpuId));
+
+  _gpuId = gpuId;
 }
 
 void EglGLWindow::_init(Renderer* renderer) {

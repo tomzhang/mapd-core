@@ -12,6 +12,8 @@ class EglGLWindow : public GLWindow {
  public:
   ~EglGLWindow();
 
+  size_t getGpuId() const final;
+
   EGLSurface getEGLSurface() const { return _surface; }
   EglDisplayShPtr getEGLDisplayPtr() const { return _dpyPtr; }
   EGLConfig getEGLConfig() const { return _eglCfg; }
@@ -32,6 +34,7 @@ class EglGLWindow : public GLWindow {
   void _initSwap(EglGLRenderer* renderer);
 
   EglDisplayShPtr _dpyPtr;
+  int _gpuId;
   EGLSurface _surface;
   EGLConfig _eglCfg;
 

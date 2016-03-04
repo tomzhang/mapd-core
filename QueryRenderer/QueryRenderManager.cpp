@@ -89,7 +89,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   // rendererSettings.setIntSetting(IntSetting::OPENGL_MAJOR, 4);
   // rendererSettings.setIntSetting(IntSetting::OPENGL_MINOR, 5);
 
-  GLRenderer* renderer;
+  GLRenderer* renderer = nullptr;
   GLResourceManagerShPtr rsrcMgrPtr;
 
   PerGpuDataShPtr gpuDataPtr;
@@ -110,6 +110,15 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     gpuDataPtr->queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
 
     _perGpuData.insert({i, gpuDataPtr});
+
+    // make sure to clear the renderer from the current thread
+    gpuDataPtr->makeInactive();
+  }
+}
+
+void QueryRenderManager::_resetQueryResultBuffers() {
+  for (auto& itr : _perGpuData) {
+    itr.second->queryResultBufferPtr->reset();
   }
 }
 
@@ -240,9 +249,22 @@ CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
 
   return rtn;
 }
+
+void QueryRenderManager::setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes) {
+  auto itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot set cuda handle results for gpu " + std::to_string(gpuId) + ".");
+
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_mtx);
+
+  itr->second->makeActiveOnCurrentThread();
+  itr->second->queryResultBufferPtr->updatePostQuery(numUsedBytes);
+  itr->second->rendererPtr->makeInactive();
+}
+
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                                          QueryDataLayoutShPtr dataLayoutPtr,
-                                         const ::CudaMgr_Namespace::CudaMgr* cudaMgr,
                                          const Executor* executor) {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
@@ -254,9 +276,8 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   // from the json obj
   if (dataLayoutPtr) {
     // CHECK(executor != nullptr);
-    CHECK(cudaMgr != nullptr);
 
-    _activeRenderer->updateQueryResultBufferPostQuery(dataLayoutPtr, cudaMgr, executor, _perGpuData);
+    _activeRenderer->updateResultsPostQuery(dataLayoutPtr, executor, _perGpuData);
   } else {
     CHECK(_perGpuData.size());
 
@@ -298,12 +319,23 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
   _activeRenderer->setWidthHeight(width, height);
 }
 
+std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
+  std::vector<GpuId> rtn;
+  for (auto itr : _perGpuData) {
+    rtn.push_back(itr.first);
+  }
+
+  return rtn;
+}
+
 void QueryRenderManager::render() {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   std::lock_guard<std::mutex> render_lock(_mtx);
   _activeRenderer->render();
+
+  _resetQueryResultBuffers();
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
@@ -311,7 +343,11 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   std::lock_guard<std::mutex> render_lock(_mtx);
-  return _activeRenderer->renderToPng(compressionLevel);
+  PngData rtn = _activeRenderer->renderToPng(compressionLevel);
+
+  _resetQueryResultBuffers();
+
+  return rtn;
 }
 
 int64_t QueryRenderManager::getIdAt(int x, int y) {

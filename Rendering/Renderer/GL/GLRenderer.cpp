@@ -143,6 +143,25 @@ const GLEWContext* GLRenderer::glewGetContext() const {
 }
 #endif
 
+const GLWindow* GLRenderer::getPrimaryGLWindow() const {
+  const Window* window = getPrimaryWindow();
+  if (window) {
+    return dynamic_cast<const GLWindow*>(window);
+  }
+  return nullptr;
+}
+
+GLWindow* GLRenderer::getPrimaryGLWindow() {
+  return const_cast<GLWindow*>(static_cast<const GLRenderer&>(*this).getPrimaryGLWindow());
+}
+
+size_t GLRenderer::getGpuId() const {
+  const GLWindow* primaryWindow = getPrimaryGLWindow();
+  RUNTIME_EX_ASSERT(primaryWindow != nullptr,
+                    "The GLRenderer has not been initialized yet. Cannot get the Gpu ID associated with it.");
+  return primaryWindow->getGpuId();
+}
+
 void GLRenderer::setClearColor(const ColorRGBA& color) {
   MAPD_CHECK_GL_ERROR(glClearColor(color.r(), color.g(), color.b(), color.a()));
 }

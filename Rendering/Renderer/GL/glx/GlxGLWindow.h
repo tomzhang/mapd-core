@@ -15,6 +15,8 @@ class GlxGLWindow : public GLWindow {
  public:
   ~GlxGLWindow();
 
+  size_t getGpuId() const final;
+
   X11DisplayShPtr getXDisplayPtr() const;
   int getXScreenId() const;
   const DisplayScreenPair& getXConnectionData() const;

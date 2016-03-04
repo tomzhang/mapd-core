@@ -61,6 +61,12 @@ GlxGLWindow::~GlxGLWindow() {
   }
 }
 
+size_t GlxGLWindow::getGpuId() const {
+  RUNTIME_EX_ASSERT(_dpyConnection.second >= 0,
+                    "The GLWindow has not been initialized yet. Cannot get the Gpu ID associated with it.");
+  return _dpyConnection.second;
+}
+
 X11DisplayShPtr GlxGLWindow::getXDisplayPtr() const {
   return _dpyConnection.first;
 }

@@ -70,11 +70,14 @@ void QueryVertexBuffer::bufferData(void* data, size_t numItems, size_t numBytesP
 QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage)
     : QueryVertexBuffer(renderer, numBytes, usage),
       _isActive(false),
+      _usedBytes(0),
+      _gpuId(-1),
 #ifdef HAVE_CUDA
       // _cudaResource(nullptr),
       _cudaResourceMap()
 #endif
 {
+  _gpuId = renderer->getGpuId();
 }
 
 QueryResultVertexBuffer::~QueryResultVertexBuffer() {
@@ -119,8 +122,7 @@ QueryResultVertexBuffer::~QueryResultVertexBuffer() {
 #endif  // HAVE_CUDA
 }
 
-void QueryResultVertexBuffer::updatePostQuery(const Rendering::GL::Resources::GLBufferLayoutShPtr& bufferLayout,
-                                              size_t numRows) {
+void QueryResultVertexBuffer::updatePostQuery(size_t numUsedBytes) {
   // TODO(croot): fill this function in. Should be called after the query is completed
   // and this buffer is filled with data. We just need to know what's in that data.
 
@@ -134,7 +136,16 @@ void QueryResultVertexBuffer::updatePostQuery(const Rendering::GL::Resources::GL
   _unmapCudaGraphicsResource(cudaRsrc);
 #endif
 
-  _vbo->setBufferLayout(bufferLayout, numRows);
+  _usedBytes = numUsedBytes;
+}
+
+void QueryResultVertexBuffer::setBufferLayout(const ::Rendering::GL::Resources::GLBufferLayoutShPtr& bufferLayout) {
+  size_t bytesPerVertex = bufferLayout->getNumBytesPerVertex();
+  RUNTIME_EX_ASSERT(_usedBytes % bytesPerVertex == 0,
+                    "Buffer layout bytes-per-vertex " + std::to_string(bytesPerVertex) +
+                        " does not align with the number of used bytes in the buffer: " + std::to_string(_usedBytes) +
+                        ".");
+  _vbo->setBufferLayout(bufferLayout, _usedBytes / bytesPerVertex);
 }
 
 #ifdef HAVE_CUDA
@@ -155,27 +166,36 @@ CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {
   CUgraphicsResource cudaRsrc = _getCudaGraphicsResource(true);
   _mapCudaGraphicsResource(cudaRsrc);
 
-  size_t num_bytes;
+  size_t num_bytes = 0;
   size_t numVboBytes = _vbo->numBytes();
 
   CUdeviceptr devPtr;
   // checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
   checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc));
 
-  RUNTIME_EX_ASSERT(num_bytes == numVboBytes,
-                    "QueryResultVertexBuffer: couldn't successfully map all " + std::to_string(numVboBytes) +
-                        " bytes. Was only able to map " + std::to_string(num_bytes) + " bytes.");
+  LOG_IF(WARNING, num_bytes != numVboBytes) << "QueryResultVertexBuffer: couldn't successfully map all " << numVboBytes
+                                            << " bytes. Was only able to map " << num_bytes << " bytes for cuda.";
+  // RUNTIME_EX_ASSERT(num_bytes == numVboBytes,
+  //                   "QueryResultVertexBuffer: couldn't successfully map all " + std::to_string(numVboBytes) +
+  //                       " bytes. Was only able to map " + std::to_string(num_bytes) + " bytes.");
 
   _isActive = true;
 
-  return CudaHandle(reinterpret_cast<void*>(devPtr), numVboBytes);
+  return CudaHandle(reinterpret_cast<void*>(devPtr), num_bytes);
 }
 
 CUgraphicsResource QueryResultVertexBuffer::_getCudaGraphicsResource(bool registerResource) {
   // CUcontext* currCudaCtx=nullptr;
   CUcontext currCudaCtx;
+  CUdevice ctxDevice;
 
   checkCudaErrors(cuCtxGetCurrent(&currCudaCtx));
+  checkCudaErrors(cuCtxGetDevice(&ctxDevice));
+
+  RUNTIME_EX_ASSERT(ctxDevice == _gpuId,
+                    "Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
+                        " for cuda context does not match the QueryResultVertexBuffer device " +
+                        std::to_string(_gpuId));
 
   // TODO(croot): convert these checks to log/throw errors
   CHECK(currCudaCtx != nullptr);

@@ -180,12 +180,13 @@ void GLTexture2d::resize(size_t width, size_t height) {
 
     validateUsability();
 
-    // TODO(croot): do we need to supply the sample props down on a resize or will
-    // the stay intact?
-    resizeTexture2d(_target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples);
-
     _width = width;
     _height = height;
+
+    // TODO(croot): do we need to supply the sample props down on a resize or will
+    // the stay intact?
+    resizeTexture2d(
+        _target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples, &_sampleProps);
   }
 }
 

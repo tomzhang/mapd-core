@@ -7,15 +7,13 @@ using Rendering::GL::Resources::GLInterleavedBufferLayout;
 using Rendering::GL::Resources::GLSequentialBufferLayout;
 using Rendering::GL::Resources::GLBufferAttrType;
 
-QueryDataLayout::QueryDataLayout(const PerGpuDataMap& numRowsPerGpuBufferMap,
-                                 const std::vector<std::string>& attrNames,
+QueryDataLayout::QueryDataLayout(const std::vector<std::string>& attrNames,
                                  const std::vector<AttrType>& attrTypes,
                                  const std::unordered_map<std::string, std::string>& attrAliasToName,
                                  const size_t numKeys,
                                  const int64_t invalidKey,
                                  const LayoutType layoutType)
-    : numRowsPerGpuBufferMap(numRowsPerGpuBufferMap),
-      numKeys(numKeys),
+    : numKeys(numKeys),
       invalidKey(invalidKey),
       attrNames(attrNames),
       attrTypes(attrTypes),

@@ -43,6 +43,8 @@ class GLWindow : public Window {
  public:
   virtual ~GLWindow();
 
+  virtual size_t getGpuId() const = 0;
+
   // void makeActiveOnCurrentThread() final;
   // void makeInactive() final;
   // bool isActiveOnCurrentThread() final;

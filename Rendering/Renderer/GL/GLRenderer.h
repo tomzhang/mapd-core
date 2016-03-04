@@ -33,6 +33,10 @@ class GLRenderer : public Renderer {
   const GLEWContext* glewGetContext() const;
 #endif
 
+  const GLWindow* getPrimaryGLWindow() const;
+  GLWindow* getPrimaryGLWindow();
+  size_t getGpuId() const;
+
   /** State related functions **/
 
   // TODO(croot): Eventually put in a state machine class

@@ -95,11 +95,13 @@ class QueryRenderManager {
 
   void setWidthHeight(int width, int height);
 
+  std::vector<GpuId> getAllGpuIds() const;
+
 #ifdef HAVE_CUDA
   CudaHandle getCudaHandle(const GpuId& gpuId);
+  void setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes);
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                        QueryDataLayoutShPtr dataLayoutPtr = nullptr,
-                       const CudaMgr_Namespace::CudaMgr* cudaMgr = nullptr,
                        const Executor* executor = nullptr);
 #else
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr);
@@ -129,6 +131,7 @@ class QueryRenderManager {
   PerGpuDataMap _perGpuData;
 
   void _initialize(Rendering::WindowManager& windowMgr, int numGpus, int startGpu, size_t queryResultBufferSize);
+  void _resetQueryResultBuffers();
 
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;

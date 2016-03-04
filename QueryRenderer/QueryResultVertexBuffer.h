@@ -32,6 +32,8 @@
 
 namespace QueryRenderer {
 
+class QueryRenderManager;
+
 #ifdef HAVE_CUDA
 struct CudaHandle {
   void* handle;
@@ -104,14 +106,21 @@ class QueryResultVertexBuffer : public QueryVertexBuffer {
 
   ~QueryResultVertexBuffer();
 
+  size_t getNumUsedBytes() { return _usedBytes; }
+
 #ifdef HAVE_CUDA
   CudaHandle getCudaHandlePreQuery();
 #endif
 
-  void updatePostQuery(const Rendering::GL::Resources::GLBufferLayoutShPtr& bufferLayout, size_t numRows);
+  void updatePostQuery(size_t numUsedBytes);
+  void setBufferLayout(const Rendering::GL::Resources::GLBufferLayoutShPtr& bufferLayout);
 
  private:
   bool _isActive;
+  size_t _usedBytes;
+  int _gpuId;
+
+  void reset() { _usedBytes = 0; }
 
 #ifdef HAVE_CUDA
   // CUgraphicsResource _cudaResource;
@@ -126,6 +135,8 @@ class QueryResultVertexBuffer : public QueryVertexBuffer {
 
   void _unmapCudaGraphicsResource(CUgraphicsResource& rsrc);
 #endif  // HAVE_CUDA
+
+  friend class ::QueryRenderer::QueryRenderManager;
 };
 
 }  // namespace QueryRenderer

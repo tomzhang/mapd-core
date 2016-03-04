@@ -17,8 +17,6 @@ struct QueryDataLayout {
 
   typedef std::map<GpuId, size_t> PerGpuDataMap;
 
-  PerGpuDataMap numRowsPerGpuBufferMap;
-
   // TODO(croot): add size_t numKeys --- each row can have
   // multiple keys. This value would indicate how many.
   // We can default it to use one, and the invalid key
@@ -31,8 +29,7 @@ struct QueryDataLayout {
   std::unordered_map<std::string, std::string> attrAliasToName;
   LayoutType layoutType;
 
-  QueryDataLayout(const PerGpuDataMap& numRowsPerGpuBufferMap,
-                  const std::vector<std::string>& attrNames,
+  QueryDataLayout(const std::vector<std::string>& attrNames,
                   const std::vector<AttrType>& attrTypes,
                   const std::unordered_map<std::string, std::string>& attrAliasToName,
                   const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant
