@@ -10,7 +10,7 @@ using Settings::IntConstant;
 using Settings::StrSetting;
 
 Window::Window(RendererType type, const WindowSettings& windowSettings, const WindowShPtr& prnt)
-    : _type(type), _settings(windowSettings), _prnt(prnt) {
+    : _initialized(false), _type(type), _settings(windowSettings), _prnt(prnt) {
 }
 
 // Window::Window(const WindowSettings& windowSettings, const RendererShPtr& rendererPtr, const WindowShPtr& prnt)

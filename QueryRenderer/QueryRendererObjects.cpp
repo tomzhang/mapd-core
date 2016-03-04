@@ -2008,7 +2008,7 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   // need to have a way to generically draw bound buffers
   // which would be best with a renderer class
   // MAPD_CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, x.size()));
-  renderer->drawVertexBuffers(GL_POINTS, 0, x.size(gpuId));
+  renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());
 
   // unset state
   renderer->disable(GL_PROGRAM_POINT_SIZE);
