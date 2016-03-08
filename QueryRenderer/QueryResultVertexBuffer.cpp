@@ -68,15 +68,7 @@ void QueryVertexBuffer::bufferData(void* data, size_t numItems, size_t numBytesP
 }
 
 QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage)
-    : QueryVertexBuffer(renderer, numBytes, usage),
-      _isActive(false),
-      _usedBytes(0),
-      _gpuId(-1),
-#ifdef HAVE_CUDA
-      // _cudaResource(nullptr),
-      _cudaResourceMap()
-#endif
-{
+    : QueryVertexBuffer(renderer, numBytes, usage), _isActive(false), _usedBytes(0), _gpuId(-1), _cudaResourceMap() {
   _gpuId = renderer->getGpuId();
 }
 
