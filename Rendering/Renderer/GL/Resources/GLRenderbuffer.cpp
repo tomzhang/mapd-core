@@ -48,10 +48,10 @@ static void resizeRenderbuffer(GLuint rbo,
 }
 
 GLRenderbuffer::GLRenderbuffer(const RendererWkPtr& rendererPtr,
-                               int width,
-                               int height,
+                               size_t width,
+                               size_t height,
                                GLenum internalFormat,
-                               int numSamples)
+                               size_t numSamples)
     : GLResource(rendererPtr),
       _width(width),
       _height(height),
@@ -88,7 +88,7 @@ void GLRenderbuffer::_makeEmpty() {
   _bufferId = 0;
 }
 
-void GLRenderbuffer::resize(int width, int height) {
+void GLRenderbuffer::resize(size_t width, size_t height) {
   if (width != _width || height != _height) {
     RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the renderbuffer. Dimensions must be > 0");
 

@@ -186,7 +186,7 @@ void GLFramebuffer::_makeEmpty() {
   _attachmentManager.clear();
 }
 
-int GLFramebuffer::getWidth() const {
+size_t GLFramebuffer::getWidth() const {
   if (_textureBuffers.size()) {
     return _textureBuffers[0]->getWidth();
   } else if (_renderBuffers.size()) {
@@ -195,7 +195,7 @@ int GLFramebuffer::getWidth() const {
   return 0;
 }
 
-int GLFramebuffer::getHeight() const {
+size_t GLFramebuffer::getHeight() const {
   if (_textureBuffers.size()) {
     return _textureBuffers[0]->getHeight();
   } else if (_renderBuffers.size()) {
@@ -223,6 +223,15 @@ void GLFramebuffer::readPixels(GLenum attachment,
 
   validateUsability();
 
+  // size_t myWidth = getWidth();
+  // size_t myHeight = getHeight();
+  // RUNTIME_EX_ASSERT(startx + width <= myWidth && starty + height <= myHeight,
+  //                   "GLFramebuffer: bounds of the pixels to read ((x, y) = (" + std::to_string(startx) + ", " +
+  //                       std::to_string(starty) + "), width = " + std::to_string(width) + ", height = " +
+  //                       std::to_string(height) + ") extends beyond the bounds of the framebuffer (width = " +
+  //                       std::to_string(myWidth) + ", height = " + std::to_string(myHeight) + "). Cannot read
+  //                       pixels.");
+
   GLint currReadBuffer, currReadFbo;
 
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &currReadFbo));
@@ -245,7 +254,7 @@ void GLFramebuffer::readPixels(GLenum attachment,
   }
 }
 
-void GLFramebuffer::resize(int width, int height) {
+void GLFramebuffer::resize(size_t width, size_t height) {
   // TODO(croot): should we worry about which renderer here? Or is always defaulting to
   // the parent renderer ok?
 

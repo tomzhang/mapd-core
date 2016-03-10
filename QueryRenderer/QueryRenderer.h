@@ -101,7 +101,7 @@ class QueryRenderer {
   void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);
 
-  unsigned int getIdAt(int x, int y);
+  unsigned int getIdAt(size_t x, size_t y);
 
   PerGpuDataMap* getPerGpuData() { return &_perGpuData; }
   QueryRendererContext* getContext() { return _ctx.get(); }

@@ -19,26 +19,30 @@ class GLRenderbuffer : public GLResource {
   GLuint getId() const final { return _bufferId; }
   GLenum getTarget() const final { return GL_RENDERBUFFER; }
 
-  int getWidth() { return _width; }
-  int getHeight() { return _height; }
+  size_t getWidth() { return _width; }
+  size_t getHeight() { return _height; }
   GLenum getInternalFormat() { return _internalFormat; }
-  int getNumSamples() { return _numSamples; }
+  size_t getNumSamples() { return _numSamples; }
 
-  void resize(int width, int height);
+  void resize(size_t width, size_t height);
 
   void bindToRenderer(GLRenderer* renderer) final;
 
  private:
-  GLRenderbuffer(const RendererWkPtr& rendererPtr, int width, int height, GLenum internalFormat, int numSamples = 1);
+  explicit GLRenderbuffer(const RendererWkPtr& rendererPtr,
+                          size_t width,
+                          size_t height,
+                          GLenum internalFormat,
+                          size_t numSamples = 1);
 
   void _initResource();
   void _cleanupResource() final;
   void _makeEmpty() final;
 
-  int _width;
-  int _height;
+  size_t _width;
+  size_t _height;
   GLenum _internalFormat;
-  int _numSamples;
+  size_t _numSamples;
 
   GLuint _bufferId;
 

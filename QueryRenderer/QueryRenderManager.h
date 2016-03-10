@@ -112,7 +112,7 @@ class QueryRenderManager {
   PngData renderToPng(int compressionLevel = -1);
 
   // get the id at a specific pixel
-  int64_t getIdAt(int x, int y);
+  int64_t getIdAt(size_t x, size_t y);
 
   // CROOT - the following is a debug function. Remove when ready for deployment
   // GLFWwindow* getWindow() {

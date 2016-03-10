@@ -678,7 +678,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   return PngData(width, height, pixelsPtr, compressionLevel);
 }
 
-unsigned int QueryRenderer::getIdAt(int x, int y) {
+unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
   // RUNTIME_EX_ASSERT(_framebufferPtr != nullptr,
   //                   "QueryRenderer: The framebuffer is not defined. Cannot retrieve id at pixel.");
 
@@ -694,24 +694,32 @@ unsigned int QueryRenderer::getIdAt(int x, int y) {
   std::shared_ptr<unsigned int> idPixelsPtr;
 
   if (_compositorPtr) {
-    Renderer* renderer = _compositorPtr->getRenderer();
-    renderer->makeActiveOnCurrentThread();
-    idPixelsPtr = _compositorPtr->readIdBuffer(x, y, 1, 1);
-    renderer->makeInactive();
+    if (x < _compositorPtr->getWidth() && y >= 0 && y < _compositorPtr->getHeight()) {
+      Renderer* renderer = _compositorPtr->getRenderer();
+      renderer->makeActiveOnCurrentThread();
+      idPixelsPtr = _compositorPtr->readIdBuffer(x, y, 1, 1);
+      renderer->makeInactive();
+    } else {
+      return 0;
+    }
   } else {
     auto itr = _perGpuData.begin();
 
-    QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
-
-    // const GpuId& gpuId = itr->first;
-    itr->second.makeActiveOnCurrentThread();
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
-    CHECK(renderer != nullptr);
-
     QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
-    framebufferPtr->bindToRenderer(renderer, FboBind::READ);
-    idPixelsPtr = framebufferPtr->readIdBuffer(x, y, 1, 1);
-    itr->second.makeInactive();
+    if (x < framebufferPtr->getWidth() && y >= 0 && y < framebufferPtr->getHeight()) {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+
+      // const GpuId& gpuId = itr->first;
+      itr->second.makeActiveOnCurrentThread();
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
+      CHECK(renderer != nullptr);
+
+      framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+      idPixelsPtr = framebufferPtr->readIdBuffer(x, y, 1, 1);
+      itr->second.makeInactive();
+    } else {
+      return 0;
+    }
   }
 
   CHECK(idPixelsPtr);

@@ -2,6 +2,7 @@
 #include "QueryRenderCompositor.h"
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
+#include <cstring>
 
 // #include "MapDGL.h"
 // #include "QueryRendererError.h"
@@ -17,6 +18,37 @@ using ::Rendering::GL::Resources::FboBind;
 using ::Rendering::GL::Resources::GLFramebufferAttachmentMap;
 using ::Rendering::GL::Resources::GLTexture2dShPtr;
 using ::Rendering::GL::Resources::GLRenderbufferShPtr;
+
+static bool clampWidthAndHeightToSrc(size_t startx,
+                                     size_t starty,
+                                     int width,
+                                     int height,
+                                     size_t srcWidth,
+                                     size_t srcHeight,
+                                     int& clampedWidth,
+                                     int& clampedHeight) {
+  bool rtn = false;
+
+  clampedWidth = (width < 0 ? srcWidth - startx : width);
+  clampedHeight = (height < 0 ? srcHeight - starty : height);
+
+  bool widthOverflow = (startx + clampedWidth > srcWidth);
+  bool heightOverflow = (starty + clampedHeight > srcHeight);
+
+  if (widthOverflow || heightOverflow) {
+    rtn = true;
+
+    if (widthOverflow) {
+      clampedWidth = srcWidth - startx;
+    }
+
+    if (heightOverflow) {
+      clampedHeight = srcHeight - starty;
+    }
+  }
+
+  return rtn;
+}
 
 QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, bool doHitTest, bool doDepthTest)
     : _doHitTest(doHitTest),
@@ -85,11 +117,11 @@ void QueryFramebuffer::resize(int width, int height) {
   _fbo->resize(width, height);
 }
 
-int QueryFramebuffer::getWidth() const {
+size_t QueryFramebuffer::getWidth() const {
   return _fbo->getWidth();
 }
 
-int QueryFramebuffer::getHeight() const {
+size_t QueryFramebuffer::getHeight() const {
   return _fbo->getHeight();
 }
 
@@ -148,14 +180,33 @@ void QueryFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
 }
 
 std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx, size_t starty, int width, int height) {
-  size_t widthToUse = (width < 0 ? getWidth() : width);
-  size_t heightToUse = (height < 0 ? getHeight() : height);
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
 
-  std::shared_ptr<unsigned char> pixels(new unsigned char[widthToUse * heightToUse * 4],
-                                        std::default_delete<unsigned char[]>());
+  if (width < 0) {
+    width = myWidth;
+  }
+
+  if (height < 0) {
+    height = myHeight;
+  }
+
+  int widthToUse, heightToUse;
+  if (clampWidthAndHeightToSrc(startx, starty, width, height, myWidth, myHeight, widthToUse, heightToUse)) {
+    LOG(WARNING) << "QueryFramebuffer: bounds of the pixels to read ((x, y) = (" << startx << ", " << starty
+                 << "), width = " << width << ", height = " << height
+                 << ") extend beyond the bounds of the framebuffer (width = " << myWidth << ", height = " << myHeight
+                 << "). Only pixels within the bounds will be read. The rest will be initialized to (0,0,0,0).";
+  }
+
+  std::shared_ptr<unsigned char> pixels(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
   unsigned char* rawPixels = pixels.get();
+  std::memset(rawPixels, 0, width * height * 4 * sizeof(unsigned char));
 
-  _fbo->readPixels(GL_COLOR_ATTACHMENT0, startx, starty, widthToUse, heightToUse, GL_RGBA, GL_UNSIGNED_BYTE, rawPixels);
+  if (widthToUse > 0 && heightToUse > 0) {
+    _fbo->readPixels(
+        GL_COLOR_ATTACHMENT0, startx, starty, widthToUse, heightToUse, GL_RGBA, GL_UNSIGNED_BYTE, rawPixels);
+  }
 
   return pixels;
 }
@@ -167,19 +218,31 @@ std::shared_ptr<unsigned int> QueryFramebuffer::readIdBuffer(size_t startx, size
   size_t myWidth = getWidth();
   size_t myHeight = getHeight();
 
-  size_t widthToUse = (width < 0 ? myWidth : width);
-  size_t heightToUse = (height < 0 ? myHeight : height);
+  if (width < 0) {
+    width = myWidth;
+  }
 
-  RUNTIME_EX_ASSERT(
-      startx + widthToUse <= myWidth && starty + heightToUse <= myHeight,
-      "QueryFramebuffer: bounds of the pixels to read extend beyond the bounds of the image. Cannot get ids.");
+  if (height < 0) {
+    height = myHeight;
+  }
 
-  std::shared_ptr<unsigned int> pixels(new unsigned int[widthToUse * heightToUse],
-                                       std::default_delete<unsigned int[]>());
+  int widthToUse, heightToUse;
+
+  if (clampWidthAndHeightToSrc(startx, starty, width, height, myWidth, myHeight, widthToUse, heightToUse)) {
+    LOG(WARNING) << "QueryFramebuffer: bounds of the pixels to read ((x, y) = (" << startx << ", " << starty
+                 << "), width = " << width << ", height = " << height
+                 << ") extend beyond the bounds of the framebuffer (width = " << myWidth << ", height = " << myHeight
+                 << "). Only pixels within the bounds will be read. The rest will be initialized to 0.";
+  }
+
+  std::shared_ptr<unsigned int> pixels(new unsigned int[width * height], std::default_delete<unsigned int[]>());
   unsigned int* rawPixels = pixels.get();
+  std::memset(rawPixels, 0, width * height * sizeof(unsigned int));
 
-  _fbo->readPixels(
-      GL_COLOR_ATTACHMENT1, startx, starty, widthToUse, heightToUse, GL_RED_INTEGER, GL_UNSIGNED_INT, rawPixels);
+  if (widthToUse > 0 && heightToUse > 0) {
+    _fbo->readPixels(
+        GL_COLOR_ATTACHMENT1, startx, starty, widthToUse, heightToUse, GL_RED_INTEGER, GL_UNSIGNED_INT, rawPixels);
+  }
 
   return pixels;
 }

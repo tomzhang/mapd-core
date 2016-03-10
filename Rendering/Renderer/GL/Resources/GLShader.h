@@ -67,6 +67,9 @@ class GLShader : public GLResource {
 
   GLint getUniformAttributeGLType(const std::string& attrName);
 
+  // TODO(croot): this doesn't work if called like so:
+  // shader.setUniformAttribute("attrName", 1+2);
+  // Need to find a way to deal with this
   template <typename T>
   void setUniformAttribute(const std::string& attrName, T attrValue) {
     detail::UniformAttrInfo* info = _validateAttr(attrName);

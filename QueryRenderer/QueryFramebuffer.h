@@ -52,8 +52,8 @@ class QueryFramebuffer {
 
   std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
-  int getWidth() const;
-  int getHeight() const;
+  size_t getWidth() const;
+  size_t getHeight() const;
   bool doHitTest() const { return _doHitTest; }
   bool doDepthTest() const { return _doDepthTest; }
   ::Rendering::Renderer* getRenderer();

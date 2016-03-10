@@ -350,7 +350,7 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   return rtn;
 }
 
-int64_t QueryRenderManager::getIdAt(int x, int y) {
+int64_t QueryRenderManager::getIdAt(size_t x, size_t y) {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
                     "requesting pixel data.");

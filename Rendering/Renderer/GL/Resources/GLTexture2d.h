@@ -52,14 +52,14 @@ class GLTexture2d : public GLResource {
   void resize(size_t width, size_t height);
 
  private:
-  GLTexture2d(const RendererWkPtr& rendererPtr,
-              size_t width,
-              size_t height,
-              GLenum internalFormat,
-              GLenum pixelFormat,
-              GLenum pixelType,
-              const GLTexture2dSampleProps& sampleProps = GLTexture2dSampleProps(),
-              size_t numSamples = 1);
+  explicit GLTexture2d(const RendererWkPtr& rendererPtr,
+                       size_t width,
+                       size_t height,
+                       GLenum internalFormat,
+                       GLenum pixelFormat,
+                       GLenum pixelType,
+                       const GLTexture2dSampleProps& sampleProps = GLTexture2dSampleProps(),
+                       size_t numSamples = 1);
 
   void _initResource();
   void _cleanupResource() final;

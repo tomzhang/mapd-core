@@ -88,8 +88,8 @@ class GLFramebuffer : public GLResource {
   GLuint getId() const final { return _fbo; }
   GLenum getTarget() const final { return GL_FRAMEBUFFER; }
 
-  int getWidth() const;
-  int getHeight() const;
+  size_t getWidth() const;
+  size_t getHeight() const;
 
   void readPixels(GLenum attachment,
                   size_t startx,
@@ -99,7 +99,8 @@ class GLFramebuffer : public GLResource {
                   GLenum format,
                   GLenum type,
                   GLvoid* data);
-  void resize(int width, int height);
+
+  void resize(size_t width, size_t height);
 
  private:
   GLFramebuffer(const RendererWkPtr& rendererPtr, const GLFramebufferAttachmentMap& attachments);
