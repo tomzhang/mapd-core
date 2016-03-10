@@ -63,7 +63,7 @@ struct X11AllGpuInfo {
     std::string line;
     bool gettingNames = false;
 
-    std::regex numGpusRegex("^\\s*(\\d+)\\s+GPUs{0,1}\\s+on\\s+([\\w,-]+)[:,::](\\d+)");
+    std::regex numGpusRegex("^\\s*(\\d+)\\s+GPUs{0,1}\\s+on\\s+([\\w,-.]+)[:,::](\\d+)");
     std::regex gpuInfoRegex("^\\s*\\[(\\d+)\\]\\s+([\\w,-]+)[:,::](\\d+)\\s*(\\[\\w+:\\d+\\])\\s+\\((.+)\\)\\s*$");
     std::regex hasTheFollowingNamesRegex("^\\s*Has the following names:\\s*$");
     std::regex gpuNameRegex("^\\s*(\\S+)\\s*$");
