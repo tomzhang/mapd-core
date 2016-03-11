@@ -9,6 +9,7 @@
 #include <png.h>
 #include <vector>
 #include <thread>
+#include <cstring>
 // #include "MapDGL.h"
 // #include "QueryRenderer.h"
 // #include "RapidJSONUtils.h"
@@ -61,8 +62,10 @@ void QueryRenderer::_clearGpuResources() {
 void QueryRenderer::_updateGpuData(const GpuId& gpuId,
                                    QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
                                    std::unordered_set<GpuId>& unusedGpus,
-                                   bool update) {
+                                   size_t width,
+                                   size_t height) {
   auto myItr = _perGpuData.find(gpuId);
+
   if (myItr == _perGpuData.end()) {
     auto itr = qrmPerGpuData.find(gpuId);
     CHECK(itr != qrmPerGpuData.end());
@@ -74,24 +77,22 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
     // TODO(croot): validate the QueryRenderManager data is complete?
     CHECK(itr->second->rendererPtr != nullptr);
 
-    if (update) {
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second->rendererPtr.get());
-      CHECK(renderer != nullptr);
+    GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr->second->rendererPtr.get());
+    CHECK(renderer != nullptr);
 
-      itr->second->makeActiveOnCurrentThread();
+    itr->second->makeActiveOnCurrentThread();
 
-      if (_compositorPtr) {
-        gpuData.framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer));
-      } else {
-        gpuData.framebufferPtr.reset(new QueryFramebuffer(
-            renderer, _ctx->getWidth(), _ctx->getHeight(), _ctx->doHitTest(), _ctx->doDepthTest()));
-      }
+    if (_compositorPtr) {
+      gpuData.framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer));
+    } else {
+      gpuData.framebufferPtr.reset(
+          new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
     }
 
     _perGpuData.emplace(gpuId, std::move(gpuData));
   } else {
     myItr->second.makeActiveOnCurrentThread();
-    myItr->second.framebufferPtr->resize(_ctx->getWidth(), _ctx->getHeight());
+    myItr->second.framebufferPtr->resize(width, height);
 
     unusedGpus.erase(gpuId);
   }
@@ -109,15 +110,57 @@ std::unordered_set<GpuId> QueryRenderer::_initUnusedGpus() {
 void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
                                       const std::vector<GpuId>& gpuIds,
                                       std::unordered_set<GpuId>& unusedGpus) {
-  bool update = (_perGpuData.size() > 0);
-  if (gpuIds.size()) {
-    for (auto gpuId : gpuIds) {
-      _updateGpuData(gpuId, qrmPerGpuData, unusedGpus, update);
+  // make sure size is at least 1x1
+  size_t width = _ctx->getWidth();
+  if (width == 0) {
+    // TODO(croot): expose a default size?
+    width = 1;
+  }
+
+  size_t height = _ctx->getHeight();
+  if (height == 0) {
+    // TODO(croot): expose a default size?
+    height = 1;
+  }
+
+  int numGpus = gpuIds.size();
+  if (!_compositorPtr && numGpus > 1) {
+    // NOTE: since we're using a map to store the per gpu data, the first item
+    // will be the lowest active gpu id.
+    auto itr = qrmPerGpuData.find(gpuIds[0]);
+    CHECK(itr != qrmPerGpuData.end());
+
+    itr->second->makeActiveOnCurrentThread();
+    _compositorPtr.reset(new QueryRenderCompositor(this,
+                                                   itr->second->rendererPtr,
+                                                   width,
+                                                   height,
+                                                   // TODO(croot): should we support num samples
+                                                   1,  //_ctx->getNumSamples(),
+                                                   _ctx->doHitTest(),
+                                                   _ctx->doDepthTest()));
+
+    // on new compositor creation, we need to add all the framebuffers
+    // for use
+    for (auto& gpuData : _perGpuData) {
+      CHECK(gpuData.second.framebufferPtr);
+      _compositorPtr->addQueryFramebuffer(gpuData.second.framebufferPtr);
     }
-  } else {
-    for (auto& qrmItr : qrmPerGpuData) {
-      _updateGpuData(qrmItr.first, qrmPerGpuData, unusedGpus, update);
-    }
+  } else if (_compositorPtr && numGpus <= 1) {
+    // no need for compositing if only rendering on 1 gpu
+    _compositorPtr.reset(nullptr);
+  } else if (_compositorPtr && numGpus > 1) {
+    // TODO(croot): we need to verify that the compositor is on a GPU that is
+    // still active for this renderer. If not, then we need to build a new compositor
+    // and update all existing framebuffers to refer to this new compositor.
+    // NOTE: we won't have to do this TODO if we move the framebuffers and compositors
+    // to the QueryRenderManager level.
+    // if (_compositorPtr->getRenderer() != itr->second.qrmGpuData->rendererPtr.get()) {
+    // }
+  }
+
+  for (auto gpuId : gpuIds) {
+    _updateGpuData(gpuId, qrmPerGpuData, unusedGpus, width, height);
   }
 
   // now clean up any unused gpu resources
@@ -137,53 +180,18 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
   // level if/when we store a large framebuffer for all connected users to use.
   QueryRenderManager::PerGpuDataShPtr qrmGpuData;
 
-  if (_perGpuData.size() > 1) {
-    // NOTE: since we're using a map to store the per gpu data, the first item
-    // will be the lowest active gpu id.
-    auto itr = _perGpuData.begin();
-    itr->second.makeActiveOnCurrentThread();
-    if (!_compositorPtr) {
-      qrmGpuData = itr->second.getQRMGpuData();
-      _compositorPtr.reset(new QueryRenderCompositor(this,
-                                                     qrmGpuData->rendererPtr,
-                                                     width,
-                                                     height,
-                                                     // TODO(croot): should we support num samples
-                                                     1,  //_ctx->getNumSamples(),
-                                                     _ctx->doHitTest(),
-                                                     _ctx->doDepthTest()));
-    } else {
-      // TODO(croot): we need to verify that the compositor is on a GPU that is
-      // still active for this renderer. If not, then we need to build a new compositor
-      // and update all existing framebuffers to refer to this new compositor.
-      // NOTE: we won't have to do this TODO if we move the framebuffers and compositors
-      // to the QueryRenderManager level.
-      // if (_compositorPtr->getRenderer() != itr->second.qrmGpuData->rendererPtr.get()) {
-      // }
-      _compositorPtr->resize(width, height);
-    }
-  } else {
-    _compositorPtr.reset(nullptr);
+  if (_compositorPtr) {
+    Renderer* compRenderer = _compositorPtr->getRenderer();
+    CHECK(compRenderer);
+    compRenderer->makeActiveOnCurrentThread();
+    _compositorPtr->resize(width, height);
   }
 
   for (auto& gpuDataItr : _perGpuData) {
     gpuDataItr.second.makeActiveOnCurrentThread();
 
-    if (gpuDataItr.second.framebufferPtr == nullptr) {
-      qrmGpuData = gpuDataItr.second.getQRMGpuData();
-      CHECK(qrmGpuData->rendererPtr != nullptr);
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
-      CHECK(renderer != nullptr);
-
-      if (_compositorPtr) {
-        gpuDataItr.second.framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer));
-      } else {
-        gpuDataItr.second.framebufferPtr.reset(
-            new QueryFramebuffer(renderer, width, height, _ctx->doHitTest(), _ctx->doDepthTest()));
-      }
-    } else {
-      gpuDataItr.second.framebufferPtr->resize(width, height);
-    }
+    CHECK(gpuDataItr.second.framebufferPtr != nullptr);
+    gpuDataItr.second.framebufferPtr->resize(width, height);
   }
 }
 
@@ -406,15 +414,17 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
   _ctx->_jsonCache = jsonDocumentPtr;
 }
 
-int QueryRenderer::getWidth() {
+size_t QueryRenderer::getWidth() {
   return _ctx->_width;
 }
 
-int QueryRenderer::getHeight() {
+size_t QueryRenderer::getHeight() {
   return _ctx->_height;
 }
 
 void QueryRenderer::setWidthHeight(int width, int height) {
+  RUNTIME_EX_ASSERT(width >= 0 && height >= 0, "Cannot set a negative width/height.");
+
   _ctx->_width = width;
   _ctx->_height = height;
 
@@ -506,7 +516,15 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
 void QueryRenderer::activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
                                  const std::vector<GpuId>& gpusToActivate) {
   std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
-  _initGpuResources(qrmPerGpuData, gpusToActivate, unusedGpus);
+  if (!gpusToActivate.size()) {
+    std::vector<GpuId> gpuIds;
+    for (const auto& kv : qrmPerGpuData) {
+      gpuIds.push_back(kv.first);
+    }
+    _initGpuResources(qrmPerGpuData, gpuIds, unusedGpus);
+  } else {
+    _initGpuResources(qrmPerGpuData, gpusToActivate, unusedGpus);
+  }
 }
 
 void QueryRenderer::_update() {
@@ -638,7 +656,9 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
 
   if (inactivateRendererOnThread) {
     GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
-    currRenderer->makeInactive();
+    if (currRenderer) {
+      currRenderer->makeInactive();
+    }
   }
 }
 
@@ -653,26 +673,32 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   int height = getHeight();
   std::shared_ptr<unsigned char> pixelsPtr;
 
-  if (_perGpuData.size() > 1) {
-    Renderer* renderer = _compositorPtr->getRenderer();
-    renderer->makeActiveOnCurrentThread();
-    pixelsPtr = _compositorPtr->readColorBuffer(0, 0, width, height);
-    renderer->makeInactive();
+  int numGpus = _perGpuData.size();
+  if (numGpus) {
+    if (_perGpuData.size() > 1) {
+      Renderer* renderer = _compositorPtr->getRenderer();
+      renderer->makeActiveOnCurrentThread();
+      pixelsPtr = _compositorPtr->readColorBuffer(0, 0, width, height);
+      renderer->makeInactive();
+    } else {
+      auto itr = _perGpuData.begin();
+
+      QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+
+      // const GpuId& gpuId = itr->first;
+      itr->second.makeActiveOnCurrentThread();
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
+      CHECK(renderer != nullptr);
+
+      QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+      framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+      pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
+
+      renderer->makeInactive();
+    }
   } else {
-    auto itr = _perGpuData.begin();
-
-    QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
-
-    // const GpuId& gpuId = itr->first;
-    itr->second.makeActiveOnCurrentThread();
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
-    CHECK(renderer != nullptr);
-
-    QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
-    framebufferPtr->bindToRenderer(renderer, FboBind::READ);
-    pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
-
-    renderer->makeInactive();
+    pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
+    std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
   }
 
   return PngData(width, height, pixelsPtr, compressionLevel);
@@ -694,7 +720,7 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
   std::shared_ptr<unsigned int> idPixelsPtr;
 
   if (_compositorPtr) {
-    if (x < _compositorPtr->getWidth() && y >= 0 && y < _compositorPtr->getHeight()) {
+    if (x < _compositorPtr->getWidth() && y < _compositorPtr->getHeight()) {
       Renderer* renderer = _compositorPtr->getRenderer();
       renderer->makeActiveOnCurrentThread();
       idPixelsPtr = _compositorPtr->readIdBuffer(x, y, 1, 1);
@@ -706,7 +732,7 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
     auto itr = _perGpuData.begin();
 
     QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
-    if (x < framebufferPtr->getWidth() && y >= 0 && y < framebufferPtr->getHeight()) {
+    if (x < framebufferPtr->getWidth() && y < framebufferPtr->getHeight()) {
       QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
 
       // const GpuId& gpuId = itr->first;

@@ -81,8 +81,8 @@ class QueryRenderer {
 
   ~QueryRenderer();
 
-  int getWidth();
-  int getHeight();
+  size_t getWidth();
+  size_t getHeight();
   void setWidthHeight(int width, int height);
 
   const QueryFramebufferUqPtr& getFramebuffer(const GpuId& gpuId = 0);
@@ -128,7 +128,8 @@ class QueryRenderer {
   void _updateGpuData(const GpuId& gpuId,
                       QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
                       std::unordered_set<GpuId>& unusedGpus,
-                      bool update);
+                      size_t width,
+                      size_t height);
   void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
   void _initFromJSON(const std::string& configJSON, bool forceUpdate = false);
   void _resizeFramebuffers(int width, int height);
@@ -172,8 +173,8 @@ class QueryRendererContext {
 
   ~QueryRendererContext();
 
-  int getWidth() { return _width; }
-  int getHeight() { return _height; }
+  size_t getWidth() { return _width; }
+  size_t getHeight() { return _height; }
 
   bool doHitTest() { return _doHitTest; }
   bool doDepthTest() { return _doDepthTest; }
@@ -243,8 +244,8 @@ class QueryRendererContext {
   PerGpuDataMap _perGpuData;
   ::Rendering::GL::Resources::GLBufferLayoutShPtr _queryResultBufferLayout;
 
-  int _width;
-  int _height;
+  size_t _width;
+  size_t _height;
   bool _doHitTest;
   bool _doDepthTest;
   int64_t _invalidKey;

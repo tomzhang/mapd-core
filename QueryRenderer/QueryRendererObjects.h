@@ -486,13 +486,13 @@ class BaseRenderProperty {
   const QueryDataTableVBOShPtr& getDataTablePtr() { return _dataPtr; }
 
   void initGpuResources(const QueryRendererContext* ctx,
-                        const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>()) {
+                        const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>(),
+                        bool initializing = true) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
-    bool update = (_perGpuData.size() > 0);
     for (auto& itr : qrcPerGpuData) {
       if (_perGpuData.find(itr.first) == _perGpuData.end()) {
         PerGpuData gpuData(itr.second);
-        if (update && _dataPtr) {
+        if (!initializing && _dataPtr) {
           gpuData.vbo = _dataPtr->getColumnDataVBO(itr.first, _vboAttrName);
         }
         _perGpuData.emplace(itr.first, std::move(gpuData));
@@ -753,10 +753,12 @@ class BaseMark {
 
     ::Rendering::GL::GLRenderer* renderer;
     ::Rendering::GL::GLResourceManagerShPtr rsrcMgr;
-    bool update = (_perGpuData.size() > 0);
+    int numGpus = _perGpuData.size();
+    bool update = (numGpus > 0);
     bool createdNewGpuRsrc = false;
     for (auto& itr : qrcPerGpuData) {
-      if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+      auto perGpuItr = _perGpuData.find(itr.first);
+      if (perGpuItr == _perGpuData.end()) {
         PerGpuData gpuData(itr.second);
         if (update) {
           auto beginItr = _perGpuData.begin();
@@ -786,7 +788,13 @@ class BaseMark {
       _perGpuData.erase(gpuId);
     }
 
-    key.initGpuResources(ctx, unusedGpus);
+    if (numGpus && _perGpuData.size() == 0) {
+      // TODO(croot): make a makeAllDirty() function
+      setShaderDirty();
+      setPropsDirty();
+    }
+
+    key.initGpuResources(ctx, unusedGpus, initializing);
 
     if (!initializing) {
       _updateRenderPropertyGpuResources(ctx, unusedGpus);
@@ -862,12 +870,14 @@ class PointMark : public BaseMark {
 
   void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
                                          const std::unordered_set<GpuId> unusedGpus) final {
-    x.initGpuResources(ctx, unusedGpus);
-    y.initGpuResources(ctx, unusedGpus);
-    z.initGpuResources(ctx, unusedGpus);
-    size.initGpuResources(ctx, unusedGpus);
-    id.initGpuResources(ctx, unusedGpus);
-    fillColor.initGpuResources(ctx, unusedGpus);
+    // this function should only be called when not initializing.
+    // so pass 'false' for the initializing parameter in the following
+    x.initGpuResources(ctx, unusedGpus, false);
+    y.initGpuResources(ctx, unusedGpus, false);
+    z.initGpuResources(ctx, unusedGpus, false);
+    size.initGpuResources(ctx, unusedGpus, false);
+    id.initGpuResources(ctx, unusedGpus, false);
+    fillColor.initGpuResources(ctx, unusedGpus, false);
   }
 };
 

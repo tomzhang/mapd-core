@@ -121,12 +121,11 @@ class BaseQueryDataTableVBO {
                          bool initializing = true) {
     const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
 
-    bool update = (_perGpuData.size() > 0);
     for (auto& itr : qrcPerGpuData) {
       if (_perGpuData.find(itr.first) == _perGpuData.end()) {
         PerGpuData gpuData(itr.second);
 
-        if (update) {
+        if (!initializing) {
           switch (getType()) {
             // case QueryDataTableType::EMBEDDED:
             // case QueryDataTableType::URL:

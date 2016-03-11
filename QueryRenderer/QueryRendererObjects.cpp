@@ -1575,7 +1575,7 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Po
 }
 
 void BaseMark::_buildVertexArrayObjectFromProperties() {
-  if (!_propsDirty) {
+  if (!_propsDirty || !_perGpuData.size()) {
     // early out
     return;
   }
@@ -1807,7 +1807,7 @@ void PointMark::_updateShader() {
   // script that converts all shaders into their own header
   // files with static strings of the shader's source to access.
 
-  if (!_shaderDirty) {
+  if (!_shaderDirty || !_perGpuData.size()) {
     // early out
     return;
   }
