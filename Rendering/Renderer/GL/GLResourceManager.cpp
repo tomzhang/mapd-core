@@ -4,6 +4,8 @@
 namespace Rendering {
 namespace GL {
 
+using Resources::GLResource;
+using Resources::GLResourceShPtr;
 using Resources::GLShaderShPtr;
 using Resources::GLShader;
 using Resources::GLResourceWkPtr;
@@ -51,7 +53,7 @@ GLShaderShPtr GLResourceManager::createShader(const std::string& vertexShaderSrc
 
   // TODO(croot): make thread safe?
   GLShaderShPtr rtn(new GLShader(_prntRenderer, vertexShaderSrc, fragmentShaderSrc));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -64,7 +66,7 @@ GLRenderbufferShPtr GLResourceManager::createRenderbuffer(int width,
 
   // TODO(croot): make thread safe?
   GLRenderbufferShPtr rtn(new GLRenderbuffer(_prntRenderer, width, height, internalFormat, numSamples));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -81,7 +83,7 @@ GLTexture2dShPtr GLResourceManager::createTexture2d(size_t width,
   // TODO(croot): make thread safe?
   GLTexture2dShPtr rtn(
       new GLTexture2d(_prntRenderer, width, height, internalFormat, pixelFormat, pixelType, sampleProps, numSamples));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -115,7 +117,7 @@ GLFramebufferShPtr GLResourceManager::createFramebuffer(const Resources::GLFrame
 
   // TODO(croot): make thread safe?
   GLFramebufferShPtr rtn(new GLFramebuffer(_prntRenderer, attachments));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -125,7 +127,7 @@ GLVertexBufferShPtr GLResourceManager::createVertexBuffer(GLenum usage) {
 
   // TODO(croot): make thread safe?
   GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, usage));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -135,7 +137,7 @@ GLVertexBufferShPtr GLResourceManager::createVertexBuffer(size_t numBytes, GLenu
 
   // TODO(croot): make thread safe?
   GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, numBytes, usage));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -146,7 +148,7 @@ GLVertexBufferShPtr GLResourceManager::createVertexBuffer(const Resources::GLBuf
 
   // TODO(croot): make thread safe?
   GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, layoutPtr, usage));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -156,7 +158,7 @@ GLVertexArrayShPtr GLResourceManager::createVertexArray() {
 
   // TODO(croot): make thread safe?
   GLVertexArrayShPtr rtn(new GLVertexArray(_prntRenderer));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
 
   return rtn;
 }
@@ -166,9 +168,43 @@ GLVertexArrayShPtr GLResourceManager::createVertexArray(const VboAttrToShaderAtt
 
   // TODO(croot): make thread safe?
   GLVertexArrayShPtr rtn(new GLVertexArray(_prntRenderer, vboAttrToShaderAttrMap));
-  _glResources.push_back(GLResourceWkPtr(rtn));
+  _addGLResource(rtn);
+
+  for (auto& item : vboAttrToShaderAttrMap) {
+    item.first->_addVertexArray(rtn);
+  }
 
   return rtn;
+}
+
+GLResourceShPtr GLResourceManager::getResourcePtr(GLResource* rsrc) {
+  GLResourceShPtr rtn;
+  for (size_t i = 0; i < _glResources.size(); ++i) {
+    rtn = _glResources[i].lock();
+    if (rtn && rtn.get() == rsrc) {
+      break;
+    }
+    rtn = nullptr;
+  }
+  return rtn;
+}
+
+void GLResourceManager::_addGLResource(Resources::GLResourceShPtr glResource) {
+  // do a purge of any delete resources first
+  int i, sz = _glResources.size();
+  std::vector<int> deletedIndices;
+  for (i = 0; i < sz; ++i) {
+    if (_glResources[i].expired()) {
+      deletedIndices.push_back(i);
+    }
+  }
+
+  auto itr = _glResources.begin();
+  for (i = deletedIndices.size() - 1; i >= 0; --i) {
+    _glResources.erase(itr + i);
+  }
+
+  _glResources.emplace_back(glResource);
 }
 
 }  // namespace GL

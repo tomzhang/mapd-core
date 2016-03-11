@@ -36,16 +36,28 @@ class GLVertexArray : public GLResource {
   explicit GLVertexArray(const RendererWkPtr& rendererPtr, const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap);
 
   GLuint _vao;
+
   size_t _numItems;
+  GLVertexBufferWkPtr _numItemsVbo;
+
   size_t _numVertices;
+  GLVertexBufferWkPtr _numVerticesVbo;
 
   void _initResource();
   void _cleanupResource() final;
   void _makeEmpty() final;
 
+  void _initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer);
+  void _addVertexBuffer(const GLVertexBufferShPtr& vbo);
+  void _deleteVertexBuffer(GLVertexBuffer* vbo);
+  void _deleteAllVertexBuffers();
+  void _vboUpdated(GLVertexBuffer* vbo);
+  void _syncWithVBOs();
+
   std::set<GLVertexBufferWkPtr, std::owner_less<GLVertexBufferWkPtr>> _usedVbos;
 
   friend class ::Rendering::GL::GLResourceManager;
+  friend class ::Rendering::GL::Resources::GLVertexBuffer;
 };
 
 }  // namespace Resources

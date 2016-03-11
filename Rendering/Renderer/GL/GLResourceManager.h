@@ -63,6 +63,8 @@ class GLResourceManager {
   Resources::GLVertexArrayShPtr createVertexArray();
   Resources::GLVertexArrayShPtr createVertexArray(const Resources::VboAttrToShaderAttrMap& vboAttrToShaderAttrMap);
 
+  Resources::GLResourceShPtr getResourcePtr(Resources::GLResource* rsrc);
+
  protected:
   explicit GLResourceManager(const RendererShPtr& prnt);
 
@@ -83,7 +85,12 @@ class GLResourceManager {
   // can do it when idle? Or possibly every nth render call? Need to think
   // about this, but for the time being it shouldn't be a big deal because a
   // weak_ptr takes up very little memory.
+
+  // TODO(croot): improve the data structure used here. May want to separate
+  // byte resource types for easier lookups. May want to add a name to resources
+  // too for an additional level of categorization.
   std::vector<Resources::GLResourceWkPtr> _glResources;
+  void _addGLResource(Resources::GLResourceShPtr glResource);
 
   friend class ::Rendering::WindowManager;
   friend class GLRenderer;

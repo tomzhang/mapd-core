@@ -59,11 +59,19 @@ class GLVertexBuffer : public GLBaseBuffer {
 
   void _bindToShaderInternal(GLShader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "");
 
+  void _addVertexArray(GLVertexArrayShPtr& vao);
+  void _deleteVertexArray(GLVertexArray* vao);
+  void _deleteAllVertexArrays();
+  void _updateVertexArrays();
+
   GLBufferLayoutShPtr _layoutPtr;
   size_t _numItems;
+  std::set<GLVertexArrayWkPtr, std::owner_less<GLVertexArrayWkPtr>> _vaoRefs;
 
   friend class ::Rendering::GL::GLResourceManager;
-  friend void ::Rendering::GL::Resources::GLVertexArray::initialize(const VboAttrToShaderAttrMap&, GLRenderer*);
+  friend class ::Rendering::GL::Resources::GLVertexArray;
+  // friend void ::Rendering::GL::Resources::GLVertexArray::initialize(const VboAttrToShaderAttrMap&, GLRenderer*);
+  // friend void ::Rendering::GL::Resources::GLVertexArray::_deleteAllVertexBuffers();
 };
 
 }  // namespace Resources

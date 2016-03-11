@@ -1,5 +1,6 @@
 #include "GLVertexArray.h"
 #include "GLVertexBuffer.h"
+#include "../GLResourceManager.h"
 
 namespace Rendering {
 namespace GL {
@@ -12,7 +13,7 @@ GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr)
 
 GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr, const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap)
     : GLVertexArray(rendererPtr) {
-  initialize(vboAttrToShaderAttrMap);
+  _initialize(vboAttrToShaderAttrMap, getGLRenderer());
 }
 
 GLVertexArray::~GLVertexArray() {
@@ -38,9 +39,11 @@ void GLVertexArray::_cleanupResource() {
 
 void GLVertexArray::_makeEmpty() {
   _vao = 0;
-  _usedVbos.clear();
+  _deleteAllVertexBuffers();
   _numItems = 0;
+  _numItemsVbo.reset();
   _numVertices = 0;
+  _numVerticesVbo.reset();
 }
 
 void GLVertexArray::validateVBOs() {
@@ -57,28 +60,41 @@ void GLVertexArray::validateVBOs() {
 }
 
 void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer) {
-  // TODO(croot): make this thread safe?
-
-  size_t numVboItems, numVboVertices;
-
-  validateRenderer(renderer);
-
   GLRenderer* rendererToUse = renderer;
+  GLRenderer* myRenderer = dynamic_cast<GLRenderer*>(_rendererPtr.lock().get());
+  CHECK(rendererToUse);
+
   if (!rendererToUse) {
-    rendererToUse = dynamic_cast<GLRenderer*>(_rendererPtr.lock().get());
-    CHECK(rendererToUse);
+    rendererToUse = myRenderer;
   }
 
-  RUNTIME_EX_ASSERT(rendererToUse->hasBoundShader(),
+  _initialize(vboAttrToShaderAttrMap, renderer);
+
+  GLResourceManagerShPtr rsrcMgr = myRenderer->getResourceManager();
+  GLVertexArrayShPtr myRsrc = std::dynamic_pointer_cast<GLVertexArray>(rsrcMgr->getResourcePtr(this));
+  CHECK(myRsrc && myRsrc.get() == this);
+
+  for (auto& item : vboAttrToShaderAttrMap) {
+    item.first->_addVertexArray(myRsrc);
+  }
+}
+
+void GLVertexArray::_initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer) {
+  // TODO(croot): make this thread safe?
+  validateRenderer(renderer);
+
+  RUNTIME_EX_ASSERT(renderer->hasBoundShader(),
                     "Cannot initialize vertex array object. A shader needs to be bound to the renderer for vertex "
                     "array initialization.");
 
-  GLShaderShPtr shaderPtr = rendererToUse->getBoundShader();
+  GLShaderShPtr shaderPtr = renderer->getBoundShader();
   GLShader* shader = shaderPtr.get();
 
-  _usedVbos.clear();
+  _deleteAllVertexBuffers();
   _numItems = 0;
+  _numItemsVbo.reset();
   _numVertices = 0;
+  _numVerticesVbo.reset();
 
   GLint currVao, currVbo;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &currVao));
@@ -101,11 +117,7 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
       }
     }
 
-    _usedVbos.emplace(vbo);
-    numVboItems = vbo->numItems();
-    numVboVertices = vbo->numVertices();
-    _numItems = (_numItems == 0 ? numVboItems : std::min(_numItems, numVboItems));
-    _numVertices = (_numVertices == 0 ? numVboVertices : std::min(_numVertices, numVboVertices));
+    _addVertexBuffer(vbo);
   }
 
   if (currVao != static_cast<GLint>(_vao)) {
@@ -115,6 +127,117 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, currVbo));
 
   setUsable();
+}
+
+void GLVertexArray::_addVertexBuffer(const GLVertexBufferShPtr& vbo) {
+  size_t numVboItems, numVboVertices;
+  _usedVbos.emplace(vbo);
+  numVboItems = vbo->numItems();
+  numVboVertices = vbo->numVertices();
+  if (_numItems == 0 || numVboItems < _numItems) {
+    _numItems = numVboItems;
+    _numItemsVbo = vbo;
+  }
+
+  if (_numVertices == 0 || numVboVertices < _numVertices) {
+    _numVertices = numVboVertices;
+    _numVerticesVbo = vbo;
+  }
+}
+
+void GLVertexArray::_deleteVertexBuffer(GLVertexBuffer* vbo) {
+  GLVertexBufferShPtr vboPtr;
+  std::vector<GLVertexBufferWkPtr> vbosToDelete;
+  bool resync = false;
+  for (auto& vboWkPtr : _usedVbos) {
+    vboPtr = vboWkPtr.lock();
+    if (vboPtr && vboPtr.get() == vbo) {
+      vbosToDelete.push_back(vboWkPtr);
+      if (vboPtr == _numItemsVbo.lock() || vboPtr == _numVerticesVbo.lock()) {
+        resync = true;
+      }
+    } else if (!vboPtr) {
+      vbosToDelete.push_back(vboWkPtr);
+    }
+  }
+
+  for (auto& vboWkPtr : vbosToDelete) {
+    _usedVbos.erase(vboWkPtr);
+  }
+
+  if (resync) {
+    _syncWithVBOs();
+  }
+}
+
+void GLVertexArray::_deleteAllVertexBuffers() {
+  GLVertexBufferShPtr vboPtr;
+  for (auto& vboWkPtr : _usedVbos) {
+    vboPtr = vboWkPtr.lock();
+    if (vboPtr) {
+      vboPtr->_deleteVertexArray(this);
+    }
+  }
+  _usedVbos.clear();
+}
+
+void GLVertexArray::_vboUpdated(GLVertexBuffer* vbo) {
+  GLVertexBufferShPtr vboPtr;
+  for (auto& vboWkPtr : _usedVbos) {
+    vboPtr = vboWkPtr.lock();
+    if (vboPtr && vboPtr.get() == vbo) {
+      break;
+    }
+    vboPtr = nullptr;
+  }
+
+  CHECK(vboPtr);
+
+  size_t numVboItems = vboPtr->numItems();
+  size_t numVboVertices = vboPtr->numVertices();
+  if ((vboPtr == _numItemsVbo.lock() && numVboItems != _numItems) ||
+      (vboPtr == _numVerticesVbo.lock() && numVboVertices != _numVertices)) {
+    _syncWithVBOs();
+  } else {
+    if (_numItems == 0 || numVboItems < _numItems) {
+      _numItems = numVboItems;
+      _numItemsVbo = vboPtr;
+    }
+
+    if (_numVertices == 0 || numVboVertices < _numVertices) {
+      _numVertices = numVboVertices;
+      _numVerticesVbo = vboPtr;
+    }
+  }
+}
+
+void GLVertexArray::_syncWithVBOs() {
+  // TODO(croot): We currently don't maintain any synchronization
+  // when VBOs change under the hood. This function needs to be
+  // called to make sure the VAO stays up-to-date with the vbos
+  // it uses. This is kinda ugly. We may want to keep a pointer
+  // in the vbo to update any attached VAOs on the fly. That or
+  // remove the # of items/vertices in the vao.
+  size_t numVboItems, numVboVertices;
+  _numItems = 0;
+  _numVertices = 0;
+  GLVertexBufferShPtr vboPtr;
+  std::vector<GLVertexBufferWkPtr> vbosToDelete;
+  for (auto& vbo : _usedVbos) {
+    vboPtr = vbo.lock();
+    if (vboPtr) {
+      numVboItems = vboPtr->numItems();
+      numVboVertices = vboPtr->numVertices();
+      _numItems = (_numItems == 0 ? numVboItems : std::min(_numItems, numVboItems));
+      _numVertices = (_numVertices == 0 ? numVboVertices : std::min(_numVertices, numVboVertices));
+    } else {
+      vbosToDelete.push_back(vbo);
+    }
+  }
+
+  for (auto& vbo : vbosToDelete) {
+    _usedVbos.erase(vbo);
+  }
 }
 
 }  // namespace Resources

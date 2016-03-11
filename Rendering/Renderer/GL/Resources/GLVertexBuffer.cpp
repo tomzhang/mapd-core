@@ -27,6 +27,8 @@ GLVertexBuffer::~GLVertexBuffer() {
 void GLVertexBuffer::_makeEmpty() {
   GLBaseBuffer::_makeEmpty();
   _layoutPtr = nullptr;
+  _numItems = 0;
+  _deleteAllVertexArrays();
 }
 
 bool GLVertexBuffer::hasAttribute(const std::string& attrName) const {
@@ -63,6 +65,9 @@ void GLVertexBuffer::setBufferLayout(const GLBufferLayoutShPtr& layoutPtr, size_
 
   _layoutPtr = layoutPtr;
   _numItems = numItems;
+
+  // notify any VAOs this buffer is attached to about its change in size
+  _updateVertexArrays();
 }
 
 int GLVertexBuffer::numAttributes() const {
@@ -117,6 +122,52 @@ void GLVertexBuffer::_bindToShaderInternal(GLShader* activeShader,
 void GLVertexBuffer::bufferData(void* data, size_t numItems, size_t numBytesPerItem) {
   GLBaseBuffer::bufferData(data, numItems * numBytesPerItem);
   _numItems = numItems;
+
+  // notify all vaos this buffer is attached to about the change in buffer size.
+  _updateVertexArrays();
+}
+
+void GLVertexBuffer::_addVertexArray(GLVertexArrayShPtr& vao) {
+  _vaoRefs.emplace(vao);
+}
+
+void GLVertexBuffer::_deleteVertexArray(GLVertexArray* vao) {
+  GLVertexArrayShPtr vaoPtr;
+  std::vector<GLVertexArrayWkPtr> vaosToDelete;
+  for (auto& vaoWkPtr : _vaoRefs) {
+    vaoPtr = vaoWkPtr.lock();
+    if (vaoPtr && vaoPtr.get() == vao) {
+      vaosToDelete.push_back(vaoWkPtr);
+    } else if (!vaoPtr) {
+      vaosToDelete.push_back(vaoWkPtr);
+    }
+  }
+
+  for (auto& vaoWkPtr : vaosToDelete) {
+    _vaoRefs.erase(vaoWkPtr);
+  }
+}
+
+void GLVertexBuffer::_deleteAllVertexArrays() {
+  GLVertexArrayShPtr vaoPtr;
+  for (auto& vao : _vaoRefs) {
+    vaoPtr = vao.lock();
+    if (vaoPtr) {
+      vaoPtr->_deleteVertexBuffer(this);
+    }
+  }
+
+  _vaoRefs.clear();
+}
+
+void GLVertexBuffer::_updateVertexArrays() {
+  GLVertexArrayShPtr vaoPtr;
+  for (auto& vao : _vaoRefs) {
+    vaoPtr = vao.lock();
+    if (vaoPtr) {
+      vaoPtr->_vboUpdated(this);
+    }
+  }
 }
 
 }  // namespace Resources
