@@ -413,6 +413,8 @@ void GLRenderer::_cleanupResources() {
 
   if (currRenderer) {
     currRenderer->makeActiveOnCurrentThread(currWindow);
+  } else {
+    makeInactive();
   }
 }
 
