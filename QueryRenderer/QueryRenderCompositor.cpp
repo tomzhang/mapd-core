@@ -113,6 +113,36 @@ std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx,
   return rtn;
 }
 
+void QueryRenderCompositor::addQueryFramebuffer(QueryFramebuffer* fbo) {
+  ::Rendering::GL::Resources::GLTexture2dShPtr rgbaTex = fbo->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
+
+  CHECK(_compositeTextures.find(rgbaTex.get()) == _compositeTextures.end());
+  _implPtr->addFboTexture2d(rgbaTex, FboColorBuffer::COLOR_BUFFER);
+  _compositeTextures.insert({rgbaTex.get(), rgbaTex});
+
+  if (fbo->doHitTest()) {
+    ::Rendering::GL::Resources::GLTexture2dShPtr idTex = fbo->getColorTexture2d(FboColorBuffer::ID_BUFFER);
+    CHECK(_compositeTextures.find(idTex.get()) == _compositeTextures.end());
+    _implPtr->addFboTexture2d(idTex, FboColorBuffer::ID_BUFFER);
+    _compositeTextures.insert({idTex.get(), idTex});
+  }
+
+  if (fbo->doDepthTest()) {
+    // TODO(croot): fill this out
+    // ::Rendering::GL::Resources::GLRenderbufferShPtr rbo = fbo->getColorTexture2d(FboRenderBuffer::DEPTH_BUFFER);
+    // _implPtr->addFboRenderbuffer(rbo, FboRenderBuffer::DEPTH_BUFFER);
+    // _compositeRbos.insert({rbo.get(), rbo});
+  }
+}
+
+void QueryRenderCompositor::addQueryFramebuffer(const QueryFramebufferShPtr& fbo) {
+  addQueryFramebuffer(fbo.get());
+}
+
+void QueryRenderCompositor::addQueryFramebuffer(const QueryFramebufferUqPtr& fbo) {
+  addQueryFramebuffer(fbo.get());
+}
+
 void QueryRenderCompositor::deleteFboTexture2d(GLTexture2d* texture2dPtr) {
   CHECK(_implPtr);
   _implPtr->deleteFboTexture2d(texture2dPtr);

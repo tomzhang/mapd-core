@@ -77,6 +77,9 @@ class QueryRenderCompositorImpl {
   virtual ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                                 FboRenderBuffer rboType) = 0;
 
+  virtual void addFboTexture2d(::Rendering::GL::Resources::GLTexture2dShPtr& tex, FboColorBuffer texType) = 0;
+  virtual void addFboRenderbuffer(::Rendering::GL::Resources::GLRenderbufferShPtr& rbo, FboRenderBuffer rboType) = 0;
+
   virtual void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) {}
   virtual void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr) {}
 
@@ -136,6 +139,10 @@ class QueryRenderCompositor {
   ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(
       ::Rendering::GL::GLRenderer* renderer,
       FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER);
+
+  void addQueryFramebuffer(QueryFramebuffer* fbo);
+  void addQueryFramebuffer(const QueryFramebufferShPtr& fbo);
+  void addQueryFramebuffer(const QueryFramebufferUqPtr& fbo);
 
   void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr);
   void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr);

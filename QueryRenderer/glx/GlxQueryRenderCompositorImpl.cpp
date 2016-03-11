@@ -87,6 +87,10 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderer* queryRenderer) 
   size_t width = getWidth();
   size_t height = getHeight();
   size_t depth = queryRenderer->getPerGpuData()->size();
+  if (depth == 0) {
+    // the texture array needs to be initialized to something
+    depth = 1;
+  }
   GLTexture2dSampleProps sampleProps;
   size_t numSamples = getNumSamples();
 
@@ -153,6 +157,44 @@ GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Render
   return rbo;
 }
 
+void GlxQueryRenderCompositorImpl::addFboTexture2d(::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                                   FboColorBuffer texType) {
+  size_t width = getWidth();
+  size_t height = getHeight();
+
+  RUNTIME_EX_ASSERT(width == tex->getWidth() && height == tex->getHeight(),
+                    "Cannot add texture 2d object to compositor - invalid dimensions: tex " +
+                        std::to_string(tex->getWidth()) + "x" + std::to_string(tex->getHeight()) + " != compositor " +
+                        std::to_string(width) + "x" + std::to_string(height) + ".");
+
+  switch (texType) {
+    case FboColorBuffer::COLOR_BUFFER:
+      CHECK(_rgbaTextures.find(tex.get()) == _rgbaTextures.end());
+      _rgbaTextures.insert({tex.get(), {tex, _rgbaTextures.size()}});
+      break;
+    case FboColorBuffer::ID_BUFFER:
+      CHECK(_idTextures.find(tex.get()) == _idTextures.end());
+      _idTextures.insert({tex.get(), {tex, _idTextures.size()}});
+      break;
+    default:
+      CHECK(false);
+  }
+}
+
+void GlxQueryRenderCompositorImpl::addFboRenderbuffer(::Rendering::GL::Resources::GLRenderbufferShPtr& rbo,
+                                                      FboRenderBuffer rboType) {
+  size_t width = getWidth();
+  size_t height = getHeight();
+
+  RUNTIME_EX_ASSERT(width == rbo->getWidth() && height == rbo->getHeight(),
+                    "Cannot add renderbuffer object to compositor - invalid dimensions: rbo " +
+                        std::to_string(rbo->getWidth()) + "x" + std::to_string(rbo->getHeight()) + " != compositor " +
+                        std::to_string(width) + "x" + std::to_string(height) + ".");
+
+  CHECK(_rbos.find(rbo.get()) == _rbos.end());
+  _rbos.insert({rbo.get(), {rbo, _rbos.size()}});
+}
+
 void GlxQueryRenderCompositorImpl::deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) {
   // TODO(croot): make thread safe?
   auto rgbaItr = _rgbaTextures.find(texture2dPtr);
@@ -180,6 +222,9 @@ void GlxQueryRenderCompositorImpl::deleteFboTexture2d(::Rendering::GL::Resources
         rgbaLoopItr.second.second -= 1;
       }
     }
+
+    CHECK(_rgbaTextureArray);
+    _rgbaTextureArray->resize(_rgbaTextures.size());
   }
 }
 
