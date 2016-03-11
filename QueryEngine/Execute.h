@@ -297,6 +297,7 @@ class Executor {
     int32_t* error_code_;
     RenderAllocatorMap* render_allocator_map_;
     std::vector<std::pair<ResultRows, std::vector<size_t>>> all_fragment_results_;
+    mutable std::unique_ptr<ColumnarResults> ra_node_input_;
 
    public:
     ExecutionDispatch(Executor* executor,
@@ -326,6 +327,8 @@ class Executor {
              const std::map<int, std::vector<size_t>>& frag_ids,
              const size_t ctx_idx,
              const int64_t rowid_lookup_key) noexcept;
+
+    const int8_t* getColumn(const ResultRows* rows, const int col_id) const;
 
     std::string getIR(const ExecutorDeviceType device_type) const;
 
@@ -391,7 +394,8 @@ class Executor {
                          std::unordered_set<int>& available_gpus,
                          int& available_cpus);
 
-  std::vector<std::vector<const int8_t*>> fetchChunks(const std::list<ScanColDescriptor>&,
+  std::vector<std::vector<const int8_t*>> fetchChunks(const ExecutionDispatch&,
+                                                      const std::list<ScanColDescriptor>&,
                                                       const int device_id,
                                                       const Data_Namespace::MemoryLevel,
                                                       const std::vector<ScanDescriptor>& scan_ids,
