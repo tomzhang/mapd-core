@@ -3556,6 +3556,8 @@ const SQLTypeInfo get_column_type(const int col_id,
                                   const TemporaryTables* temporary_tables) {
   CHECK(cd || temporary_tables);
   if (cd) {
+    CHECK_EQ(col_id, cd->columnId);
+    CHECK_EQ(table_id, cd->tableId);
     return cd->columnType;
   }
   const auto it = temporary_tables->find(table_id);
