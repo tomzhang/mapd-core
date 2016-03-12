@@ -5,20 +5,7 @@
 #include <Rendering/Settings/RendererSettings.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
-
-// #include "QueryFramebuffer.h"
-
-// #include <GL/glew.h>
-// #include <png.h>
-
-// #include <glog/logging.h>
-// #include <time.h>
-// #include <iostream>
-// #include <stdexcept>
-// #include <fstream>
-// #include <sstream>
-// #include <map>
-// #include "rapidjson/document.h"
+#include <unordered_map>
 
 namespace QueryRenderer {
 
@@ -123,7 +110,10 @@ void QueryRenderManager::_resetQueryResultBuffers() {
 }
 
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
-  // TODO(croot): should we put thread locks in here? that probably makes sense.
+  // purge any idle users
+  _purgeUnusedWidgets(userId, widgetId);
+
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
 
   UserWidgetPair userWidget = std::make_pair(userId, widgetId);
 
@@ -150,10 +140,12 @@ void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPai
 }
 
 bool QueryRenderManager::hasUser(int userId) const {
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
   return (_rendererDict.find(userId) != _rendererDict.end());
 }
 
 bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
   auto userIter = _rendererDict.find(userId);
 
   if (userIter == _rendererDict.end()) {
@@ -168,6 +160,7 @@ bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) con
 }
 
 void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
   WidgetRendererMap* wfMap;
 
   auto userIter = _rendererDict.find(userId);
@@ -194,6 +187,7 @@ void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, boo
 }
 
 void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
   auto userIter = _rendererDict.find(userId);
 
   RUNTIME_EX_ASSERT(userIter != _rendererDict.end(),
@@ -209,6 +203,10 @@ void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
 
   wfMap->erase(widgetIter);
 
+  if (!wfMap->size()) {
+    _rendererDict.erase(userIter);
+  }
+
   if (userId == _activeUserWidget.first && widgetId == _activeUserWidget.second) {
     _activeUserWidget = _emptyUserWidget;
     _activeRenderer = nullptr;
@@ -221,6 +219,7 @@ void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) 
 
 // Removes all widgets/sessions for a particular user id.
 void QueryRenderManager::removeUser(int userId) {
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
   auto userIter = _rendererDict.find(userId);
 
   RUNTIME_EX_ASSERT(userIter != _rendererDict.end(),
@@ -234,6 +233,56 @@ void QueryRenderManager::removeUser(int userId) {
   }
 }
 
+const int64_t QueryRenderManager::maxWidgetIdleTime = 300000;  // 5 minutes, in ms
+
+void QueryRenderManager::_purgeUnusedWidgets(int doNotTouchUserId, int doNotTouchWidgetId) {
+  std::lock_guard<std::mutex> user_lock(_usersMtx);
+
+  std::unordered_map<int, std::vector<int>> idsToRemove;
+  WidgetRendererMap* wfMap;
+
+  for (auto& userItr : _rendererDict) {
+    wfMap = userItr.second.get();
+    for (auto& widgetItr : (*wfMap)) {
+      if (widgetItr.second->timeSinceLastRenderMS() > maxWidgetIdleTime) {
+        if (userItr.first == doNotTouchUserId && widgetItr.first == doNotTouchWidgetId) {
+          // do not remove this one
+          continue;
+        }
+
+        auto rmItr = idsToRemove.find(userItr.first);
+        if (rmItr == idsToRemove.end()) {
+          idsToRemove.insert({userItr.first, {widgetItr.first}});
+        } else {
+          rmItr->second.push_back(widgetItr.first);
+        }
+      }
+    }
+  }
+
+  for (auto itr : idsToRemove) {
+    auto userItr = _rendererDict.find(itr.first);
+    CHECK(userItr != _rendererDict.end());
+
+    wfMap = userItr->second.get();
+
+    for (auto widgetId : itr.second) {
+      auto widgetItr = wfMap->find(widgetId);
+      CHECK(widgetItr != wfMap->end());
+      wfMap->erase(widgetItr);
+
+      if (userItr->first == _activeUserWidget.first && widgetId == _activeUserWidget.second) {
+        _activeUserWidget = _emptyUserWidget;
+        _activeRenderer = nullptr;
+      }
+    }
+
+    if (!wfMap->size()) {
+      _rendererDict.erase(userItr);
+    }
+  }
+}
+
 #ifdef HAVE_CUDA
 CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
   auto itr = _perGpuData.find(gpuId);
@@ -241,7 +290,7 @@ CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   itr->second->makeActiveOnCurrentThread();
   CudaHandle rtn = itr->second->queryResultBufferPtr->getCudaHandlePreQuery();
@@ -256,7 +305,7 @@ void QueryRenderManager::setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot set cuda handle results for gpu " + std::to_string(gpuId) + ".");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   itr->second->makeActiveOnCurrentThread();
   itr->second->queryResultBufferPtr->updatePostQuery(numUsedBytes);
@@ -270,7 +319,7 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   // need to update the data layout of the query result buffer before building up
   // from the json obj
@@ -296,7 +345,7 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   CHECK(_perGpuData.size());
 
@@ -315,7 +364,7 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
                     "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
                     "setting width/height.");
 
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
   _activeRenderer->setWidthHeight(width, height);
 }
 
@@ -332,7 +381,7 @@ void QueryRenderManager::render() {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
   _activeRenderer->render();
 
   _resetQueryResultBuffers();
@@ -342,7 +391,7 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
   PngData rtn = _activeRenderer->renderToPng(compressionLevel);
 
   _resetQueryResultBuffers();
@@ -355,7 +404,7 @@ int64_t QueryRenderManager::getIdAt(size_t x, size_t y) {
                     "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
                     "requesting pixel data.");
 
-  std::lock_guard<std::mutex> render_lock(_mtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
   int64_t id = _activeRenderer->getIdAt(x, y);
 
   // ids go from 0 to numitems-1, but since we're storing

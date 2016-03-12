@@ -32,6 +32,7 @@ using ::Rendering::GL::Resources::FboBind;
 
 QueryRenderer::QueryRenderer(bool doHitTest, bool doDepthTest)
     : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData(), _compositorPtr(nullptr) {
+  _updateRenderTime();
 }
 
 QueryRenderer::QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -531,6 +532,10 @@ void QueryRenderer::_update() {
   _ctx->_update();
 }
 
+int64_t QueryRenderer::timeSinceLastRenderMS() const {
+  return timer_stop(_lastRenderTime);
+}
+
 void QueryRenderer::renderGpu(GpuId gpuId,
                               PerGpuDataMap* gpuDataMap,
                               QueryRendererContext* ctx,
@@ -608,49 +613,6 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
       CHECK(_compositorPtr);
 
       _compositorPtr->render();
-
-      // auto itr = _perGpuData.begin();
-      // int cnt = 0;
-      // for (; itr != _perGpuData.end(); ++itr, ++cnt) {
-      //   if (cnt == 0) {
-      //     renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
-      //   } else {
-      //     renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 1);
-      //   }
-      // }
-
-      // NOTE: threaded rendering like what is setup in the commented code
-      // below is surprisingly slow on greendragon.
-      // I'm not sure what the reason is - perhaps the driver has issues
-      // with multi-threading like this?
-      // I would suspect threaded rendering like this if the contexts were
-      // on the same GPU, but not if each rendering context is on a separate
-      // GPU... Hmmm.
-      //
-      // Anyway, doing it sequentially should be fine as OpenGL calls are
-      // asynchronous, and we have to do a composite one gpu/layer at a time in
-      // the end anyway.
-      // std::vector<std::thread> t(numGpusToRender);
-
-      // auto itr = _perGpuData.begin();
-      // int idx = 0;
-      // for (; itr != _perGpuData.end(); ++itr, ++idx) {
-      //   // need to clear out the context on the current thread
-      //   // TODO(croot): do this with a simple function call before going thru
-      //   // the loop?
-      //   itr->second.qrmGpuData->rendererPtr->makeInactive();
-      //   if (idx == 0) {
-      //     // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 0); });
-      //     t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
-      //   } else {
-      //     t[idx] = std::thread(renderGpu, itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 1);
-      //     // t[idx] = std::thread([=] { _renderGpu(itr, 0, 0, 0, 1); });
-      //   }
-      // }
-
-      // for (idx = 0; idx < numGpusToRender; ++idx) {
-      //   t[idx].join();
-      // }
     }
   }
 
@@ -660,6 +622,8 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
       currRenderer->makeInactive();
     }
   }
+
+  _updateRenderTime();
 }
 
 PngData QueryRenderer::renderToPng(int compressionLevel) {
@@ -751,6 +715,10 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
   CHECK(idPixelsPtr);
 
   return idPixelsPtr.get()[0];
+}
+
+void QueryRenderer::_updateRenderTime() {
+  _lastRenderTime = timer_start();
 }
 
 QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)

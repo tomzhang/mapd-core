@@ -136,7 +136,11 @@ class QueryRenderManager {
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
 
-  std::mutex _mtx;
+  static const int64_t maxWidgetIdleTime;
+  void _purgeUnusedWidgets(int doNotTouchUserId, int doNotTouchWidgetId);
+
+  mutable std::mutex _renderMtx;
+  mutable std::mutex _usersMtx;
 };
 
 }  // namespace QueryRenderer

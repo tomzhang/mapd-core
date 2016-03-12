@@ -4,18 +4,11 @@
 #include "Types.h"
 #include "QueryRenderManager.h"
 #include "QueryRenderCompositor.h"
-
-// #include "QueryRendererError.h"
-// #include "QueryDataLayout.h"
-// #include "QueryResultVertexBuffer.h"
 #include "QueryFramebuffer.h"
-// #include "QueryRendererObjects.h"
-// #include "QueryFramebuffer.h"
-// // #include "QueryRenderManager.h"
-// #include "DataTable.h"
-// #include "BufferLayout.h"
 #include "RapidJSONUtils.h"
+
 #include <Rendering/Renderer/GL/Resources/Types.h>
+#include <Shared/measure.h>
 
 #include <string>
 #include <map>
@@ -106,6 +99,8 @@ class QueryRenderer {
   PerGpuDataMap* getPerGpuData() { return &_perGpuData; }
   QueryRendererContext* getContext() { return _ctx.get(); }
 
+  int64_t timeSinceLastRenderMS() const;
+
   static void renderGpu(GpuId gpuId,
                         PerGpuDataMap* gpuDataMap,
                         QueryRendererContext* ctx,
@@ -118,6 +113,7 @@ class QueryRenderer {
   std::shared_ptr<QueryRendererContext> _ctx;
   PerGpuDataMap _perGpuData;
   std::unique_ptr<QueryRenderCompositor> _compositorPtr;
+  std::chrono::steady_clock::time_point _lastRenderTime;
 
   void _clear();
   void _clearGpuResources();
@@ -135,6 +131,7 @@ class QueryRenderer {
   void _resizeFramebuffers(int width, int height);
 
   void _update();
+  void _updateRenderTime();
   // PngData _renderToPng(int width,
   //                      int height,
   //                      const std::shared_ptr<unsigned char>& pixelsPtr,
