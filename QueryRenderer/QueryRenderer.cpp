@@ -92,6 +92,8 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
     _perGpuData.emplace(gpuId, std::move(gpuData));
   } else {
     myItr->second.makeActiveOnCurrentThread();
+
+    CHECK(myItr->second.framebufferPtr);
     myItr->second.framebufferPtr->resize(width, height);
 
     unusedGpus.erase(gpuId);
@@ -639,6 +641,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
       renderer->makeInactive();
     } else {
       auto itr = _perGpuData.begin();
+      CHECK(itr != _perGpuData.end());
 
       QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
 
@@ -648,6 +651,8 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
       CHECK(renderer != nullptr);
 
       QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
+      CHECK(framebufferPtr);
+
       framebufferPtr->bindToRenderer(renderer, FboBind::READ);
       pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
@@ -662,18 +667,6 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 }
 
 unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
-  // RUNTIME_EX_ASSERT(_framebufferPtr != nullptr,
-  //                   "QueryRenderer: The framebuffer is not defined. Cannot retrieve id at pixel.");
-
-  // // TODO(croot): develop an API for reading from specific fbo buffers
-  // _framebufferPtr->bindToRenderer();
-  // MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT1));
-
-  // // TODO(croot): support a wider pixel check for a hit test and take a weighted avg
-  // // of the results to get a more stable result at boundaries
-  // unsigned int id;
-  // MAPD_CHECK_GL_ERROR(glReadPixels(int(x), int(y), 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &id));
-
   std::shared_ptr<unsigned int> idPixelsPtr;
 
   if (_compositorPtr) {
@@ -688,8 +681,15 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
   } else {
     auto itr = _perGpuData.begin();
 
+    // we can reach this point if the renderer was purged due to inactivity
+    // and then the first render query is a getIdAt().. hence the
+    // renderer is uninitialized
+    if (itr == _perGpuData.end()) {
+      return 0;
+    }
+
     QueryFramebufferUqPtr& framebufferPtr = itr->second.framebufferPtr;
-    if (x < framebufferPtr->getWidth() && y < framebufferPtr->getHeight()) {
+    if (framebufferPtr && x < framebufferPtr->getWidth() && y < framebufferPtr->getHeight()) {
       QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
 
       // const GpuId& gpuId = itr->first;

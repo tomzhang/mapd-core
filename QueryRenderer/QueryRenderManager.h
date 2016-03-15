@@ -186,7 +186,6 @@ class QueryRenderManager {
   void _updateActiveLastRenderTime();
 
   mutable std::mutex _renderMtx;
-  mutable std::mutex _usersMtx;
 
   const size_t _renderCacheLimit;
 };

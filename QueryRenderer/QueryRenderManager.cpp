@@ -135,7 +135,7 @@ void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   // purge any idle users
 
   {
-    std::lock_guard<std::mutex> user_lock(_usersMtx);
+    std::lock_guard<std::mutex> render_lock(_renderMtx);
 
     // if (userWidget != _activeUserWidget) {
     if (_activeItr == _rendererMap.end() || (userId != _activeItr->userId || widgetId != _activeItr->widgetId)) {
@@ -159,7 +159,7 @@ void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPai
 }
 
 bool QueryRenderManager::hasUser(int userId) const {
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   auto& userIdMap = _rendererMap.get<UserId>();
 
@@ -167,7 +167,7 @@ bool QueryRenderManager::hasUser(int userId) const {
 }
 
 bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
   return (_rendererMap.find(std::make_tuple(userId, widgetId)) != _rendererMap.end());
 }
 
@@ -176,7 +176,7 @@ bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) con
 }
 
 void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   RUNTIME_EX_ASSERT(_rendererMap.find(std::make_tuple(userId, widgetId)) == _rendererMap.end(),
                     "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
@@ -218,7 +218,7 @@ void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, boo
 }
 
 void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
   auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
   RUNTIME_EX_ASSERT(itr != _rendererMap.end(),
@@ -238,7 +238,7 @@ void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) 
 
 // Removes all widgets/sessions for a particular user id.
 void QueryRenderManager::removeUser(int userId) {
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   auto& userIdMap = _rendererMap.get<UserId>();
 
@@ -258,7 +258,7 @@ void QueryRenderManager::_clearActiveUserWidget() {
 }
 
 void QueryRenderManager::_purgeUnusedWidgets() {
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   std::chrono::milliseconds cutoffTime = getCurrentTimeMS() - maxWidgetIdleTime;
 
@@ -323,11 +323,11 @@ void QueryRenderManager::setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                                          QueryDataLayoutShPtr dataLayoutPtr,
                                          const Executor* executor) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
-
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   // need to update the data layout of the query result buffer before building up
   // from the json obj
@@ -345,11 +345,11 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 }
 #else
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
-
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   CHECK(_perGpuData.size());
 
@@ -360,11 +360,12 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 #endif  // HAVE_CUDA
 
 void QueryRenderManager::setWidthHeight(int width, int height) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
                     "setting width/height.");
 
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
   _activeItr->renderer->setWidthHeight(width, height);
 }
 
@@ -378,10 +379,10 @@ std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
 }
 
 void QueryRenderManager::render() {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
-
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   _activeItr->renderer->render();
   _updateActiveLastRenderTime();
@@ -390,10 +391,10 @@ void QueryRenderManager::render() {
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
-
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   PngData rtn = _activeItr->renderer->renderToPng(compressionLevel);
 
@@ -405,11 +406,12 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
 }
 
 int64_t QueryRenderManager::getIdAt(size_t x, size_t y) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
                     "requesting pixel data.");
 
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
   int64_t id = _activeItr->renderer->getIdAt(x, y);
   _updateActiveLastRenderTime();
 
