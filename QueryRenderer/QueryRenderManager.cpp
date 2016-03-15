@@ -6,6 +6,7 @@
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <unordered_map>
+#include <boost/lambda/lambda.hpp>
 
 namespace QueryRenderer {
 
@@ -19,9 +20,30 @@ using ::Rendering::Settings::StrSetting;
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
 
+static std::chrono::milliseconds getCurrentTimeMS() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+}
+
 const UserWidgetPair QueryRenderManager::_emptyUserWidget = std::make_pair(-1, -1);
 
-QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryResultBufferSize) {
+const std::chrono::milliseconds QueryRenderManager::maxWidgetIdleTime =
+    std::chrono::milliseconds(300000);  // 5 minutes, in ms
+
+QueryRenderManager::SessionData::SessionData(int userId, int widgetId, QueryRenderer* newRenderer)
+    : userId(userId), widgetId(widgetId), renderer(newRenderer) {
+  lastRenderTime = getCurrentTimeMS();
+}
+
+QueryRenderManager::ChangeLastRenderTime::ChangeLastRenderTime() {
+  new_time = getCurrentTimeMS();
+}
+
+void QueryRenderManager::ChangeLastRenderTime::operator()(SessionData& sd) {
+  sd.lastRenderTime = new_time;
+}
+
+QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryResultBufferSize, size_t renderCacheLimit)
+    : _rendererMap(), _activeItr(_rendererMap.end()), _perGpuData(), _renderCacheLimit(renderCacheLimit) {
   // NOTE: this constructor needs to be used on the main thread as that is a requirement
   // for a window manager instance.
   ::Rendering::WindowManager windowMgr;
@@ -31,9 +53,9 @@ QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryRe
 QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
                                        int numGpus,
                                        int startGpu,
-                                       size_t queryResultBufferSize)
-
-    : _activeRenderer(nullptr), _activeUserWidget(_emptyUserWidget), _perGpuData() {
+                                       size_t queryResultBufferSize,
+                                       size_t renderCacheLimit)
+    : _rendererMap(), _activeItr(_rendererMap.end()), _perGpuData(), _renderCacheLimit(renderCacheLimit) {
   _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize);
 }
 
@@ -58,7 +80,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                           (maxNumGpus > 1 ? "s" : "") + " but only " + std::to_string(maxNumGpus) +
                           " are available for rendering.");
   }
-  LOG(INFO) << "Using " << numGpus << " GPUs for rendering." << std::endl;
 
   int defaultWidth = 1024, defaultHeight = 1024;  // TODO(croot): expose as a static somewhere?
 
@@ -73,8 +94,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
   // create renderer settings that will be compatible with the window's settings.
   RendererSettings rendererSettings(windowSettings);
-  // rendererSettings.setIntSetting(IntSetting::OPENGL_MAJOR, 4);
-  // rendererSettings.setIntSetting(IntSetting::OPENGL_MINOR, 5);
 
   GLRenderer* renderer = nullptr;
   GLResourceManagerShPtr rsrcMgrPtr;
@@ -101,6 +120,9 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();
   }
+
+  LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startGpu << ", num GPUs: " << endGpu
+            << ", Render cache limit: " << _renderCacheLimit;
 }
 
 void QueryRenderManager::_resetQueryResultBuffers() {
@@ -111,176 +133,162 @@ void QueryRenderManager::_resetQueryResultBuffers() {
 
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   // purge any idle users
-  _purgeUnusedWidgets(userId, widgetId);
 
-  std::lock_guard<std::mutex> user_lock(_usersMtx);
+  {
+    std::lock_guard<std::mutex> user_lock(_usersMtx);
 
-  UserWidgetPair userWidget = std::make_pair(userId, widgetId);
+    // if (userWidget != _activeUserWidget) {
+    if (_activeItr == _rendererMap.end() || (userId != _activeItr->userId || widgetId != _activeItr->widgetId)) {
+      auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
-  if (userWidget != _activeUserWidget) {
-    auto userIter = _rendererDict.find(userId);
+      RUNTIME_EX_ASSERT(
+          itr != _rendererMap.end(),
+          "User id: " + std::to_string(userId) + ", Widget Id: " + std::to_string(widgetId) + " does not exist.");
 
-    RUNTIME_EX_ASSERT(userIter != _rendererDict.end(), "User id: " + std::to_string(userId) + " does not exist.");
+      _activeItr = itr;
+    }
 
-    WidgetRendererMap* wfMap = userIter->second.get();
-
-    auto widgetIter = wfMap->find(widgetId);
-
-    RUNTIME_EX_ASSERT(
-        widgetIter != wfMap->end(),
-        "Widget id: " + std::to_string(widgetId) + " for user id: " + std::to_string(userId) + " does not exist.");
-
-    _activeRenderer = widgetIter->second.get();
-    _activeUserWidget = userWidget;
+    _updateActiveLastRenderTime();
   }
+
+  _purgeUnusedWidgets();
 }
 
 void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPair) {
-  setActiveUserWidget(userWidgetPair.first, userWidgetPair.second);
+  setActiveUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
 }
 
 bool QueryRenderManager::hasUser(int userId) const {
   std::lock_guard<std::mutex> user_lock(_usersMtx);
-  return (_rendererDict.find(userId) != _rendererDict.end());
+
+  auto& userIdMap = _rendererMap.get<UserId>();
+
+  return (userIdMap.find(userId) != userIdMap.end());
 }
 
 bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
   std::lock_guard<std::mutex> user_lock(_usersMtx);
-  auto userIter = _rendererDict.find(userId);
-
-  if (userIter == _rendererDict.end()) {
-    return false;
-  }
-
-  return (userIter->second->find(widgetId) != userIter->second->end());
+  return (_rendererMap.find(std::make_tuple(userId, widgetId)) != _rendererMap.end());
 }
 
 bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) const {
-  return hasUserWidget(userWidgetPair.first, userWidgetPair.second);
+  return hasUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
 }
 
 void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
   std::lock_guard<std::mutex> user_lock(_usersMtx);
-  WidgetRendererMap* wfMap;
 
-  auto userIter = _rendererDict.find(userId);
+  RUNTIME_EX_ASSERT(_rendererMap.find(std::make_tuple(userId, widgetId)) == _rendererMap.end(),
+                    "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
+                        std::to_string(widgetId) + " already exists.");
 
-  if (userIter == _rendererDict.end()) {
-    wfMap = new WidgetRendererMap();
-    _rendererDict[userId] = std::unique_ptr<WidgetRendererMap>(wfMap);
-  } else {
-    wfMap = userIter->second.get();
+  // Check if the current num of connections is maxed out, NOTE: can only add 1 at a time
+  // here
+  if (_rendererMap.size() == _renderCacheLimit) {
+    auto& lastRenderTimeList = _rendererMap.get<LastRenderTime>();
 
-    RUNTIME_EX_ASSERT(wfMap->find(widgetId) == wfMap->end(),
-                      "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
-                          std::to_string(widgetId) + " already exists.");
+    auto itr = lastRenderTimeList.begin();
+
+    if (_activeItr != _rendererMap.end()) {
+      auto activeItr = _rendererMap.project<LastRenderTime>(_activeItr);
+
+      if (itr == activeItr) {
+        // We won't remove the active itr if it is the most idle one
+        // unless the renderCacheLimit == 1, in which case the
+        // active itr is forcibly removed.
+        // TODO(croot): Should we always remove the active itr?
+        if (_renderCacheLimit == 1) {
+          _clearActiveUserWidget();
+        } else {
+          itr++;
+        }
+      }
+    }
+
+    LOG(INFO) << "QueryRenderManager render cache limit reached. Removing longest-idle connection (" << itr->userId
+              << ", " << itr->widgetId << ")";
+    lastRenderTimeList.erase(itr);
   }
 
-  (*wfMap)[widgetId] = QueryRendererUqPtr(new QueryRenderer(doHitTest, doDepthTest));
-
-  // TODO(croot): should we set this as active the newly added ids as active?
-  // setActiveUserWidget(userId, widgetId);
+  _rendererMap.emplace(userId, widgetId, new QueryRenderer(doHitTest, doDepthTest));
 }
 
 void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
-  addUserWidget(userWidgetPair.first, userWidgetPair.second, doHitTest, doDepthTest);
+  addUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair), doHitTest, doDepthTest);
 }
 
 void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
   std::lock_guard<std::mutex> user_lock(_usersMtx);
-  auto userIter = _rendererDict.find(userId);
+  auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
-  RUNTIME_EX_ASSERT(userIter != _rendererDict.end(),
-                    "User id " + std::to_string(userId) + " does not exist. Cannot remove the caches for " +
-                        std::to_string(userId) + ":" + std::to_string(widgetId) + ".");
+  RUNTIME_EX_ASSERT(itr != _rendererMap.end(),
+                    "User id: " + std::to_string(userId) + "Widget id: " + std::to_string(widgetId) +
+                        " does not exist. Cannot remove their caches.");
 
-  WidgetRendererMap* wfMap = userIter->second.get();
-  auto widgetIter = wfMap->find(widgetId);
+  _rendererMap.erase(itr);
 
-  RUNTIME_EX_ASSERT(widgetIter != wfMap->end(),
-                    "Widget id " + std::to_string(widgetId) + " for user id " + std::to_string(userId) +
-                        " does not exist. Cannot remove widget.");
-
-  wfMap->erase(widgetIter);
-
-  if (!wfMap->size()) {
-    _rendererDict.erase(userIter);
-  }
-
-  if (userId == _activeUserWidget.first && widgetId == _activeUserWidget.second) {
-    _activeUserWidget = _emptyUserWidget;
-    _activeRenderer = nullptr;
+  if (itr == _activeItr) {
+    _clearActiveUserWidget();
   }
 }
 
 void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
-  removeUserWidget(userWidgetPair.first, userWidgetPair.second);
+  removeUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
 }
 
 // Removes all widgets/sessions for a particular user id.
 void QueryRenderManager::removeUser(int userId) {
   std::lock_guard<std::mutex> user_lock(_usersMtx);
-  auto userIter = _rendererDict.find(userId);
 
-  RUNTIME_EX_ASSERT(userIter != _rendererDict.end(),
+  auto& userIdMap = _rendererMap.get<UserId>();
+
+  auto startEndItr = userIdMap.equal_range(userId);
+  RUNTIME_EX_ASSERT(startEndItr.first != userIdMap.end(),
                     "User id " + std::to_string(userId) + " does not exist. Cannot remove its caches.");
 
-  _rendererDict.erase(userIter);
-
-  if (userId == _activeUserWidget.first) {
-    _activeUserWidget = _emptyUserWidget;
-    _activeRenderer = nullptr;
+  if (userId == _activeItr->userId) {
+    _clearActiveUserWidget();
   }
+
+  userIdMap.erase(startEndItr.first, startEndItr.second);
 }
 
-const int64_t QueryRenderManager::maxWidgetIdleTime = 300000;  // 5 minutes, in ms
+void QueryRenderManager::_clearActiveUserWidget() {
+  _activeItr = _rendererMap.end();
+}
 
-void QueryRenderManager::_purgeUnusedWidgets(int doNotTouchUserId, int doNotTouchWidgetId) {
+void QueryRenderManager::_purgeUnusedWidgets() {
   std::lock_guard<std::mutex> user_lock(_usersMtx);
 
-  std::unordered_map<int, std::vector<int>> idsToRemove;
-  WidgetRendererMap* wfMap;
+  std::chrono::milliseconds cutoffTime = getCurrentTimeMS() - maxWidgetIdleTime;
 
-  for (auto& userItr : _rendererDict) {
-    wfMap = userItr.second.get();
-    for (auto& widgetItr : (*wfMap)) {
-      if (widgetItr.second->timeSinceLastRenderMS() > maxWidgetIdleTime) {
-        if (userItr.first == doNotTouchUserId && widgetItr.first == doNotTouchWidgetId) {
-          // do not remove this one
-          continue;
-        }
+  // the currently active itr should not be a purgable
+  CHECK(_activeItr == _rendererMap.end() || _activeItr->lastRenderTime >= cutoffTime);
 
-        auto rmItr = idsToRemove.find(userItr.first);
-        if (rmItr == idsToRemove.end()) {
-          idsToRemove.insert({userItr.first, {widgetItr.first}});
-        } else {
-          rmItr->second.push_back(widgetItr.first);
-        }
-      }
-    }
+  auto& lastRenderTimeList = _rendererMap.get<LastRenderTime>();
+
+  int cnt = 0;
+  auto itr = lastRenderTimeList.begin();
+  while (itr != lastRenderTimeList.end() && itr->lastRenderTime < cutoffTime) {
+    cnt++;
+    itr++;
   }
 
-  for (auto itr : idsToRemove) {
-    auto userItr = _rendererDict.find(itr.first);
-    CHECK(userItr != _rendererDict.end());
+  LOG_IF(INFO, cnt > 0) << "QueryRenderManager - purging " << cnt << " idle connections.";
+  lastRenderTimeList.erase(lastRenderTimeList.begin(), itr);
+}
 
-    wfMap = userItr->second.get();
-
-    for (auto widgetId : itr.second) {
-      auto widgetItr = wfMap->find(widgetId);
-      CHECK(widgetItr != wfMap->end());
-      wfMap->erase(widgetItr);
-
-      if (userItr->first == _activeUserWidget.first && widgetId == _activeUserWidget.second) {
-        _activeUserWidget = _emptyUserWidget;
-        _activeRenderer = nullptr;
-      }
-    }
-
-    if (!wfMap->size()) {
-      _rendererDict.erase(userItr);
-    }
+void QueryRenderManager::_updateActiveLastRenderTime() {
+  if (_activeItr == _rendererMap.end()) {
+    return;
   }
+
+  _rendererMap.modify(_activeItr, ChangeLastRenderTime());
+
+  auto& lastRenderTimeList = _rendererMap.get<LastRenderTime>();
+  auto lastRenderTimeItr = _rendererMap.project<LastRenderTime>(_activeItr);
+
+  lastRenderTimeList.relocate(lastRenderTimeList.end(), lastRenderTimeItr);
 }
 
 #ifdef HAVE_CUDA
@@ -315,7 +323,7 @@ void QueryRenderManager::setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                                          QueryDataLayoutShPtr dataLayoutPtr,
                                          const Executor* executor) {
-  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
@@ -326,22 +334,18 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   if (dataLayoutPtr) {
     // CHECK(executor != nullptr);
 
-    _activeRenderer->updateResultsPostQuery(dataLayoutPtr, executor, _perGpuData);
+    _activeItr->renderer->updateResultsPostQuery(dataLayoutPtr, executor, _perGpuData);
   } else {
     CHECK(_perGpuData.size());
 
-    // uses the first gpu as the default.
-    // TODO(croot): expose a way to specify which gpu to use?
-    // auto itr = _perGpuData.begin();
-    // _activeRenderer->activateGpus(_perGpuData, itr->first);
-    _activeRenderer->activateGpus(_perGpuData);
+    _activeItr->renderer->activateGpus(_perGpuData);
   }
 
-  _activeRenderer->setJSONDocument(jsonDocumentPtr, false);
+  _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
 }
 #else
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
-  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
@@ -349,23 +353,19 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 
   CHECK(_perGpuData.size());
 
-  // uses the first gpu as the default.
-  // TODO(croot): expose a way to specify which gpu to use?
-  // auto itr = _perGpuData.begin();
-  // _activeRenderer->activateGpus(_perGpuData, itr->first);
-  _activeRenderer->activateGpus(_perGpuData);
+  _activeItr->renderer->activateGpus(_perGpuData);
 
-  _activeRenderer->setJSONDocument(jsonDocumentPtr, false);
+  _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
 }
 #endif  // HAVE_CUDA
 
 void QueryRenderManager::setWidthHeight(int width, int height) {
-  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
                     "setting width/height.");
 
   std::lock_guard<std::mutex> render_lock(_renderMtx);
-  _activeRenderer->setWidthHeight(width, height);
+  _activeItr->renderer->setWidthHeight(width, height);
 }
 
 std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
@@ -378,21 +378,26 @@ std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
 }
 
 void QueryRenderManager::render() {
-  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   std::lock_guard<std::mutex> render_lock(_renderMtx);
-  _activeRenderer->render();
+
+  _activeItr->renderer->render();
+  _updateActiveLastRenderTime();
 
   _resetQueryResultBuffers();
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
-  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
   std::lock_guard<std::mutex> render_lock(_renderMtx);
-  PngData rtn = _activeRenderer->renderToPng(compressionLevel);
+
+  PngData rtn = _activeItr->renderer->renderToPng(compressionLevel);
+
+  _updateActiveLastRenderTime();
 
   _resetQueryResultBuffers();
 
@@ -400,12 +405,13 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
 }
 
 int64_t QueryRenderManager::getIdAt(size_t x, size_t y) {
-  RUNTIME_EX_ASSERT(_activeRenderer != nullptr,
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
                     "requesting pixel data.");
 
   std::lock_guard<std::mutex> render_lock(_renderMtx);
-  int64_t id = _activeRenderer->getIdAt(x, y);
+  int64_t id = _activeItr->renderer->getIdAt(x, y);
+  _updateActiveLastRenderTime();
 
   // ids go from 0 to numitems-1, but since we're storing
   // the ids as unsigned ints, and there isn't a way to specify the

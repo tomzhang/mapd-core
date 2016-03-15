@@ -32,7 +32,6 @@ using ::Rendering::GL::Resources::FboBind;
 
 QueryRenderer::QueryRenderer(bool doHitTest, bool doDepthTest)
     : _ctx(new QueryRendererContext(doHitTest, doDepthTest)), _perGpuData(), _compositorPtr(nullptr) {
-  _updateRenderTime();
 }
 
 QueryRenderer::QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -532,10 +531,6 @@ void QueryRenderer::_update() {
   _ctx->_update();
 }
 
-int64_t QueryRenderer::timeSinceLastRenderMS() const {
-  return timer_stop(_lastRenderTime);
-}
-
 void QueryRenderer::renderGpu(GpuId gpuId,
                               PerGpuDataMap* gpuDataMap,
                               QueryRendererContext* ctx,
@@ -622,8 +617,6 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
       currRenderer->makeInactive();
     }
   }
-
-  _updateRenderTime();
 }
 
 PngData QueryRenderer::renderToPng(int compressionLevel) {
@@ -715,10 +708,6 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
   CHECK(idPixelsPtr);
 
   return idPixelsPtr.get()[0];
-}
-
-void QueryRenderer::_updateRenderTime() {
-  _lastRenderTime = timer_start();
 }
 
 QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)

@@ -7,12 +7,22 @@
 #include "Types.h"
 #include "PngData.h"
 #include <Rendering/Types.h>
+
 #include <unordered_map>
 #include <map>
 #include <utility>  // std::pair
 #include <mutex>
+#include <chrono>
 
 #include "rapidjson/document.h"
+
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/composite_key.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/sequenced_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/tag.hpp>
 
 #ifdef HAVE_CUDA
 #include <CudaMgr/CudaMgr.h>
@@ -24,8 +34,6 @@ class CudaMgr;
 namespace QueryRenderer {
 
 typedef std::pair<int, int> UserWidgetPair;
-typedef std::unordered_map<int, QueryRendererUqPtr> WidgetRendererMap;
-typedef std::unordered_map<int, std::unique_ptr<WidgetRendererMap>> RendererTable;
 
 class QueryRenderManager {
  public:
@@ -69,12 +77,15 @@ class QueryRenderManager {
   typedef std::weak_ptr<PerGpuData> PerGpuDataWkPtr;
   typedef std::map<GpuId, PerGpuDataShPtr> PerGpuDataMap;
 
-  explicit QueryRenderManager(int numGpus = -1, int startGpu = 0, size_t queryResultBufferSize = 500000);
-  explicit QueryRenderManager(
-      Rendering::WindowManager& windowMgr,
-      int numGpus = -1,  // < 0 means use all available GPUs
-      int startGpu = 0,
-      size_t queryResultBufferSize = 500000);  // only applicable if a GPU or CUDA_INTEROP render
+  explicit QueryRenderManager(int numGpus = -1,
+                              int startGpu = 0,
+                              size_t queryResultBufferSize = 500000,
+                              size_t renderCacheLimit = 500);
+  explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
+                              int numGpus = -1,  // < 0 means use all available GPUs
+                              int startGpu = 0,
+                              size_t queryResultBufferSize = 500000,
+                              size_t renderCacheLimit = 500);  // only applicable if a GPU or CUDA_INTEROP render
   ~QueryRenderManager();
 
   bool hasUser(int userId) const;
@@ -114,19 +125,52 @@ class QueryRenderManager {
   // get the id at a specific pixel
   int64_t getIdAt(size_t x, size_t y);
 
-  // CROOT - the following is a debug function. Remove when ready for deployment
-  // GLFWwindow* getWindow() {
-  //   // return _windowPtr.get();
-  //   return _windowPtr;
-  // }
-
  private:
   static const UserWidgetPair _emptyUserWidget;
 
-  RendererTable _rendererDict;
+  struct UserId {};
+  struct UserWidgetIds {};
+  struct LastRenderTime {};
 
-  mutable QueryRenderer* _activeRenderer;
-  mutable UserWidgetPair _activeUserWidget;
+  struct SessionData {
+    int userId;
+    int widgetId;
+    QueryRendererUqPtr renderer;
+    std::chrono::milliseconds lastRenderTime;
+
+    SessionData(int userId, int widgetId, QueryRenderer* newRenderer);
+  };
+
+  struct ChangeLastRenderTime {
+    ChangeLastRenderTime();
+    void operator()(SessionData& sd);
+
+   private:
+    std::chrono::milliseconds new_time;
+  };
+
+  typedef ::boost::multi_index_container<
+      SessionData,
+      ::boost::multi_index::indexed_by<::boost::multi_index::hashed_unique<
+                                           ::boost::multi_index::tag<UserWidgetIds>,
+                                           ::boost::multi_index::composite_key<
+                                               SessionData,
+                                               ::boost::multi_index::member<SessionData, int, &SessionData::userId>,
+                                               ::boost::multi_index::member<SessionData, int, &SessionData::widgetId>>>,
+
+                                       ::boost::multi_index::ordered_non_unique<
+                                           ::boost::multi_index::tag<UserId>,
+                                           ::boost::multi_index::member<SessionData, int, &SessionData::userId>>,
+
+                                       ::boost::multi_index::sequenced<::boost::multi_index::tag<LastRenderTime>>>>
+      RendererMap;
+
+  typedef RendererMap::index<UserId>::type RendererMap_by_UserId;
+  typedef RendererMap::index<LastRenderTime>::type RendererMap_by_LastRenderTime;
+
+  RendererMap _rendererMap;
+
+  mutable RendererMap::iterator _activeItr;
 
   PerGpuDataMap _perGpuData;
 
@@ -136,11 +180,15 @@ class QueryRenderManager {
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
 
-  static const int64_t maxWidgetIdleTime;
-  void _purgeUnusedWidgets(int doNotTouchUserId, int doNotTouchWidgetId);
+  static const std::chrono::milliseconds maxWidgetIdleTime;
+  void _clearActiveUserWidget();
+  void _purgeUnusedWidgets();
+  void _updateActiveLastRenderTime();
 
   mutable std::mutex _renderMtx;
   mutable std::mutex _usersMtx;
+
+  const size_t _renderCacheLimit;
 };
 
 }  // namespace QueryRenderer

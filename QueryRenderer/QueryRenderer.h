@@ -99,8 +99,6 @@ class QueryRenderer {
   PerGpuDataMap* getPerGpuData() { return &_perGpuData; }
   QueryRendererContext* getContext() { return _ctx.get(); }
 
-  int64_t timeSinceLastRenderMS() const;
-
   static void renderGpu(GpuId gpuId,
                         PerGpuDataMap* gpuDataMap,
                         QueryRendererContext* ctx,
@@ -113,7 +111,6 @@ class QueryRenderer {
   std::shared_ptr<QueryRendererContext> _ctx;
   PerGpuDataMap _perGpuData;
   std::unique_ptr<QueryRenderCompositor> _compositorPtr;
-  std::chrono::steady_clock::time_point _lastRenderTime;
 
   void _clear();
   void _clearGpuResources();
@@ -131,11 +128,6 @@ class QueryRenderer {
   void _resizeFramebuffers(int width, int height);
 
   void _update();
-  void _updateRenderTime();
-  // PngData _renderToPng(int width,
-  //                      int height,
-  //                      const std::shared_ptr<unsigned char>& pixelsPtr,
-  //                      int compressionLevel = -1);
 
   friend class QueryRendererContext;
   friend class QueryRenderCompositor;
