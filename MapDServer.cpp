@@ -383,6 +383,10 @@ class MapDHandler : virtual public MapDIf {
       const auto rowid = executor->getRowidForPixel(
           pixel.x, pixel.y, session_info_ptr->get_session_id(), 1);  // TODO(alex): de-hardcode user widget
 
+      if (rowid < 0) {
+        continue;
+      }
+
       // TODO(alex): fix potential SQL injection issues?
       const auto projection = boost::algorithm::join(col_names, ", ");
       const auto query_str =
