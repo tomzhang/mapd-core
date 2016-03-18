@@ -754,7 +754,7 @@ class BaseMark {
     ::Rendering::GL::GLRenderer* renderer;
     ::Rendering::GL::GLResourceManagerShPtr rsrcMgr;
     int numGpus = _perGpuData.size();
-    bool update = (numGpus > 0);
+    bool update = (numGpus > 0 && _perGpuData.begin()->second.shaderPtr);
     bool createdNewGpuRsrc = false;
     for (auto& itr : qrcPerGpuData) {
       auto perGpuItr = _perGpuData.find(itr.first);
@@ -762,6 +762,8 @@ class BaseMark {
         PerGpuData gpuData(itr.second);
         if (update) {
           auto beginItr = _perGpuData.begin();
+          CHECK(beginItr != _perGpuData.end() && beginItr->second.shaderPtr);
+
           beginItr->second.makeActiveOnCurrentThread();
           std::string vertSrc = beginItr->second.shaderPtr->getVertexSource();
           std::string fragSrc = beginItr->second.shaderPtr->getFragmentSource();
