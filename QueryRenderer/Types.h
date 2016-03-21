@@ -29,6 +29,9 @@ typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 class QueryFramebuffer;
 typedef std::unique_ptr<QueryFramebuffer> QueryFramebufferUqPtr;
 
+class QueryIdMapPixelBuffer;
+typedef std::shared_ptr<QueryIdMapPixelBuffer> QueryIdMapPixelBufferShPtr;
+
 enum class QueryDataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR, STRING };
 enum class QueryDataTableType { SQLQUERY = 0, EMBEDDED, URL, UNSUPPORTED };
 

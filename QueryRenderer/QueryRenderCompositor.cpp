@@ -14,7 +14,7 @@ using ::Rendering::GL::Resources::GLTexture2dShPtr;
 using ::Rendering::GL::Resources::GLRenderbuffer;
 using ::Rendering::GL::Resources::GLRenderbufferShPtr;
 
-QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
+QueryRenderCompositor::QueryRenderCompositor(QueryRenderManager* prnt,
                                              ::Rendering::RendererShPtr& rendererPtr,
                                              size_t width,
                                              size_t height,
@@ -29,7 +29,7 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
                                                            height,
                                                            numSamples,
                                                            doHitTest,
-                                                           doDepthTest)),
+                                                           doDepthTest))
 #elif MAPDGL_EGL
       _implPtr(new Impl::EGL::EglQueryRenderCompositorImpl(prnt,
                                                            rendererPtr,
@@ -37,9 +37,11 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderer* prnt,
                                                            height,
                                                            numSamples,
                                                            doHitTest,
-                                                           doDepthTest)),
+                                                           doDepthTest))
+#else
+      _implPtr(nullptr)
 #endif  // MAPDGL_GLX
-      _queryRenderer(prnt) {
+{
 }
 
 QueryRenderCompositor::~QueryRenderCompositor() {
@@ -75,14 +77,19 @@ bool QueryRenderCompositor::doDepthTest() {
   return _implPtr->getRenderer();
 }
 
+::Rendering::GL::GLRenderer* QueryRenderCompositor::getGLRenderer() {
+  CHECK(_implPtr);
+  return _implPtr->getGLRenderer();
+}
+
 void QueryRenderCompositor::resize(size_t width, size_t height) {
   CHECK(_implPtr);
   _implPtr->resize(width, height);
 }
 
-void QueryRenderCompositor::render() {
+void QueryRenderCompositor::render(QueryRenderer* queryRenderer) {
   CHECK(_implPtr);
-  _implPtr->render(_queryRenderer);
+  _implPtr->render(queryRenderer);
 }
 
 std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t startx,
@@ -96,6 +103,16 @@ std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t sta
 std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width, int height) {
   CHECK(_implPtr);
   return _implPtr->readIdBuffer(startx, starty, width, height);
+}
+
+void QueryRenderCompositor::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
+  CHECK(_implPtr);
+  return _implPtr->copyIdBufferToPbo(pbo);
+}
+
+void QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer) {
+  CHECK(_implPtr);
+  return _implPtr->readIdBuffer(startx, starty, width, height, idBuffer);
 }
 
 ::Rendering::GL::Resources::GLTexture2dShPtr QueryRenderCompositor::createFboTexture2d(

@@ -40,7 +40,7 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   void render(QueryRenderer* queryRenderer) final;
 
  private:
-  EglQueryRenderCompositorImpl(QueryRenderer* prnt,
+  EglQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                ::Rendering::RendererShPtr& rendererPtr,
                                size_t width,
                                size_t height,

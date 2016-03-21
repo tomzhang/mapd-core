@@ -4,6 +4,8 @@
 #include "Types.h"
 #include "QueryDataLayout.h"
 #include "QueryResultVertexBuffer.h"
+#include "QueryRenderCompositor.h"
+#include "QueryIdMapPboPool.h"
 #include "Types.h"
 #include "PngData.h"
 #include <Rendering/Types.h>
@@ -41,18 +43,27 @@ class QueryRenderManager {
     QueryResultVertexBufferShPtr queryResultBufferPtr;
     Rendering::WindowShPtr windowPtr;
     Rendering::RendererShPtr rendererPtr;
-    // QueryRendererFboShPtr rendererFboPtr;
 
-    PerGpuData() : queryResultBufferPtr(nullptr), windowPtr(nullptr), rendererPtr(nullptr) {}
-    PerGpuData(const PerGpuData& data)
-        : queryResultBufferPtr(data.queryResultBufferPtr), windowPtr(data.windowPtr), rendererPtr(data.rendererPtr) {}
+    // TODO(croot): make a pool of framebuffers?
+    // This would be necessary if we ever support asynchronous
+    // queries, even partially (i.e. the cuda part of the query
+    // may be serialized, but the render part could run asynchronously.)
+    QueryFramebufferUqPtr framebufferPtr;
+    std::shared_ptr<QueryRenderCompositor> compositorPtr;
+    std::unique_ptr<QueryIdMapPboPool> pboPoolPtr;
+
+    PerGpuData()
+        : queryResultBufferPtr(nullptr),
+          windowPtr(nullptr),
+          rendererPtr(nullptr),
+          framebufferPtr(nullptr),
+          compositorPtr(nullptr),
+          pboPoolPtr(nullptr) {}
 
     ~PerGpuData() {
       // need to make active to properly destroy gpu resources
-      // TODO(croot): uncomment this if we have GL resources at
-      // this level (i.e. a framebuffer or a compositor per gpu)
       // TODO(croot): reset to previously active renderer?
-      // makeActiveOnCurrentThread();
+      makeActiveOnCurrentThread();
     }
 
     void makeActiveOnCurrentThread() {
@@ -65,11 +76,45 @@ class QueryRenderManager {
       rendererPtr->makeInactive();
     }
 
-    Rendering::Renderer* getRenderer() {
+    ::Rendering::Renderer* getRenderer() {
       if (rendererPtr) {
         return rendererPtr.get();
       }
       return nullptr;
+    }
+
+    ::Rendering::GL::GLRenderer* getGLRenderer() {
+      if (rendererPtr) {
+        ::Rendering::Renderer* renderer = rendererPtr.get();
+        return dynamic_cast<::Rendering::GL::GLRenderer*>(renderer);
+      }
+
+      return nullptr;
+    }
+
+    void resize(size_t width, size_t height) {
+      CHECK(framebufferPtr);
+
+      width = std::max(width, framebufferPtr->getWidth());
+      height = std::max(height, framebufferPtr->getHeight());
+      framebufferPtr->resize(width, height);
+      if (compositorPtr) {
+        compositorPtr->resize(width, height);
+      }
+    }
+
+    QueryFramebufferUqPtr& getFramebuffer() { return framebufferPtr; }
+    std::shared_ptr<QueryRenderCompositor>& getCompositor() { return compositorPtr; }
+    std::unique_ptr<QueryIdMapPboPool>& getIdMapPboPool() { return pboPoolPtr; }
+
+    QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height) {
+      CHECK(pboPoolPtr);
+      return pboPoolPtr->getInactiveIdMapPbo(width, height);
+    }
+
+    void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
+      CHECK(pboPoolPtr);
+      pboPoolPtr->setIdMapPboInactive(pbo);
     }
   };
 
@@ -107,6 +152,7 @@ class QueryRenderManager {
   void setWidthHeight(int width, int height);
 
   std::vector<GpuId> getAllGpuIds() const;
+  PerGpuDataMap* getPerGpuData() { return _perGpuData.get(); }
 
 #ifdef HAVE_CUDA
   CudaHandle getCudaHandle(const GpuId& gpuId);
@@ -172,7 +218,8 @@ class QueryRenderManager {
 
   mutable RendererMap::iterator _activeItr;
 
-  PerGpuDataMap _perGpuData;
+  std::shared_ptr<PerGpuDataMap> _perGpuData;
+  std::shared_ptr<QueryRenderCompositor> _compositorPtr;
 
   void _initialize(Rendering::WindowManager& windowMgr, int numGpus, int startGpu, size_t queryResultBufferSize);
   void _resetQueryResultBuffers();

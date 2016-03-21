@@ -53,26 +53,20 @@ class QueryVertexBuffer {
 
   explicit QueryVertexBuffer(VboType type = VboType::QUERY_VBO);
 
-  // explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, GLenum usage = GL_STATIC_DRAW);
-  explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
-                             size_t numBytes,
-                             GLenum usage = GL_STATIC_DRAW,
-                             VboType type = VboType::QUERY_VBO);
-  explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
-                             const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
-                             GLenum usage = GL_STATIC_DRAW,
-                             VboType type = VboType::QUERY_VBO);
-
-  // template <typename T>
-  // explicit QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
-  //                            const std::vector<T>& data,
-  //                            const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
-  //                            GLenum usage = GL_STATIC_DRAW)
-  //     : QueryVertexBuffer(renderer, layoutPtr, usage) {
-  //   // TODO(croot): validate that the data and the layout align
-  //   // NOTE: _size will be set in the bufferData() call
-  //   _vbo->bufferData((void*)&data[0], data.size(), sizeof(T));
-  // }
+  explicit QueryVertexBuffer(
+      Rendering::GL::GLRenderer* renderer,
+      size_t numBytes,
+      Rendering::GL::Resources::BufferAccessType accessType =
+          Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      VboType type = VboType::QUERY_VBO);
+  explicit QueryVertexBuffer(
+      Rendering::GL::GLRenderer* renderer,
+      const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+      Rendering::GL::Resources::BufferAccessType accessType =
+          Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      VboType type = VboType::QUERY_VBO);
 
   ~QueryVertexBuffer();
 
@@ -91,7 +85,8 @@ class QueryVertexBuffer {
  private:
   VboType _type;
   void _initBuffer(Rendering::GL::GLRenderer* renderer,
-                   GLenum usage,
+                   Rendering::GL::Resources::BufferAccessType accessType,
+                   Rendering::GL::Resources::BufferAccessFreq accessFreq,
                    size_t numBytes = 0,
                    const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr = nullptr);
 };
@@ -100,9 +95,11 @@ class QueryVertexBuffer {
 // inherit from
 class QueryResultVertexBuffer : public QueryVertexBuffer {
  public:
-  explicit QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer,
-                                   size_t numBytes,
-                                   GLenum usage = GL_DYNAMIC_COPY);
+  explicit QueryResultVertexBuffer(
+      Rendering::GL::GLRenderer* renderer,
+      size_t numBytes,
+      Rendering::GL::Resources::BufferAccessType accessType = Rendering::GL::Resources::BufferAccessType::COPY,
+      Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::DYNAMIC);
 
   ~QueryResultVertexBuffer();
 

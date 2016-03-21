@@ -3,12 +3,14 @@
 
 #include "Types.h"
 #include "Resources/Types.h"
+#include "Resources/Enums.h"
 #include "Resources/GLShader.h"
 #include "Resources/GLRenderbuffer.h"
 #include "Resources/GLTexture2d.h"
 #include "Resources/GLTexture2dArray.h"
 #include "Resources/GLFramebuffer.h"
 #include "Resources/GLVertexBuffer.h"
+#include "Resources/GLPixelBuffer2d.h"
 #include <string>
 #include <vector>
 
@@ -42,19 +44,38 @@ class GLResourceManager {
 
   Resources::GLFramebufferShPtr createFramebuffer(const Resources::GLFramebufferAttachmentMap& attachments);
 
-  Resources::GLVertexBufferShPtr createVertexBuffer(GLenum usage = GL_STATIC_DRAW);
-  Resources::GLVertexBufferShPtr createVertexBuffer(size_t numBytes, GLenum usage = GL_STATIC_DRAW);
-  Resources::GLVertexBufferShPtr createVertexBuffer(const Resources::GLBufferLayoutShPtr& layoutPtr,
-                                                    GLenum usage = GL_STATIC_DRAW);
+  Resources::GLVertexBufferShPtr createVertexBuffer(
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+  Resources::GLVertexBufferShPtr createVertexBuffer(
+      size_t numBytes,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+  Resources::GLVertexBufferShPtr createVertexBuffer(
+      const Resources::GLBufferLayoutShPtr& layoutPtr,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLPixelBuffer2dShPtr createPixelBuffer2d(
+      size_t width,
+      size_t height,
+      // GLenum internalFormat,
+      GLenum pixelFormat,
+      GLenum pixelType,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
 
   template <typename T>
-  Resources::GLVertexBufferShPtr createVertexBuffer(const std::vector<T>& data,
-                                                    const Resources::GLBufferLayoutShPtr& layoutPtr,
-                                                    GLenum usage = GL_STATIC_DRAW) {
+  Resources::GLVertexBufferShPtr createVertexBuffer(
+      const std::vector<T>& data,
+      const Resources::GLBufferLayoutShPtr& layoutPtr,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC) {
     CHECK(!_prntRenderer.expired());
 
     // TODO(croot): make thread safe?
-    Resources::GLVertexBufferShPtr rtn(new Resources::GLVertexBuffer(_prntRenderer, data, layoutPtr, usage));
+    Resources::GLVertexBufferShPtr rtn(
+        new Resources::GLVertexBuffer(_prntRenderer, data, layoutPtr, accessType, accessFreq));
     _glResources.push_back(Resources::GLResourceWkPtr(rtn));
 
     return rtn;

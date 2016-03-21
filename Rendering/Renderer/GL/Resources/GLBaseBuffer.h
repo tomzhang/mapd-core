@@ -16,28 +16,47 @@ class GLBaseBuffer : public GLResource {
   GLuint getId() const final { return _bufferId; }
   GLenum getTarget() const final { return _target; }
 
+  BufferAccessType getAccessType() const { return _accessType; }
+  BufferAccessFreq getAccessFreq() const { return _accessFreq; }
+  GLenum getGLUsage() const { return _usage; }
+
   size_t numBytes() const { return _numBytes; }
   GLBufferType type() const { return _type; }
+
+  bool isReadable() const {
+    return (_accessType == BufferAccessType::READ || _accessType == BufferAccessType::READ_AND_WRITE ||
+            _accessType == BufferAccessType::COPY);
+  }
+
+  bool isWritable() const {
+    return (_accessType == BufferAccessType::WRITE || _accessType == BufferAccessType::READ_AND_WRITE ||
+            _accessType == BufferAccessType::COPY);
+  }
 
  protected:
   explicit GLBaseBuffer(const RendererWkPtr& rendererPtr,
                         GLBufferType type,
                         GLenum target = GL_ARRAY_BUFFER,
-                        GLenum usage = GL_STATIC_DRAW);
+                        BufferAccessType = BufferAccessType::READ_AND_WRITE,
+                        BufferAccessFreq = BufferAccessFreq::STATIC);
 
   void _initResource();
 
   virtual void _cleanupResource() override;
   virtual void _makeEmpty() override;
   static GLenum _getBufferBinding(GLenum target);
-  void bufferData(void* data, size_t numBytes);
+  void bufferData(void* data, size_t numBytes, GLenum altTarget = 0);
 
   GLBufferType _type;
   GLuint _bufferId;
   GLenum _target;
   GLenum _usage;
 
+  BufferAccessType _accessType;
+  BufferAccessFreq _accessFreq;
+
   size_t _numBytes;
+  size_t _numUsedBytes;
 };
 
 }  // namespace Resources

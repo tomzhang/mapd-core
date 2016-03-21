@@ -1,6 +1,7 @@
 #ifndef QUERYRENDERER_QUERYFRAMEBUFFER_H_
 #define QUERYRENDERER_QUERYFRAMEBUFFER_H_
 
+#include "Types.h"
 #include <Rendering/Renderer.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/Resources/Enums.h>
@@ -50,13 +51,21 @@ class QueryFramebuffer {
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
+  void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
   std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+
+  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo);
 
   size_t getWidth() const;
   size_t getHeight() const;
   bool doHitTest() const { return _doHitTest; }
   bool doDepthTest() const { return _doDepthTest; }
+
+  void setHitTest(bool doHitTest);
+  void setDepthTest(bool doDepthTest);
+
   ::Rendering::Renderer* getRenderer();
+  ::Rendering::GL::GLRenderer* getGLRenderer();
 
   ::Rendering::GL::Resources::GLTexture2dShPtr getColorTexture2d(FboColorBuffer texType);
   ::Rendering::GL::Resources::GLRenderbufferShPtr getRenderbuffer(
@@ -78,6 +87,7 @@ class QueryFramebuffer {
       size_t height);
 
  private:
+  bool _defaultDoHitTest, _defaultDoDepthTest;
   bool _doHitTest, _doDepthTest;
 
   ::Rendering::GL::Resources::GLTexture2dShPtr _rgbaTex;

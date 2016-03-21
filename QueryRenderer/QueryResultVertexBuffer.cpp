@@ -3,41 +3,51 @@
 
 namespace QueryRenderer {
 
+using ::Rendering::GL::Resources::BufferAccessType;
+using ::Rendering::GL::Resources::BufferAccessFreq;
+
 QueryVertexBuffer::QueryVertexBuffer(VboType type) : _type(type) {
 }
 
-// QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, GLenum usage) : _vbo(nullptr) {
+// QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, BufferAccessType accessType,
+// BufferAccessFreq accessFreq) : _vbo(nullptr) {
 // }
 
-QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage, VboType type)
+QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+                                     size_t numBytes,
+                                     BufferAccessType accessType,
+                                     BufferAccessFreq accessFreq,
+                                     VboType type)
     : QueryVertexBuffer(type) {
-  _initBuffer(renderer, usage, numBytes);
+  _initBuffer(renderer, accessType, accessFreq, numBytes);
 }
 
 QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
                                      const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
-                                     GLenum usage,
+                                     BufferAccessType accessType,
+                                     BufferAccessFreq accessFreq,
                                      VboType type)
     : QueryVertexBuffer(type) {
-  _initBuffer(renderer, usage, 0, layoutPtr);
+  _initBuffer(renderer, accessType, accessFreq, 0, layoutPtr);
 }
 
 QueryVertexBuffer::~QueryVertexBuffer() {
 }
 
 void QueryVertexBuffer::_initBuffer(Rendering::GL::GLRenderer* renderer,
-                                    GLenum usage,
+                                    BufferAccessType accessType,
+                                    BufferAccessFreq accessFreq,
                                     size_t numBytes,
                                     const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) {
   if (!_vbo) {
     Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
     if (numBytes > 0) {
-      _vbo = rsrcMgr->createVertexBuffer(numBytes, usage);
+      _vbo = rsrcMgr->createVertexBuffer(numBytes, accessType, accessFreq);
     } else if (layoutPtr) {
-      _vbo = rsrcMgr->createVertexBuffer(layoutPtr, usage);
+      _vbo = rsrcMgr->createVertexBuffer(layoutPtr, accessType, accessFreq);
     } else {
-      _vbo = rsrcMgr->createVertexBuffer(usage);
+      _vbo = rsrcMgr->createVertexBuffer(accessType, accessFreq);
     }
   }
 }
@@ -67,8 +77,15 @@ void QueryVertexBuffer::bufferData(void* data, size_t numItems, size_t numBytesP
   return _vbo->bufferData(data, numItems, numBytesPerItem);
 }
 
-QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer, size_t numBytes, GLenum usage)
-    : QueryVertexBuffer(renderer, numBytes, usage), _isActive(false), _usedBytes(0), _gpuId(-1), _cudaResourceMap() {
+QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer,
+                                                 size_t numBytes,
+                                                 BufferAccessType accessType,
+                                                 BufferAccessFreq accessFreq)
+    : QueryVertexBuffer(renderer, numBytes, accessType, accessFreq),
+      _isActive(false),
+      _usedBytes(0),
+      _gpuId(-1),
+      _cudaResourceMap() {
   _gpuId = renderer->getGpuId();
 }
 

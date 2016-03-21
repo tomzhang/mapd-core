@@ -3,6 +3,7 @@
 #include "GLFramebuffer.h"
 #include "GLTexture2d.h"
 #include "GLRenderbuffer.h"
+#include "GLPixelBuffer2d.h"
 
 namespace Rendering {
 namespace GL {
@@ -29,7 +30,7 @@ bool AttachmentContainer::hasAttachment(GLenum attachment) {
 void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) {
   MAPD_CHECK_GL_ERROR(glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, tex, 0));
 
-  AttachmentData data = {attachment, tex};
+  AttachmentData data = {attachment, tex, true};
   _attachmentMap.insert(data);
 
   if (isColorAttachment(attachment, _maxColorAttachments)) {
@@ -40,7 +41,7 @@ void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) 
 void AttachmentContainer::addRenderbufferAttachment(GLenum attachment, GLuint rbo) {
   MAPD_CHECK_GL_ERROR(glFramebufferRenderbuffer(GL_FRAMEBUFFER, attachment, GL_RENDERBUFFER, rbo));
 
-  AttachmentData data = {attachment, rbo};
+  AttachmentData data = {attachment, rbo, true};
   _attachmentMap.insert(data);
 
   if (isColorAttachment(attachment, _maxColorAttachments)) {
@@ -55,7 +56,83 @@ void AttachmentContainer::removeAttachment(GLenum attachment) {
   }
 }
 
-void AttachmentContainer::enableAttachments() {
+void AttachmentContainer::enableAllAttachments() {
+  ChangeActive enabled(true);
+  for (auto itr = _attachmentMap.begin(); itr != _attachmentMap.end(); ++itr) {
+    if (!itr->active) {
+      _attachmentMap.modify(itr, enabled);
+      if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+        _dirty = true;
+      }
+    }
+  }
+}
+
+void AttachmentContainer::disableAllAttachments() {
+  ChangeActive disabled(false);
+  for (auto itr = _attachmentMap.begin(); itr != _attachmentMap.end(); ++itr) {
+    if (itr->active) {
+      _attachmentMap.modify(itr, disabled);
+      if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+        _dirty = true;
+      }
+    }
+  }
+}
+
+void AttachmentContainer::enableAttachments(const std::vector<GLenum>& attachments) {
+  ChangeActive enabled(true);
+  for (auto attachment : attachments) {
+    auto itr = _attachmentMap.find(attachment);
+    if (itr != _attachmentMap.end() && !itr->active) {
+      _attachmentMap.modify(itr, enabled);
+
+      if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+        _dirty = true;
+      }
+    }
+  }
+}
+
+void AttachmentContainer::disableAttachments(const std::vector<GLenum>& attachments) {
+  ChangeActive disabled(false);
+  for (auto attachment : attachments) {
+    auto itr = _attachmentMap.find(attachment);
+    if (itr != _attachmentMap.end() && itr->active) {
+      _attachmentMap.modify(itr, disabled);
+
+      if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+        _dirty = true;
+      }
+    }
+  }
+}
+
+void AttachmentContainer::enableAttachment(GLenum attachment) {
+  ChangeActive enabled(true);
+  auto itr = _attachmentMap.find(attachment);
+  if (itr != _attachmentMap.end() && !itr->active) {
+    _attachmentMap.modify(itr, enabled);
+
+    if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+      _dirty = true;
+    }
+  }
+}
+
+void AttachmentContainer::disableAttachment(GLenum attachment) {
+  ChangeActive disabled(false);
+  auto itr = _attachmentMap.find(attachment);
+  if (itr != _attachmentMap.end() && itr->active) {
+    _attachmentMap.modify(itr, disabled);
+
+    if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+      _dirty = true;
+    }
+  }
+}
+
+void AttachmentContainer::enableGLAttachments() {
   // TODO(croot): what to do if the active attachments are empty?
 
   if (_dirty) {
@@ -64,9 +141,13 @@ void AttachmentContainer::enableAttachments() {
     AttachmentMap_in_order& inOrder = _attachmentMap.get<inorder>();
     AttachmentMap_in_order::iterator itr;
     for (itr = inOrder.begin(); itr != inOrder.end(); ++itr) {
-      if (isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
+      if (itr->active && isColorAttachment(itr->attachmentType, _maxColorAttachments)) {
         _activeAttachments.push_back(itr->attachmentType);
       }
+    }
+
+    if (!_activeAttachments.size()) {
+      _activeAttachments.push_back(GL_NONE);
     }
 
     _dirty = false;
@@ -123,7 +204,7 @@ void GLFramebuffer::_initResource(const GLFramebufferAttachmentMap& attachments)
     }
   }
 
-  _attachmentManager.enableAttachments();
+  _attachmentManager.enableGLAttachments();
 
   GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
@@ -223,15 +304,6 @@ void GLFramebuffer::readPixels(GLenum attachment,
 
   validateUsability();
 
-  // size_t myWidth = getWidth();
-  // size_t myHeight = getHeight();
-  // RUNTIME_EX_ASSERT(startx + width <= myWidth && starty + height <= myHeight,
-  //                   "GLFramebuffer: bounds of the pixels to read ((x, y) = (" + std::to_string(startx) + ", " +
-  //                       std::to_string(starty) + "), width = " + std::to_string(width) + ", height = " +
-  //                       std::to_string(height) + ") extends beyond the bounds of the framebuffer (width = " +
-  //                       std::to_string(myWidth) + ", height = " + std::to_string(myHeight) + "). Cannot read
-  //                       pixels.");
-
   GLint currReadBuffer, currReadFbo;
 
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &currReadFbo));
@@ -254,6 +326,79 @@ void GLFramebuffer::readPixels(GLenum attachment,
   }
 }
 
+void GLFramebuffer::copyPixelsToBoundPixelBuffer(GLenum attachment,
+                                                 size_t startx,
+                                                 size_t starty,
+                                                 size_t width,
+                                                 size_t height,
+                                                 size_t offsetBytes,
+                                                 GLenum format,
+                                                 GLenum type) {
+  // TODO(croot): should we worry about which renderer here? Or is always defaulting to
+  // the parent renderer ok? If it isn't, we either need to pass the renderer as a default
+  // argument, or supply an api to the renderer directly, which will then call this function
+  // which would be private.
+
+  RUNTIME_EX_ASSERT(
+      _attachmentManager.hasAttachment(attachment),
+      "Error trying to read pixels from fbo attachment " + std::to_string(attachment) + ". Attachment doesn't exist.");
+
+  validateUsability();
+
+  GLRenderer* renderer = getGLRenderer();
+  GLPixelBuffer2dShPtr pbo = renderer->getBoundReadPixelBuffer();
+  RUNTIME_EX_ASSERT(pbo != nullptr, "No bound read pixel buffer. Cannot read pixels.");
+
+  // size_t myWidth = getWidth();
+  // size_t myHeight = getHeight();
+
+  // size_t pboWidth = pbo->getWidth();
+  // size_t pboHeight = pbo->getHeight();
+  // RUNTIME_EX_ASSERT(pboWidth == myWidth && pboHeight == myHeight,
+  //                   "GLFramebuffer dimensions: " + std::to_string(myWidth) + "x" + std::to_string(myHeight) +
+  //                       " does not match the dimensions of the bound pixel buffer: " + std::to_string(pboWidth) + "x"
+  //                       +
+  //                       std::to_string(pboHeight));
+
+  GLint currReadBuffer, currReadFbo;
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &currReadFbo));
+  bool fboBind = (currReadFbo != static_cast<GLint>(_fbo));
+  if (fboBind) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo));
+  }
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_BUFFER, &currReadBuffer));
+  MAPD_CHECK_GL_ERROR(glReadBuffer(attachment));
+
+  MAPD_CHECK_GL_ERROR(glReadPixels(startx, starty, width, height, format, type, BUFFER_OFFSET(offsetBytes)));
+
+  if (currReadBuffer != static_cast<GLint>(attachment)) {
+    MAPD_CHECK_GL_ERROR(glReadBuffer(currReadBuffer));
+  }
+
+  if (fboBind) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, currReadFbo));
+  }
+}
+
+void GLFramebuffer::copyPixelsToPixelBuffer(GLenum attachment,
+                                            size_t startx,
+                                            size_t starty,
+                                            size_t width,
+                                            size_t height,
+                                            size_t offsetBytes,
+                                            GLenum format,
+                                            GLenum type,
+                                            GLPixelBuffer2dShPtr& pbo) {
+  GLRenderer* renderer = getGLRenderer();
+  GLPixelBuffer2dShPtr currPbo = renderer->getBoundReadPixelBuffer();
+
+  renderer->bindReadPixelBuffer(pbo);
+  copyPixelsToBoundPixelBuffer(attachment, startx, starty, width, height, offsetBytes, format, type);
+  renderer->bindReadPixelBuffer(currPbo);
+}
+
 void GLFramebuffer::resize(size_t width, size_t height) {
   // TODO(croot): should we worry about which renderer here? Or is always defaulting to
   // the parent renderer ok?
@@ -267,12 +412,40 @@ void GLFramebuffer::resize(size_t width, size_t height) {
   }
 }
 
+void GLFramebuffer::enableAllAttachments() {
+  _attachmentManager.enableAllAttachments();
+}
+
+void GLFramebuffer::disableAllAttachments() {
+  _attachmentManager.disableAllAttachments();
+}
+
+void GLFramebuffer::enableAttachments(const std::vector<GLenum>& activeAttachments) {
+  _attachmentManager.enableAttachments(activeAttachments);
+}
+
+void GLFramebuffer::disableAttachments(const std::vector<GLenum>& attachmentsToDisable) {
+  _attachmentManager.disableAttachments(attachmentsToDisable);
+}
+
+void GLFramebuffer::enableAttachment(GLenum attachment) {
+  _attachmentManager.enableAttachment(attachment);
+}
+
+void GLFramebuffer::disableAttachment(GLenum attachment) {
+  _attachmentManager.disableAttachment(attachment);
+}
+
+void GLFramebuffer::activateEnabledAttachmentsForDrawing() {
+  _attachmentManager.enableGLAttachments();
+}
+
 // void GLFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
 //   // TODO(croot): perhaps write a "don't check renderer" version?
 //   validateUsability(renderer);
 
 //   MAPD_CHECK_GL_ERROR(glBindFramebuffer(static_cast<int>(bindType), _fbo));
-//   // _attachmentManager.enableAttachments();
+//   // _attachmentManager.enableGLAttachments();
 
 //   // TODO(croot): How do we properly deal with the state machine
 //   // if (_attachmentManager.hasAttachment(GL_DEPTH_ATTACHMENT)) {

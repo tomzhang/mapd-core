@@ -37,7 +37,7 @@ using ::Rendering::GL::Resources::GLTexture2dSampleProps;
 #define glxewGetContext _renderer->glxewGetContext
 #endif
 
-GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
+GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                                            ::Rendering::RendererShPtr& rendererPtr,
                                                            size_t width,
                                                            size_t height,
@@ -66,7 +66,7 @@ GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
   _initResources(prnt);
 }
 
-void GlxQueryRenderCompositorImpl::_initResources(QueryRenderer* queryRenderer) {
+void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRenderManager) {
   _renderer->makeActiveOnCurrentThread();
   GLResourceManagerShPtr rsrcMgr = _renderer->getResourceManager();
 
@@ -80,13 +80,16 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderer* queryRenderer) 
 
   _shader = rsrcMgr->createShader(Compositor_vert::source, Compositor_frag::source);
   _renderer->bindShader(_shader);
+
+  // TODO(croot): automate the texture image unit binding
   _shader->setSamplerTextureImageUnit("rgbaArraySampler", GL_TEXTURE0);
   _shader->setSamplerTextureImageUnit("idArraySampler", GL_TEXTURE1);
+
   _vao = rsrcMgr->createVertexArray({{_rectvbo, {}}});
 
   size_t width = getWidth();
   size_t height = getHeight();
-  size_t depth = queryRenderer->getPerGpuData()->size();
+  size_t depth = queryRenderManager->getPerGpuData()->size();
   if (depth == 0) {
     // the texture array needs to be initialized to something
     depth = 1;
@@ -131,10 +134,10 @@ GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
 
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
-      _rgbaTextures.insert({tex.get(), {tex, _rgbaTextures.size()}});
+      _rgbaTextures.insert(tex.get());
       break;
     case FboColorBuffer::ID_BUFFER:
-      _idTextures.insert({tex.get(), {tex, _idTextures.size()}});
+      _idTextures.insert(tex.get());
       break;
     default:
       CHECK(false);
@@ -152,7 +155,7 @@ GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Render
 
   GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, width, height);
 
-  _rbos.insert({rbo.get(), {rbo, _rbos.size()}});
+  _rbos.insert(rbo.get());
 
   return rbo;
 }
@@ -170,11 +173,11 @@ void GlxQueryRenderCompositorImpl::addFboTexture2d(::Rendering::GL::Resources::G
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
       CHECK(_rgbaTextures.find(tex.get()) == _rgbaTextures.end());
-      _rgbaTextures.insert({tex.get(), {tex, _rgbaTextures.size()}});
+      _rgbaTextures.insert(tex.get());
       break;
     case FboColorBuffer::ID_BUFFER:
       CHECK(_idTextures.find(tex.get()) == _idTextures.end());
-      _idTextures.insert({tex.get(), {tex, _idTextures.size()}});
+      _idTextures.insert(tex.get());
       break;
     default:
       CHECK(false);
@@ -192,7 +195,7 @@ void GlxQueryRenderCompositorImpl::addFboRenderbuffer(::Rendering::GL::Resources
                         std::to_string(width) + "x" + std::to_string(height) + ".");
 
   CHECK(_rbos.find(rbo.get()) == _rbos.end());
-  _rbos.insert({rbo.get(), {rbo, _rbos.size()}});
+  _rbos.insert(rbo.get());
 }
 
 void GlxQueryRenderCompositorImpl::deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) {
@@ -201,27 +204,13 @@ void GlxQueryRenderCompositorImpl::deleteFboTexture2d(::Rendering::GL::Resources
   if (rgbaItr == _rgbaTextures.end()) {
     auto idItr = _idTextures.find(texture2dPtr);
     if (idItr != _idTextures.end()) {
-      int idx = idItr->second.second;
       _idTextures.erase(idItr);
-
-      for (auto& idLoopItr : _idTextures) {
-        if (idLoopItr.second.second > idx) {
-          idLoopItr.second.second -= 1;
-        }
-      }
     }
 
     CHECK(_idTextureArray);
     _idTextureArray->resize(_idTextures.size());
   } else {
-    int idx = rgbaItr->second.second;
     _rgbaTextures.erase(rgbaItr);
-
-    for (auto& rgbaLoopItr : _rgbaTextures) {
-      if (rgbaLoopItr.second.second > idx) {
-        rgbaLoopItr.second.second -= 1;
-      }
-    }
 
     CHECK(_rgbaTextureArray);
     _rgbaTextureArray->resize(_rgbaTextures.size());
@@ -232,14 +221,7 @@ void GlxQueryRenderCompositorImpl::deleteFboRenderbuffer(::Rendering::GL::Resour
   // TODO(croot): make thread safe?
   auto rboItr = _rbos.find(renderbufferPtr);
   if (rboItr != _rbos.end()) {
-    int idx = rboItr->second.second;
     _rbos.erase(rboItr);
-
-    for (auto& rboLoopItr : _rbos) {
-      if (rboLoopItr.second.second > idx) {
-        rboLoopItr.second.second -= 1;
-      }
-    }
 
     // TODO(croot): need to resize the depth texture array, if/when
     // that gets implemented.
@@ -258,8 +240,6 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
 
   size_t width = ctx->getWidth();
   size_t height = ctx->getHeight();
-
-  int idx;
 
   GLTexture2dShPtr rgbaTex, idTex;
   GLRenderbufferShPtr depthRbo;
@@ -303,12 +283,14 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
     // TODO(croot): do we need to do a flush/finish before copying?
     // or will the copy take care of that for us?
 
-    rgbaTex = itr->second.framebufferPtr->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
+    auto& framebufferPtr = itr->second.getFramebuffer();
+    CHECK(framebufferPtr);
+
+    rgbaTex = framebufferPtr->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
+    CHECK(rgbaTex);
 
     auto rgbaItr = _rgbaTextures.find(rgbaTex.get());
     CHECK(rgbaItr != _rgbaTextures.end());
-
-    idx = rgbaItr->second.second;
 
     glXCopyImageSubDataNV(displayPtr.get(),
                           glxCtx,
@@ -324,13 +306,14 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
                           0,
                           0,
                           0,
-                          idx,
+                          cnt,
                           width,
                           height,
                           1);
 
     if (doHitTest) {
-      idTex = itr->second.framebufferPtr->getColorTexture2d(FboColorBuffer::ID_BUFFER);
+      idTex = framebufferPtr->getColorTexture2d(FboColorBuffer::ID_BUFFER);
+      CHECK(idTex);
 
       auto idItr = _idTextures.find(idTex.get());
       CHECK(idItr != _idTextures.end());
@@ -349,7 +332,7 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
                             0,
                             0,
                             0,
-                            idx,
+                            cnt,
                             width,
                             height,
                             1);
@@ -376,11 +359,11 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   _renderer->clearAll();
 
   _shader->setSamplerAttribute("rgbaArraySampler", _rgbaTextureArray);
-  _shader->setUniformAttribute("rgbaArraySize", _rgbaTextureArray->getDepth());
+  _shader->setUniformAttribute("rgbaArraySize", perGpuData->size());
 
   if (doHitTest) {
     _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
-    _shader->setUniformAttribute("idArraySize", _idTextureArray->getDepth());
+    _shader->setUniformAttribute("idArraySize", perGpuData->size());
   } else {
     _shader->setUniformAttribute("idArraySize", 0);
   }

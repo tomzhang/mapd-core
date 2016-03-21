@@ -1,5 +1,6 @@
 #include "QueryRenderManager.h"
 #include "QueryRenderer.h"
+#include "Utilities.h"
 #include <Rendering/WindowManager.h>
 #include <Rendering/Settings/WindowSettings.h>
 #include <Rendering/Settings/RendererSettings.h>
@@ -18,11 +19,8 @@ using ::Rendering::Settings::IntSetting;
 using ::Rendering::Settings::StrSetting;
 
 using ::Rendering::GL::GLRenderer;
+using ::Rendering::GL::GLRendererShPtr;
 using ::Rendering::GL::GLResourceManagerShPtr;
-
-static std::chrono::milliseconds getCurrentTimeMS() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-}
 
 const UserWidgetPair QueryRenderManager::_emptyUserWidget = std::make_pair(-1, -1);
 
@@ -43,7 +41,11 @@ void QueryRenderManager::ChangeLastRenderTime::operator()(SessionData& sd) {
 }
 
 QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryResultBufferSize, size_t renderCacheLimit)
-    : _rendererMap(), _activeItr(_rendererMap.end()), _perGpuData(), _renderCacheLimit(renderCacheLimit) {
+    : _rendererMap(),
+      _activeItr(_rendererMap.end()),
+      _perGpuData(new PerGpuDataMap()),
+      _compositorPtr(nullptr),
+      _renderCacheLimit(renderCacheLimit) {
   // NOTE: this constructor needs to be used on the main thread as that is a requirement
   // for a window manager instance.
   ::Rendering::WindowManager windowMgr;
@@ -55,7 +57,11 @@ QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
                                        int startGpu,
                                        size_t queryResultBufferSize,
                                        size_t renderCacheLimit)
-    : _rendererMap(), _activeItr(_rendererMap.end()), _perGpuData(), _renderCacheLimit(renderCacheLimit) {
+    : _rendererMap(),
+      _activeItr(_rendererMap.end()),
+      _perGpuData(),
+      _compositorPtr(nullptr),
+      _renderCacheLimit(renderCacheLimit) {
   _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize);
 }
 
@@ -95,12 +101,13 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   // create renderer settings that will be compatible with the window's settings.
   RendererSettings rendererSettings(windowSettings);
 
-  GLRenderer* renderer = nullptr;
+  GLRendererShPtr renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
 
   PerGpuDataShPtr gpuDataPtr;
-  int endGpu = startGpu + numGpus;
-  for (int i = startGpu; i < endGpu; ++i) {
+  size_t endDevice = startGpu + numGpus;
+  size_t startDevice = startGpu;
+  for (size_t i = startDevice; i < endDevice; ++i) {
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
@@ -110,23 +117,46 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
     gpuDataPtr->makeActiveOnCurrentThread();
 
-    renderer = dynamic_cast<GLRenderer*>(gpuDataPtr->rendererPtr.get());
+    if (i == startDevice && numGpus > 1) {
+      _compositorPtr.reset(new QueryRenderCompositor(this,
+                                                     gpuDataPtr->rendererPtr,
+                                                     defaultWidth,
+                                                     defaultHeight,
+                                                     // TODO(croot): should we support num samples
+                                                     1,  //_ctx->getNumSamples(),
+                                                     true,
+                                                     // TODO(croot): do depth testing
+                                                     false));
+    }
+
+    // renderer = dynamic_cast<GLRenderer*>(gpuDataPtr->rendererPtr.get());
+    renderer = std::static_pointer_cast<GLRenderer>(gpuDataPtr->rendererPtr);
     CHECK(renderer != nullptr);
 
-    gpuDataPtr->queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer, queryResultBufferSize));
+    gpuDataPtr->queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer.get(), queryResultBufferSize));
 
-    _perGpuData.insert({i, gpuDataPtr});
+    if (_compositorPtr) {
+      gpuDataPtr->compositorPtr = _compositorPtr;
+      gpuDataPtr->framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer.get()));
+    } else {
+      // TODO(croot): do depth testing
+      gpuDataPtr->framebufferPtr.reset(new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false));
+    }
+
+    gpuDataPtr->pboPoolPtr.reset(new QueryIdMapPboPool(renderer));
 
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();
+
+    _perGpuData->insert({i, gpuDataPtr});
   }
 
-  LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startGpu << ", num GPUs: " << endGpu
+  LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << endDevice
             << ", Render cache limit: " << _renderCacheLimit;
 }
 
 void QueryRenderManager::_resetQueryResultBuffers() {
-  for (auto& itr : _perGpuData) {
+  for (auto& itr : *_perGpuData) {
     itr.second->queryResultBufferPtr->reset();
   }
 }
@@ -210,7 +240,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
     lastRenderTimeList.erase(itr);
   }
 
-  _rendererMap.emplace(userId, widgetId, new QueryRenderer(doHitTest, doDepthTest));
+  _rendererMap.emplace(userId, widgetId, new QueryRenderer(_perGpuData, doHitTest, doDepthTest));
 }
 
 void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
@@ -293,9 +323,9 @@ void QueryRenderManager::_updateActiveLastRenderTime() {
 
 #ifdef HAVE_CUDA
 CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
-  auto itr = _perGpuData.find(gpuId);
+  auto itr = _perGpuData->find(gpuId);
 
-  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
+  RUNTIME_EX_ASSERT(itr != _perGpuData->end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
@@ -308,9 +338,9 @@ CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
 }
 
 void QueryRenderManager::setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes) {
-  auto itr = _perGpuData.find(gpuId);
+  auto itr = _perGpuData->find(gpuId);
 
-  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot set cuda handle results for gpu " + std::to_string(gpuId) + ".");
+  RUNTIME_EX_ASSERT(itr != _perGpuData->end(), "Cannot set cuda handle results for gpu " + std::to_string(gpuId) + ".");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
@@ -334,14 +364,16 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   if (dataLayoutPtr) {
     // CHECK(executor != nullptr);
 
-    _activeItr->renderer->updateResultsPostQuery(dataLayoutPtr, executor, _perGpuData);
+    _activeItr->renderer->updateResultsPostQuery(dataLayoutPtr, executor);
   } else {
-    CHECK(_perGpuData.size());
+    CHECK(_perGpuData->size());
 
-    _activeItr->renderer->activateGpus(_perGpuData);
+    _activeItr->renderer->activateGpus();
   }
 
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
+
+  _resetQueryResultBuffers();
 }
 #else
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
@@ -351,11 +383,13 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
-  CHECK(_perGpuData.size());
+  CHECK(_perGpuData->size());
 
   _activeItr->renderer->activateGpus(_perGpuData);
 
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
+
+  _resetQueryResultBuffers();
 }
 #endif  // HAVE_CUDA
 
@@ -371,7 +405,7 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
 
 std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
   std::vector<GpuId> rtn;
-  for (auto itr : _perGpuData) {
+  for (auto itr : *_perGpuData) {
     rtn.push_back(itr.first);
   }
 
@@ -386,8 +420,6 @@ void QueryRenderManager::render() {
 
   _activeItr->renderer->render();
   _updateActiveLastRenderTime();
-
-  _resetQueryResultBuffers();
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
@@ -399,8 +431,6 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   PngData rtn = _activeItr->renderer->renderToPng(compressionLevel);
 
   _updateActiveLastRenderTime();
-
-  _resetQueryResultBuffers();
 
   return rtn;
 }

@@ -41,6 +41,10 @@ class GLVertexBuffer;
 typedef std::weak_ptr<GLVertexBuffer> GLVertexBufferWkPtr;
 typedef std::shared_ptr<GLVertexBuffer> GLVertexBufferShPtr;
 
+class GLPixelBuffer2d;
+typedef std::weak_ptr<GLPixelBuffer2d> GLPixelBuffer2dWkPtr;
+typedef std::shared_ptr<GLPixelBuffer2d> GLPixelBuffer2dShPtr;
+
 class GLBaseBufferLayout;
 typedef std::shared_ptr<GLBaseBufferLayout> GLBufferLayoutShPtr;
 

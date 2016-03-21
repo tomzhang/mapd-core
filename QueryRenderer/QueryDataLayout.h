@@ -15,8 +15,6 @@ struct QueryDataLayout {
   enum class AttrType { UINT = 0, INT, FLOAT, DOUBLE, UINT64, INT64 };
   enum class LayoutType { INTERLEAVED = 0, SEQUENTIAL };
 
-  typedef std::map<GpuId, size_t> PerGpuDataMap;
-
   // TODO(croot): add size_t numKeys --- each row can have
   // multiple keys. This value would indicate how many.
   // We can default it to use one, and the invalid key

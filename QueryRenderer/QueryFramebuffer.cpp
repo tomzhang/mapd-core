@@ -1,5 +1,6 @@
 #include "QueryFramebuffer.h"
 #include "QueryRenderCompositor.h"
+#include "QueryIdMapPixelBuffer.h"
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 #include <cstring>
@@ -51,7 +52,9 @@ static bool clampWidthAndHeightToSrc(size_t startx,
 }
 
 QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, bool doHitTest, bool doDepthTest)
-    : _doHitTest(doHitTest),
+    : _defaultDoHitTest(doHitTest),
+      _defaultDoDepthTest(doDepthTest),
+      _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
       _rgbaTex(nullptr),
       _idTex(nullptr),
@@ -61,7 +64,9 @@ QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, 
 }
 
 QueryFramebuffer::QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer)
-    : _doHitTest(compositor->doHitTest()),
+    : _defaultDoHitTest(compositor->doHitTest()),
+      _defaultDoDepthTest(compositor->doDepthTest()),
+      _doHitTest(compositor->doHitTest()),
       _doDepthTest(compositor->doDepthTest()),
       _rgbaTex(nullptr),
       _idTex(nullptr),
@@ -80,12 +85,12 @@ void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, i
 
   GLFramebufferAttachmentMap attachments({{GL_COLOR_ATTACHMENT0, _rgbaTex}});
 
-  if (_doHitTest) {
+  if (_defaultDoHitTest) {
     _idTex = createFboTexture2d(rsrcMgr, FboColorBuffer::ID_BUFFER, width, height);
     attachments.insert({GL_COLOR_ATTACHMENT1, _idTex});
   }
 
-  if (_doDepthTest) {
+  if (_defaultDoDepthTest) {
     _rbo = createFboRenderbuffer(rsrcMgr, FboRenderBuffer::DEPTH_BUFFER, width, height);
     attachments.insert({GL_DEPTH_ATTACHMENT, _rbo});
   }
@@ -99,12 +104,12 @@ void QueryFramebuffer::_init(QueryRenderCompositor* compositor, ::Rendering::GL:
   _rgbaTex = compositor->createFboTexture2d(renderer, FboColorBuffer::COLOR_BUFFER);
   GLFramebufferAttachmentMap attachments({{GL_COLOR_ATTACHMENT0, _rgbaTex}});
 
-  if (_doHitTest) {
+  if (_defaultDoHitTest) {
     _idTex = compositor->createFboTexture2d(renderer, FboColorBuffer::ID_BUFFER);
     attachments.insert({GL_COLOR_ATTACHMENT1, _idTex});
   }
 
-  if (_doDepthTest) {
+  if (_defaultDoDepthTest) {
     _rbo = compositor->createFboRenderbuffer(renderer, FboRenderBuffer::DEPTH_BUFFER);
     attachments.insert({GL_DEPTH_ATTACHMENT, _rbo});
   }
@@ -125,8 +130,28 @@ size_t QueryFramebuffer::getHeight() const {
   return _fbo->getHeight();
 }
 
+void QueryFramebuffer::setHitTest(bool doHitTest) {
+  if (doHitTest) {
+    RUNTIME_EX_ASSERT(_defaultDoHitTest,
+                      "Cannot activate hit testing for query framebuffer that wasn't initialized for hit-testing.");
+  }
+  _doHitTest = doHitTest;
+}
+
+void QueryFramebuffer::setDepthTest(bool doDepthTest) {
+  if (doDepthTest) {
+    RUNTIME_EX_ASSERT(_defaultDoDepthTest,
+                      "Cannot activate depth testing for query framebuffer that wasn't initialized for depth-testing.");
+  }
+  _doDepthTest = doDepthTest;
+}
+
 ::Rendering::Renderer* QueryFramebuffer::getRenderer() {
   return _fbo->getRenderer();
+}
+
+::Rendering::GL::GLRenderer* QueryFramebuffer::getGLRenderer() {
+  return _fbo->getGLRenderer();
 }
 
 GLTexture2dShPtr QueryFramebuffer::getColorTexture2d(FboColorBuffer texType) {
@@ -177,6 +202,28 @@ GLuint QueryFramebuffer::getId(FboRenderBuffer buffer) {
 
 void QueryFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
   renderer->bindFramebuffer(bindType, _fbo);
+
+  if (bindType == FboBind::DRAW || bindType == FboBind::READ_AND_DRAW) {
+    std::vector<GLenum> enableAttachments = {};
+    std::vector<GLenum> disableAttachments = {};
+
+    if (_doHitTest) {
+      enableAttachments.push_back(GL_COLOR_ATTACHMENT1);
+    } else if (_defaultDoHitTest) {
+      disableAttachments.push_back(GL_COLOR_ATTACHMENT1);
+    }
+
+    if (_doDepthTest) {
+      enableAttachments.push_back(GL_DEPTH_ATTACHMENT);
+    } else if (_defaultDoDepthTest) {
+      disableAttachments.push_back(GL_DEPTH_ATTACHMENT);
+    }
+
+    _fbo->enableAttachments(enableAttachments);
+    _fbo->disableAttachments(disableAttachments);
+
+    _fbo->activateEnabledAttachmentsForDrawing();
+  }
 }
 
 std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx, size_t starty, int width, int height) {
@@ -211,6 +258,29 @@ std::shared_ptr<unsigned char> QueryFramebuffer::readColorBuffer(size_t startx, 
   return pixels;
 }
 
+void QueryFramebuffer::readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer) {
+  RUNTIME_EX_ASSERT(_idTex != nullptr,
+                    "QueryFramebuffer: The framebuffer was not setup to write an ID map. Cannot retrieve ID at pixel.");
+
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  int widthToUse, heightToUse;
+
+  if (clampWidthAndHeightToSrc(startx, starty, width, height, myWidth, myHeight, widthToUse, heightToUse)) {
+    LOG(WARNING) << "QueryFramebuffer: bounds of the pixels to read ((x, y) = (" << startx << ", " << starty
+                 << "), width = " << width << ", height = " << height
+                 << ") extend beyond the bounds of the framebuffer (width = " << myWidth << ", height = " << myHeight
+                 << "). Only pixels within the bounds will be read. The rest will be initialized to 0.";
+  }
+
+  std::memset(idBuffer, 0, width * height * sizeof(unsigned int));
+  if (widthToUse > 0 && heightToUse > 0) {
+    _fbo->readPixels(
+        GL_COLOR_ATTACHMENT1, startx, starty, widthToUse, heightToUse, GL_RED_INTEGER, GL_UNSIGNED_INT, idBuffer);
+  }
+}
+
 std::shared_ptr<unsigned int> QueryFramebuffer::readIdBuffer(size_t startx, size_t starty, int width, int height) {
   RUNTIME_EX_ASSERT(_idTex != nullptr,
                     "QueryFramebuffer: The framebuffer was not setup to write an ID map. Cannot retrieve ID at pixel.");
@@ -226,25 +296,40 @@ std::shared_ptr<unsigned int> QueryFramebuffer::readIdBuffer(size_t startx, size
     height = myHeight;
   }
 
-  int widthToUse, heightToUse;
-
-  if (clampWidthAndHeightToSrc(startx, starty, width, height, myWidth, myHeight, widthToUse, heightToUse)) {
-    LOG(WARNING) << "QueryFramebuffer: bounds of the pixels to read ((x, y) = (" << startx << ", " << starty
-                 << "), width = " << width << ", height = " << height
-                 << ") extend beyond the bounds of the framebuffer (width = " << myWidth << ", height = " << myHeight
-                 << "). Only pixels within the bounds will be read. The rest will be initialized to 0.";
-  }
-
   std::shared_ptr<unsigned int> pixels(new unsigned int[width * height], std::default_delete<unsigned int[]>());
   unsigned int* rawPixels = pixels.get();
-  std::memset(rawPixels, 0, width * height * sizeof(unsigned int));
 
-  if (widthToUse > 0 && heightToUse > 0) {
-    _fbo->readPixels(
-        GL_COLOR_ATTACHMENT1, startx, starty, widthToUse, heightToUse, GL_RED_INTEGER, GL_UNSIGNED_INT, rawPixels);
-  }
+  readIdBuffer(startx, starty, width, height, rawPixels);
 
   return pixels;
+}
+
+void QueryFramebuffer::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
+  RUNTIME_EX_ASSERT(pbo != nullptr, "Pbo is empty. Cannot copy pixels to an undefined pbo.");
+  RUNTIME_EX_ASSERT(
+      _idTex != nullptr,
+      "QueryFramebuffer: The framebuffer was not setup for an ID map. Cannot copy ID map to pixel buffer object.");
+
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  size_t pboWidth = pbo->getWidth();
+  size_t pboHeight = pbo->getHeight();
+
+  RUNTIME_EX_ASSERT(pboWidth <= myWidth && pboHeight <= myHeight,
+                    "The pbo for the idmap is too big for the framebuffer. It is " + std::to_string(pboWidth) + "x" +
+                        std::to_string(pboHeight) + " and the fbo is " + std::to_string(myWidth) + "x" +
+                        std::to_string(myHeight) + ". The pbo size needs to be <= the fbo size.");
+
+  // TODO(croot): should we initialize the buffer to something? Like all 0s beforehand?
+  // If so, see glClearBufferData()/glClearBufferSubData()
+  CHECK(myWidth > 0 && myHeight > 0);
+
+  GLRenderer* renderer = _fbo->getGLRenderer();
+  renderer->bindReadPixelBuffer(pbo->getPixelBuffer2d());
+  _fbo->copyPixelsToBoundPixelBuffer(
+      GL_COLOR_ATTACHMENT1, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT);
+  renderer->bindReadPixelBuffer(nullptr);
 }
 
 GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rsrcMgr,

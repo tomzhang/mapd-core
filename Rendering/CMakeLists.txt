@@ -26,9 +26,9 @@ list(APPEND RENDERING_LIBS "${Glog_LIBRARIES}")
 if (${RENDERER_TYPE} STREQUAL "OpenGL")
   find_package(OpenGL REQUIRED)
 
-  list(APPEND RENDERING_SOURCES Renderer/GL/MapDGL.cpp Renderer/GL/GLWindow.cpp Renderer/GL/GLResourceManager.cpp Renderer/GL/GLRenderer.cpp Renderer/GL/TypeGL.cpp)
+  list(APPEND RENDERING_SOURCES Renderer/GL/MapDGL.cpp Renderer/GL/GLWindow.cpp Renderer/GL/GLResourceManager.cpp Renderer/GL/GLUtility.cpp Renderer/GL/GLRenderer.cpp Renderer/GL/TypeGL.cpp)
   list(APPEND RENDERING_SOURCES Renderer/GL/State/GLBindState.cpp)
-  list(APPEND RENDERING_SOURCES Renderer/GL/Resources/Enums.cpp Renderer/GL/Resources/GLBaseBuffer.cpp Renderer/GL/Resources/GLBufferLayout.cpp Renderer/GL/Resources/GLFramebuffer.cpp Renderer/GL/Resources/GLRenderbuffer.cpp Renderer/GL/Resources/GLShader.cpp Renderer/GL/Resources/GLTexture2d.cpp Renderer/GL/Resources/GLTexture2dArray.cpp Renderer/GL/Resources/GLVertexArray.cpp Renderer/GL/Resources/GLVertexBuffer.cpp)
+  list(APPEND RENDERING_SOURCES Renderer/GL/Resources/Enums.cpp Renderer/GL/Resources/GLBaseBuffer.cpp Renderer/GL/Resources/GLBufferLayout.cpp Renderer/GL/Resources/GLFramebuffer.cpp Renderer/GL/Resources/GLPixelBuffer2d.cpp Renderer/GL/Resources/GLRenderbuffer.cpp Renderer/GL/Resources/GLShader.cpp Renderer/GL/Resources/GLTexture2d.cpp Renderer/GL/Resources/GLTexture2dArray.cpp Renderer/GL/Resources/GLVertexArray.cpp Renderer/GL/Resources/GLVertexBuffer.cpp)
 
   list(APPEND RENDERING_INCLUDE_DIRS "${GL_INCLUDE_DIR}")
   list(APPEND RENDERING_LIBS "${OPENGL_LIBRARIES}")

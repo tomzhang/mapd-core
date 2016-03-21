@@ -19,6 +19,7 @@ using Resources::GLFramebufferShPtr;
 using Resources::GLShaderShPtr;
 using Resources::GLVertexArrayShPtr;
 using Resources::GLRenderbufferShPtr;
+using Resources::GLPixelBuffer2dShPtr;
 
 // TODO(croot): make these std::weak_ptr?
 thread_local GLRenderer* _currentRenderer;
@@ -269,6 +270,14 @@ void GLRenderer::bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc)
   _bindState.bindRenderbuffer(rboRsrc);
 }
 
+void GLRenderer::bindReadPixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc) {
+  _bindState.bindReadPixelBuffer(pboRsrc);
+}
+
+void GLRenderer::bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc) {
+  _bindState.bindWritePixelBuffer(pboRsrc);
+}
+
 Resources::GLTexture2dShPtr GLRenderer::getBoundTexture2d() const {
   return _bindState.getBoundTexture2d();
 }
@@ -315,6 +324,22 @@ GLRenderbufferShPtr GLRenderer::getBoundRenderbuffer() const {
 
 bool GLRenderer::hasBoundRenderbuffer() const {
   return _bindState.hasBoundRenderbuffer();
+}
+
+GLPixelBuffer2dShPtr GLRenderer::getBoundReadPixelBuffer() const {
+  return _bindState.getBoundReadPixelBuffer();
+}
+
+bool GLRenderer::hasBoundReadPixelBuffer() const {
+  return _bindState.hasBoundReadPixelBuffer();
+}
+
+GLPixelBuffer2dShPtr GLRenderer::getBoundWritePixelBuffer() const {
+  return _bindState.getBoundWritePixelBuffer();
+}
+
+bool GLRenderer::hasBoundWritePixelBuffer() const {
+  return _bindState.hasBoundWritePixelBuffer();
 }
 
 void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {

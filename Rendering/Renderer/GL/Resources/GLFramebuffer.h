@@ -28,9 +28,19 @@ namespace detail {
 struct AttachmentData {
   GLenum attachmentType;
   GLuint attachedTextureId;
+  bool active;
 };
 
 struct inorder {};
+
+struct ChangeActive {
+  ChangeActive(bool active) : active(active) {}
+
+  void operator()(AttachmentData& data) { data.active = active; }
+
+ private:
+  bool active;
+};
 
 class AttachmentContainer {
  public:
@@ -40,7 +50,15 @@ class AttachmentContainer {
   void addTexture2dAttachment(GLenum attachment, GLuint tex);
   void addRenderbufferAttachment(GLenum attachment, GLuint rbo);
   void removeAttachment(GLenum attachment);
-  void enableAttachments();
+
+  void enableAllAttachments();
+  void disableAllAttachments();
+  void enableAttachments(const std::vector<GLenum>& attachments);
+  void disableAttachments(const std::vector<GLenum>& attachments);
+  void enableAttachment(GLenum attachment);
+  void disableAttachment(GLenum attachment);
+
+  void enableGLAttachments();
 
   void clear();
 
@@ -100,7 +118,35 @@ class GLFramebuffer : public GLResource {
                   GLenum type,
                   GLvoid* data);
 
+  void copyPixelsToBoundPixelBuffer(GLenum attachment,
+                                    size_t startx,
+                                    size_t starty,
+                                    size_t width,
+                                    size_t height,
+                                    size_t offsetBytes,
+                                    GLenum format,
+                                    GLenum type);
+
+  void copyPixelsToPixelBuffer(GLenum attachment,
+                               size_t startx,
+                               size_t starty,
+                               size_t width,
+                               size_t height,
+                               size_t offsetBytes,
+                               GLenum format,
+                               GLenum type,
+                               GLPixelBuffer2dShPtr& pbo);
+
   void resize(size_t width, size_t height);
+
+  void enableAllAttachments();
+  void disableAllAttachments();
+  void enableAttachments(const std::vector<GLenum>& activeAttachments);
+  void disableAttachments(const std::vector<GLenum>& attachmentsToDisable);
+  void enableAttachment(GLenum attachment);
+  void disableAttachment(GLenum attachment);
+
+  void activateEnabledAttachmentsForDrawing();
 
  private:
   GLFramebuffer(const RendererWkPtr& rendererPtr, const GLFramebufferAttachmentMap& attachments);

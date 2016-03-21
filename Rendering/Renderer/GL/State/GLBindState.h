@@ -19,6 +19,8 @@ class GLBindState {
   Resources::GLShaderWkPtr boundShader;
   Resources::GLVertexArrayWkPtr boundVao;
   Resources::GLRenderbufferWkPtr boundRbo;
+  Resources::GLPixelBuffer2dWkPtr boundReadPbo;
+  Resources::GLPixelBuffer2dWkPtr boundWritePbo;
 
   ~GLBindState();
 
@@ -30,6 +32,8 @@ class GLBindState {
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
   void bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc);
   void bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc);
+  void bindReadPixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc);
+  void bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc);
 
   Resources::GLTexture2dShPtr getBoundTexture2d() const;
   bool hasBoundTexture2d() const;
@@ -48,6 +52,12 @@ class GLBindState {
 
   Resources::GLRenderbufferShPtr getBoundRenderbuffer() const;
   bool hasBoundRenderbuffer() const;
+
+  Resources::GLPixelBuffer2dShPtr getBoundReadPixelBuffer() const;
+  bool hasBoundReadPixelBuffer() const;
+
+  Resources::GLPixelBuffer2dShPtr getBoundWritePixelBuffer() const;
+  bool hasBoundWritePixelBuffer() const;
 
  private:
   GLBindState(GLRenderer* prntRenderer);

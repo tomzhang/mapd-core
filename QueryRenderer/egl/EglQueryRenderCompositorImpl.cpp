@@ -39,7 +39,7 @@ EglImage::~EglImage() {
   eglDestroyImageKHR(displayPtr->getEGLDisplay(), img);
 }
 
-EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderer* prnt,
+EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                                            ::Rendering::RendererShPtr& rendererPtr,
                                                            size_t width,
                                                            size_t height,

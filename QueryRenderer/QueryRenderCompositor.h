@@ -58,6 +58,11 @@ class QueryRenderCompositorImpl {
     return _framebufferPtr->getRenderer();
   }
 
+  ::Rendering::GL::GLRenderer* getGLRenderer() {
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->getGLRenderer();
+  }
+
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0,
                                                  size_t starty = 0,
                                                  int width = -1,
@@ -69,6 +74,16 @@ class QueryRenderCompositorImpl {
   std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1) {
     CHECK(_framebufferPtr);
     return _framebufferPtr->readIdBuffer(startx, starty, width, height);
+  }
+
+  void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer) {
+    CHECK(_framebufferPtr);
+    _framebufferPtr->readIdBuffer(startx, starty, width, height, idBuffer);
+  }
+
+  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
+    CHECK(_framebufferPtr);
+    _framebufferPtr->copyIdBufferToPbo(pbo);
   }
 
   virtual ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
@@ -92,7 +107,7 @@ class QueryRenderCompositorImpl {
   virtual void render(QueryRenderer* queryRenderer) = 0;
 
  protected:
-  QueryRenderCompositorImpl(QueryRenderer* prnt,
+  QueryRenderCompositorImpl(QueryRenderManager* prnt,
                             ::Rendering::RendererShPtr rendererPtr,
                             size_t width,
                             size_t height,
@@ -124,14 +139,18 @@ class QueryRenderCompositor {
   bool doHitTest();
   bool doDepthTest();
   ::Rendering::Renderer* getRenderer();
+  ::Rendering::GL::GLRenderer* getGLRenderer();
 
   void resize(size_t width, size_t height);
 
-  void render();
+  void render(QueryRenderer* queryRenderer);
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
   std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+
+  void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
+  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo);
 
   ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
                                                                   FboColorBuffer texType);
@@ -150,7 +169,7 @@ class QueryRenderCompositor {
   void cleanupUnusedFbos();
 
  private:
-  QueryRenderCompositor(QueryRenderer* prnt,
+  QueryRenderCompositor(QueryRenderManager* prnt,
                         ::Rendering::RendererShPtr& rendererPtr,
                         size_t width,
                         size_t height,
@@ -165,10 +184,9 @@ class QueryRenderCompositor {
   std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*, ::Rendering::GL::Resources::GLRenderbufferWkPtr>
       _compositeRbos;
 
-  QueryRenderer* _queryRenderer;
   bool _doHitTest, _doDepthTest;
 
-  friend class ::QueryRenderer::QueryRenderer;
+  friend class ::QueryRenderer::QueryRenderManager;
 };
 
 }  // namespace QueryRenderer

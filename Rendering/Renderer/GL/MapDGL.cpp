@@ -22,38 +22,36 @@ GLEWContext* glewGetContext() {
 }
 #endif
 
-void checkGLError(const char* cmd, const char* file, int line) {
+std::string getGLErrorStr() {
   const GLenum err = glGetError();
   if (err != GL_NO_ERROR) {
-    const char* error = nullptr;
     switch (err) {
       case GL_INVALID_ENUM:
-        error = "INVALID_ENUM";
-        break;
+        return "INVALID_ENUM";
       case GL_INVALID_VALUE:
-        error = "INVALID_VALUE";
-        break;
+        return "INVALID_VALUE";
       case GL_INVALID_OPERATION:
-        error = "INVALID_OPERATION";
-        break;
+        return "INVALID_OPERATION";
       case GL_INVALID_FRAMEBUFFER_OPERATION:
-        error = "INVALID_FRAMEBUFFER_OPERATION";
-        break;
+        return "INVALID_FRAMEBUFFER_OPERATION";
       case GL_OUT_OF_MEMORY:
-        error = "OUT_OF_MEMORY";
-        break;
+        return "OUT_OF_MEMORY";
       case GL_STACK_UNDERFLOW:
-        error = "STACK_UNDERFLOW";
-        break;
+        return "STACK_UNDERFLOW";
       case GL_STACK_OVERFLOW:
-        error = "STACK_OVERFLOW";
-        break;
+        return "STACK_OVERFLOW";
       default:
-        error = "(unknown)";
-        break;
+        return "(unknown)";
     }
+  }
 
-    THROW_RUNTIME_EX(std::string(cmd) + ": Error GL_" + error + " - " + file + ":" + std::to_string(line));
+  return "";
+}
+
+void checkGLError(const char* cmd, const char* file, int line) {
+  std::string errStr = getGLErrorStr();
+  if (errStr.length()) {
+    THROW_RUNTIME_EX(std::string(cmd) + ": Error GL_" + errStr + " - " + file + ":" + std::to_string(line));
   }
 }
 

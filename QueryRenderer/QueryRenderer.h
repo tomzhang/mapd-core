@@ -5,6 +5,7 @@
 #include "QueryRenderManager.h"
 #include "QueryRenderCompositor.h"
 #include "QueryFramebuffer.h"
+#include "QueryIdMapPixelBuffer.h"
 #include "RapidJSONUtils.h"
 
 #include <Rendering/Renderer/GL/Resources/Types.h>
@@ -35,15 +36,23 @@ class QueryRenderer {
  public:
   struct PerGpuData {
     QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
-    QueryFramebufferUqPtr framebufferPtr;
 
-    PerGpuData() : qrmGpuData(), framebufferPtr(nullptr) {}
-    PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
-                                             framebufferPtr(std::move(data.framebufferPtr)) {}
+    // QueryFramebufferUqPtr framebufferPtr;
+
+    // PerGpuData() : qrmGpuData(), framebufferPtr(nullptr) {}
+    PerGpuData() : qrmGpuData() {}
+
+    // PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
+    //                                          framebufferPtr(std::move(data.framebufferPtr)) {}
+
+    PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)) {}
+
     ~PerGpuData() {
       // need to make active to properly destroy gpu resources
+      // TODO(croot): uncomment this if we have GL resources at
+      // this level (i.e. a framebuffer or a compositor per gpu)
       // TODO(croot): reset to previously active renderer?
-      makeActiveOnCurrentThread();
+      // makeActiveOnCurrentThread();
     }
 
     QueryRenderManager::PerGpuDataShPtr getQRMGpuData() const { return qrmGpuData.lock(); }
@@ -61,35 +70,96 @@ class QueryRenderer {
         qrmGpuDataShPtr->makeInactive();
       }
     }
+
+    ::Rendering::Renderer* getRenderer() {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        return qrmGpuDataShPtr->getRenderer();
+      }
+
+      return nullptr;
+    }
+
+    ::Rendering::GL::GLRenderer* getGLRenderer() {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        return qrmGpuDataShPtr->getGLRenderer();
+      }
+
+      return nullptr;
+    }
+
+    void resize(size_t width, size_t height) {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        qrmGpuDataShPtr->resize(width, height);
+      }
+    }
+
+    QueryFramebufferUqPtr& getFramebuffer() {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      CHECK(qrmGpuDataShPtr);
+      return qrmGpuDataShPtr->getFramebuffer();
+    }
+
+    std::shared_ptr<QueryRenderCompositor>& getCompositor() {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      CHECK(qrmGpuDataShPtr);
+      return qrmGpuDataShPtr->getCompositor();
+    }
+
+    GpuId getCompositorGpuId() {
+      auto compositorPtr = getCompositor();
+      ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
+      CHECK(renderer);
+      return renderer->getGpuId();
+    }
+
+    QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height) {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      CHECK(qrmGpuDataShPtr);
+      return qrmGpuDataShPtr->getInactiveIdMapPbo(width, height);
+    }
+
+    void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
+      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
+      if (qrmGpuDataShPtr) {
+        qrmGpuDataShPtr->setIdMapPboInactive(pbo);
+      }
+    }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
-  explicit QueryRenderer(bool doHitTest = false, bool doDepthTest = false);
-
-  explicit QueryRenderer(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+  explicit QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                          bool doHitTest = false,
                          bool doDepthTest = false);
 
-  explicit QueryRenderer(const std::string& configJSON, bool doHitTest = false, bool doDepthTest = false);
+  explicit QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                         const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
+                         bool doHitTest = false,
+                         bool doDepthTest = false);
+
+  explicit QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                         const std::string& configJSON,
+                         bool doHitTest = false,
+                         bool doDepthTest = false);
 
   ~QueryRenderer();
 
   size_t getWidth();
   size_t getHeight();
-  void setWidthHeight(int width, int height);
+  void setWidthHeight(size_t width, size_t height);
 
-  const QueryFramebufferUqPtr& getFramebuffer(const GpuId& gpuId = 0);
+  // const QueryFramebufferUqPtr& getFramebuffer(const GpuId& gpuId = 0);
 
   void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
 #ifdef HAVE_CUDA
-  void updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr,
-                              const Executor* executor,
-                              QueryRenderManager::PerGpuDataMap& qrmPerGpuData);
+  void updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor);
 #endif  // HAVE_CUDA
 
-  void activateGpus(QueryRenderManager::PerGpuDataMap& qrmPerGpuData, const std::vector<GpuId>& gpusToActivate = {});
+  void activateGpus(const std::vector<GpuId>& gpusToActivate = {});
 
   void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);
@@ -108,18 +178,26 @@ class QueryRenderer {
                         int a = -1);
 
  private:
+  std::weak_ptr<QueryRenderManager::PerGpuDataMap> _qrmPerGpuData;
   std::shared_ptr<QueryRendererContext> _ctx;
   PerGpuDataMap _perGpuData;
-  std::unique_ptr<QueryRenderCompositor> _compositorPtr;
+
+  GpuId _pboGpu;
+  // GLuint _pbo;
+  QueryIdMapPixelBufferShPtr _pbo;
+
+  bool _idPixelsDirty;
+  std::shared_ptr<unsigned int> _idPixels;
+  // std::unique_ptr<QueryRenderCompositor> _compositorPtr;
 
   void _clear();
   void _clearGpuResources();
   std::unordered_set<GpuId> _initUnusedGpus();
-  void _initGpuResources(QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+  void _initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
                          const std::vector<GpuId>& gpuIds,
                          std::unordered_set<GpuId>& unusedGpus);
   void _updateGpuData(const GpuId& gpuId,
-                      QueryRenderManager::PerGpuDataMap& qrmPerGpuData,
+                      QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
                       std::unordered_set<GpuId>& unusedGpus,
                       size_t width,
                       size_t height);
@@ -128,6 +206,8 @@ class QueryRenderer {
   void _resizeFramebuffers(int width, int height);
 
   void _update();
+  void _createPbo(int width = -1, int height = -1, bool makeContextInactive = false);
+  void _releasePbo(bool makeContextInactive = false);
 
   friend class QueryRendererContext;
   friend class QueryRenderCompositor;

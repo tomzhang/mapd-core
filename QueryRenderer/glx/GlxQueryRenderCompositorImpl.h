@@ -11,7 +11,7 @@
 #include <Rendering/Renderer/GL/glx/Types.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <memory>
-#include <unordered_map>
+#include <unordered_set>
 
 namespace QueryRenderer {
 namespace Impl {
@@ -36,7 +36,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   void render(QueryRenderer* queryRenderer) final;
 
  private:
-  GlxQueryRenderCompositorImpl(QueryRenderer* prnt,
+  GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                ::Rendering::RendererShPtr& rendererPtr,
                                size_t width,
                                size_t height,
@@ -44,7 +44,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
                                bool doHitTest = false,
                                bool doDepthTest = false);
 
-  void _initResources(QueryRenderer* queryRenderer);
+  void _initResources(QueryRenderManager* queryRenderer);
   void _resizeImpl(size_t width, size_t height) final;
 
   ::Rendering::RendererWkPtr _rendererPtr;
@@ -56,12 +56,16 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _idTextureArray;
   // ::Rendering::GL::Resources::GLTexture2dArrayShPtr _depthTextureArray;
 
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
-                     std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _rgbaTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
-                     std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _idTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*,
-                     std::pair<::Rendering::GL::Resources::GLRenderbufferWkPtr, int>> _rbos;
+  // std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
+  //                    std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _rgbaTextures;
+  // std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
+  //                    std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _idTextures;
+  // std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*,
+  //                    std::pair<::Rendering::GL::Resources::GLRenderbufferWkPtr, int>> _rbos;
+
+  std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _rgbaTextures;
+  std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _idTextures;
+  std::unordered_set<::Rendering::GL::Resources::GLRenderbuffer*> _rbos;
 
   friend class ::QueryRenderer::QueryRenderCompositor;
 };

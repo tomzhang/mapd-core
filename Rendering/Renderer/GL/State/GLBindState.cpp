@@ -7,10 +7,14 @@
 #include "../Resources/GLShader.h"
 #include "../Resources/GLVertexArray.h"
 #include "../Resources/GLRenderbuffer.h"
+#include "../Resources/GLPixelBuffer2d.h"
 
 namespace Rendering {
 namespace GL {
 namespace State {
+
+using Resources::BufferAccessType;
+using Resources::BufferAccessFreq;
 
 GLBindState::GLBindState(GLRenderer* prntRenderer) : _prntRenderer(prntRenderer) {
 }
@@ -177,6 +181,48 @@ void GLBindState::bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc
   }
 }
 
+void GLBindState::bindReadPixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc) {
+  GLuint pbo = (pboRsrc ? pboRsrc->getId() : 0);
+
+  bool bind = (boundReadPbo.owner_before(pboRsrc) || pboRsrc.owner_before(boundReadPbo));
+
+  if (bind) {
+    if (pboRsrc) {
+      pboRsrc->validateRenderer(_prntRenderer);
+
+      BufferAccessType accessType = pboRsrc->getAccessType();
+      RUNTIME_EX_ASSERT(accessType == BufferAccessType::READ || accessType == BufferAccessType::READ_AND_WRITE ||
+                            accessType == BufferAccessType::COPY,
+                        "Cannot bind pbo resource for reading. It was not initialized with READ/COPY access type.");
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo));
+
+    boundReadPbo = pboRsrc;
+  }
+}
+
+void GLBindState::bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc) {
+  GLuint pbo = (pboRsrc ? pboRsrc->getId() : 0);
+
+  bool bind = (boundWritePbo.owner_before(pboRsrc) || pboRsrc.owner_before(boundWritePbo));
+
+  if (bind) {
+    if (pboRsrc) {
+      pboRsrc->validateRenderer(_prntRenderer);
+
+      BufferAccessType accessType = pboRsrc->getAccessType();
+      RUNTIME_EX_ASSERT(accessType == BufferAccessType::WRITE || accessType == BufferAccessType::READ_AND_WRITE ||
+                            accessType == BufferAccessType::COPY,
+                        "Cannot bind pbo resource for reading. It was not initialized with WRITE/COPY access type.");
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo));
+
+    boundWritePbo = pboRsrc;
+  }
+}
+
 Resources::GLTexture2dShPtr GLBindState::getBoundTexture2d() const {
   return boundTex2d.lock();
 }
@@ -245,6 +291,22 @@ Resources::GLRenderbufferShPtr GLBindState::getBoundRenderbuffer() const {
 
 bool GLBindState::hasBoundRenderbuffer() const {
   return boundRbo.lock() != nullptr;
+}
+
+Resources::GLPixelBuffer2dShPtr GLBindState::getBoundReadPixelBuffer() const {
+  return boundReadPbo.lock();
+}
+
+bool GLBindState::hasBoundReadPixelBuffer() const {
+  return !boundReadPbo.expired();
+}
+
+Resources::GLPixelBuffer2dShPtr GLBindState::getBoundWritePixelBuffer() const {
+  return boundWritePbo.lock();
+}
+
+bool GLBindState::hasBoundWritePixelBuffer() const {
+  return !boundWritePbo.expired();
 }
 
 }  // namespace State

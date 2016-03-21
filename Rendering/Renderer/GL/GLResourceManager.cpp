@@ -18,8 +18,12 @@ using Resources::GLTexture2dArray;
 using Resources::GLTexture2dArrayShPtr;
 using Resources::GLFramebuffer;
 using Resources::GLFramebufferShPtr;
+using Resources::BufferAccessType;
+using Resources::BufferAccessFreq;
 using Resources::GLVertexBuffer;
 using Resources::GLVertexBufferShPtr;
+using Resources::GLPixelBuffer2d;
+using Resources::GLPixelBuffer2dShPtr;
 using Resources::GLVertexArray;
 using Resources::GLVertexArrayShPtr;
 using Resources::VboAttrToShaderAttrMap;
@@ -122,32 +126,58 @@ GLFramebufferShPtr GLResourceManager::createFramebuffer(const Resources::GLFrame
   return rtn;
 }
 
-GLVertexBufferShPtr GLResourceManager::createVertexBuffer(GLenum usage) {
+GLVertexBufferShPtr GLResourceManager::createVertexBuffer(BufferAccessType accessType, BufferAccessFreq accessFreq) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, usage));
+  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, accessType, accessFreq));
   _addGLResource(rtn);
 
   return rtn;
 }
 
-GLVertexBufferShPtr GLResourceManager::createVertexBuffer(size_t numBytes, GLenum usage) {
+GLVertexBufferShPtr GLResourceManager::createVertexBuffer(size_t numBytes,
+                                                          BufferAccessType accessType,
+                                                          BufferAccessFreq accessFreq) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, numBytes, usage));
+  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, numBytes, accessType, accessFreq));
   _addGLResource(rtn);
 
   return rtn;
 }
 
 GLVertexBufferShPtr GLResourceManager::createVertexBuffer(const Resources::GLBufferLayoutShPtr& layoutPtr,
-                                                          GLenum usage) {
+                                                          BufferAccessType accessType,
+                                                          BufferAccessFreq accessFreq) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, layoutPtr, usage));
+  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, layoutPtr, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLPixelBuffer2dShPtr GLResourceManager::createPixelBuffer2d(size_t width,
+                                                            size_t height,
+                                                            // GLenum internalFormat,
+                                                            GLenum pixelFormat,
+                                                            GLenum pixelType,
+                                                            Resources::BufferAccessType accessType,
+                                                            Resources::BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLPixelBuffer2dShPtr rtn(new GLPixelBuffer2d(_prntRenderer,
+                                               width,
+                                               height,
+                                               // internalFormat,
+                                               pixelFormat,
+                                               pixelType,
+                                               accessType,
+                                               accessFreq));
   _addGLResource(rtn);
 
   return rtn;

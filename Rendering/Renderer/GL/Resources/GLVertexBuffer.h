@@ -37,19 +37,26 @@ class GLVertexBuffer : public GLBaseBuffer {
   void bufferData(void* data, size_t numItems, size_t numBytesPerItem);
 
  private:
-  explicit GLVertexBuffer(const RendererWkPtr& rendererPtr, GLenum usage = GL_STATIC_DRAW);
-  explicit GLVertexBuffer(const RendererWkPtr& rendererPtr, size_t numBytes, GLenum usage = GL_STATIC_DRAW);
+  explicit GLVertexBuffer(const RendererWkPtr& rendererPtr,
+                          BufferAccessType accessType = BufferAccessType::READ_AND_WRITE,
+                          BufferAccessFreq accessFreq = BufferAccessFreq::STATIC);
+  explicit GLVertexBuffer(const RendererWkPtr& rendererPtr,
+                          size_t numBytes,
+                          BufferAccessType accessType = BufferAccessType::READ_AND_WRITE,
+                          BufferAccessFreq accessFreq = BufferAccessFreq::STATIC);
 
   explicit GLVertexBuffer(const RendererWkPtr& rendererPtr,
                           const GLBufferLayoutShPtr& layoutPtr,
-                          GLenum usage = GL_STATIC_DRAW);
+                          BufferAccessType accessType = BufferAccessType::READ_AND_WRITE,
+                          BufferAccessFreq accessFreq = BufferAccessFreq::STATIC);
 
   template <typename T>
   explicit GLVertexBuffer(const RendererWkPtr& rendererPtr,
                           const std::vector<T>& data,
                           const GLBufferLayoutShPtr& layoutPtr,
-                          GLenum usage = GL_STATIC_DRAW)
-      : GLVertexBuffer(rendererPtr, layoutPtr, usage) {
+                          BufferAccessType accessType = BufferAccessType::READ_AND_WRITE,
+                          BufferAccessFreq accessFreq = BufferAccessFreq::STATIC)
+      : GLVertexBuffer(rendererPtr, layoutPtr, accessType, accessFreq) {
     // TODO(croot): validate that the data and the layout align
     // NOTE: _size will be set in the bufferData() call
     bufferData((void*)&data[0], data.size(), sizeof(T));

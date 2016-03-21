@@ -4,19 +4,27 @@ namespace Rendering {
 namespace GL {
 namespace Resources {
 
-GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr, GLenum usage)
-    : GLBaseBuffer(rendererPtr, GLBufferType::VERTEX_BUFFER, GL_ARRAY_BUFFER, usage),
+GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
+                               BufferAccessType accessType,
+                               BufferAccessFreq accessFreq)
+    : GLBaseBuffer(rendererPtr, GLBufferType::VERTEX_BUFFER, GL_ARRAY_BUFFER, accessType, accessFreq),
       _layoutPtr(nullptr),
       _numItems(0) {
 }
 
-GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr, size_t numBytes, GLenum usage)
-    : GLVertexBuffer(rendererPtr, usage) {
+GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
+                               size_t numBytes,
+                               BufferAccessType accessType,
+                               BufferAccessFreq accessFreq)
+    : GLVertexBuffer(rendererPtr, accessType, accessFreq) {
   bufferData(nullptr, numBytes, 1);
 }
 
-GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr, const GLBufferLayoutShPtr& layoutPtr, GLenum usage)
-    : GLVertexBuffer(rendererPtr, usage) {
+GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
+                               const GLBufferLayoutShPtr& layoutPtr,
+                               BufferAccessType accessType,
+                               BufferAccessFreq accessFreq)
+    : GLVertexBuffer(rendererPtr, accessType, accessFreq) {
   _layoutPtr = layoutPtr;
 }
 
