@@ -18,7 +18,6 @@ LdapServer::LdapServer() {
 
 LdapServer::LdapServer(const LdapMetadata& ldapMetadata) {
   if (ldapMetadata.uri.empty()) {
-    LOG(INFO) << "LDAP not in use";
     ldapInUse = false;
   } else {
     LOG(INFO) << "LDAP being used for Authentication, uri: " << ldapMetadata.uri << " ou: " << ldapMetadata.orgUnit;
