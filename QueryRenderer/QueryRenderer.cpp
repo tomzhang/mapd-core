@@ -25,6 +25,45 @@ using ::Rendering::GL::Resources::FboBind;
 
 static const GpuId EMPTY_GPUID = 1000000000;
 
+typedef ::Rendering::Objects::Array2d<float> Array2df;
+
+static Array2df createGaussianKernel(int kernelSize, float stddev = 1.0) {
+  // NOTE: it is reasonable to create the gaussian kernel as a 2D
+  // array for getIdAt() since we are only using the gaussian values
+  // for sums and not as coefficients. If the latter, like in performing
+  // a gaussian blur in image processing, then we'd want to take advantage
+  // of the fact that the gaussian kernel is seperable:
+  // See:
+  // https://en.wikipedia.org/wiki/Gaussian_blur
+  // and
+  // https://en.wikipedia.org/wiki/Separable_filter
+  assert(kernelSize > 0 && kernelSize % 2 == 1);
+
+  Array2df kernel(kernelSize, kernelSize);
+
+  std::unique_ptr<float[]> kernel1d(new float[kernelSize]);
+  int i, j;
+  float stddevsq2x = 2.0 * stddev * stddev;
+
+  // NOTE: kernel size will always be odd
+  int halfKernelSize = kernelSize / 2;
+  for (i = -halfKernelSize, j = 0; i <= halfKernelSize; ++i, ++j) {
+    kernel1d[j] = std::pow(M_E, -float(i * i) / stddevsq2x) / std::sqrt(M_PI * stddevsq2x);
+  }
+
+  for (i = 0; i < kernelSize; ++i) {
+    for (j = 0; j < kernelSize; ++j) {
+      kernel[i][j] = kernel1d[i] * kernel1d[j];
+    }
+  }
+
+  return kernel;
+}
+
+static bool idCounterCompare(const std::pair<unsigned int, float>& a, const std::pair<unsigned int, float>& b) {
+  return (a.second < b.second);
+}
+
 QueryRenderer::QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                              bool doHitTest,
                              bool doDepthTest)
@@ -32,7 +71,6 @@ QueryRenderer::QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDat
       _ctx(new QueryRendererContext(doHitTest, doDepthTest)),
       _perGpuData(),
       _pboGpu(EMPTY_GPUID),
-      // _pbo(0),
       _pbo(nullptr),
       _idPixelsDirty(false),
       _idPixels(nullptr) {
@@ -155,8 +193,6 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerG
 }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
-  // TODO(croot): the compositor will need to be pulled out to the QueryRenderManager
-  // level if/when we store a large framebuffer for all connected users to use.
   QueryRenderManager::PerGpuDataShPtr qrmGpuData;
 
   for (auto& gpuDataItr : _perGpuData) {
@@ -405,14 +441,17 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
 
     if (_ctx->doHitTest()) {
       // resize the cpu-bound pixels that store the ids per-pixel
-      _idPixels.reset(new unsigned int[width * height], std::default_delete<unsigned int[]>());
+      if (!_idPixels) {
+        _idPixels.reset(new Array2dui(width, height));
+      } else {
+        _idPixels->resize(width, height);
+      }
 
       if (_pbo) {
         auto itr = _perGpuData.find(_pboGpu);
         CHECK(itr != _perGpuData.end());
         itr->second.makeActiveOnCurrentThread();
         _pbo->resize(width, height);
-        // itr->second.makeInactive();
       }
     }
   }
@@ -634,7 +673,7 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
       // clock_begin = timer_start();
 
       if (_ctx->doHitTest()) {
-        CHECK(_idPixels);
+        CHECK(_idPixels && _pbo);
         Renderer* renderer = compositorPtr->getRenderer();
         renderer->makeActiveOnCurrentThread();
 
@@ -715,16 +754,19 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   return PngData(width, height, pixelsPtr, compressionLevel);
 }
 
-unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
+unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   RUNTIME_EX_ASSERT(_ctx->doHitTest(), "QueryRenderer was not initialized for hit-testing.");
+
+  unsigned int id = 0;
 
   if (_idPixels && _perGpuData.size()) {
     size_t width = _ctx->getWidth();
     size_t height = _ctx->getHeight();
     if (x < width && y < height) {
-      unsigned int* rawIds = _idPixels.get();
+      CHECK(_idPixels->getWidth() == width && _idPixels->getHeight() == height);
 
       if (_idPixelsDirty) {
+        unsigned int* rawIds = _idPixels->getDataPtr();
         auto itr = _perGpuData.find(_pboGpu);
 
         if (itr != _perGpuData.end()) {
@@ -743,11 +785,58 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
         _idPixelsDirty = false;
       }
 
-      return rawIds[y * width + x];
+      if (pixelRadius == 0) {
+        id = _idPixels->get(x, y);
+      } else {
+        typedef std::unordered_map<size_t, Array2df> KernelMap;
+        static KernelMap gaussKernels;
+
+        size_t pixelRadius2xPlus1 = pixelRadius * 2 + 1;
+        auto itr = gaussKernels.find(pixelRadius);
+        if (itr == gaussKernels.end()) {
+          itr = gaussKernels.insert(itr, std::make_pair(pixelRadius, createGaussianKernel(pixelRadius2xPlus1, 0.75)));
+        }
+
+        const Array2df& kernel = itr->second;
+        Array2dui ids(pixelRadius2xPlus1, pixelRadius2xPlus1);
+
+        ids.copyFromPixelCenter(*_idPixels,
+                                x,
+                                y,
+                                pixelRadius,
+                                pixelRadius,
+                                pixelRadius,
+                                pixelRadius,
+                                ::Rendering::Objects::WrapType::USE_DEFAULT);
+
+        // build up the counter
+        std::unordered_map<unsigned int, float> idCounterMap;
+        std::unordered_map<unsigned int, float>::iterator idItr;
+        for (size_t i = 0; i < pixelRadius2xPlus1; ++i) {
+          for (size_t j = 0; j < pixelRadius2xPlus1; ++j) {
+            id = ids[i][j];
+            if (id > 0 && kernel[i][j] > 0) {  // don't include empty pixels or gaussian distro outliers
+              if ((idItr = idCounterMap.find(id)) == idCounterMap.end()) {
+                idItr = idCounterMap.insert(idItr, std::make_pair(id, 0.0));
+              }
+              idItr->second += kernel[i][j];
+            }
+          }
+        }
+
+        if (idCounterMap.size() == 0) {
+          id = 0;
+        } else if (idCounterMap.size() == 1) {
+          id = idCounterMap.begin()->first;
+        } else {
+          idItr = std::max_element(idCounterMap.begin(), idCounterMap.end(), idCounterCompare);
+          id = idItr->first;
+        }
+      }
     }
   }
 
-  return 0;
+  return id;
 }
 
 QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)

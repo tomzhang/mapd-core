@@ -9,7 +9,7 @@
 #include "RapidJSONUtils.h"
 
 #include <Rendering/Renderer/GL/Resources/Types.h>
-#include <Shared/measure.h>
+#include <Rendering/Objects/Array2d.h>
 
 #include <string>
 #include <map>
@@ -21,13 +21,6 @@
 #include <CudaMgr/CudaMgr.h>
 #endif  // HAVE_CUDA
 
-// #include <cstdint>
-// #include <limits>
-
-// #include "rapidjson/document.h"
-// #include "rapidjson/pointer.h"
-// // #include <utility>  // std::pair
-
 class Executor;
 
 namespace QueryRenderer {
@@ -37,13 +30,7 @@ class QueryRenderer {
   struct PerGpuData {
     QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
 
-    // QueryFramebufferUqPtr framebufferPtr;
-
-    // PerGpuData() : qrmGpuData(), framebufferPtr(nullptr) {}
     PerGpuData() : qrmGpuData() {}
-
-    // PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)),
-    //                                          framebufferPtr(std::move(data.framebufferPtr)) {}
 
     PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)) {}
 
@@ -150,8 +137,6 @@ class QueryRenderer {
   size_t getHeight();
   void setWidthHeight(size_t width, size_t height);
 
-  // const QueryFramebufferUqPtr& getFramebuffer(const GpuId& gpuId = 0);
-
   void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
@@ -164,7 +149,7 @@ class QueryRenderer {
   void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);
 
-  unsigned int getIdAt(size_t x, size_t y);
+  unsigned int getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
 
   PerGpuDataMap* getPerGpuData() { return &_perGpuData; }
   QueryRendererContext* getContext() { return _ctx.get(); }
@@ -183,12 +168,11 @@ class QueryRenderer {
   PerGpuDataMap _perGpuData;
 
   GpuId _pboGpu;
-  // GLuint _pbo;
   QueryIdMapPixelBufferShPtr _pbo;
 
+  typedef ::Rendering::Objects::Array2d<unsigned int> Array2dui;
   bool _idPixelsDirty;
-  std::shared_ptr<unsigned int> _idPixels;
-  // std::unique_ptr<QueryRenderCompositor> _compositorPtr;
+  std::shared_ptr<Array2dui> _idPixels;
 
   void _clear();
   void _clearGpuResources();

@@ -188,7 +188,7 @@ class QueryRenderManager {
   PngData renderToPng(int compressionLevel = -1);
 
   // get the id at a specific pixel
-  int64_t getIdAt(size_t x, size_t y);
+  int64_t getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
 
  private:
   static const UserWidgetPair _emptyUserWidget;
