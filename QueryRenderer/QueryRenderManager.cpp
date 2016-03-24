@@ -111,7 +111,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
-    gpuDataPtr.reset(new PerGpuData());
+    gpuDataPtr.reset(new PerGpuData(i));
     gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);
     gpuDataPtr->rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuDataPtr->windowPtr);
 
@@ -148,7 +148,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();
 
-    _perGpuData->insert({i, gpuDataPtr});
+    // _perGpuData->insert({i, gpuDataPtr});
+    _perGpuData->insert(gpuDataPtr);
   }
 
   LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << endDevice
@@ -157,7 +158,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
 void QueryRenderManager::_resetQueryResultBuffers() {
   for (auto& itr : *_perGpuData) {
-    itr.second->queryResultBufferPtr->reset();
+    // itr.second->queryResultBufferPtr->reset();
+    itr->queryResultBufferPtr->reset();
   }
 }
 
@@ -322,32 +324,42 @@ void QueryRenderManager::_updateActiveLastRenderTime() {
 }
 
 #ifdef HAVE_CUDA
-CudaHandle QueryRenderManager::getCudaHandle(const GpuId& gpuId) {
-  auto itr = _perGpuData->find(gpuId);
-
-  RUNTIME_EX_ASSERT(itr != _perGpuData->end(), "Cannot get cuda handle for gpu " + std::to_string(gpuId) + ".");
+CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
+  PerGpuDataMap_in_order& inOrder = _perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "Cannot get cuda handle for gpu index " + std::to_string(gpuIdx) + ". There are only " +
+                        std::to_string(inOrder.size()) + " gpus available.");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
-  itr->second->makeActiveOnCurrentThread();
-  CudaHandle rtn = itr->second->queryResultBufferPtr->getCudaHandlePreQuery();
-  itr->second->rendererPtr->makeInactive();
+  // itr->second->makeActiveOnCurrentThread();
+  // CudaHandle rtn = itr->second->queryResultBufferPtr->getCudaHandlePreQuery();
+  // itr->second->rendererPtr->makeInactive();
+
+  inOrder[gpuIdx]->makeActiveOnCurrentThread();
+  CudaHandle rtn = inOrder[gpuIdx]->queryResultBufferPtr->getCudaHandlePreQuery();
+  inOrder[gpuIdx]->rendererPtr->makeInactive();
 
   return rtn;
 }
 
-void QueryRenderManager::setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes) {
-  auto itr = _perGpuData->find(gpuId);
-
-  RUNTIME_EX_ASSERT(itr != _perGpuData->end(), "Cannot set cuda handle results for gpu " + std::to_string(gpuId) + ".");
+void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes) {
+  PerGpuDataMap_in_order& inOrder = _perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "Cannot set cuda handle results for gpu index " + std::to_string(gpuIdx) + ". There are only " +
+                        std::to_string(inOrder.size()) + " gpus available.");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
-  itr->second->makeActiveOnCurrentThread();
-  itr->second->queryResultBufferPtr->updatePostQuery(numUsedBytes);
-  itr->second->rendererPtr->makeInactive();
+  // itr->second->makeActiveOnCurrentThread();
+  // itr->second->queryResultBufferPtr->updatePostQuery(numUsedBytes);
+  // itr->second->rendererPtr->makeInactive();
+
+  inOrder[gpuIdx]->makeActiveOnCurrentThread();
+  inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
+  inOrder[gpuIdx]->rendererPtr->makeInactive();
 }
 
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -403,10 +415,15 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
   _activeItr->renderer->setWidthHeight(width, height);
 }
 
+size_t QueryRenderManager::getNumGpus() const {
+  return _perGpuData->size();
+}
+
 std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
   std::vector<GpuId> rtn;
   for (auto itr : *_perGpuData) {
-    rtn.push_back(itr.first);
+    // rtn.push_back(itr.first);
+    rtn.push_back(itr->gpuId);
   }
 
   return rtn;

@@ -103,11 +103,15 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
 
     PerGpuData gpuData;
 
-    gpuData.qrmGpuData = itr->second;
+    // gpuData.qrmGpuData = itr->second;
+    gpuData.qrmGpuData = *itr;
 
     // TODO(croot): validate the QueryRenderManager data is complete?
-    itr->second->makeActiveOnCurrentThread();
-    itr->second->resize(width, height);
+    // itr->second->makeActiveOnCurrentThread();
+    // itr->second->resize(width, height);
+
+    (*itr)->makeActiveOnCurrentThread();
+    (*itr)->resize(width, height);
 
     _perGpuData.emplace(gpuId, std::move(gpuData));
   } else {
@@ -555,8 +559,11 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
   std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
   CHECK(qrmPerGpuData);
   for (const auto& kv : *qrmPerGpuData) {
-    if (kv.second->queryResultBufferPtr->getNumUsedBytes() > 0) {
-      gpuIds.push_back(kv.first);
+    // if (kv.second->queryResultBufferPtr->getNumUsedBytes() > 0) {
+    //   gpuIds.push_back(kv.first);
+    // }
+    if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
+      gpuIds.push_back(kv->gpuId);
     }
   }
 
@@ -604,7 +611,8 @@ void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
   if (!gpusToActivate.size()) {
     std::vector<GpuId> gpuIds;
     for (const auto& kv : *qrmPerGpuData) {
-      gpuIds.push_back(kv.first);
+      // gpuIds.push_back(kv.first);
+      gpuIds.push_back(kv->gpuId);
     }
     _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
   } else {
@@ -633,15 +641,20 @@ void QueryRenderer::_createPbo(int width, int height, bool makeContextInactive) 
 
     CHECK(qrmItr != qrmPerGpuData->end());
 
-    qrmItr->second->makeActiveOnCurrentThread();
+    // qrmItr->second->makeActiveOnCurrentThread();
+    (*qrmItr)->makeActiveOnCurrentThread();
 
-    _pbo = qrmItr->second->getInactiveIdMapPbo((width < 0 ? _ctx->getWidth() : width),
-                                               (height < 0 ? _ctx->getHeight() : height));
+    // _pbo = qrmItr->second->getInactiveIdMapPbo((width < 0 ? _ctx->getWidth() : width),
+    //                                            (height < 0 ? _ctx->getHeight() : height));
+    _pbo = (*qrmItr)
+               ->getInactiveIdMapPbo((width < 0 ? _ctx->getWidth() : width), (height < 0 ? _ctx->getHeight() : height));
 
-    _pboGpu = qrmItr->first;
+    // _pboGpu = qrmItr->first;
+    _pboGpu = (*qrmItr)->gpuId;
 
     if (makeContextInactive) {
-      qrmItr->second->makeInactive();
+      // qrmItr->second->makeInactive();
+      (*qrmItr)->makeInactive();
     }
   }
 }
@@ -654,14 +667,18 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
       auto itr = qrmPerGpuData->find(_pboGpu);
       CHECK(itr != qrmPerGpuData->end()) << "Couldn't find gpu data for gpuid: " << _pboGpu << ". Can't release pb";
 
-      itr->second->makeActiveOnCurrentThread();
-      itr->second->setIdMapPboInactive(_pbo);
+      // itr->second->makeActiveOnCurrentThread();
+      // itr->second->setIdMapPboInactive(_pbo);
+
+      (*itr)->makeActiveOnCurrentThread();
+      (*itr)->setIdMapPboInactive(_pbo);
 
       _pbo = nullptr;
       _pboGpu = EMPTY_GPUID;
 
       if (makeContextInactive) {
-        itr->second->makeInactive();
+        // itr->second->makeInactive();
+        (*itr)->makeInactive();
       }
     }
   }

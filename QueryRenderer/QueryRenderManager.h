@@ -40,6 +40,7 @@ typedef std::pair<int, int> UserWidgetPair;
 class QueryRenderManager {
  public:
   struct PerGpuData {
+    GpuId gpuId;
     QueryResultVertexBufferShPtr queryResultBufferPtr;
     Rendering::WindowShPtr windowPtr;
     Rendering::RendererShPtr rendererPtr;
@@ -52,8 +53,9 @@ class QueryRenderManager {
     std::shared_ptr<QueryRenderCompositor> compositorPtr;
     std::unique_ptr<QueryIdMapPboPool> pboPoolPtr;
 
-    PerGpuData()
-        : queryResultBufferPtr(nullptr),
+    PerGpuData(GpuId gpuId)
+        : gpuId(gpuId),
+          queryResultBufferPtr(nullptr),
           windowPtr(nullptr),
           rendererPtr(nullptr),
           framebufferPtr(nullptr),
@@ -120,7 +122,24 @@ class QueryRenderManager {
 
   typedef std::shared_ptr<PerGpuData> PerGpuDataShPtr;
   typedef std::weak_ptr<PerGpuData> PerGpuDataWkPtr;
-  typedef std::map<GpuId, PerGpuDataShPtr> PerGpuDataMap;
+  // typedef std::map<GpuId, PerGpuDataShPtr> PerGpuDataMap;
+
+  struct inorder {};
+
+  struct PerGpuDataId {
+    typedef GpuId result_type;
+
+    result_type operator()(const PerGpuDataShPtr& perGpuData) const { return perGpuData->gpuId; }
+  };
+
+  typedef ::boost::multi_index_container<PerGpuDataShPtr,
+                                         ::boost::multi_index::indexed_by<
+                                             // hashed on gpuId
+                                             ::boost::multi_index::ordered_unique<PerGpuDataId>,
+                                             ::boost::multi_index::random_access<::boost::multi_index::tag<inorder>>>>
+      PerGpuDataMap;
+
+  typedef PerGpuDataMap::index<inorder>::type PerGpuDataMap_in_order;
 
   explicit QueryRenderManager(int numGpus = -1,
                               int startGpu = 0,
@@ -151,12 +170,15 @@ class QueryRenderManager {
 
   void setWidthHeight(int width, int height);
 
+  size_t getNumGpus() const;
   std::vector<GpuId> getAllGpuIds() const;
   PerGpuDataMap* getPerGpuData() { return _perGpuData.get(); }
 
 #ifdef HAVE_CUDA
-  CudaHandle getCudaHandle(const GpuId& gpuId);
-  void setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes);
+  // CudaHandle getCudaHandle(const GpuId& gpuId);
+  // void setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes);
+  CudaHandle getCudaHandle(size_t gpuIdx);
+  void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes);
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                        QueryDataLayoutShPtr dataLayoutPtr = nullptr,
                        const Executor* executor = nullptr);

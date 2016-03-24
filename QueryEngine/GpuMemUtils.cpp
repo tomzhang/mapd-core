@@ -27,22 +27,22 @@ RenderAllocatorMap::RenderAllocatorMap(::CudaMgr_Namespace::CudaMgr* cuda_mgr,
   CHECK(cuda_mgr_ && render_manager_);
 
 #ifdef HAVE_RENDERING
-  std::vector<size_t> devices = render_manager_->getAllGpuIds();
-  for (auto& device_id : devices) {
-    cuda_mgr_->setContext(device_id);
-    auto cudaHandle = render_manager_->getCudaHandle(device_id);
-    render_allocator_map_.insert(
-        {device_id,
-         RenderAllocator(static_cast<int8_t*>(cudaHandle.handle), cudaHandle.numBytes, block_size_x, grid_size_x)});
+  // std::vector<size_t> devices = render_manager_->getAllGpuIds();
+  int numDevices = cuda_mgr->getDeviceCount();
+  for (int i = 0; i < numDevices; ++i) {
+    cuda_mgr_->setContext(i);
+    auto cudaHandle = render_manager_->getCudaHandle(i);
+    render_allocator_map_.emplace_back(
+        static_cast<int8_t*>(cudaHandle.handle), cudaHandle.numBytes, block_size_x, grid_size_x);
   }
 #endif
 }
 
 RenderAllocatorMap::~RenderAllocatorMap() {
 #ifdef HAVE_RENDERING
-  for (auto itr : render_allocator_map_) {
-    cuda_mgr_->setContext(itr.first);
-    render_manager_->setCudaHandleUsedBytes(itr.first, 0);
+  for (size_t i = 0; i < render_allocator_map_.size(); ++i) {
+    cuda_mgr_->setContext(i);
+    render_manager_->setCudaHandleUsedBytes(i, 0);
   }
 #endif
 }
@@ -52,18 +52,18 @@ RenderAllocator* RenderAllocatorMap::getRenderAllocator(size_t device_id) {
 }
 
 RenderAllocator* RenderAllocatorMap::operator[](size_t device_id) {
-  auto itr = render_allocator_map_.find(device_id);
+  CHECK(device_id < render_allocator_map_.size())
+      << "Device id " << device_id << " not found in RenderAllocatorMap. Only " << render_allocator_map_.size()
+      << " devices available.";
 
-  CHECK(itr != render_allocator_map_.end()) << "Device id " << device_id << " not found in RenderAllocatorMap.";
-
-  return &(itr->second);
+  return &render_allocator_map_[device_id];
 }
 
 void RenderAllocatorMap::prepForRendering() {
 #ifdef HAVE_RENDERING
-  for (auto itr : render_allocator_map_) {
-    cuda_mgr_->setContext(itr.first);
-    render_manager_->setCudaHandleUsedBytes(itr.first, itr.second.getAllocatedSize());
+  for (size_t i = 0; i < render_allocator_map_.size(); ++i) {
+    cuda_mgr_->setContext(i);
+    render_manager_->setCudaHandleUsedBytes(i, render_allocator_map_[i].getAllocatedSize());
   }
 
   render_allocator_map_.clear();
