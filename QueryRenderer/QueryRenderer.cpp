@@ -64,27 +64,6 @@ void QueryRenderer::_clear() {
 }
 
 void QueryRenderer::_clearGpuResources() {
-  // if (_pboGpu != EMPTY_GPUID) {
-  //   GLRenderer* renderer = nullptr;
-
-  //   if (_perGpuData.size() > 1) {
-  //     auto itr = _perGpuData.begin();
-  //     auto& compositorPtr = itr->second.getCompositor();
-  //     renderer = compositorPtr->getGLRenderer();
-  //   } else {
-  //     auto itr = _perGpuData.find(_pboGpu);
-  //     CHECK(itr != _perGpuData.end());
-  //     renderer = itr->second.getGLRenderer();
-  //   }
-
-  //   CHECK(renderer);
-  //   renderer->makeActiveOnCurrentThread();
-  //   MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_pbo));
-  //   renderer->makeInactive();
-  //   _pbo = 0;
-  //   _pboGpu = EMPTY_GPUID;
-  // }
-
   _releasePbo();
 
   _perGpuData.clear();
@@ -103,12 +82,9 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
 
     PerGpuData gpuData;
 
-    // gpuData.qrmGpuData = itr->second;
     gpuData.qrmGpuData = *itr;
 
     // TODO(croot): validate the QueryRenderManager data is complete?
-    // itr->second->makeActiveOnCurrentThread();
-    // itr->second->resize(width, height);
 
     (*itr)->makeActiveOnCurrentThread();
     (*itr)->resize(width, height);
@@ -147,43 +123,7 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerG
     height = 1;
   }
 
-  // if (_pboGpu != EMPTY_GPUID) {
-  //   GLRenderer* renderer = nullptr;
-
-  //   bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != gpuIds[0]));
-  //   if (!deletePBO && gpuIds.size() > 1 && _perGpuData.size() == 1) {
-  //     auto itr = _perGpuData.find(_pboGpu);
-  //     CHECK(itr != _perGpuData.end());
-  //     auto compositorPtr = itr->second.getCompositor();
-  //     renderer = compositorPtr->getGLRenderer();
-  //     CHECK(renderer);
-  //     if (renderer->getGpuId() != _pboGpu) {
-  //       deletePBO = true;
-  //     }
-  //   }
-
-  //   if (deletePBO) {
-  //     if (_perGpuData.size() > 1) {
-  //       auto itr = _perGpuData.begin();
-  //       auto& compositorPtr = itr->second.getCompositor();
-  //       renderer = compositorPtr->getGLRenderer();
-  //     } else {
-  //       auto itr = _perGpuData.find(_pboGpu);
-  //       CHECK(itr != _perGpuData.end());
-  //       renderer = itr->second.getGLRenderer();
-  //     }
-
-  //     CHECK(renderer);
-  //     renderer->makeActiveOnCurrentThread();
-  //     MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_pbo));
-  //     renderer->makeInactive();
-  //     _pbo = 0;
-  //     _pboGpu = EMPTY_GPUID;
-  //   }
-  // }
-
   if (_pbo) {
-    // GLRenderer* renderer = nullptr;
     bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != gpuIds[0]));
     if (!deletePBO && gpuIds.size() > 1 && _perGpuData.size() == 1) {
       auto itr = _perGpuData.find(_pboGpu);
@@ -208,35 +148,6 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerG
   }
 
   if (!_pbo) {
-    // auto itr = _perGpuData.begin();
-    // if (itr != _perGpuData.end()) {
-    //   GLRenderer* renderer;
-
-    //   if (_perGpuData.size() > 1) {
-    //     auto& compositorPtr = itr->second.getCompositor();
-    //     renderer = compositorPtr->getGLRenderer();
-    //     CHECK(renderer);
-    //     _pboGpu = renderer->getGpuId();
-    //   } else {
-    //     renderer = itr->second.getGLRenderer();
-    //     CHECK(renderer);
-    //     _pboGpu = itr->first;
-    //   }
-
-    //   CHECK(renderer);
-
-    //   renderer->makeActiveOnCurrentThread();
-
-    //   MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_pbo));
-    //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, _pbo));
-    //   // TODO(croot): do we need to sync the pbo before doing this?
-    //   MAPD_CHECK_GL_ERROR(
-    //       glBufferData(GL_PIXEL_PACK_BUFFER, width * height * sizeof(GL_UNSIGNED_INT), NULL, GL_DYNAMIC_READ));
-    //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-
-    //   renderer->makeInactive();
-    // }
-
     _createPbo(width, height);
   }
 
@@ -280,7 +191,6 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
   if (_ctx->_jsonCache && *_ctx->_jsonCache == *jsonDocumentPtr) {
     // nothing's changed. Return.
-    // std::cerr << "CROOT - cache hasn't changed!" << std::endl;
     return;
   }
 
@@ -497,34 +407,6 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
       // resize the cpu-bound pixels that store the ids per-pixel
       _idPixels.reset(new unsigned int[width * height], std::default_delete<unsigned int[]>());
 
-      // initialize all the ids to 0
-      // TODO(croot): I may not need to initialize these vals, but good practice
-      // unsigned int* rawIds = _idPixels.get();
-      // std::memset(rawIds, 0, width * height * sizeof(unsigned int));
-
-      // auto itr = _perGpuData.begin();
-      // if (itr != _perGpuData.end()) {
-      //   Renderer* renderer;
-      //   if (_perGpuData.size() > 1) {
-      //     auto& compositorPtr = itr->second.getCompositor();
-      //     renderer = compositorPtr->getRenderer();
-      //   } else {
-      //     renderer = itr->second.getRenderer();
-      //   }
-
-      //   CHECK(renderer && _pbo);
-
-      //   renderer->makeActiveOnCurrentThread();
-
-      //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, _pbo));
-      //   // TODO(croot): do we need to sync the pbo before doing this?
-      //   MAPD_CHECK_GL_ERROR(
-      //       glBufferData(GL_PIXEL_PACK_BUFFER, width * height * sizeof(GL_UNSIGNED_INT), NULL, GL_DYNAMIC_READ));
-      //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-
-      //   renderer->makeInactive();
-      // }
-
       if (_pbo) {
         auto itr = _perGpuData.find(_pboGpu);
         CHECK(itr != _perGpuData.end());
@@ -535,15 +417,6 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
     }
   }
 }
-
-// const QueryFramebufferUqPtr& QueryRenderer::getFramebuffer(const GpuId& gpuId) {
-//   PerGpuDataMap::const_iterator itr = _perGpuData.find(gpuId);
-
-//   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
-//                     "Error getting QueryRenderer framebuffer for gpuId " + std::to_string(gpuId) + ".");
-
-//   return itr->second.framebufferPtr;
-// }
 
 void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate) {
   _initFromJSON(configJSON, forceUpdate);
@@ -559,9 +432,6 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
   std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
   CHECK(qrmPerGpuData);
   for (const auto& kv : *qrmPerGpuData) {
-    // if (kv.second->queryResultBufferPtr->getNumUsedBytes() > 0) {
-    //   gpuIds.push_back(kv.first);
-    // }
     if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
       gpuIds.push_back(kv->gpuId);
     }
@@ -585,21 +455,6 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
   // now update the gpu resources for data, scale, and geom configs
   // This needs to be done after the queryResultBuffers are updated.
   _ctx->_updateConfigGpuResources(unusedGpus);
-
-  // int numRows = dataLayoutPtr->numRows;
-  // _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
-  // _ctx->_queryResultVBOPtr->updatePostQuery(_ctx->_queryResultBufferLayout, numRows);
-  // _ctx->_invalidKey = dataLayoutPtr->invalidKey;
-  // _ctx->_queryDataLayoutPtr.reset(dataLayoutPtr);
-
-  // // TODO(croot): Should each mark have its own invalid key? Probably, if we support
-  // // multiple sqls.
-  // // But if we deal with multiple sqls, then the context probably shouldn't
-  // // hold onto the invalidKey - the QueryResultVertexBuffer probably should, but
-  // // then how do we deal with setting that uniform?
-  // for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
-  //   _ctx->_geomConfigs[i]->setInvalidKey(_ctx->_invalidKey);
-  // }
 }
 #endif  // HAVE_CUDA
 
@@ -611,7 +466,6 @@ void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
   if (!gpusToActivate.size()) {
     std::vector<GpuId> gpuIds;
     for (const auto& kv : *qrmPerGpuData) {
-      // gpuIds.push_back(kv.first);
       gpuIds.push_back(kv->gpuId);
     }
     _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
@@ -641,19 +495,14 @@ void QueryRenderer::_createPbo(int width, int height, bool makeContextInactive) 
 
     CHECK(qrmItr != qrmPerGpuData->end());
 
-    // qrmItr->second->makeActiveOnCurrentThread();
     (*qrmItr)->makeActiveOnCurrentThread();
 
-    // _pbo = qrmItr->second->getInactiveIdMapPbo((width < 0 ? _ctx->getWidth() : width),
-    //                                            (height < 0 ? _ctx->getHeight() : height));
     _pbo = (*qrmItr)
                ->getInactiveIdMapPbo((width < 0 ? _ctx->getWidth() : width), (height < 0 ? _ctx->getHeight() : height));
 
-    // _pboGpu = qrmItr->first;
     _pboGpu = (*qrmItr)->gpuId;
 
     if (makeContextInactive) {
-      // qrmItr->second->makeInactive();
       (*qrmItr)->makeInactive();
     }
   }
@@ -667,9 +516,6 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
       auto itr = qrmPerGpuData->find(_pboGpu);
       CHECK(itr != qrmPerGpuData->end()) << "Couldn't find gpu data for gpuid: " << _pboGpu << ". Can't release pb";
 
-      // itr->second->makeActiveOnCurrentThread();
-      // itr->second->setIdMapPboInactive(_pbo);
-
       (*itr)->makeActiveOnCurrentThread();
       (*itr)->setIdMapPboInactive(_pbo);
 
@@ -677,7 +523,6 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
       _pboGpu = EMPTY_GPUID;
 
       if (makeContextInactive) {
-        // itr->second->makeInactive();
         (*itr)->makeInactive();
       }
     }
@@ -725,7 +570,6 @@ void QueryRenderer::renderGpu(GpuId gpuId,
 
   renderer->setViewport(0, 0, ctx->_width, ctx->_height);
   if (r >= 0 && g >= 0 && b >= 0 && a >= 0) {
-    // renderer->setClearColor(0, 0, 0, 0);
     renderer->setClearColor(r, b, g, a);
     renderer->clearAll();
   }
@@ -778,15 +622,6 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - pbo idmap copy: " << time_ms << "ms" << std::endl;
         // clock_begin = timer_start();
-
-        // MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, _pbo));
-        // MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT1));
-        // MAPD_CHECK_GL_ERROR(
-        //     glReadPixels(0, 0, _ctx->getWidth(), _ctx->getHeight(), GL_RED_INTEGER, GL_UNSIGNED_INT,
-        //     BUFFER_OFFSET(0)));
-        // MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-
-        // framebufferPtr->readIdBuffer(0, 0, _ctx->getWidth(), _ctx->getHeight(), _idPixels.get());
       }
     } else {
       auto& compositorPtr = itr->second.getCompositor();
@@ -808,25 +643,11 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - compositor pbo idmap copy : " << time_ms << "ms" << std::endl;
         // clock_begin = timer_start();
-
-        // MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, _pbo));
-        // MAPD_CHECK_GL_ERROR(glReadBuffer(GL_COLOR_ATTACHMENT1));
-        // MAPD_CHECK_GL_ERROR(
-        //     glReadPixels(0, 0, _ctx->getWidth(), _ctx->getHeight(), GL_RED_INTEGER, GL_UNSIGNED_INT,
-        //     BUFFER_OFFSET(0)));
-        // MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-
-        // // compositorPtr->readIdBuffer(0, 0, _ctx->getWidth(), _ctx->getHeight(), _idPixels.get());
       }
     }
 
     _idPixelsDirty = true;
   }
-  // else if (_ctx->doHitTest()) {
-  //   CHECK(_idPixels);
-  //   unsigned int* rawIds = _idPixels.get();
-  //   std::memset(rawIds, 0, _ctx->getWidth() * _ctx->getHeight() * sizeof(unsigned int));
-  // }
 
   if (inactivateRendererOnThread) {
     GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
@@ -870,7 +691,6 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     } else {
       QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
 
-      // const GpuId& gpuId = itr->first;
       itr->second.makeActiveOnCurrentThread();
       GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
       CHECK(renderer != nullptr);
@@ -919,45 +739,6 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y) {
           // time_ms = timer_stop(clock_begin);
           // std::cerr << "CROOT - getIdAt::readIdBuffer from pbo: " << time_ms << " ms" << std::endl;
         }
-
-        // auto itr = _perGpuData.begin();
-
-        // if (_perGpuData.size() > 1) {
-        //   // auto& compositorPtr = itr->second.getCompositor();
-        //   // CHECK(compositorPtr);
-
-        //   // Renderer* renderer = compositorPtr->getRenderer();
-        //   // renderer->makeActiveOnCurrentThread();
-        //   // pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
-        //   // renderer->makeInactive();
-
-        //   auto& compositorPtr = itr->second.getCompositor();
-        //   CHECK(compositorPtr);
-
-        //   Renderer* renderer = compositorPtr->getRenderer();
-        //   renderer->makeActiveOnCurrentThread();
-
-        //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, _pbo));
-        //   void* ptr = MAPD_CHECK_GL_ERROR(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-        //   std::memcpy(rawIds, ptr, width * height * sizeof(unsigned int));
-        //   MAPD_CHECK_GL_ERROR(glUnmapBuffer(GL_PIXEL_PACK_BUFFER));
-        //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-
-        //   renderer->makeInactive();
-
-        // } else {
-        //   QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
-
-        //   itr->second.makeActiveOnCurrentThread();
-
-        //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, _pbo));
-        //   void* ptr = MAPD_CHECK_GL_ERROR(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-        //   std::memcpy(rawIds, ptr, width * height * sizeof(unsigned int));
-        //   MAPD_CHECK_GL_ERROR(glUnmapBuffer(GL_PIXEL_PACK_BUFFER));
-        //   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-
-        //   itr->second.makeInactive();
-        // }
 
         _idPixelsDirty = false;
       }
@@ -1012,11 +793,6 @@ void QueryRendererContext::_clearGpuResources() {
 
 void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData,
                                              const std::unordered_set<GpuId>& unusedGpus) {
-  // CHECK(_perGpuData.size() == qrmPerGpuData.size());
-  // for (size_t i = 0; i < qrmPerGpuData.size(); ++i) {
-  //   _perGpuData[i].qrmGpuData = &qrmPerGpuData[i];
-  // }
-
   for (const auto& itr : qrPerGpuData) {
     if (_perGpuData.find(itr.first) == _perGpuData.end()) {
       _perGpuData.insert({itr.first, PerGpuData(itr.second.qrmGpuData)});
@@ -1089,8 +865,6 @@ std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVert
 
   QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    // rtn.insert({itr.first,
-    // std::static_pointer_cast<QueryVertexBuffer>(itr.second.qrmGpuData->queryResultBufferPtr)});
     qrmGpuData = itr.second.getQRMGpuData();
     CHECK(qrmGpuData);
     rtn.insert({itr.first, qrmGpuData->queryResultBufferPtr});
@@ -1197,10 +971,6 @@ void QueryRendererContext::_update() {
     geomConfig->update();
   }
 }
-
-// void QueryRenderer::_buildShaderFromGeomConfig(const GeomConfigPtr& geomConfigPtr) {
-
-// }
 
 std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj) {
   RUNTIME_EX_ASSERT(obj.IsObject(), "A data object in the JSON must be an object.");

@@ -148,7 +148,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();
 
-    // _perGpuData->insert({i, gpuDataPtr});
     _perGpuData->insert(gpuDataPtr);
   }
 
@@ -158,7 +157,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
 void QueryRenderManager::_resetQueryResultBuffers() {
   for (auto& itr : *_perGpuData) {
-    // itr.second->queryResultBufferPtr->reset();
     itr->queryResultBufferPtr->reset();
   }
 }
@@ -169,7 +167,6 @@ void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
   {
     std::lock_guard<std::mutex> render_lock(_renderMtx);
 
-    // if (userWidget != _activeUserWidget) {
     if (_activeItr == _rendererMap.end() || (userId != _activeItr->userId || widgetId != _activeItr->widgetId)) {
       auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
@@ -333,10 +330,6 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
-  // itr->second->makeActiveOnCurrentThread();
-  // CudaHandle rtn = itr->second->queryResultBufferPtr->getCudaHandlePreQuery();
-  // itr->second->rendererPtr->makeInactive();
-
   inOrder[gpuIdx]->makeActiveOnCurrentThread();
   CudaHandle rtn = inOrder[gpuIdx]->queryResultBufferPtr->getCudaHandlePreQuery();
   inOrder[gpuIdx]->rendererPtr->makeInactive();
@@ -352,10 +345,6 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedByt
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
-
-  // itr->second->makeActiveOnCurrentThread();
-  // itr->second->queryResultBufferPtr->updatePostQuery(numUsedBytes);
-  // itr->second->rendererPtr->makeInactive();
 
   inOrder[gpuIdx]->makeActiveOnCurrentThread();
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
@@ -374,8 +363,6 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   // need to update the data layout of the query result buffer before building up
   // from the json obj
   if (dataLayoutPtr) {
-    // CHECK(executor != nullptr);
-
     _activeItr->renderer->updateResultsPostQuery(dataLayoutPtr, executor);
   } else {
     CHECK(_perGpuData->size());
@@ -422,7 +409,6 @@ size_t QueryRenderManager::getNumGpus() const {
 std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
   std::vector<GpuId> rtn;
   for (auto itr : *_perGpuData) {
-    // rtn.push_back(itr.first);
     rtn.push_back(itr->gpuId);
   }
 

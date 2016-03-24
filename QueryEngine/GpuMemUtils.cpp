@@ -27,7 +27,6 @@ RenderAllocatorMap::RenderAllocatorMap(::CudaMgr_Namespace::CudaMgr* cuda_mgr,
   CHECK(cuda_mgr_ && render_manager_);
 
 #ifdef HAVE_RENDERING
-  // std::vector<size_t> devices = render_manager_->getAllGpuIds();
   int numDevices = cuda_mgr->getDeviceCount();
   for (int i = 0; i < numDevices; ++i) {
     cuda_mgr_->setContext(i);

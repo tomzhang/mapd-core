@@ -122,7 +122,6 @@ class QueryRenderManager {
 
   typedef std::shared_ptr<PerGpuData> PerGpuDataShPtr;
   typedef std::weak_ptr<PerGpuData> PerGpuDataWkPtr;
-  // typedef std::map<GpuId, PerGpuDataShPtr> PerGpuDataMap;
 
   struct inorder {};
 
@@ -175,8 +174,6 @@ class QueryRenderManager {
   PerGpuDataMap* getPerGpuData() { return _perGpuData.get(); }
 
 #ifdef HAVE_CUDA
-  // CudaHandle getCudaHandle(const GpuId& gpuId);
-  // void setCudaHandleUsedBytes(GpuId gpuId, size_t numUsedBytes);
   CudaHandle getCudaHandle(size_t gpuIdx);
   void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes);
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
