@@ -57,6 +57,9 @@ typedef std::shared_ptr<GLInterleavedBufferLayout> GLInterleavedBufferLayoutShPt
 class GLSequentialBufferLayout;
 typedef std::shared_ptr<GLSequentialBufferLayout> GLSequentialBufferLayoutShPtr;
 
+class GLShaderBlockLayout;
+typedef std::shared_ptr<GLShaderBlockLayout> GLShaderBlockLayoutShPtr;
+
 class GLVertexArray;
 typedef std::weak_ptr<GLVertexArray> GLVertexArrayWkPtr;
 typedef std::shared_ptr<GLVertexArray> GLVertexArrayShPtr;
