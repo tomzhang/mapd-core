@@ -56,8 +56,9 @@ GLShaderShPtr GLResourceManager::createShader(const std::string& vertexShaderSrc
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLShaderShPtr rtn(new GLShader(_prntRenderer, vertexShaderSrc, fragmentShaderSrc));
+  GLShaderShPtr rtn(new GLShader(_prntRenderer));
   _addGLResource(rtn);
+  rtn->_initResource(vertexShaderSrc, fragmentShaderSrc);
 
   return rtn;
 }

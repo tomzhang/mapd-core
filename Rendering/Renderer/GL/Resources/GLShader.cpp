@@ -1,10 +1,15 @@
 #include "../MapDGL.h"
 #include "GLShader.h"
+#include "GLShaderBlockLayout.h"
+#include "../GLResourceManager.h"
 #include <boost/algorithm/string/predicate.hpp>
 
 namespace Rendering {
 namespace GL {
 namespace Resources {
+
+static detail::UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint location);
+
 namespace detail {
 
 struct Uniform1uiAttr : UniformAttrInfo {
@@ -149,6 +154,225 @@ void UniformSamplerAttr::setTexImgUnit(GLint texImgUnit) {
   startTexImgUnit = texImgUnit;
 }
 
+UniformBlockAttrInfo::UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
+                                           const std::string& blockName,
+                                           GLint blockIndex,
+                                           GLint bufferSize,
+                                           GLint bufferBindingIndex,
+                                           ShaderBlockLayoutType layoutType)
+    : blockName(blockName),
+      blockIndex(blockIndex),
+      bufferSize(bufferSize),
+      bufferBindingIndex(bufferBindingIndex),
+      blockLayoutPtr(new GLShaderBlockLayout(layoutType, shaderPtr, bufferSize)) {
+}
+
+void UniformBlockAttrInfo::setBufferBinding(GLuint programId, GLint bindingIndex) {
+  // TODO(croot): check that this binding index isn't in use elsewhere?
+  // What happens in that case?
+  MAPD_CHECK_GL_ERROR(glUniformBlockBinding(programId, blockIndex, bindingIndex));
+  bufferBindingIndex = bindingIndex;
+}
+
+void UniformBlockAttrInfo::bindBuffer(GLuint bufferId) {
+  // TODO(croot): check that the buffer is valid...
+  // TODO(croot): what about buffer size?
+  MAPD_CHECK_GL_ERROR(glBindBufferBase(GL_UNIFORM_BUFFER, bufferBindingIndex, bufferId));
+}
+
+void UniformBlockAttrInfo::bindBuffer(GLuint bufferId, size_t offsetBytes, size_t sizeBytes) {
+  // TODO(croot): check that the buffer is valid...
+  // TODO(croot): what about buffer size?
+  MAPD_CHECK_GL_ERROR(glBindBufferRange(GL_UNIFORM_BUFFER, bufferBindingIndex, bufferId, offsetBytes, sizeBytes));
+}
+
+void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type, GLint size, GLuint idx) {
+  activeAttrs.insert(make_pair(attrName, std::unique_ptr<UniformAttrInfo>(createUniformAttrInfoPtr(type, size, -1))));
+
+  ShaderBlockLayoutType layoutType = blockLayoutPtr->getLayoutType();
+  bool usePublicAddAttr = false;
+  if (layoutType == ShaderBlockLayoutType::STD140 || layoutType == ShaderBlockLayoutType::STD430) {
+    usePublicAddAttr = true;
+  }
+
+  switch (type) {
+    case GL_UNSIGNED_INT:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<unsigned int>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<unsigned int>(attrName, idx);
+      }
+      break;
+    case GL_UNSIGNED_INT_VEC2:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<unsigned int, 2>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<unsigned int, 2>(attrName, idx);
+      }
+      break;
+    case GL_UNSIGNED_INT_VEC3:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<unsigned int, 3>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<unsigned int, 3>(attrName, idx);
+      }
+      break;
+    case GL_UNSIGNED_INT_VEC4:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<unsigned int, 4>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<unsigned int, 4>(attrName, idx);
+      }
+      break;
+
+    case GL_INT:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<int>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<int>(attrName, idx);
+      }
+      break;
+    case GL_INT_VEC2:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<int, 2>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<int, 2>(attrName, idx);
+      }
+      break;
+    case GL_INT_VEC3:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<int, 3>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<int, 3>(attrName, idx);
+      }
+      break;
+    case GL_INT_VEC4:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<int, 4>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<int, 4>(attrName, idx);
+      }
+      break;
+
+    case GL_FLOAT:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<float>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<float>(attrName, idx);
+      }
+      break;
+    case GL_FLOAT_VEC2:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<float, 2>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<float, 2>(attrName, idx);
+      }
+      break;
+    case GL_FLOAT_VEC3:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<float, 3>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<float, 3>(attrName, idx);
+      }
+      break;
+    case GL_FLOAT_VEC4:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<float, 4>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<float, 4>(attrName, idx);
+      }
+      break;
+
+    case GL_DOUBLE:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<double>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<double>(attrName, idx);
+      }
+      break;
+    case GL_DOUBLE_VEC2:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<double, 2>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<double, 2>(attrName, idx);
+      }
+      break;
+    case GL_DOUBLE_VEC3:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<double, 3>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<double, 3>(attrName, idx);
+      }
+      break;
+    case GL_DOUBLE_VEC4:
+      if (usePublicAddAttr) {
+        blockLayoutPtr->addAttribute<double, 4>(attrName);
+      } else {
+        blockLayoutPtr->addAttribute<double, 4>(attrName, idx);
+      }
+      break;
+
+    // case GL_SAMPLER_1D:
+    // case GL_SAMPLER_1D_ARRAY:
+
+    // case GL_SAMPLER_1D_SHADOW:
+    // case GL_SAMPLER_1D_ARRAY_SHADOW:
+
+    // case GL_INT_SAMPLER_1D:
+    // case GL_INT_SAMPLER_1D_ARRAY:
+
+    // case GL_UNSIGNED_INT_SAMPLER_1D:
+    // case GL_UNSIGNED_INT_SAMPLER_1D_ARRAY:
+
+    // TODO(croot): for samplers, the texture image unit can be set according to
+    // https://www.opengl.org/wiki/Sampler_(GLSL)#Version_4.20_binding
+    // i.e. layout(binding=0) uniform sampler2D diffuseTex;
+    // but I can't determine how to find out what that binding is with any
+    // of the opengl program introspection methods. So, I may need to do
+    // a scan of the shader source myself to determine that.
+    // case GL_SAMPLER_2D:
+    // case GL_SAMPLER_2D_ARRAY:
+    // case GL_SAMPLER_2D_MULTISAMPLE:
+    // case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+
+    // case GL_SAMPLER_2D_SHADOW:
+    // case GL_SAMPLER_2D_ARRAY_SHADOW:
+
+    // case GL_INT_SAMPLER_2D:
+    // case GL_INT_SAMPLER_2D_ARRAY:
+    // case GL_INT_SAMPLER_2D_MULTISAMPLE:
+    // case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+
+    // case GL_UNSIGNED_INT_SAMPLER_2D:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+
+    // case GL_SAMPLER_3D:
+    // case GL_INT_SAMPLER_3D:
+    // case GL_UNSIGNED_INT_SAMPLER_3D:
+
+    // case GL_SAMPLER_CUBE:
+    // case GL_SAMPLER_CUBE_SHADOW:
+    // case GL_INT_SAMPLER_CUBE:
+    // case GL_UNSIGNED_INT_SAMPLER_CUBE:
+
+    // case GL_SAMPLER_BUFFER:
+    // case GL_INT_SAMPLER_BUFFER:
+    // case GL_UNSIGNED_INT_SAMPLER_BUFFER:
+
+    // case GL_SAMPLER_2D_RECT:
+    // case GL_SAMPLER_2D_RECT_SHADOW:
+    // case GL_INT_SAMPLER_2D_RECT:
+    // case GL_UNSIGNED_INT_SAMPLER_2D_RECT:
+
+    default:
+      // TODO(croot): throw an error instead?
+      LOG(WARNING) << "GL type: " << type << " is not a currently supported type for buffer-backed uniform block.";
+      break;
+  }
+}
+
 }  // namespace detail
 
 using detail::AttrInfo;
@@ -170,6 +394,7 @@ using detail::Uniform2dAttr;
 using detail::Uniform3dAttr;
 using detail::Uniform4dAttr;
 using detail::UniformSamplerAttr;
+using detail::UniformBlockAttrInfo;
 
 static GLint compileShader(const GLuint& shaderId, const std::string& shaderSrc, std::string& errStr) {
   GLint compiled;
@@ -346,11 +571,26 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
   return rtn;
 }
 
-GLShader::GLShader(const RendererWkPtr& rendererPtr,
-                   const std::string& vertexShaderSrc,
-                   const std::string& fragmentShaderSrc)
+// TODO(croot): move strsplit() functions into a string utility somewhere
+static std::vector<std::string>& strsplit(const std::string& s, char delim, std::vector<std::string>& elems) {
+  std::stringstream ss(s);
+  std::string item;
+  while (std::getline(ss, item, delim)) {
+    if (item.length()) {
+      elems.push_back(item);
+    }
+  }
+  return elems;
+}
+
+static std::vector<std::string> strsplit(const std::string& s, char delim) {
+  std::vector<std::string> elems;
+  strsplit(s, delim, elems);
+  return elems;
+}
+
+GLShader::GLShader(const RendererWkPtr& rendererPtr)
     : GLResource(rendererPtr, GLResourceType::SHADER), _vertShaderId(0), _fragShaderId(0), _programId(0) {
-  _initResource(vertexShaderSrc, fragmentShaderSrc);
 }
 
 GLShader::~GLShader() {
@@ -399,7 +639,50 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
   // subroutines, atomic counters, etc.
   // See: https://www.opengl.org/wiki/Program_Introspection
 
+  GLRenderer* renderer = getGLRenderer();
+  CHECK(renderer);
+
+  GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+  GLShaderShPtr myRsrc = std::dynamic_pointer_cast<GLShader>(rsrcMgr->getResourcePtr(this));
+  CHECK(myRsrc && myRsrc.get() == this);
+
   // setup the uniform attributes
+  _uniformBlockAttrs.clear();
+  MAPD_CHECK_GL_ERROR(glGetProgramiv(_programId, GL_ACTIVE_UNIFORM_BLOCKS, &numAttrs));
+  std::set<GLuint> uniformBlockAttrIndices;
+  for (GLint i = 0; i < numAttrs; ++i) {
+    MAPD_CHECK_GL_ERROR(glGetActiveUniformBlockName(_programId, i, 512, NULL, attrName));
+    std::string attrBlockName(attrName);
+
+    GLint bufSz;
+    MAPD_CHECK_GL_ERROR(glGetActiveUniformBlockiv(_programId, i, GL_UNIFORM_BLOCK_DATA_SIZE, &bufSz));
+
+    GLint activeBlockUniforms;
+    MAPD_CHECK_GL_ERROR(
+        glGetActiveUniformBlockiv(_programId, i, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &activeBlockUniforms));
+
+    GLint activeBlockUniformIndices[activeBlockUniforms];
+    MAPD_CHECK_GL_ERROR(
+        glGetActiveUniformBlockiv(_programId, i, GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES, activeBlockUniformIndices));
+
+    GLint bindingIndex;
+    MAPD_CHECK_GL_ERROR(glGetActiveUniformBlockiv(_programId, i, GL_UNIFORM_BLOCK_BINDING, &bindingIndex));
+
+    // TODO(croot): support different layouts for shader blocks. I don't think there's
+    // a way to query this using the program introspection API, so we'll need to parse the
+    // shader's source code. Right now, hard-coding STD140 for QueryRenderer
+    auto blockItr = _uniformBlockAttrs.insert(
+        make_pair(attrBlockName,
+                  std::make_unique<UniformBlockAttrInfo>(
+                      myRsrc, attrBlockName, i, bufSz, bindingIndex, ShaderBlockLayoutType::STD140)));
+
+    blockItr.first->second->blockLayoutPtr->beginAddingAttrs();
+
+    for (GLint j = 0; j < activeBlockUniforms; ++j) {
+      uniformBlockAttrIndices.insert(activeBlockUniformIndices[j]);
+    }
+  }
+
   _uniformAttrs.clear();
   MAPD_CHECK_GL_ERROR(glGetProgramiv(_programId, GL_ACTIVE_UNIFORMS, &numAttrs));
   for (GLuint i = 0; i < static_cast<GLuint>(numAttrs); ++i) {
@@ -408,14 +691,37 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
 
     MAPD_CHECK_GL_ERROR(glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_TYPE, &attrType));
     MAPD_CHECK_GL_ERROR(glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_SIZE, &attrSz));
-    MAPD_CHECK_GL_ERROR((attrLoc = glGetUniformLocation(_programId, attrName)));
 
-    if (boost::algorithm::ends_with(attrNameStr, "[0]")) {
-      attrNameStr.erase(attrNameStr.size() - 3, 3);
+    if (uniformBlockAttrIndices.erase(i) > 0) {
+      std::vector<std::string> dotSepNames = strsplit(attrNameStr, '.');
+
+      // TODO(croot): handle blocks within blocks?
+      RUNTIME_EX_ASSERT(dotSepNames.size() == 2, "Currently not supporting shader blocks within shader blocks.");
+
+      auto blockItr = _uniformBlockAttrs.find(dotSepNames[0]);
+      RUNTIME_EX_ASSERT(blockItr != _uniformBlockAttrs.end(),
+                        "Could not find uniform block " + dotSepNames[0] + " in shader.");
+
+      blockItr->second->addActiveAttr(dotSepNames[1], attrType, attrSz, i);
+    } else {
+      attrLoc = MAPD_CHECK_GL_ERROR(glGetUniformLocation(_programId, attrName));
+
+      if (boost::algorithm::ends_with(attrNameStr, "[0]")) {
+        attrNameStr.erase(attrNameStr.size() - 3, 3);
+      }
+
+      _uniformAttrs.insert(make_pair(
+          attrNameStr, std::unique_ptr<UniformAttrInfo>(createUniformAttrInfoPtr(attrType, attrSz, attrLoc))));
     }
+  }
 
-    _uniformAttrs.insert(
-        make_pair(attrNameStr, std::unique_ptr<UniformAttrInfo>(createUniformAttrInfoPtr(attrType, attrSz, attrLoc))));
+  // verify that the shader block was build properly
+  for (const auto& uniformBlockItr : _uniformBlockAttrs) {
+    uniformBlockItr.second->blockLayoutPtr->endAddingAttrs();
+    CHECK(static_cast<size_t>(uniformBlockItr.second->bufferSize) ==
+          uniformBlockItr.second->blockLayoutPtr->getNumBytesInBlock())
+        << uniformBlockItr.second->blockName << ": " << uniformBlockItr.second->bufferSize
+        << " != " << uniformBlockItr.second->blockLayoutPtr->getNumBytesInBlock();
   }
 
   // now setup the vertex attributes
@@ -476,6 +782,32 @@ UniformSamplerAttr* GLShader::_validateSamplerAttr(const std::string& attrName) 
   return samplerAttr;
 }
 
+UniformBlockAttrInfo* GLShader::_validateBlockAttr(const std::string& blockName,
+                                                   const GLUniformBufferShPtr& ubo,
+                                                   size_t idx) {
+  validateUsability(__FILE__, __LINE__);
+
+  auto itr = _uniformBlockAttrs.find(blockName);
+
+  // TODO(croot): check if bound
+  RUNTIME_EX_ASSERT(itr != _uniformBlockAttrs.end(),
+                    "Uniform block \"" + blockName + "\" is not defined in the shader.");
+
+  RUNTIME_EX_ASSERT(ubo != nullptr, "Uniform buffer object is null. Cannot bind it to the block " + blockName + ".");
+
+  GLRenderer* renderer = GLRenderer::getCurrentThreadRenderer();
+  // this should've already passed via the validateUsability() method above.
+  CHECK(renderer);
+  RUNTIME_EX_ASSERT(renderer->getBoundUniformBuffer() == ubo,
+                    "The uniform buffer object is not currently bound to the active renderer. Bind the UBO first.");
+
+  RUNTIME_EX_ASSERT(
+      idx < ubo->numItems(),
+      "Index " + std::to_string(idx) + " out of bounds. Ubo has only " + std::to_string(ubo->numItems()) + " blocks.");
+
+  return itr->second.get();
+}
+
 std::string GLShader::getVertexSource() const {
   validateUsability(__FILE__, __LINE__);
   return getShaderSource(_vertShaderId);
@@ -501,6 +833,15 @@ GLint GLShader::getUniformAttributeGLType(const std::string& attrName) {
   return iter->second->type;
 }
 
+GLShaderBlockLayoutShPtr GLShader::getBlockLayout(const std::string& blockName) const {
+  const auto itr = _uniformBlockAttrs.find(blockName);
+
+  RUNTIME_EX_ASSERT(itr != _uniformBlockAttrs.end(),
+                    "GLShader::getBlockLayout(): uniform block \"" + blockName + "\" does not exist in shader.");
+
+  return itr->second->blockLayoutPtr;
+}
+
 void GLShader::setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc) {
   switch (rsrc->getResourceType()) {
     case GLResourceType::TEXTURE_2D:
@@ -522,6 +863,16 @@ void GLShader::setSamplerTextureImageUnit(const std::string& attrName, GLenum st
   samplerAttr->setTexImgUnit(startTexImageUnit);
 }
 
+void GLShader::bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx) {
+  UniformBlockAttrInfo* blockAttr = _validateBlockAttr(blockName, ubo, idx);
+  if (idx < 0) {
+    blockAttr->bindBuffer(ubo->getId());
+  } else {
+    size_t numBytes = ubo->getNumBytesPerItem();
+    blockAttr->bindBuffer(ubo->getId(), idx * numBytes, numBytes);
+  }
+}
+
 GLuint GLShader::getVertexAttributeLocation(const std::string& attrName) const {
   AttrMap::const_iterator iter = _vertexAttrs.find(attrName);
 
@@ -532,18 +883,6 @@ GLuint GLShader::getVertexAttributeLocation(const std::string& attrName) const {
 
   return info->location;
 }
-
-// void GLShader::bindToRenderer() {
-//   // TODO(croot): Throw an error or warning if the program
-//   // is invalid?
-
-//   // TODO(croot): perhaps write a "don't check renderer" version?
-//   validateUsability(__FILE__, __LINE__);
-
-//   if (_programId) {
-//     MAPD_CHECK_GL_ERROR(glUseProgram(_programId));
-//   }
-// }
 
 }  // namespace Resources
 }  // namespace GL

@@ -13,7 +13,6 @@
 
 namespace Rendering {
 namespace GL {
-
 namespace Resources {
 
 namespace detail {
@@ -42,9 +41,30 @@ struct UniformSamplerAttr : UniformAttrInfo {
   GLint startTexImgUnit;
 };
 
-}  // namespace detail
+struct UniformBlockAttrInfo {
+  std::string blockName;
+  GLint blockIndex;
+  GLint bufferSize;
+  GLint bufferBindingIndex;
+  std::unordered_map<std::string, std::unique_ptr<UniformAttrInfo>> activeAttrs;
+  GLShaderBlockLayoutShPtr blockLayoutPtr;
 
-// enum { ATTR_TYPE = 0, ATTR_SIZE, ATTR_LOC };
+  UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
+                       const std::string& blockName,
+                       GLint blockIndex,
+                       GLint bufferSize,
+                       GLint bufferBindingIndex,
+                       ShaderBlockLayoutType layoutType = ShaderBlockLayoutType::PACKED);
+
+  void setBufferBinding(GLuint programId, GLint bindingIndex);
+  void bindBuffer(GLuint bufferId);
+  void bindBuffer(GLuint bufferId, size_t offsetBytes, size_t sizeBytes);
+
+  // void addActiveAttr(const std::string& attrName, GLint type, GLint size, GLuint location, GLuint idx);
+  void addActiveAttr(const std::string& attrName, GLint type, GLint size, GLuint idx);
+};
+
+}  // namespace detail
 
 class GLShader : public GLResource {
  public:
@@ -59,6 +79,8 @@ class GLShader : public GLResource {
   bool hasUniformAttribute(const std::string& attrName);
 
   GLint getUniformAttributeGLType(const std::string& attrName);
+
+  GLShaderBlockLayoutShPtr getBlockLayout(const std::string& blockName) const;
 
   // TODO(croot): this doesn't work if called like so:
   // shader.setUniformAttribute("attrName", 1+2);
@@ -106,18 +128,22 @@ class GLShader : public GLResource {
 
   void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
 
+  void bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx = -1);
+
   GLuint getVertexAttributeLocation(const std::string& attrName) const;
 
  private:
-  GLShader(const RendererWkPtr& rendererPtr, const std::string& vertexShaderSrc, const std::string& fragmentShaderSrc);
+  GLShader(const RendererWkPtr& rendererPtr);
 
   typedef std::unordered_map<std::string, std::unique_ptr<detail::AttrInfo>> AttrMap;
   typedef std::unordered_map<std::string, std::unique_ptr<detail::UniformAttrInfo>> UniformAttrMap;
+  typedef std::unordered_map<std::string, std::unique_ptr<detail::UniformBlockAttrInfo>> UniformBlockAttrMap;
 
   GLuint _vertShaderId;
   GLuint _fragShaderId;
   GLuint _programId;
   UniformAttrMap _uniformAttrs;
+  UniformBlockAttrMap _uniformBlockAttrs;
   AttrMap _vertexAttrs;
 
   void _initResource(const std::string& vertSrc, const std::string& fragSrc);
@@ -125,12 +151,14 @@ class GLShader : public GLResource {
   void _makeEmpty() final;
   detail::UniformAttrInfo* _validateAttr(const std::string& attrName);
   detail::UniformSamplerAttr* _validateSamplerAttr(const std::string& attrName);
+  detail::UniformBlockAttrInfo* _validateBlockAttr(const std::string& blockName,
+                                                   const GLUniformBufferShPtr& ubo,
+                                                   size_t idx);
 
   friend class ::Rendering::GL::GLResourceManager;
 };
 
 }  // namespace Resources
-
 }  // namespace GL
 }  // namespace Rendering
 
