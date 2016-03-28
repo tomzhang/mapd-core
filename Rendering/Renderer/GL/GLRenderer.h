@@ -83,6 +83,7 @@ class GLRenderer : public Renderer {
   void bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc);
   void bindReadPixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc);
   void bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc);
+  void bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRsrc);
 
   Resources::GLTexture2dShPtr getBoundTexture2d() const;
   bool hasBoundTexture2d() const;
@@ -107,6 +108,9 @@ class GLRenderer : public Renderer {
 
   Resources::GLPixelBuffer2dShPtr getBoundWritePixelBuffer() const;
   bool hasBoundWritePixelBuffer() const;
+
+  Resources::GLUniformBufferShPtr getBoundUniformBuffer() const;
+  bool hasBoundUniformBuffer() const;
 
   void drawVertexBuffers(GLenum primitiveMode, int startIndex = 0, int numItemsToDraw = -1);
 

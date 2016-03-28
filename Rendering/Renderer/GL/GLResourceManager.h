@@ -11,6 +11,7 @@
 #include "Resources/GLFramebuffer.h"
 #include "Resources/GLVertexBuffer.h"
 #include "Resources/GLPixelBuffer2d.h"
+#include "Resources/GLUniformBuffer.h"
 #include <string>
 #include <vector>
 
@@ -56,15 +57,6 @@ class GLResourceManager {
       Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
 
-  Resources::GLPixelBuffer2dShPtr createPixelBuffer2d(
-      size_t width,
-      size_t height,
-      // GLenum internalFormat,
-      GLenum pixelFormat,
-      GLenum pixelType,
-      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ,
-      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
-
   template <typename T>
   Resources::GLVertexBufferShPtr createVertexBuffer(
       const std::vector<T>& data,
@@ -76,6 +68,40 @@ class GLResourceManager {
     // TODO(croot): make thread safe?
     Resources::GLVertexBufferShPtr rtn(
         new Resources::GLVertexBuffer(_prntRenderer, data, layoutPtr, accessType, accessFreq));
+    _glResources.push_back(Resources::GLResourceWkPtr(rtn));
+
+    return rtn;
+  }
+
+  Resources::GLPixelBuffer2dShPtr createPixelBuffer2d(
+      size_t width,
+      size_t height,
+      // GLenum internalFormat,
+      GLenum pixelFormat,
+      GLenum pixelType,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
+
+  Resources::GLUniformBufferShPtr createUniformBuffer(
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
+
+  Resources::GLUniformBufferShPtr createUniformBuffer(
+      const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
+
+  template <typename T>
+  Resources::GLUniformBufferShPtr createUniformBuffer(
+      const std::vector<T>& data,
+      const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC) {
+    CHECK(!_prntRenderer.expired());
+
+    // TODO(croot): make thread safe?
+    Resources::GLUniformBufferShPtr rtn(
+        new Resources::GLUniformBuffer(_prntRenderer, data, shaderBlockLayoutPtr, accessType, accessFreq));
     _glResources.push_back(Resources::GLResourceWkPtr(rtn));
 
     return rtn;

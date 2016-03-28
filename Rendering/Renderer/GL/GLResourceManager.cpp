@@ -24,6 +24,8 @@ using Resources::GLVertexBuffer;
 using Resources::GLVertexBufferShPtr;
 using Resources::GLPixelBuffer2d;
 using Resources::GLPixelBuffer2dShPtr;
+using Resources::GLUniformBuffer;
+using Resources::GLUniformBufferShPtr;
 using Resources::GLVertexArray;
 using Resources::GLVertexArrayShPtr;
 using Resources::VboAttrToShaderAttrMap;
@@ -179,6 +181,30 @@ GLPixelBuffer2dShPtr GLResourceManager::createPixelBuffer2d(size_t width,
                                                pixelType,
                                                accessType,
                                                accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLUniformBufferShPtr GLResourceManager::createUniformBuffer(Resources::BufferAccessType accessType,
+                                                            Resources::BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLUniformBufferShPtr GLResourceManager::createUniformBuffer(
+    const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
+    Resources::BufferAccessType accessType,
+    Resources::BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, shaderBlockLayoutPtr, accessType, accessFreq));
   _addGLResource(rtn);
 
   return rtn;

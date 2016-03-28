@@ -8,6 +8,7 @@
 #include "../Resources/GLVertexArray.h"
 #include "../Resources/GLRenderbuffer.h"
 #include "../Resources/GLPixelBuffer2d.h"
+#include "../Resources/GLUniformBuffer.h"
 
 namespace Rendering {
 namespace GL {
@@ -223,6 +224,22 @@ void GLBindState::bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pb
   }
 }
 
+void GLBindState::bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRsrc) {
+  GLuint ubo = (uboRsrc ? uboRsrc->getId() : 0);
+
+  bool bind = (boundUbo.owner_before(uboRsrc) || uboRsrc.owner_before(boundUbo));
+
+  if (bind) {
+    if (uboRsrc) {
+      uboRsrc->validateRenderer(_prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_UNIFORM_BUFFER, ubo));
+
+    boundUbo = uboRsrc;
+  }
+}
+
 Resources::GLTexture2dShPtr GLBindState::getBoundTexture2d() const {
   return boundTex2d.lock();
 }
@@ -307,6 +324,14 @@ Resources::GLPixelBuffer2dShPtr GLBindState::getBoundWritePixelBuffer() const {
 
 bool GLBindState::hasBoundWritePixelBuffer() const {
   return !boundWritePbo.expired();
+}
+
+Resources::GLUniformBufferShPtr GLBindState::getBoundUniformBuffer() const {
+  return boundUbo.lock();
+}
+
+bool GLBindState::hasBoundUniformBuffer() const {
+  return !boundUbo.expired();
 }
 
 }  // namespace State

@@ -45,6 +45,10 @@ class GLPixelBuffer2d;
 typedef std::weak_ptr<GLPixelBuffer2d> GLPixelBuffer2dWkPtr;
 typedef std::shared_ptr<GLPixelBuffer2d> GLPixelBuffer2dShPtr;
 
+class GLUniformBuffer;
+typedef std::weak_ptr<GLUniformBuffer> GLUniformBufferWkPtr;
+typedef std::shared_ptr<GLUniformBuffer> GLUniformBufferShPtr;
+
 class GLBaseBufferLayout;
 typedef std::shared_ptr<GLBaseBufferLayout> GLBufferLayoutShPtr;
 

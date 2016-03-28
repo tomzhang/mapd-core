@@ -20,6 +20,7 @@ using Resources::GLShaderShPtr;
 using Resources::GLVertexArrayShPtr;
 using Resources::GLRenderbufferShPtr;
 using Resources::GLPixelBuffer2dShPtr;
+using Resources::GLUniformBufferShPtr;
 
 // TODO(croot): make these std::weak_ptr?
 thread_local GLRenderer* _currentRenderer;
@@ -293,6 +294,10 @@ void GLRenderer::bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pbo
   _bindState.bindWritePixelBuffer(pboRsrc);
 }
 
+void GLRenderer::bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRsrc) {
+  _bindState.bindUniformBuffer(uboRsrc);
+}
+
 Resources::GLTexture2dShPtr GLRenderer::getBoundTexture2d() const {
   return _bindState.getBoundTexture2d();
 }
@@ -355,6 +360,14 @@ GLPixelBuffer2dShPtr GLRenderer::getBoundWritePixelBuffer() const {
 
 bool GLRenderer::hasBoundWritePixelBuffer() const {
   return _bindState.hasBoundWritePixelBuffer();
+}
+
+GLUniformBufferShPtr GLRenderer::getBoundUniformBuffer() const {
+  return _bindState.getBoundUniformBuffer();
+}
+
+bool GLRenderer::hasBoundUniformBuffer() const {
+  return _bindState.hasBoundUniformBuffer();
 }
 
 void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {
