@@ -19,7 +19,7 @@ class GLIndexBuffer : public GLBaseBuffer {
 
   ~GLIndexBuffer();
 
-  GLResourceType getResourceType() const final { return GLResourceType::INDEXBUFFER; }
+  GLResourceType getResourceType() const final { return GLResourceType::INDEX_BUFFER; }
 
   IndexType getIndexType() const { return _indexType; }
   size_t numItems() const { return _numItems; }
