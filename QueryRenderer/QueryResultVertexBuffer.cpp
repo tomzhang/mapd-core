@@ -159,7 +159,17 @@ void QueryResultVertexBuffer::setBufferLayout(const ::Rendering::GL::Resources::
 
 #ifdef HAVE_CUDA
 void QueryResultVertexBuffer::checkCudaErrors(CUresult result) {
-  RUNTIME_EX_ASSERT(result == CUDA_SUCCESS, "CUDA error code=" + std::to_string(static_cast<unsigned int>(result)));
+  if (result == CUDA_ERROR_INVALID_CONTEXT) {
+    ::Rendering::GL::GLRenderer* renderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
+    if (!renderer) {
+      CHECK(false) << "CUDA error code=" << result << ". No gl context is set as current.";
+    } else {
+      CHECK(false) << "CUDA error code=" << result << ". Current context is on gpu: " << renderer->getGpuId()
+                   << ", but expecting it to be on " << _gpuId << ".";
+    }
+  } else {
+    CHECK(result == CUDA_SUCCESS) << "CUDA error code=" << result;
+  }
 }
 
 CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {

@@ -124,7 +124,9 @@ class QueryResultVertexBuffer : public QueryVertexBuffer {
   std::unordered_map<CUcontext, CUgraphicsResource> _cudaResourceMap;
   std::unordered_set<CUgraphicsResource> _mappedCudaResources;
 
-  static void checkCudaErrors(CUresult result);
+  // temporarily making the checkCudaErrors
+  // static void checkCudaErrors(CUresult result);
+  void checkCudaErrors(CUresult result);
 
   CUgraphicsResource _getCudaGraphicsResource(bool registerResource = false);
 
