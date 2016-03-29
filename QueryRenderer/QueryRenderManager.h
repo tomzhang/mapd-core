@@ -251,6 +251,8 @@ class QueryRenderManager {
   void _purgeUnusedWidgets();
   void _updateActiveLastRenderTime();
 
+  static void _unsetCurrentRenderer();
+
   mutable std::mutex _renderMtx;
 
   const size_t _renderCacheLimit;

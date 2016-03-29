@@ -153,6 +153,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
   LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << endDevice
             << ", Render cache limit: " << _renderCacheLimit;
+
+  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::_resetQueryResultBuffers() {
@@ -240,6 +242,8 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
   }
 
   _rendererMap.emplace(userId, widgetId, new QueryRenderer(_perGpuData, doHitTest, doDepthTest));
+
+  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
@@ -259,6 +263,8 @@ void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
   if (itr == _activeItr) {
     _clearActiveUserWidget();
   }
+
+  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
@@ -280,6 +286,8 @@ void QueryRenderManager::removeUser(int userId) {
   }
 
   userIdMap.erase(startEndItr.first, startEndItr.second);
+
+  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::_clearActiveUserWidget() {
@@ -305,6 +313,8 @@ void QueryRenderManager::_purgeUnusedWidgets() {
 
   LOG_IF(INFO, cnt > 0) << "QueryRenderManager - purging " << cnt << " idle connections.";
   lastRenderTimeList.erase(lastRenderTimeList.begin(), itr);
+
+  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::_updateActiveLastRenderTime() {
@@ -332,7 +342,8 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
 
   inOrder[gpuIdx]->makeActiveOnCurrentThread();
   CudaHandle rtn = inOrder[gpuIdx]->queryResultBufferPtr->getCudaHandlePreQuery();
-  inOrder[gpuIdx]->rendererPtr->makeInactive();
+
+  _unsetCurrentRenderer();
 
   return rtn;
 }
@@ -348,7 +359,8 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedByt
 
   inOrder[gpuIdx]->makeActiveOnCurrentThread();
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
-  inOrder[gpuIdx]->rendererPtr->makeInactive();
+
+  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -373,6 +385,8 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
 
   _resetQueryResultBuffers();
+
+  _unsetCurrentRenderer();
 }
 #else
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
@@ -389,6 +403,8 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
 
   _resetQueryResultBuffers();
+
+  _unsetCurrentRenderer();
 }
 #endif  // HAVE_CUDA
 
@@ -400,6 +416,8 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
                     "setting width/height.");
 
   _activeItr->renderer->setWidthHeight(width, height);
+
+  _unsetCurrentRenderer();
 }
 
 size_t QueryRenderManager::getNumGpus() const {
@@ -423,6 +441,8 @@ void QueryRenderManager::render() {
 
   _activeItr->renderer->render();
   _updateActiveLastRenderTime();
+
+  _unsetCurrentRenderer();
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
@@ -434,6 +454,8 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   PngData rtn = _activeItr->renderer->renderToPng(compressionLevel);
 
   _updateActiveLastRenderTime();
+
+  _unsetCurrentRenderer();
 
   return rtn;
 }
@@ -448,11 +470,21 @@ int64_t QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   int64_t id = _activeItr->renderer->getIdAt(x, y, pixelRadius);
   _updateActiveLastRenderTime();
 
+  _unsetCurrentRenderer();
+
   // ids go from 0 to numitems-1, but since we're storing
   // the ids as unsigned ints, and there isn't a way to specify the
   // clear value for secondary buffers, we need to account for that
   // offset here
   return id - 1;
+}
+
+void QueryRenderManager::_unsetCurrentRenderer() {
+  ::Rendering::GL::GLRenderer* renderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
+
+  if (renderer) {
+    renderer->makeInactive();
+  }
 }
 
 }  // namespace QueryRenderer

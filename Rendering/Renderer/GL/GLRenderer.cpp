@@ -70,6 +70,9 @@ void GLRenderer::makeActiveOnCurrentThread(Window* window) {
   // TODO(croot): a window and context can be activated
   // so we need to add the window as a per-thread item.
 
+  // lock access to the current renderer / current window
+  std::lock_guard<std::mutex> thread_lock(_currRendererMtx);
+
   // TODO(croot): Make thread safe while traversing windows?
   Window* windowToUse = nullptr;
   if (!window) {
@@ -89,9 +92,6 @@ void GLRenderer::makeActiveOnCurrentThread(Window* window) {
 
   // GLWindow* glWindow = dynamic_cast<GLWindow*>(window);
   // CHECK(glWindow != nullptr);
-
-  // lock access to the current renderer / current window
-  std::lock_guard<std::mutex> thread_lock(_currRendererMtx);
 
   if (_currentRenderer == this && _currentWindow == windowToUse) {
     // already active
