@@ -22,7 +22,7 @@ GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
                                BufferAccessType accessType,
                                BufferAccessFreq accessFreq)
     : GLVertexBuffer(rendererPtr, accessType, accessFreq) {
-  bufferData(nullptr, numBytes, 1);
+  bufferData(nullptr, 1, numBytes);
 }
 
 GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
