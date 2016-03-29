@@ -87,7 +87,13 @@ class GLResourceManager {
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
 
   Resources::GLUniformBufferShPtr createUniformBuffer(
+      size_t numBytes,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
+
+  Resources::GLUniformBufferShPtr createUniformBuffer(
       const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
+      size_t numItems = 0,
       Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
 

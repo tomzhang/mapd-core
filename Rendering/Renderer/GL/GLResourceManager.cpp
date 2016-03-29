@@ -197,14 +197,27 @@ GLUniformBufferShPtr GLResourceManager::createUniformBuffer(Resources::BufferAcc
   return rtn;
 }
 
+GLUniformBufferShPtr GLResourceManager::createUniformBuffer(size_t numBytes,
+                                                            Resources::BufferAccessType accessType,
+                                                            Resources::BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, numBytes, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
 GLUniformBufferShPtr GLResourceManager::createUniformBuffer(
     const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
+    size_t numItems,
     Resources::BufferAccessType accessType,
     Resources::BufferAccessFreq accessFreq) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, shaderBlockLayoutPtr, accessType, accessFreq));
+  GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, shaderBlockLayoutPtr, numItems, accessType, accessFreq));
   _addGLResource(rtn);
 
   return rtn;
