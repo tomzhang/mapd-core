@@ -49,7 +49,7 @@ void GLBaseBuffer::_makeEmpty() {
   _numUsedBytes = 0;
 }
 
-void GLBaseBuffer::bufferData(void* data, size_t numBytes, GLenum altTarget) {
+void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarget) {
   // TODO(croot): this could be a performance hit when buffering data
   // frequently. Should perhaps look into buffer object streaming techniques:
   // https://www.opengl.org/wiki/Buffer_Object_Streaming
@@ -105,7 +105,8 @@ GLenum GLBaseBuffer::_getBufferBinding(GLenum target) {
   static const BufferBindingMap bufferBindings = {{GL_ARRAY_BUFFER, GL_ARRAY_BUFFER_BINDING},
                                                   {GL_PIXEL_UNPACK_BUFFER, GL_PIXEL_UNPACK_BUFFER_BINDING},
                                                   {GL_PIXEL_PACK_BUFFER, GL_PIXEL_PACK_BUFFER_BINDING},
-                                                  {GL_UNIFORM_BUFFER, GL_UNIFORM_BUFFER_BINDING}};
+                                                  {GL_UNIFORM_BUFFER, GL_UNIFORM_BUFFER_BINDING},
+                                                  {GL_ELEMENT_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER_BINDING}};
 
   BufferBindingMap::const_iterator itr;
 

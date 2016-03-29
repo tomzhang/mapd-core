@@ -49,6 +49,10 @@ class GLUniformBuffer;
 typedef std::weak_ptr<GLUniformBuffer> GLUniformBufferWkPtr;
 typedef std::shared_ptr<GLUniformBuffer> GLUniformBufferShPtr;
 
+class GLIndexBuffer;
+typedef std::weak_ptr<GLIndexBuffer> GLIndexBufferWkPtr;
+typedef std::shared_ptr<GLIndexBuffer> GLIndexBufferShPtr;
+
 class GLBaseBufferLayout;
 typedef std::shared_ptr<GLBaseBufferLayout> GLBufferLayoutShPtr;
 
