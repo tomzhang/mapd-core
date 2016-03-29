@@ -19,6 +19,14 @@ std::string to_string(const GLResourceType value) {
       return "TEXTURE_2D_ARRAY";
     case GLResourceType::VERTEXBUFFER:
       return "VERTEXBUFFER";
+    case GLResourceType::INDEXBUFFER:
+      return "INDEXBUFFER";
+    case GLResourceType::UNIFORMBUFFER:
+      return "UNIFORMBUFFER";
+    case GLResourceType::INDIRECT_DRAW_VERTEX_BUFFER:
+      return "INDIRECT_DRAW_VERTEX_BUFFER";
+    case GLResourceType::INDIRECT_DRAW_INDEX_BUFFER:
+      return "INDIRECT_DRAW_INDEX_BUFFER";
     case GLResourceType::PIXELBUFFER_2D:
       return "PIXELBUFFER_2D";
     case GLResourceType::VERTEXARRAY:

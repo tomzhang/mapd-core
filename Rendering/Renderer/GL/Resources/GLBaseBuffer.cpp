@@ -106,7 +106,8 @@ GLenum GLBaseBuffer::_getBufferBinding(GLenum target) {
                                                   {GL_PIXEL_UNPACK_BUFFER, GL_PIXEL_UNPACK_BUFFER_BINDING},
                                                   {GL_PIXEL_PACK_BUFFER, GL_PIXEL_PACK_BUFFER_BINDING},
                                                   {GL_UNIFORM_BUFFER, GL_UNIFORM_BUFFER_BINDING},
-                                                  {GL_ELEMENT_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER_BINDING}};
+                                                  {GL_ELEMENT_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER_BINDING},
+                                                  {GL_DRAW_INDIRECT_BUFFER, GL_DRAW_INDIRECT_BUFFER_BINDING}};
 
   BufferBindingMap::const_iterator itr;
 
