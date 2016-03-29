@@ -28,6 +28,7 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
   // the context when needed. But if these are defined per driver, then
   // keeping them static is fine.
   static int uniformBufferOffsetAlignment;
+  static int maxUniformBlockSize;
 
   template <typename T, int numComponents = 1>
   void addAttribute(const std::string& attrName, GLuint attrIdx) {
@@ -76,6 +77,7 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
                     const std::string& shaderAttr = "");
 
   static void _initNumAlignmentBytes();
+  static void _initMaxUniformBlockSize();
 
   GLShaderWkPtr _shaderPtr;
   LayoutType _layoutType;

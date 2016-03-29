@@ -18,17 +18,12 @@ static size_t calcNumBytesPerItem(size_t bytesInBlock, size_t alignmentBytes, si
   return bytesInBlock;
 }
 
-int GLUniformBuffer::maxUniformBlockSize = -1;
-
 GLUniformBuffer::GLUniformBuffer(const RendererWkPtr& rendererPtr,
                                  BufferAccessType accessType,
                                  BufferAccessFreq accessFreq)
     : GLBaseBuffer(rendererPtr, GLBufferType::UNIFORM_BUFFER, GL_UNIFORM_BUFFER, accessType, accessFreq),
       _shaderBlockLayoutPtr(nullptr),
       _numItems(0) {
-  if (maxUniformBlockSize < 0) {
-    MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxUniformBlockSize));
-  }
 }
 
 GLUniformBuffer::GLUniformBuffer(const RendererWkPtr& rendererPtr,
@@ -247,14 +242,7 @@ void GLUniformBuffer::bufferData(void* data, size_t numItems, size_t numBytesPer
     }
   }
 
-  size_t totalNumBytes = numItems * numBytesPerItem;
-
-  RUNTIME_EX_ASSERT(static_cast<int>(totalNumBytes) <= maxUniformBlockSize,
-                    "Cannot allocate a uniform buffer with " + std::to_string(totalNumBytes) +
-                        " bytes. It exceeds the maximum uniform buffer size of " + std::to_string(maxUniformBlockSize) +
-                        " bytes.");
-
-  GLBaseBuffer::bufferData(data, totalNumBytes);
+  GLBaseBuffer::bufferData(data, numItems * numBytesPerItem);
   _numItems = numItems;
 }
 

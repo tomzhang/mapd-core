@@ -53,12 +53,6 @@ class GLUniformBuffer : public GLBaseBuffer {
   }
 
  private:
-  // TODO(croot): if these values can vary per-gpu, then we probably
-  // need to store these on a per-object basis or query directly from
-  // the context when needed. But if these are defined per driver, then
-  // keeping them static is fine.
-  static int maxUniformBlockSize;
-
   explicit GLUniformBuffer(const RendererWkPtr& rendererPtr,
                            BufferAccessType accessType = BufferAccessType::WRITE,
                            BufferAccessFreq accessFreq = BufferAccessFreq::DYNAMIC);
