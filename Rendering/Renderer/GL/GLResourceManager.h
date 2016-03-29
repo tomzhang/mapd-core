@@ -12,6 +12,7 @@
 #include "Resources/GLVertexBuffer.h"
 #include "Resources/GLPixelBuffer2d.h"
 #include "Resources/GLUniformBuffer.h"
+#include "Resources/GLIndexBuffer.h"
 #include <string>
 #include <vector>
 
@@ -44,6 +45,32 @@ class GLResourceManager {
   Resources::GLTexture2dArrayShPtr createTexture2dArray(const std::vector<Resources::GLTexture2dShPtr>& initTextures);
 
   Resources::GLFramebufferShPtr createFramebuffer(const Resources::GLFramebufferAttachmentMap& attachments);
+
+  Resources::GLIndexBufferShPtr createIndexBuffer(
+      Resources::GLIndexBuffer::IndexType indexType = Resources::GLIndexBuffer::IndexType::UNSIGNED_INT,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndexBufferShPtr createIndexBuffer(
+      size_t numBytes,
+      Resources::GLIndexBuffer::IndexType indexType = Resources::GLIndexBuffer::IndexType::UNSIGNED_INT,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndexBufferShPtr createIndexBuffer(
+      const std::vector<unsigned char>& items,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndexBufferShPtr createIndexBuffer(
+      const std::vector<unsigned short>& items,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndexBufferShPtr createIndexBuffer(
+      const std::vector<unsigned int>& items,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
 
   Resources::GLVertexBufferShPtr createVertexBuffer(
       Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,

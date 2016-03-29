@@ -20,6 +20,8 @@ using Resources::GLFramebuffer;
 using Resources::GLFramebufferShPtr;
 using Resources::BufferAccessType;
 using Resources::BufferAccessFreq;
+using Resources::GLIndexBuffer;
+using Resources::GLIndexBufferShPtr;
 using Resources::GLVertexBuffer;
 using Resources::GLVertexBufferShPtr;
 using Resources::GLPixelBuffer2d;
@@ -124,6 +126,67 @@ GLFramebufferShPtr GLResourceManager::createFramebuffer(const Resources::GLFrame
 
   // TODO(croot): make thread safe?
   GLFramebufferShPtr rtn(new GLFramebuffer(_prntRenderer, attachments));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndexBufferShPtr GLResourceManager::createIndexBuffer(GLIndexBuffer::IndexType indexType,
+                                                        BufferAccessType accessType,
+                                                        BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndexBufferShPtr rtn(new GLIndexBuffer(_prntRenderer, indexType, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndexBufferShPtr GLResourceManager::createIndexBuffer(size_t numBytes,
+                                                        GLIndexBuffer::IndexType indexType,
+                                                        BufferAccessType accessType,
+                                                        BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndexBufferShPtr rtn(new GLIndexBuffer(_prntRenderer, numBytes, indexType, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndexBufferShPtr GLResourceManager::createIndexBuffer(const std::vector<unsigned char>& items,
+                                                        BufferAccessType accessType,
+                                                        BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndexBufferShPtr rtn(new GLIndexBuffer(_prntRenderer, items, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndexBufferShPtr GLResourceManager::createIndexBuffer(const std::vector<unsigned short>& items,
+                                                        BufferAccessType accessType,
+                                                        BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndexBufferShPtr rtn(new GLIndexBuffer(_prntRenderer, items, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndexBufferShPtr GLResourceManager::createIndexBuffer(const std::vector<unsigned int>& items,
+                                                        BufferAccessType accessType,
+                                                        BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndexBufferShPtr rtn(new GLIndexBuffer(_prntRenderer, items, accessType, accessFreq));
   _addGLResource(rtn);
 
   return rtn;

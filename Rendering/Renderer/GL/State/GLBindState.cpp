@@ -9,6 +9,7 @@
 #include "../Resources/GLRenderbuffer.h"
 #include "../Resources/GLPixelBuffer2d.h"
 #include "../Resources/GLUniformBuffer.h"
+#include "../Resources/GLIndexBuffer.h"
 
 namespace Rendering {
 namespace GL {
@@ -240,6 +241,22 @@ void GLBindState::bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRs
   }
 }
 
+void GLBindState::bindIndexBuffer(const Resources::GLIndexBufferShPtr& iboRsrc) {
+  GLuint ibo = (iboRsrc ? iboRsrc->getId() : 0);
+
+  bool bind = (boundIbo.owner_before(iboRsrc) || iboRsrc.owner_before(boundIbo));
+
+  if (bind) {
+    if (iboRsrc) {
+      iboRsrc->validateRenderer(_prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo));
+
+    boundIbo = iboRsrc;
+  }
+}
+
 Resources::GLTexture2dShPtr GLBindState::getBoundTexture2d() const {
   return boundTex2d.lock();
 }
@@ -332,6 +349,14 @@ Resources::GLUniformBufferShPtr GLBindState::getBoundUniformBuffer() const {
 
 bool GLBindState::hasBoundUniformBuffer() const {
   return !boundUbo.expired();
+}
+
+Resources::GLIndexBufferShPtr GLBindState::getBoundIndexBuffer() const {
+  return boundIbo.lock();
+}
+
+bool GLBindState::hasBoundIndexBuffer() const {
+  return !boundIbo.expired();
 }
 
 }  // namespace State

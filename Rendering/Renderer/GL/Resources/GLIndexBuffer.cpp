@@ -88,6 +88,10 @@ void GLIndexBuffer::_makeEmpty() {
   _numItems = 0;
 }
 
+size_t GLIndexBuffer::getIndexTypeByteSize() const {
+  return getIndexTypeSize(_indexType);
+}
+
 void GLIndexBuffer::bufferData(const std::vector<unsigned char>& indices) {
   RUNTIME_EX_ASSERT(_indexType == IndexType::UNSIGNED_BYTE,
                     "Cannot set data of type " + to_string(IndexType::UNSIGNED_BYTE) +

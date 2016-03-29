@@ -21,6 +21,7 @@ using Resources::GLVertexArrayShPtr;
 using Resources::GLRenderbufferShPtr;
 using Resources::GLPixelBuffer2dShPtr;
 using Resources::GLUniformBufferShPtr;
+using Resources::GLIndexBufferShPtr;
 
 // TODO(croot): make these std::weak_ptr?
 thread_local GLRenderer* _currentRenderer;
@@ -298,6 +299,10 @@ void GLRenderer::bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRsr
   _bindState.bindUniformBuffer(uboRsrc);
 }
 
+void GLRenderer::bindIndexBuffer(const Resources::GLIndexBufferShPtr& uboRsrc) {
+  _bindState.bindIndexBuffer(uboRsrc);
+}
+
 Resources::GLTexture2dShPtr GLRenderer::getBoundTexture2d() const {
   return _bindState.getBoundTexture2d();
 }
@@ -370,17 +375,40 @@ bool GLRenderer::hasBoundUniformBuffer() const {
   return _bindState.hasBoundUniformBuffer();
 }
 
-void GLRenderer::drawVertexBuffers(GLenum primitiveMode, int startIndex, int numItemsToDraw) {
+GLIndexBufferShPtr GLRenderer::getBoundIndexBuffer() const {
+  return _bindState.getBoundIndexBuffer();
+}
+
+bool GLRenderer::hasBoundIndexBuffer() const {
+  return _bindState.hasBoundIndexBuffer();
+}
+
+void GLRenderer::drawVertexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
+  CHECK(hasBoundVertexBuffer());
+
   if (numItemsToDraw < 0) {
     if (hasBoundVertexArray()) {
       numItemsToDraw = getBoundVertexArray()->numVertices();
     } else {
-      CHECK(hasBoundVertexBuffer());
       numItemsToDraw = getBoundVertexBuffer()->numVertices();
     }
   }
 
   MAPD_CHECK_GL_ERROR(glDrawArrays(primitiveMode, startIndex, numItemsToDraw));
+}
+
+void GLRenderer::drawIndexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
+  GLIndexBufferShPtr ibo = getBoundIndexBuffer();
+  CHECK(ibo != nullptr);
+
+  if (numItemsToDraw < 0) {
+    numItemsToDraw = ibo->numItems();
+  }
+
+  MAPD_CHECK_GL_ERROR(glDrawElements(primitiveMode,
+                                     numItemsToDraw,
+                                     static_cast<GLenum>(ibo->getIndexType()),
+                                     BUFFER_OFFSET(startIndex * ibo->getIndexTypeByteSize())));
 }
 
 void GLRenderer::getReadFramebufferPixels(GLenum readBuffer,
