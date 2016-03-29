@@ -785,7 +785,11 @@ UniformSamplerAttr* GLShader::_validateSamplerAttr(const std::string& attrName) 
 UniformBlockAttrInfo* GLShader::_validateBlockAttr(const std::string& blockName,
                                                    const GLUniformBufferShPtr& ubo,
                                                    size_t idx) {
+<<<<<<< 78675a6a7b3ecc01921df0b9408961add6100289
   validateUsability(__FILE__, __LINE__);
+=======
+  validateUsability();
+>>>>>>> Adding methods for binding and validating a uniform buffer object
 
   auto itr = _uniformBlockAttrs.find(blockName);
 
