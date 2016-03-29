@@ -394,6 +394,9 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
         throw std::runtime_error("Not enough OpenGL memory to render the query results");
       }
       if (render_allocator_map) {
+        if (error_code == ERR_OUT_OF_GPU_MEM) {
+          throw std::runtime_error("Not enough GPU memory to execute the query");
+        }
         if (error_code && !root_plan->get_limit()) {
           CHECK_LT(error_code, 0);
           throw std::runtime_error("Ran out of slots in the output buffer");
