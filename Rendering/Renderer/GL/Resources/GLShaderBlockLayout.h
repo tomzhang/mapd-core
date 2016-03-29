@@ -14,21 +14,21 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
   // for a description of the different layout types
   enum class LayoutType { PACKED = 0, SHARED, STD140, STD430 };
 
-  // all shader block layouts must be interleaved, but there are rules for
-  // the stride/offset for each layout type, hence the reasoning for
-  // a specific shader block layout.
-  GLShaderBlockLayout(const GLShaderShPtr& shaderPtr, size_t blockByteSize, LayoutType layoutType = LayoutType::SHARED)
-      : GLBaseBufferLayout(GLBufferLayoutType::INTERLEAVED), _shaderPtr(shaderPtr), _layoutType(layoutType) {
-    _vertexByteSize = blockByteSize;
-  }
-
-  ~GLShaderBlockLayout() {}
+  GLShaderBlockLayout(const GLShaderShPtr& shaderPtr, size_t blockByteSize, LayoutType layoutType = LayoutType::SHARED);
+  ~GLShaderBlockLayout();
 
   LayoutType getLayoutType() const { return _layoutType; }
-
   size_t getNumBytesInBlock() const { return _vertexByteSize; }
 
+  static size_t getNumAlignmentBytes();
+
  private:
+  // TODO(croot): if these values can vary per-gpu, then we probably
+  // need to store these on a per-object basis or query directly from
+  // the context when needed. But if these are defined per driver, then
+  // keeping them static is fine.
+  static int uniformBufferOffsetAlignment;
+
   template <typename T, int numComponents = 1>
   void addAttribute(const std::string& attrName, GLuint attrIdx) {
     RUNTIME_EX_ASSERT(!hasAttribute(attrName) && attrName.length(),
@@ -73,11 +73,9 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
   void bindToShader(GLShader* activeShader,
                     int numActiveBufferItems,
                     const std::string& attr = "",
-                    const std::string& shaderAttr = "") {
-    THROW_RUNTIME_EX(
-        "A GLShaderBlockLayout cannot be bound to a shader. It is instead defined by a shader via a shader storage "
-        "block.")
-  }
+                    const std::string& shaderAttr = "");
+
+  static void _initNumAlignmentBytes();
 
   GLShaderWkPtr _shaderPtr;
   LayoutType _layoutType;
