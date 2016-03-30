@@ -49,6 +49,21 @@ using ::Rendering::GL::Resources::VboAttrToShaderAttrMap;
 typedef std::string::iterator str_itr;
 typedef boost::iterator_range<str_itr> str_itr_range;
 
+std::string to_string(BaseScale::ScaleType scaleType) {
+  switch (scaleType) {
+    case BaseScale::ScaleType::LINEAR:
+      return "LINEAR";
+    case BaseScale::ScaleType::ORDINAL:
+      return "ORDINAL";
+    case BaseScale::ScaleType::UNDEFINED:
+      return "UNDEFINED";
+    default:
+      return "<scale type " + std::to_string(static_cast<int>(scaleType)) + ">";
+  }
+
+  return "";
+}
+
 str_itr_range getGLSLFunctionBounds(std::string& codeStr, const std::string& funcName) {
   std::string regexStr = "\\h*\\w+\\h+" + funcName + "\\h*\\([\\w\\h\\v,]*\\)\\h*\\v*\\{";
   boost::regex funcSignatureRegex(regexStr);
@@ -105,7 +120,7 @@ QueryDataType getDataTypeFromJSONObj(const rapidjson::Value& obj, bool supportSt
         //   rtn = QueryDataType::DOUBLE;
         // }
       } else {
-        THROW_RUNTIME_EX("getDataTypeFromJSONObj(): RapidJSON number type is not supported.");
+        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "RapidJSON number type is not supported."));
       }
       break;
     case rapidjson::kStringType: {
@@ -115,29 +130,32 @@ QueryDataType getDataTypeFromJSONObj(const rapidjson::Value& obj, bool supportSt
       } else if (ColorRGBA::isColorString(val)) {
         rtn = QueryDataType::COLOR;
       } else {
-        THROW_RUNTIME_EX("getDataTypeFromJSONObj(): non-color strings are not a supported type.");
+        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "non-color strings are not a supported type."));
       }
     } break;
     default:
-      THROW_RUNTIME_EX("getDataTypeFromJSONObj(): type from JSON is unsupported.");
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "type from JSON is unsupported."));
   }
 
   return rtn;
 }
 
 QueryDataType getDataTypeFromDataRefJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - data reference is not a JSON object.");
+  RUNTIME_EX_ASSERT(obj.IsObject(), RapidJSONUtils::getJsonParseErrorStr(obj, "data reference is not a JSON object."));
 
   rapidjson::Value::ConstMemberIterator mitr;
-  RUNTIME_EX_ASSERT((mitr = obj.FindMember("data")) != obj.MemberEnd() && mitr->value.IsString(),
-                    "JSON parse error - data reference object doesn't contain a \"data\" string property.");
+  RUNTIME_EX_ASSERT(
+      (mitr = obj.FindMember("data")) != obj.MemberEnd() && mitr->value.IsString(),
+      RapidJSONUtils::getJsonParseErrorStr(obj, "data reference object doesn't contain a \"data\" string property."));
   std::string dataTableName = mitr->value.GetString();
   QueryDataTableVBOShPtr tablePtr = ctx->getDataTable(dataTableName);
 
-  RUNTIME_EX_ASSERT(tablePtr != nullptr, "JSON parse error - data table \"" + dataTableName + "\" doesn't exist.");
+  RUNTIME_EX_ASSERT(tablePtr != nullptr,
+                    RapidJSONUtils::getJsonParseErrorStr(obj, "data table \"" + dataTableName + "\" doesn't exist."));
 
-  RUNTIME_EX_ASSERT((mitr = obj.FindMember("field")) != obj.MemberEnd() && mitr->value.IsString(),
-                    "JSON parse error - data reference object must contain a \"field\" string property.");
+  RUNTIME_EX_ASSERT(
+      (mitr = obj.FindMember("field")) != obj.MemberEnd() && mitr->value.IsString(),
+      RapidJSONUtils::getJsonParseErrorStr(obj, "data reference object must contain a \"field\" string property."));
   return tablePtr->getColumnType(mitr->value.GetString());
 }
 
@@ -178,7 +196,9 @@ BaseScale::~BaseScale() {
 bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - scale items must be objects.");
+    RUNTIME_EX_ASSERT(
+        obj.IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "scale items must be objects."));
 
     if (!_name.length()) {
       _name = getScaleNameFromJSONObj(obj);
@@ -205,8 +225,10 @@ bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::P
 
       bool prevClamp = _useClamp;
       if ((itr = obj.FindMember("clamp")) != obj.MemberEnd()) {
-        RUNTIME_EX_ASSERT(itr->value.IsBool(),
-                          "JSON parse error - the \"clamp\" property for linear scales must be a boolean.");
+        RUNTIME_EX_ASSERT(
+            itr->value.IsBool(),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), obj, "the \"clamp\" property for linear scales must be a boolean."));
 
         _useClamp = itr->value.GetBool();
       } else {
@@ -227,6 +249,19 @@ bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::P
   return rtn;
 }
 
+const ::Rendering::GL::TypeGLShPtr& BaseScale::getDomainTypeGL() {
+  RUNTIME_EX_ASSERT(_domainTypeGL != nullptr,
+                    std::string(*this) + " getDomainTypeGL(): the domain type is uninitialized.");
+  return _domainTypeGL;
+}
+
+const ::Rendering::GL::TypeGLShPtr& BaseScale::getRangeTypeGL() {
+  RUNTIME_EX_ASSERT(_rangeTypeGL != nullptr,
+                    std::string(*this) + " getRangeTypeGL(): the range type is uninitialized.");
+
+  return _rangeTypeGL;
+}
+
 std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
   std::string scaleName;
 
@@ -238,10 +273,14 @@ std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
       scaleName = "Ordinal";
       break;
     default:
-      THROW_RUNTIME_EX("BaseScale::getScaleGLSLFuncName(): scale type is not supported.");
+      THROW_RUNTIME_EX(std::string(*this) + " getScaleGLSLFuncName(): scale type is not supported.");
   }
 
   return "get" + scaleName + "Scale_" + _name + extraSuffix;
+}
+
+std::string BaseScale::_printInfo() const {
+  return "(name: " + _name + ", type: " + to_string(_type) + ") " + to_string(_ctx->getUserWidgetIds());
 }
 
 template <typename T>
@@ -263,16 +302,19 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
 
   mitr = obj.FindMember(_name.c_str());
   RUNTIME_EX_ASSERT(mitr != obj.MemberEnd(),
-                    "JSON parse error - scale objects must have a \"" + _name + "\" property.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        ctx->getUserWidgetIds(), obj, "scale objects must have a \"" + _name + "\" property."));
 
   if (!ctx->isJSONCacheUpToDate(_jsonPath, mitr->value)) {
     if (_useString) {
       RUNTIME_EX_ASSERT(((isObject = mitr->value.IsObject()) || (isString = mitr->value.IsString()) ||
                          (mitr->value.IsArray() && mitr->value.Size())),
-                        "JSON parse error - scale " + _name + " is invalid.");
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            ctx->getUserWidgetIds(), mitr->value, "scale " + _name + " is invalid."));
     } else {
       RUNTIME_EX_ASSERT(((isObject = mitr->value.IsObject()) || (mitr->value.IsArray() && mitr->value.Size())),
-                        "JSON parse error - scale " + _name + " is invalid.");
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            ctx->getUserWidgetIds(), mitr->value, "scale " + _name + " is invalid."));
     }
 
     const rapidjson::Value& jsonObj = mitr->value;
@@ -282,12 +324,16 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
       prevSz = _vectorPtr->size();
     }
     if (isObject) {
-      RUNTIME_EX_ASSERT((mitr = jsonObj.FindMember("data")) != jsonObj.MemberEnd() && mitr->value.IsString(),
-                        "JSON parse error - scale data reference must have a \"data\" string property.");
+      RUNTIME_EX_ASSERT(
+          (mitr = jsonObj.FindMember("data")) != jsonObj.MemberEnd() && mitr->value.IsString(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              ctx->getUserWidgetIds(), jsonObj, "scale data reference must have a \"data\" string property."));
       tablePtr = ctx->getDataTable(mitr->value.GetString());
 
-      RUNTIME_EX_ASSERT((mitr = jsonObj.FindMember("field")) != jsonObj.MemberEnd() && mitr->value.IsString(),
-                        "JSON parse error - scale data reference must have a \"field\" string property.");
+      RUNTIME_EX_ASSERT(
+          (mitr = jsonObj.FindMember("field")) != jsonObj.MemberEnd() && mitr->value.IsString(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              ctx->getUserWidgetIds(), jsonObj, "scale data reference must have a \"field\" string property."));
 
       // Only supports hand-written data right now.
       // TODO(croot): Support query result vbo -- this is somewhat
@@ -295,7 +341,10 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
       // shaders/cuda to do min/max/other math stuff, and uniform buffers or
       // storage buffers to send the values as uniforms
       RUNTIME_EX_ASSERT(tablePtr->getType() == QueryDataTableType::EMBEDDED,
-                        "JSON parse error - scale data references only support JSON-embedded data tables currently.");
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            ctx->getUserWidgetIds(),
+                            jsonObj,
+                            "scale data references only support JSON-embedded data tables currently."));
 
       DataTable* dataTablePtr = dynamic_cast<DataTable*>(tablePtr.get());
 
@@ -320,9 +369,12 @@ void ScaleDomainRangeData<T>::initializeFromJSONObj(const rapidjson::Value& obj,
         // only strings are currently allowed in the domains
         itemType = getDataTypeFromJSONObj(*vitr, supportStr);
 
-        RUNTIME_EX_ASSERT(itemType == dataType,
-                          "JSON parse error - scale " + _name + " item " + std::to_string(vitr - jsonObj.Begin()) +
-                              " has an invalid type.");
+        RUNTIME_EX_ASSERT(
+            itemType == dataType,
+            RapidJSONUtils::getJsonParseErrorStr(
+                ctx->getUserWidgetIds(),
+                jsonObj,
+                "scale " + _name + " item " + std::to_string(vitr - jsonObj.Begin()) + " has an invalid type."));
 
         // _pushItem(*vitr);
         _setItem(idx, *vitr);
@@ -451,19 +503,22 @@ void ScaleDomainRangeData<T>::_setFromStringValue(const std::string& strVal, Bas
 
     (*_vectorPtr)[0] -= 1;
   } else {
-    THROW_RUNTIME_EX("JSON parse rror - string value for domain/range is invalid.");
+    THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr("string value \"" + strVal + "\" for scale type " +
+                                                          to_string(type) + " for domain/range is invalid."));
   }
 }
 
 template <>
 void ScaleDomainRangeData<ColorRGBA>::_setFromStringValue(const std::string& strVal, BaseScale::ScaleType type) {
-  THROW_RUNTIME_EX("JSON parse error - string value for color domain/range is invalid.");
+  THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr("string value \"" + strVal + "\" for scale type " +
+                                                        to_string(type) + " color domain/range is invalid."));
 }
 
 template <>
 void ScaleDomainRangeData<std::string>::_setFromStringValue(const std::string& strVal, BaseScale::ScaleType type) {
   THROW_RUNTIME_EX(
-      "JSON parse error - string value for string domain/range is invalid. It must be an array of strings.");
+      RapidJSONUtils::getJsonParseErrorStr("string value \"" + strVal + "\" for scale type " + to_string(type) +
+                                           " for string domain/range is invalid. It must be an array of strings."));
 }
 
 template <typename T>
@@ -481,8 +536,14 @@ void ScaleDomainRangeData<ColorRGBA>::_updateVectorDataByType(TDataColumn<ColorR
   if (type == BaseScale::ScaleType::LINEAR) {
     // TODO(croot): update ColorRGBA to be supported by the <,>,etc. operators
     // so that the getExtrema() call will work to get the min and max colors
-    THROW_RUNTIME_EX("JSON parse error - getting the extrema of colors in the domain/range is unsupported.");
+    THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+        "getting the extrema of colors in the domain/range is unsupported for scale type" + to_string(type) + "."));
   }
+}
+
+template <typename T>
+ScaleDomainRangeData<T>::operator std::string() const {
+  return "ScaleDomainRangeData<T>(name: " + _name + ")";
 }
 
 template <typename DomainType, typename RangeType>
@@ -517,8 +578,11 @@ void Scale<DomainType, RangeType>::_setDefaultFromJSONObj(const rapidjson::Value
     if ((mitr = obj.FindMember(defaultStr.c_str())) != obj.MemberEnd()) {
       QueryDataType itemType = getDataTypeFromJSONObj(mitr->value);
 
-      RUNTIME_EX_ASSERT(itemType == _rangePtr.dataType,
-                        "JSON parse error - scale \"" + _name + "\" default is not the same type as its range.");
+      RUNTIME_EX_ASSERT(
+          itemType == _rangePtr.dataType,
+          RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                               mitr->value,
+                                               "scale \"" + _name + "\" default is not the same type as its range."));
 
       _defaultVal = _rangePtr.getDataValueFromJSONObj(mitr->value);
     } else {
@@ -574,7 +638,7 @@ std::string Scale<DomainType, RangeType>::getGLSLCode(const std::string& extraSu
                                                       bool ignoreDomain,
                                                       bool ignoreRange) {
   RUNTIME_EX_ASSERT(_domainPtr.size() > 0 && _rangePtr.size() > 0,
-                    "Scale::getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
+                    std::string(*this) + " getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
 
   std::string shaderCode = scaleVertexShaderSource[static_cast<int>(_type)];
   std::ostringstream ss;
@@ -625,12 +689,19 @@ void Scale<DomainType, RangeType>::bindUniformsToRenderer(GLShader* activeShader
   }
 }
 
+template <typename DomainType, typename RangeType>
+Scale<DomainType, RangeType>::operator std::string() const {
+  return "Scale<" + std::string(typeid(DomainType).name()) + ", " + std::string(typeid(RangeType).name()) + ">" +
+         _printInfo();
+}
+
 std::string getScaleNameFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - scale items must be JSON objects.");
+  RUNTIME_EX_ASSERT(obj.IsObject(), RapidJSONUtils::getJsonParseErrorStr(obj, "scale items must be JSON objects."));
 
   rapidjson::Value::ConstMemberIterator itr;
-  RUNTIME_EX_ASSERT((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString(),
-                    "JSON parse error - scale objects must contain a \"name\" string property.");
+  RUNTIME_EX_ASSERT(
+      (itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString(),
+      RapidJSONUtils::getJsonParseErrorStr(obj, "scale objects must contain a \"name\" string property."));
 
   return itr->value.GetString();
 }
@@ -639,11 +710,13 @@ BaseScale::ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj) {
   // TODO(croot): expose default as a static attr.
   BaseScale::ScaleType rtn = BaseScale::ScaleType::LINEAR;
 
-  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - scale items must be JSON objects.");
+  RUNTIME_EX_ASSERT(obj.IsObject(), RapidJSONUtils::getJsonParseErrorStr(obj, "scale items must be JSON objects."));
 
   rapidjson::Value::ConstMemberIterator itr;
   if ((itr = obj.FindMember("type")) != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(itr->value.IsString(), "JSON parse error - \"type\" property in scale objects must be a string.");
+    RUNTIME_EX_ASSERT(
+        itr->value.IsString(),
+        RapidJSONUtils::getJsonParseErrorStr(itr->value, "\"type\" property in scale objects must be a string."));
     std::string strScaleType(itr->value.GetString());
 
     if (strScaleType == "linear") {
@@ -651,7 +724,8 @@ BaseScale::ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj) {
     } else if (strScaleType == "ordinal") {
       rtn = BaseScale::ScaleType::ORDINAL;
     } else {
-      THROW_RUNTIME_EX("JSON parse error - scale type \"" + strScaleType + "\" is not a supported type.");
+      THROW_RUNTIME_EX(
+          RapidJSONUtils::getJsonParseErrorStr(obj, "scale type \"" + strScaleType + "\" is not a supported type."));
     }
   }
 
@@ -665,7 +739,8 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, con
   // TODO(croot): expose "domain" as a const somewhere.
   RUNTIME_EX_ASSERT((itr = obj.FindMember("domain")) != obj.MemberEnd() &&
                         ((isObject = itr->value.IsObject()) || (itr->value.IsArray() && itr->value.Size())),
-                    "JSON parse error - \"domain\" property for scales must exist and must be an object or an array.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        obj, "\"domain\" property for scales must exist and must be an object or an array."));
 
   QueryDataType domainType;
 
@@ -691,17 +766,19 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, cons
   RUNTIME_EX_ASSERT((itr = obj.FindMember("range")) != obj.MemberEnd() &&
                         ((isObject = itr->value.IsObject()) || (isString = itr->value.IsString()) ||
                          (itr->value.IsArray() && itr->value.Size())),
-                    "JSON parse error - \"range\" property for scales must exist and must be an object or a string.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        obj, "\"range\" property for scales must exist and must be an object or a string."));
 
   QueryDataType rangeType;
   if (isObject) {
     rangeType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
   } else if (isString) {
     std::string strVal = itr->value.GetString();
-    RUNTIME_EX_ASSERT(
-        strVal == "width" || strVal == "height",
-        "JSON parse error - invalid \"range\" string property for scales. Only string values supported are "
-        "\"width\" and \"height\"");
+    RUNTIME_EX_ASSERT(strVal == "width" || strVal == "height",
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          itr->value,
+                          "invalid \"range\" string property for scales. Only string values supported are "
+                          "\"width\" and \"height\""));
 
     // TODO(croot): should we actually use width/height values in the scale?
     // The easy way is just to use the -1 to 1 NDC range, but what
@@ -726,7 +803,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     scaleName = getScaleNameFromJSONObj(obj);
   }
 
-  RUNTIME_EX_ASSERT(scaleName.length() > 0, "JSON parse error - Scales must have a \"name\" property");
+  RUNTIME_EX_ASSERT(scaleName.length() > 0,
+                    RapidJSONUtils::getJsonParseErrorStr(obj, "Scales must have a \"name\" property"));
 
   BaseScale::ScaleType scaleType(type);
   if (scaleType == BaseScale::ScaleType::UNDEFINED) {
@@ -734,7 +812,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
   }
 
   RUNTIME_EX_ASSERT(scaleType != BaseScale::ScaleType::UNDEFINED,
-                    "JSON parse error - Scale type for \"" + scaleName + "\" is undefined.");
+                    RapidJSONUtils::getJsonParseErrorStr(obj, "Scale type for \"" + scaleName + "\" is undefined."));
 
   rapidjson::Value::ConstMemberIterator itr;
 
@@ -755,8 +833,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::COLOR:
           return ScaleShPtr(new Scale<unsigned int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
         default:
-          THROW_RUNTIME_EX("JSON parse error - range type is unsupported: " +
-                           std::to_string(static_cast<int>(rangeType)));
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
       }
     case QueryDataType::INT:
       switch (rangeType) {
@@ -771,8 +849,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::COLOR:
           return ScaleShPtr(new Scale<int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
         default:
-          THROW_RUNTIME_EX("JSON parse error - range type is unsupported: " +
-                           std::to_string(static_cast<int>(rangeType)));
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
       }
     case QueryDataType::FLOAT:
       switch (rangeType) {
@@ -787,8 +865,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::COLOR:
           return ScaleShPtr(new Scale<float, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
         default:
-          THROW_RUNTIME_EX("JSON parse error - range type is unsupported: " +
-                           std::to_string(static_cast<int>(rangeType)));
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
       }
     case QueryDataType::DOUBLE:
       switch (rangeType) {
@@ -803,8 +881,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::COLOR:
           return ScaleShPtr(new Scale<double, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
         default:
-          THROW_RUNTIME_EX("JSON parse error - range type is unsupported: " +
-                           std::to_string(static_cast<int>(rangeType)));
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
       }
     case QueryDataType::COLOR:
       switch (rangeType) {
@@ -819,8 +897,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::COLOR:
           return ScaleShPtr(new Scale<ColorRGBA, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
         default:
-          THROW_RUNTIME_EX("JSON parse error - range type is unsupported: " +
-                           std::to_string(static_cast<int>(rangeType)));
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
       }
     case QueryDataType::STRING:
       switch (rangeType) {
@@ -835,12 +913,24 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::COLOR:
           return ScaleShPtr(new Scale<std::string, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
         default:
-          THROW_RUNTIME_EX("JSON parse error - range type is unsupported: " +
-                           std::to_string(static_cast<int>(rangeType)));
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
       }
     default:
-      THROW_RUNTIME_EX("JSON parse error - domain type is unsupported.");
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "domain type is unsupported."));
   }
+}
+
+std::string BaseScaleRef::_printInfo() const {
+  std::string rtn = to_string(_ctx->getUserWidgetIds());
+  if (_scalePtr) {
+    rtn += ", scale reference: " + std::string(*_scalePtr);
+  }
+  if (_rndrPropPtr) {
+    rtn += ", render property: " + std::string(*_rndrPropPtr);
+  }
+
+  return rtn;
 }
 
 template <class T, class TT>
@@ -857,13 +947,15 @@ void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData, 
 template <class T>
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData,
                             ScaleDomainRangeData<ColorRGBA>* srcData) {
-  THROW_RUNTIME_EX("Cannot convert a color to a numeric value.");
+  THROW_RUNTIME_EX("Cannot convert a color (" + std::string(*srcData) + ") to a numeric value (" +
+                   std::string(*destData) + ").");
 }
 
 template <class TT>
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
                             ScaleDomainRangeData<TT>* srcData) {
-  THROW_RUNTIME_EX("Cannot convert a numeric value to a color.");
+  THROW_RUNTIME_EX("Cannot convert a numeric value (" + std::string(*srcData) + ") to a color (" +
+                   std::string(*destData) + ").");
 }
 
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
@@ -918,7 +1010,7 @@ void ScaleRef<DomainType, RangeType>::_updateDomainRange(bool updateDomain, bool
         _doStringToDataConversion(stringDomain);
         doSort = true;
       } else {
-        THROW_RUNTIME_EX("Cannot create scale reference - unsupported domain type.");
+        THROW_RUNTIME_EX(std::string(*this) + ": Cannot create scale reference - unsupported domain type.");
       }
     } else {
       _coercedDomainData = nullptr;
@@ -946,7 +1038,7 @@ void ScaleRef<DomainType, RangeType>::_updateDomainRange(bool updateDomain, bool
       } else if (force && colorDomain) {
         convertDomainRangeData(_coercedRangeData, colorDomain);
       } else {
-        THROW_RUNTIME_EX("Cannot create scale reference - unsupported range type.");
+        THROW_RUNTIME_EX(std::string(*this) + ": Cannot create scale reference - unsupported range type.");
       }
     } else {
       _coercedRangeData = nullptr;
@@ -1032,30 +1124,32 @@ template <typename DomainType, typename RangeType>
 void ScaleRef<DomainType, RangeType>::_doStringToDataConversion(ScaleDomainRangeData<std::string>* domainData) {
   const Executor* const executor = _ctx->getExecutor();
 
-  RUNTIME_EX_ASSERT(executor != nullptr, "An executor is not defined. Cannot numerically convert a string column.");
+  RUNTIME_EX_ASSERT(executor != nullptr,
+                    std::string(*this) + ": An executor is not defined. Cannot numerically convert a string column.");
 
   const QueryDataTableVBOShPtr& dataTable = _rndrPropPtr->getDataTablePtr();
 
   RUNTIME_EX_ASSERT(dataTable != nullptr,
-                    "A data table is not referenced by render property \"" + _rndrPropPtr->getName() +
-                        "\". Cannot numerically convert a string column.");
+                    std::string(*this) + ": A data table is not referenced by render property \"" +
+                        _rndrPropPtr->getName() + "\". Cannot numerically convert a string column.");
 
   SqlQueryDataTable* sqlDataTable = dynamic_cast<SqlQueryDataTable*>(dataTable.get());
 
   RUNTIME_EX_ASSERT(sqlDataTable != nullptr,
-                    "The data table referenced by render property \"" + _rndrPropPtr->getName() +
+                    std::string(*this) + ": The data table referenced by render property \"" + _rndrPropPtr->getName() +
                         "\" is not an sql data table. Cannot numerically convert a string column");
 
   std::string tableName = sqlDataTable->getTableName();
   RUNTIME_EX_ASSERT(tableName.length() != 0,
-                    "The sql data table referenced by render property \"" + _rndrPropPtr->getName() +
+                    std::string(*this) + "The sql data table referenced by render property \"" +
+                        _rndrPropPtr->getName() +
                         "\" is not properly initialized. It is missing a \"dbTableName\" property. Cannot numerically "
                         "convert a string column");
 
   std::string colName = _rndrPropPtr->getDataColumnName();
   RUNTIME_EX_ASSERT(
       colName.length() != 0,
-      "The render property \"" + _rndrPropPtr->getName() +
+      std::string(*this) + ": The render property \"" + _rndrPropPtr->getName() +
           "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
 
   const QueryDataLayoutShPtr& queryDataLayoutPtr = _ctx->getQueryDataLayout();
@@ -1116,6 +1210,12 @@ void ScaleRef<DomainType, RangeType>::_sort() {
   }
 }
 
+template <typename DomainType, typename RangeType>
+ScaleRef<DomainType, RangeType>::operator std::string() const {
+  return "ScaleRef<" + std::string(typeid(DomainType).name()) + ", " + std::string(typeid(RangeType).name()) + "> " +
+         _printInfo();
+}
+
 void setRenderPropertyTypeInShaderSrc(const BaseRenderProperty& prop, std::string& shaderSrc) {
   std::ostringstream in_ss, out_ss;
 
@@ -1160,8 +1260,13 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 
       if (!_ctx->isJSONCacheUpToDate(_fieldJsonPath, mitr->value)) {
         RUNTIME_EX_ASSERT(dataPtr != nullptr,
-                          "JSON parse error - a data reference for the mark is not defined. Cannot access \"field\".");
-        RUNTIME_EX_ASSERT(mitr->value.IsString(), "JSON parse error - \"field\" property for mark must be a string.");
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              _ctx->getUserWidgetIds(),
+                              obj,
+                              "a data reference for the mark is not defined. Cannot access \"field\"."));
+        RUNTIME_EX_ASSERT(mitr->value.IsString(),
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              _ctx->getUserWidgetIds(), obj, "\"field\" property for mark must be a string."));
 
         // TODO(croot): need to update references when a data
         // ptr has changed, but the scale reference hasn't
@@ -1182,16 +1287,20 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       _valueJsonPath = objPath.Append(valueProp.c_str(), valueProp.length());
     } else {
       // need some value source, either by "field" or by "value"
-      THROW_RUNTIME_EX(
-          "JSON parse error - invalid mark property object. Must contain a data reference via a \"field\" property "
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(),
+          obj,
+          "invalid mark property object. Must contain a data reference via a \"field\" property "
           "or "
-          "a \"value\" property.");
+          "a \"value\" property."));
     }
 
     if ((mitr = obj.FindMember(scaleProp.c_str())) != obj.MemberEnd()) {
       if (!_ctx->isJSONCacheUpToDate(_scaleJsonPath, mitr->value)) {
-        RUNTIME_EX_ASSERT(_useScale,
-                          "JSON parse error - render property \"" + _name + "\" does not support scale references.");
+        RUNTIME_EX_ASSERT(
+            _useScale,
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), obj, "render property \"" + _name + "\" does not support scale references."));
 
         _initScaleFromJSONObj(mitr->value);
         _verifyScale();
@@ -1239,9 +1348,9 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 }
 
 void BaseRenderProperty::initializeFromData(const std::string& columnName, const QueryDataTableVBOShPtr& dataPtr) {
-  RUNTIME_EX_ASSERT(
-      dataPtr != nullptr,
-      "Cannot initialize mark property " + _name + " from data. A valid data reference hasn't been initialized.");
+  RUNTIME_EX_ASSERT(dataPtr != nullptr,
+                    std::string(*this) + ": Cannot initialize mark property " + _name +
+                        " from data. A valid data reference hasn't been initialized.");
 
   _dataPtr = dataPtr;
   _vboAttrName = columnName;
@@ -1254,14 +1363,55 @@ void BaseRenderProperty::initializeFromData(const std::string& columnName, const
   _initTypeFromVbo();
 }
 
+int BaseRenderProperty::size(const GpuId& gpuId) const {
+  auto itr = _perGpuData.find(gpuId);
+  if (itr != _perGpuData.end()) {
+    return itr->second.vbo->numItems();
+  }
+  return 0;
+}
+
+bool BaseRenderProperty::hasVboPtr() {
+  for (auto& itr : _perGpuData) {
+    if (itr.second.vbo != nullptr) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool BaseRenderProperty::hasVboPtr(const GpuId& gpuId) {
+  auto itr = _perGpuData.find(gpuId);
+
+  return (itr != _perGpuData.end() && itr->second.vbo != nullptr);
+}
+
+QueryVertexBufferShPtr BaseRenderProperty::getVboPtr(const GpuId& gpuId) const {
+  auto itr = _perGpuData.find(gpuId);
+  if (itr != _perGpuData.end()) {
+    return itr->second.vbo;
+  }
+
+  return nullptr;
+}
+
+QueryVertexBufferShPtr BaseRenderProperty::getVboPtr() const {
+  auto itr = _perGpuData.begin();
+  if (itr != _perGpuData.end()) {
+    return itr->second.vbo;
+  }
+
+  return nullptr;
+}
+
 std::string BaseRenderProperty::getInGLSLType() const {
   RUNTIME_EX_ASSERT(_inType != nullptr,
-                    "BaseRenderProperty::getInGLSLType(): input type for \"" + _name + "\" is uninitialized.");
+                    std::string(*this) + " getInGLSLType(): input type for \"" + _name + "\" is uninitialized.");
 
   if (_scaleConfigPtr != nullptr) {
     std::string glslType = _scaleConfigPtr->getDomainTypeGL()->glslType();
     RUNTIME_EX_ASSERT(glslType == _inType->glslType(),
-                      "BaseRenderProperty::getInGLSLType(): the domain type for scale \"" +
+                      std::string(*this) + " getInGLSLType(): the domain type for scale \"" +
                           _scaleConfigPtr->getNameRef() + "\" does not match the type for mark property \"" + _name +
                           "\"");
     return glslType;
@@ -1277,9 +1427,50 @@ std::string BaseRenderProperty::getOutGLSLType() const {
 
   RUNTIME_EX_ASSERT(
       _outType != nullptr,
-      "BaseRenderProperty::getOutGLSLType(): output type for mark property \"" + _name + "\" is uninitialized.");
+      std::string(*this) + " getOutGLSLType(): output type for mark property \"" + _name + "\" is uninitialized.");
 
   return (_outType->glslType());
+}
+
+void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,
+                                         ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const {
+  auto itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(itr->second.vbo != nullptr,
+                    std::string(*this) +
+                        " addToVboAttrMap(): A vertex buffer is not defined. Cannot add vbo attrs to "
+                        "vbo->shader attr map.");
+
+  ::Rendering::GL::Resources::GLVertexBufferShPtr glVbo = itr->second.vbo->getGLVertexBufferPtr();
+  auto attrMapItr = attrMap.find(glVbo);
+  if (attrMapItr == attrMap.end()) {
+    attrMap.insert({glVbo, {{_vboAttrName, _name}}});
+  } else {
+    attrMapItr->second.push_back({_vboAttrName, _name});
+  }
+}
+
+void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
+                                          const std::unordered_set<GpuId> unusedGpus,
+                                          bool initializing) {
+  const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+  for (auto& itr : qrcPerGpuData) {
+    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+      PerGpuData gpuData(itr.second);
+      if (!initializing && _dataPtr) {
+        gpuData.vbo = _dataPtr->getColumnDataVBO(itr.first, _vboAttrName);
+      }
+      _perGpuData.emplace(itr.first, std::move(gpuData));
+    }
+  }
+
+  for (auto gpuId : unusedGpus) {
+    _perGpuData.erase(gpuId);
+  }
+}
+
+std::string BaseRenderProperty::_printInfo() const {
+  return "(name: " + _name + ", vbo attr name: " + _vboAttrName + ") " + to_string(_ctx->getUserWidgetIds());
 }
 
 template <typename T, int numComponents>
@@ -1313,21 +1504,28 @@ RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
 
 template <typename T, int numComponents>
 void RenderProperty<T, numComponents>::_initScaleFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsString(),
-                    "JSON parse error - scale reference for mark property \"" + _name + "\" must be a string.");
+  RUNTIME_EX_ASSERT(
+      obj.IsString(),
+      RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(), obj, "scale reference for mark property \"" + _name + "\" must be a string."));
 
   RUNTIME_EX_ASSERT(_ctx != nullptr && _scaleConfigPtr == nullptr,
-                    "JSON parse error - cannot initialize mark property \"" + _name +
-                        "\" from a scale. The context is uninitialized or a scale is already being referenced.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(),
+                        obj,
+                        "cannot initialize mark property \"" + _name +
+                            "\" from a scale. The context is uninitialized or a scale is already being referenced."));
 
   // TODO(croot): We probably need a better way to deal with types. We've got an _inType that is either defined
   // by an incoming data reference or an explicit value (or set of values). The latter is easy. We already
   // have the type in T/numComponents of the template. But the data reference is trickier.
 
   ScaleShPtr scalePtr = _ctx->getScale(obj.GetString());
-  RUNTIME_EX_ASSERT(
-      scalePtr != nullptr,
-      "JSON parse error - the scale \"" + std::string(obj.GetString()) + "\" does not exist in the json.");
+  RUNTIME_EX_ASSERT(scalePtr != nullptr,
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(),
+                        obj,
+                        "the scale \"" + std::string(obj.GetString()) + "\" does not exist in the json."));
 
   _updateScalePtr(scalePtr);
 }
@@ -1353,8 +1551,9 @@ void RenderProperty<T, numComponents>::_updateScalePtr(const ScaleShPtr& scalePt
   } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
     _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
   } else {
-    THROW_RUNTIME_EX("Scale domain with shader type \"" + scalePtr->getDomainTypeGL()->glslType() +
-                     "\" and data with shader type \"" + _inType->glslType() + "\" are not supported to work together");
+    THROW_RUNTIME_EX(std::string(*this) + ": Scale domain with shader type \"" +
+                     scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" + _inType->glslType() +
+                     "\" are not supported to work together");
   }
 
   // setup callbacks for scale updates
@@ -1457,7 +1656,9 @@ void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj)
 
 template <>
 void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsString(), "JSON parse error - value for color property \"" + _name + "\" must be a string.");
+  RUNTIME_EX_ASSERT(obj.IsString(),
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(), obj, "value for color property \"" + _name + "\" must be a string."));
 
   ColorRGBA color(obj.GetString());
 
@@ -1469,7 +1670,9 @@ void RenderProperty<T, numComponents>::_initTypeFromVbo() {
   auto itr = _perGpuData.begin();
 
   RUNTIME_EX_ASSERT((itr != _perGpuData.end() && itr->second.vbo != nullptr),
-                    "Vertex buffer is uninitialized. Cannot initialize type for mark property \"" + _name + "\".");
+                    std::string(*this) +
+                        ": Vertex buffer is uninitialized. Cannot initialize type for mark property \"" + _name +
+                        "\".");
 
   TypeGLShPtr vboType = itr->second.vbo->getAttributeTypeGL(_vboAttrName);
 
@@ -1481,7 +1684,9 @@ void RenderProperty<T, numComponents>::_initTypeFromVbo() {
     // different types. So verify that the type of the attribute
     // in the vbo is appropriate.
     RUNTIME_EX_ASSERT((*_outType) == (*vboType),
-                      "The vertex buffer type does not match the output type for mark property \"" + _name + "\".");
+                      std::string(*this) +
+                          ": The vertex buffer type does not match the output type for mark property \"" + _name +
+                          "\".");
   }
 }
 
@@ -1492,13 +1697,15 @@ void RenderProperty<T, numComponents>::_verifyScale() {
 template <>
 void RenderProperty<ColorRGBA, 1>::_verifyScale() {
   RUNTIME_EX_ASSERT(_scaleConfigPtr != nullptr,
-                    "Cannot verify scale for mark property \"" + _name + "\". Scale reference is uninitialized.");
+                    std::string(*this) + ": Cannot verify scale for mark property \"" + _name +
+                        "\". Scale reference is uninitialized.");
 
   TypeGLShPtr vboType = _scaleConfigPtr->getRangeTypeGL();
 
   // colors need to be a specific type
   RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(vboType),
-                    "Vertex buffer to use for mark property \"" + _name + "\" is not an appropriate type for colors.");
+                    std::string(*this) + ": Vertex buffer to use for mark property \"" + _name +
+                        "\" is not an appropriate type for colors.");
 }
 
 template <typename T, int numComponents>
@@ -1517,10 +1724,15 @@ void RenderProperty<T, numComponents>::_scaleRefUpdateCB(RefEventType refEventTy
     case RefEventType::REMOVE:
       break;
     default:
-      THROW_RUNTIME_EX("Ref event type: " + std::to_string(static_cast<int>(refEventType)) +
+      THROW_RUNTIME_EX(std::string(*this) + ": Ref event type: " + std::to_string(static_cast<int>(refEventType)) +
                        " isn't currently supported for scale reference updates.");
       break;
   }
+}
+
+template <typename T, int numComponents>
+RenderProperty<T, numComponents>::operator std::string() const {
+  return "RenderProperty<" + std::string(typeid(T).name()) + ", " + std::to_string(numComponents) + "> " + _printInfo();
 }
 
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
@@ -1549,7 +1761,9 @@ BaseMark::~BaseMark() {
 }
 
 void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - definition for marks must be an object.");
+  RUNTIME_EX_ASSERT(
+      obj.IsObject(),
+      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "definition for marks must be an object."));
 
   rapidjson::Value::ConstMemberIterator mitr;
 
@@ -1559,10 +1773,14 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Po
     const rapidjson::Value& fromObj = mitr->value;
 
     if (!_ctx->isJSONCacheUpToDate(_dataPtrJsonPath, fromObj)) {
-      RUNTIME_EX_ASSERT(fromObj.IsObject(), "JSON parse error - mark data reference must be an object.");
+      RUNTIME_EX_ASSERT(fromObj.IsObject(),
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(), fromObj, "mark data reference must be an object."));
 
-      RUNTIME_EX_ASSERT((mitr = fromObj.FindMember("data")) != fromObj.MemberEnd() && mitr->value.IsString(),
-                        "JSON parse error - mark data reference must contain a \"data\" string property.");
+      RUNTIME_EX_ASSERT(
+          (mitr = fromObj.FindMember("data")) != fromObj.MemberEnd() && mitr->value.IsString(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(), fromObj, "mark data reference must contain a \"data\" string property."));
 
       _dataPtr = _ctx->getDataTable(mitr->value.GetString());
     }
@@ -1620,6 +1838,83 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
   _propsDirty = false;
 }
 
+void BaseMark::_initGpuResources(const QueryRendererContext* ctx,
+                                 const std::unordered_set<GpuId> unusedGpus,
+                                 bool initializing) {
+  const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+
+  ::Rendering::GL::GLRenderer* renderer;
+  ::Rendering::GL::GLResourceManagerShPtr rsrcMgr;
+  int numGpus = _perGpuData.size();
+  bool update = (numGpus > 0 && _perGpuData.begin()->second.shaderPtr);
+  bool createdNewGpuRsrc = false;
+  for (auto& itr : qrcPerGpuData) {
+    auto perGpuItr = _perGpuData.find(itr.first);
+    if (perGpuItr == _perGpuData.end()) {
+      PerGpuData gpuData(itr.second);
+      if (update) {
+        auto beginItr = _perGpuData.begin();
+        CHECK(beginItr != _perGpuData.end() && beginItr->second.shaderPtr);
+
+        beginItr->second.makeActiveOnCurrentThread();
+        std::string vertSrc = beginItr->second.shaderPtr->getVertexSource();
+        std::string fragSrc = beginItr->second.shaderPtr->getFragmentSource();
+
+        itr.second.makeActiveOnCurrentThread();
+        renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
+        CHECK(renderer);
+
+        rsrcMgr = renderer->getResourceManager();
+
+        // TODO(croot): make resource copy constructors which appropriately
+        // deal with different contexts, including contexts on different gpus
+        gpuData.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+
+        // NOTE: we need to create the VAO after the properties have
+        // been updated.
+        createdNewGpuRsrc = true;
+      }
+      _perGpuData.emplace(itr.first, std::move(gpuData));
+    }
+  }
+
+  for (auto gpuId : unusedGpus) {
+    _perGpuData.erase(gpuId);
+  }
+
+  if (numGpus && _perGpuData.size() == 0) {
+    // TODO(croot): make a makeAllDirty() function
+    setShaderDirty();
+    setPropsDirty();
+  }
+
+  key.initGpuResources(ctx, unusedGpus, initializing);
+
+  if (!initializing) {
+    _updateRenderPropertyGpuResources(ctx, unusedGpus);
+  }
+
+  if (createdNewGpuRsrc) {
+    for (auto& itr : _perGpuData) {
+      if (!itr.second.vaoPtr) {
+        itr.second.makeActiveOnCurrentThread();
+        renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
+        CHECK(renderer);
+
+        rsrcMgr = renderer->getResourceManager();
+
+        CHECK(itr.second.shaderPtr);
+        renderer->bindShader(itr.second.shaderPtr);
+
+        ::Rendering::GL::Resources::VboAttrToShaderAttrMap attrMap;
+        _addPropertiesToAttrMap(itr.first, attrMap);
+
+        itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
+      }
+    }
+  }
+}
+
 PointMark::PointMark(const rapidjson::Value& obj,
                      const rapidjson::Pointer& objPath,
                      const QueryRendererContextShPtr& ctx)
@@ -1648,7 +1943,8 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
   rapidjson::Value::ConstMemberIterator mitr;
 
   RUNTIME_EX_ASSERT((mitr = obj.FindMember(propertiesProp.c_str())) != obj.MemberEnd(),
-                    "JSON parse error - mark objects must have a \"properties\" property.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(), obj, "mark objects must have a \"properties\" property."));
 
   const rapidjson::Value& propObj = mitr->value;
 
@@ -1657,19 +1953,25 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
 
-    RUNTIME_EX_ASSERT(propObj.IsObject(),
-                      "JSON parse error - The \"properties\" property of marks must be a json object.");
+    RUNTIME_EX_ASSERT(
+        propObj.IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), propObj, "The \"properties\" property of marks must be a json object."));
 
     // TODO(croot): move "x" to a const somewhere
     std::string xProp = "x";
-    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(xProp.c_str())) != propObj.MemberEnd(),
-                      "JSON parse error - \"" + xProp + "\" mark property must exist for point marks.");
+    RUNTIME_EX_ASSERT(
+        (mitr = propObj.FindMember(xProp.c_str())) != propObj.MemberEnd(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), propObj, "\"" + xProp + "\" mark property must exist for point marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_xJsonPath, mitr->value)) {
       _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
-      RUNTIME_EX_ASSERT(
-          (mitr->value.IsObject() || mitr->value.IsNumber()),
-          "JSON parse error - \"" + xProp + "\" mark property must be a scale/data reference or a number.");
+      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(),
+                            mitr->value,
+                            "\"" + xProp + "\" mark property must be a scale/data reference or a number."));
       x.initializeFromJSONObj(mitr->value, _xJsonPath, _dataPtr);
     } else {
       _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
@@ -1677,14 +1979,18 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     // TODO(croot): move "y" to a const somewhere
     std::string yProp = "y";
-    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(yProp.c_str())) != propObj.MemberEnd(),
-                      "JSON parse error - \"" + yProp + "\" mark property must exist for point marks.");
+    RUNTIME_EX_ASSERT(
+        (mitr = propObj.FindMember(yProp.c_str())) != propObj.MemberEnd(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), propObj, "\"" + yProp + "\" mark property must exist for point marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_yJsonPath, mitr->value)) {
       _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
-      RUNTIME_EX_ASSERT(
-          (mitr->value.IsObject() || mitr->value.IsNumber()),
-          "JSON parse error - \"" + yProp + "\" mark property must be a scale/data reference or a number.");
+      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(),
+                            mitr->value,
+                            "\"" + yProp + "\" mark property must be a scale/data reference or a number."));
       y.initializeFromJSONObj(mitr->value, _yJsonPath, _dataPtr);
     } else {
       _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
@@ -1695,9 +2001,11 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
     if ((mitr = propObj.FindMember(zProp.c_str())) != propObj.MemberEnd()) {
       if (!_ctx->isJSONCacheUpToDate(_zJsonPath, mitr->value)) {
         _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
-        RUNTIME_EX_ASSERT(
-            (mitr->value.IsObject() || mitr->value.IsNumber()),
-            "JSON parse error - \"" + zProp + "\" mark property must be a scale/data reference or a number.");
+        RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              _ctx->getUserWidgetIds(),
+                              mitr->value,
+                              "\"" + zProp + "\" mark property must be a scale/data reference or a number."));
         z.initializeFromJSONObj(mitr->value, _zJsonPath, _dataPtr);
       } else {
         _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
@@ -1711,14 +2019,18 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     // TODO(croot): move "size" to a const somewhere
     std::string sizeProp = "size";
-    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(sizeProp.c_str())) != propObj.MemberEnd(),
-                      "JSON parse error - \"" + sizeProp + "\" mark property must exist for point marks.");
+    RUNTIME_EX_ASSERT(
+        (mitr = propObj.FindMember(sizeProp.c_str())) != propObj.MemberEnd(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), propObj, "\"" + sizeProp + "\" mark property must exist for point marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_sizeJsonPath, mitr->value)) {
       _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
-      RUNTIME_EX_ASSERT(
-          (mitr->value.IsObject() || mitr->value.IsNumber()),
-          "JSON parse error - \"" + sizeProp + "\" mark property must be a scale/data reference or a number.");
+      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(),
+                            mitr->value,
+                            "\"" + sizeProp + "\" mark property must be a scale/data reference or a number."));
       size.initializeFromJSONObj(mitr->value, _sizeJsonPath, _dataPtr);
     } else {
       _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
@@ -1726,14 +2038,18 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     // TODO(croot): move "fillColor" to a const somewhere
     std::string fillColorProp = "fillColor";
-    RUNTIME_EX_ASSERT((mitr = propObj.FindMember(fillColorProp.c_str())) != propObj.MemberEnd(),
-                      "JSON parse error - \"" + fillColorProp + "\" mark property must exist for point marks.");
+    RUNTIME_EX_ASSERT(
+        (mitr = propObj.FindMember(fillColorProp.c_str())) != propObj.MemberEnd(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), propObj, "\"" + fillColorProp + "\" mark property must exist for point marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_fillColorJsonPath, mitr->value)) {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
-      RUNTIME_EX_ASSERT(
-          (mitr->value.IsObject() || mitr->value.IsString()),
-          "JSON parse error - \"" + fillColorProp + "\" mark property must be a scale/data reference or a string.");
+      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsString()),
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(),
+                            mitr->value,
+                            "\"" + fillColorProp + "\" mark property must be a scale/data reference or a string."));
       fillColor.initializeFromJSONObj(mitr->value, _fillColorJsonPath, _dataPtr);
     } else {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
@@ -1746,9 +2062,11 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
       if ((mitr = propObj.FindMember(idProp.c_str())) != propObj.MemberEnd()) {
         if (!_ctx->isJSONCacheUpToDate(_idJsonPath, mitr->value)) {
           _idJsonPath = _propertiesJsonPath.Append(idProp.c_str(), idProp.length());
-          RUNTIME_EX_ASSERT(
-              mitr->value.IsObject(),
-              "JSON parse error - \"id\" is a special mark property that must be defined by a data reference.");
+          RUNTIME_EX_ASSERT(mitr->value.IsObject(),
+                            RapidJSONUtils::getJsonParseErrorStr(
+                                _ctx->getUserWidgetIds(),
+                                mitr->value,
+                                "\"id\" is a special mark property that must be defined by a data reference."));
           id.initializeFromJSONObj(mitr->value, _idJsonPath, _dataPtr);
         } else {
           // update the json path, if it's been changed
@@ -1868,7 +2186,8 @@ void PointMark::_updateShader() {
       funcRange = getGLSLFunctionBounds(vertSrc, propFuncName);
 
       RUNTIME_EX_ASSERT(!funcRange.empty(),
-                        "Cannot find a properly defined \"" + propFuncName + "\" function in the vertex shader.");
+                        std::string(*this) + ": Cannot find a properly defined \"" + propFuncName +
+                            "\" function in the vertex shader.");
 
       std::string scaleCode = scalePtr->getGLSLCode("_" + prop->getName());
 
@@ -1931,13 +2250,17 @@ void PointMark::_updateShader() {
 void PointMark::_addPropertiesToAttrMap(const GpuId& gpuId, VboAttrToShaderAttrMap& attrMap) {
   int cnt = 0;
   int vboSize = 0;
+  int itrSize = 0;
   for (auto& itr : _vboProps) {
     cnt++;
+    itrSize = itr->size(gpuId);
     if (cnt == 1) {
-      vboSize = itr->size(gpuId);
+      vboSize = itrSize;
     } else {
-      RUNTIME_EX_ASSERT(itr->size(gpuId) == vboSize,
-                        "Invalid point mark. The sizes of the vertex buffer attributes do not match.");
+      RUNTIME_EX_ASSERT(itrSize == vboSize,
+                        std::string(*this) +
+                            ": Invalid point mark. The sizes of the vertex buffer attributes do not match for gpuId " +
+                            std::to_string(gpuId) + ". " + std::to_string(vboSize) + "!=" + std::to_string(itrSize));
     }
 
     itr->addToVboAttrMap(gpuId, attrMap);
@@ -2026,7 +2349,7 @@ bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::
     // NOTE: We should never get in here since marks
     // are stored as an array but if we ever change the storage container
     // in the future (i.e. an unordered_map or the like), we'd reach this
-    THROW_RUNTIME_EX("The cache for mark \"" + RapidJSONUtils::getPointerPath(objPath) +
+    THROW_RUNTIME_EX(std::string(*this) + ": The cache for mark \"" + RapidJSONUtils::getPointerPath(objPath) +
                      "\" is up-to-date, but the path in the JSON has changed from " +
                      RapidJSONUtils::getPointerPath(_jsonPath) + " to " + RapidJSONUtils::getPointerPath(objPath) +
                      ", so the path caches need updating. This "
@@ -2041,24 +2364,29 @@ bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::
   return rtn;
 }
 
+PointMark::operator std::string() const {
+  return "PointMark " + to_string(_ctx->getUserWidgetIds());
+}
+
 BaseMark::GeomType getMarkTypeFromJSONObj(const rapidjson::Value& obj) {
   rapidjson::Value::ConstMemberIterator itr;
   RUNTIME_EX_ASSERT((itr = obj.FindMember("type")) != obj.MemberEnd() && itr->value.IsString(),
-                    "JSON parse error - a mark object must have a \"type\" string property.");
+                    RapidJSONUtils::getJsonParseErrorStr(obj, "a mark object must have a \"type\" string property."));
 
   std::string strGeomType(itr->value.GetString());
 
   if (strGeomType == "points") {
     return BaseMark::GeomType::POINTS;
   } else {
-    THROW_RUNTIME_EX("JSON parse error - a mark of type \"" + strGeomType + "\" is unsupported.");
+    THROW_RUNTIME_EX(
+        RapidJSONUtils::getJsonParseErrorStr(obj, "a mark of type \"" + strGeomType + "\" is unsupported."));
   }
 }
 
 GeomConfigShPtr createMark(const rapidjson::Value& obj,
                            const rapidjson::Pointer& objPath,
                            const QueryRendererContextShPtr& ctx) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "JSON parse error - marks must be objects.");
+  RUNTIME_EX_ASSERT(obj.IsObject(), RapidJSONUtils::getJsonParseErrorStr(obj, "marks must be objects."));
 
   switch (getMarkTypeFromJSONObj(obj)) {
     case BaseMark::GeomType::POINTS:

@@ -117,16 +117,22 @@ class QueryRenderer {
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
-  explicit QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+  explicit QueryRenderer(int userId,
+                         int widgetId,
+                         const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                          bool doHitTest = false,
                          bool doDepthTest = false);
 
-  explicit QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+  explicit QueryRenderer(int userId,
+                         int widgetId,
+                         const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                          const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                          bool doHitTest = false,
                          bool doDepthTest = false);
 
-  explicit QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+  explicit QueryRenderer(int userId,
+                         int widgetId,
+                         const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                          const std::string& configJSON,
                          bool doHitTest = false,
                          bool doDepthTest = false);
@@ -221,13 +227,22 @@ class QueryRendererContext {
   typedef std::shared_ptr<BaseScale> ScaleShPtr;
   typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
 
-  explicit QueryRendererContext(bool doHitTest = false, bool doDepthTest = false);
-  explicit QueryRendererContext(int width, int height, bool doHitTest = false, bool doDepthTest = false);
+  explicit QueryRendererContext(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
+  explicit QueryRendererContext(int userId,
+                                int widgetId,
+                                int width,
+                                int height,
+                                bool doHitTest = false,
+                                bool doDepthTest = false);
 
   ~QueryRendererContext();
 
   size_t getWidth() { return _width; }
   size_t getHeight() { return _height; }
+
+  int getUserId() const { return _userWidget.userId; }
+  int getWidgetId() const { return _userWidget.widgetId; }
+  const UserWidgetIdPair& getUserWidgetIds() const { return _userWidget; }
 
   bool doHitTest() { return _doHitTest; }
   bool doDepthTest() { return _doDepthTest; }
@@ -297,6 +312,7 @@ class QueryRendererContext {
   PerGpuDataMap _perGpuData;
   ::Rendering::GL::Resources::GLBufferLayoutShPtr _queryResultBufferLayout;
 
+  UserWidgetIdPair _userWidget;
   size_t _width;
   size_t _height;
   bool _doHitTest;

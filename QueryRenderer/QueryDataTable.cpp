@@ -71,18 +71,67 @@ DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
     //   return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
     // }
   } else {
-    THROW_RUNTIME_EX("Cannot create data column for column \"" + columnName +
-                     "\". The JSON data for the column is not supported.");
+    THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+        rowItem,
+        "Cannot create data column for column \"" + columnName + "\". The JSON data for the column is not supported."));
   }
 }
 
 DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnName,
                                                      const rapidjson::Value& rowItem,
                                                      const rapidjson::Value& dataArray) {
-  RUNTIME_EX_ASSERT(rowItem.IsString(),
-                    "Cannot create color column \"" + columnName + "\". Colors must be defined as strings.");
+  RUNTIME_EX_ASSERT(
+      rowItem.IsString(),
+      RapidJSONUtils::getJsonParseErrorStr(
+          rowItem, "Cannot create color column \"" + columnName + "\". Colors must be defined as strings."));
 
   return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+}
+
+std::string BaseQueryDataTableVBO::_printInfo() const {
+  return to_string(_ctx->getUserWidgetIds());
+}
+
+void BaseQueryDataTableVBO::_initGpuResources(const QueryRendererContext* ctx,
+                                              const std::unordered_set<GpuId>& unusedGpus,
+                                              bool initializing) {
+  const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+
+  for (auto& itr : qrcPerGpuData) {
+    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+      PerGpuData gpuData(itr.second);
+
+      if (!initializing) {
+        switch (getType()) {
+          // case QueryDataTableType::EMBEDDED:
+          // case QueryDataTableType::URL:
+          //   break;
+          case QueryDataTableType::SQLQUERY:
+            gpuData.vbo = itr.second.getQRMGpuData()->queryResultBufferPtr;
+            break;
+          default:
+            THROW_RUNTIME_EX(std::string(*this) + ": Unsupported data table type for mult-gpu configuration: " +
+                             std::to_string(static_cast<int>(getType())));
+        }
+      }
+
+      _perGpuData.emplace(itr.first, std::move(gpuData));
+    }
+  }
+
+  for (auto gpuId : unusedGpus) {
+    _perGpuData.erase(gpuId);
+  }
+}
+
+void BaseQueryDataTableVBO::_initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap) {
+  CHECK(vboMap.size() == _perGpuData.size());
+
+  for (const auto& itr : vboMap) {
+    auto myItr = _perGpuData.find(itr.first);
+    CHECK(myItr != _perGpuData.end());
+    myItr->second.vbo = itr.second;
+  }
 }
 
 void SqlQueryDataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
@@ -95,6 +144,34 @@ void SqlQueryDataTable::updateFromJSONObj(const rapidjson::Value& obj, const rap
 
   // force an initialization
   _initFromJSONObj(obj, objPath, true);
+}
+
+bool SqlQueryDataTable::hasColumn(const std::string& columnName) {
+  // all vbos should have the same set of columns, so only need to check the first one.
+  auto itr = _perGpuData.begin();
+  CHECK(itr != _perGpuData.end());
+  return itr->second.vbo->hasAttribute(columnName);
+}
+
+QueryVertexBufferShPtr SqlQueryDataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
+  auto itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                    std::string(*this) + ": Cannot find column data VBO for gpu " + std::to_string(gpuId));
+
+  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
+                    std::string(*this) + " hasColumn(): column \"" + columnName + "\" does not exist.");
+  return itr->second.vbo;
+}
+
+std::map<GpuId, QueryVertexBufferShPtr> SqlQueryDataTable::getColumnDataVBOs(const std::string& columnName) {
+  std::map<GpuId, QueryVertexBufferShPtr> rtn;
+
+  for (auto& itr : _perGpuData) {
+    rtn.insert({itr.first, itr.second.vbo});
+  }
+
+  return rtn;
 }
 
 QueryDataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
@@ -115,9 +192,24 @@ QueryDataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
     case GLBufferAttrType::VEC4F:
       return QueryDataType::COLOR;
     default:
-      THROW_RUNTIME_EX("SqlQueryDataTable::getColumnType(): Vertex buffer attribute type: " +
+      THROW_RUNTIME_EX(std::string(*this) + " getColumnType(): Vertex buffer attribute type: " +
                        std::to_string(static_cast<int>(attrType)) + " is not a supported type.");
   }
+}
+
+int SqlQueryDataTable::numRows(const GpuId& gpuId) {
+  auto itr = _perGpuData.find(gpuId);
+
+  RUNTIME_EX_ASSERT(
+      itr != _perGpuData.end(),
+      std::string(*this) + ": Cannot find number of rows for column data VBO on gpu " + std::to_string(gpuId));
+
+  return itr->second.vbo->numItems();
+}
+
+SqlQueryDataTable::operator std::string() const {
+  return "SqlQueryDataTable(name: " + _name + ", sqlQuery: " + _sqlQueryStr + ", table name: " + _tableName + ") " +
+         _printInfo();
 }
 
 void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj,
@@ -125,8 +217,10 @@ void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj,
                                          bool forceUpdate) {
   rapidjson::Value::ConstMemberIterator itr;
   if (forceUpdate || !_sqlQueryStr.length()) {
-    RUNTIME_EX_ASSERT((itr = obj.FindMember("sql")) != obj.MemberEnd() && itr->value.IsString(),
-                      "SQL data object \"" + _name + "\" must contain an \"sql\" property and it must be a string");
+    RUNTIME_EX_ASSERT(
+        (itr = obj.FindMember("sql")) != obj.MemberEnd() && itr->value.IsString(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            obj, "SQL data object \"" + _name + "\" must contain an \"sql\" property and it must be a string"));
 
     _sqlQueryStr = itr->value.GetString();
   }
@@ -137,7 +231,8 @@ void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj,
   // but should it be required? Or can we somehow extract it from the sql?
   if ((forceUpdate || !_tableName.length()) && (itr = obj.FindMember("dbTableName")) != obj.MemberEnd()) {
     RUNTIME_EX_ASSERT(itr->value.IsString(),
-                      "SQL data object \"" + _name + "\" \"dbTableName\" property must be a string");
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          itr->value, "SQL data object \"" + _name + "\" \"dbTableName\" property must be a string"));
 
     _tableName = itr->value.GetString();
   }
@@ -214,13 +309,15 @@ void DataTable::_readFromCsvFile(const std::string& filename) {
 void DataTable::_readDataFromFile(const std::string& filename) {
   boost::filesystem::path p(filename);  // avoid repeated path construction below
 
-  RUNTIME_EX_ASSERT(boost::filesystem::exists(p), "File: " + filename + " does not exist.");
+  RUNTIME_EX_ASSERT(boost::filesystem::exists(p), std::string(*this) + ": File " + filename + " does not exist.");
 
   RUNTIME_EX_ASSERT(boost::filesystem::is_regular_file(p),
-                    "File: " + filename + " is not a regular file. Cannot read contents to build a data table.");
+                    std::string(*this) + ": File " + filename +
+                        " is not a regular file. Cannot read contents to build a data table.");
 
   RUNTIME_EX_ASSERT(p.has_extension(),
-                    "File: " + filename + " does not have an extension. Cannot read contents to build a data table.");
+                    std::string(*this) + ": File " + filename +
+                        " does not have an extension. Cannot read contents to build a data table.");
 
   std::string ext = p.extension().string();
   boost::to_lower(ext);
@@ -228,7 +325,8 @@ void DataTable::_readDataFromFile(const std::string& filename) {
   if (ext == ".csv") {
     _readFromCsvFile(filename);
   } else {
-    THROW_RUNTIME_EX("File: " + filename + " with extension \"" + ext + "\" is not a supported data file.");
+    THROW_RUNTIME_EX(std::string(*this) + ": File " + filename + " with extension \"" + ext +
+                     "\" is not a supported data file.");
   }
 }
 
@@ -236,30 +334,38 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
                                          const rapidjson::Pointer& objPath,
                                          bool buildIdColumn) {
   RUNTIME_EX_ASSERT(obj.IsObject(),
-                    "JSON data parse error - data must be an object. Cannot build data table from JSON.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(), obj, "data must be an object. Cannot build data table from JSON."));
 
   rapidjson::Value::ConstMemberIterator mitr1, mitr2;
 
   bool isObject;
 
   if ((mitr1 = obj.FindMember("values")) != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT((isObject = mitr1->value.IsObject()) || mitr1->value.IsArray(),
-                      "JSON data parse error - \"values\" property in the json must be an object or an array.");
+    RUNTIME_EX_ASSERT(
+        (isObject = mitr1->value.IsObject()) || mitr1->value.IsArray(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), obj, "\"values\" property in the json must be an object or an array."));
 
     if (isObject) {
       // in column format
       // TODO: fill out
-      THROW_RUNTIME_EX("JSON data parse error - column format not supported yet.");
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(), mitr1->value, "column format not supported yet."));
     } else {
       // in row format in an array
 
       // TODO(croot) - should we just log a warning if no data is supplied instead?
-      RUNTIME_EX_ASSERT(!mitr1->value.Empty(), "JSON data parse error - there is no data in defined.");
+      RUNTIME_EX_ASSERT(
+          !mitr1->value.Empty(),
+          RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), mitr1->value, "there is no data defined."));
 
       const rapidjson::Value& item = mitr1->value[0];
 
-      RUNTIME_EX_ASSERT(item.IsObject(),
-                        "JSON data parse error - every row of JSON data must be defined as an object.");
+      RUNTIME_EX_ASSERT(
+          item.IsObject(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(), mitr1->value, "every row of JSON data must be defined as an object."));
 
       for (mitr2 = item.MemberBegin(); mitr2 != item.MemberEnd(); ++mitr2) {
         // TODO: Support strings? bools? Anything else?
@@ -275,15 +381,20 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
       }
     }
   } else if ((mitr1 = obj.FindMember("url")) != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(mitr1->value.IsString(), "JSON data parse error - \"url\" property must be a string.");
+    RUNTIME_EX_ASSERT(
+        mitr1->value.IsString(),
+        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "\"url\" property must be a string."));
 
     _readDataFromFile(mitr1->value.GetString());
   } else {
-    THROW_RUNTIME_EX("JSON data parse error - JSON data object must contain either a \"values\" or \"url\" property.");
+    THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+        _ctx->getUserWidgetIds(), obj, "JSON data object must contain either a \"values\" or \"url\" property."));
   }
 
   // TODO(croot) - throw a warning instead if no data?
-  RUNTIME_EX_ASSERT(_columns.size(), "JSON data parse error - there are not columns in the data table.");
+  RUNTIME_EX_ASSERT(
+      _columns.size(),
+      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "there are no columns in the data table."));
   _numRows = (*_columns.begin())->size();
 
   if (buildIdColumn) {
@@ -302,7 +413,7 @@ QueryDataType DataTable::getColumnType(const std::string& columnName) {
 
   ColumnMap_by_name::iterator itr;
   RUNTIME_EX_ASSERT((itr = nameLookup.find(columnName)) != nameLookup.end(),
-                    "DataTable::getColumnType(): column \"" + columnName + "\" does not exist.");
+                    std::string(*this) + " getColumnType(): column \"" + columnName + "\" does not exist.");
 
   return (*itr)->getColumnType();
 }
@@ -312,7 +423,7 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
 
   ColumnMap_by_name::iterator itr;
   RUNTIME_EX_ASSERT((itr = nameLookup.find(columnName)) != nameLookup.end(),
-                    "DataTable::getColumn(): column \"" + columnName + "\" does not exist.");
+                    std::string(*this) + " getColumn(): column \"" + columnName + "\" does not exist.");
 
   return *itr;
 }
@@ -348,8 +459,8 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
             vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::VEC4F);
             break;
           default:
-            THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
-                             "\" is not supported. Cannot build vertex buffer.");
+            THROW_RUNTIME_EX(std::string(*this) + ": Column type for column \"" + (*itr)->columnName +
+                             "\" in data table \"" + _name + "\" is not supported. Cannot build vertex buffer.");
             break;
         }
 
@@ -411,8 +522,8 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
             vboLayout->addAttribute((*itr)->columnName, GLBufferAttrType::VEC4F);
             break;
           default:
-            THROW_RUNTIME_EX("Column type for column \"" + (*itr)->columnName + "\" in data table \"" + _name +
-                             "\" is not supported. Cannot build vertex buffer.");
+            THROW_RUNTIME_EX(std::string(*this) + ": Column type for column \"" + (*itr)->columnName +
+                             "\" in data table \"" + _name + "\" is not supported. Cannot build vertex buffer.");
             break;
         }
 
@@ -455,7 +566,8 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
 QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
   auto itr = _perGpuData.find(gpuId);
 
-  RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot get column data vbo for gpu " + std::to_string(gpuId));
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                    std::string(*this) + ": Cannot get column data vbo for gpu " + std::to_string(gpuId));
 
   QueryRenderManager::PerGpuDataShPtr qrmGpuData;
   if (itr->second.vbo == nullptr) {
@@ -471,7 +583,7 @@ QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std
   }
 
   RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
-                    "DataTable::getColumnVBO(): column \"" + columnName + "\" does not exist.");
+                    std::string(*this) + " getColumnVBO(): column \"" + columnName + "\" does not exist.");
 
   return itr->second.vbo;
 }
@@ -512,7 +624,12 @@ void DataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::
 
   _jsonPath = objPath;
 
-  THROW_RUNTIME_EX("Updating a JSON-embedded data table is not yet supported.");
+  THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+      _ctx->getUserWidgetIds(), obj, "Updating a JSON-embedded data table is not yet supported."));
+}
+
+DataTable::operator std::string() const {
+  return "DataTable(name: " + _name + ", num columns: " + std::to_string(_columns.size()) + ") " + _printInfo();
 }
 
 template <typename T>
@@ -525,6 +642,14 @@ TDataColumn<T>::TDataColumn(const std::string& name, const rapidjson::Value& dat
   }
 }
 
+template <typename T>
+void TDataColumn<T>::push_back(const std::string& val) {
+  // TODO(croot): this would throw a boost::bad_lexical_cast error
+  // if the conversion can't be done.. I may need to throw
+  // a MapD-compliant exception
+  _columnDataPtr->push_back(boost::lexical_cast<T>(val));
+}
+
 template <>
 void TDataColumn<ColorRGBA>::push_back(const std::string& val) {
   _columnDataPtr->push_back(ColorRGBA(val));
@@ -532,19 +657,23 @@ void TDataColumn<ColorRGBA>::push_back(const std::string& val) {
 
 template <typename T>
 void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(), "JSON data parse error: Row-major data object is not an array.");
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
+                    RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
 
   rapidjson::Value::ConstValueIterator vitr;
   rapidjson::Value::ConstMemberIterator mitr;
 
   for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    RUNTIME_EX_ASSERT(vitr->IsObject(),
-                      "JSON data parse error: Item " + std::to_string(vitr - dataArrayObj.Begin()) +
-                          "in data array must be an object for row-major-defined data.");
+    RUNTIME_EX_ASSERT(
+        vitr->IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
+                                             "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                                                 "in data array must be an object for row-major-defined data."));
     RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
-                      "JSON data parse error: column \"" + columnName +
-                          "\" does not exist in row-major-defined data item " +
-                          std::to_string(vitr - dataArrayObj.Begin()));
+                      RapidJSONUtils::getJsonParseErrorStr(*vitr,
+                                                           "column \"" + columnName +
+                                                               "\" does not exist in row-major-defined data item " +
+                                                               std::to_string(vitr - dataArrayObj.Begin())));
 
     _columnDataPtr->push_back(RapidJSONUtils::getNumValFromJSONObj<T>(mitr->value));
   }
@@ -552,7 +681,8 @@ void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayO
 
 template <>
 void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(), "JSON data parse error: Row-major data object is not an array.");
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
+                    RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
 
   rapidjson::Value::ConstValueIterator vitr;
   rapidjson::Value::ConstMemberIterator mitr;
@@ -560,13 +690,16 @@ void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& da
   ColorRGBA color;
 
   for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    RUNTIME_EX_ASSERT(vitr->IsObject(),
-                      "JSON data parse error: Item " + std::to_string(vitr - dataArrayObj.Begin()) +
-                          "in data array must be an object for row-major-defined data.");
+    RUNTIME_EX_ASSERT(
+        vitr->IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
+                                             "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                                                 "in data array must be an object for row-major-defined data."));
     RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
-                      "JSON data parse error: column \"" + columnName +
-                          "\" does not exist in row-major-defined data item " +
-                          std::to_string(vitr - dataArrayObj.Begin()));
+                      RapidJSONUtils::getJsonParseErrorStr(*vitr,
+                                                           "column \"" + columnName +
+                                                               "\" does not exist in row-major-defined data item " +
+                                                               std::to_string(vitr - dataArrayObj.Begin())));
 
     _columnDataPtr->push_back(color.initFromCSSString(mitr->value.GetString()));
   }

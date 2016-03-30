@@ -6,6 +6,7 @@
 #include <string>
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
+#include "Types.h"
 
 namespace QueryRenderer {
 
@@ -16,10 +17,19 @@ struct RapidJSONUtils {
 
   static std::string getObjAsString(const rapidjson::Value& obj);
 
+  static const std::string jsonErrorStrPrefix;
+  static std::string getJsonParseErrorStr(const std::string& errStr);
+  static std::string getJsonParseErrorStr(const rapidjson::Value& obj, const std::string& errStr);
+  static std::string getJsonParseErrorStr(const UserWidgetIdPair& userWidget, const std::string& errStr);
+  static std::string getJsonParseErrorStr(const UserWidgetIdPair& userWidget,
+                                          const rapidjson::Value& obj,
+                                          const std::string& errStr);
+
   template <typename T>
   static T getNumValFromJSONObj(const rapidjson::Value& obj) {
     RUNTIME_EX_ASSERT(obj.IsNumber(),
-                      "getNumValFromJSONObj(): rapidjson object is not a number. Cannot get a number value.");
+                      getJsonParseErrorStr(
+                          obj, "getNumValFromJSONObj(): rapidjson object is not a number. Cannot get a number value."));
 
     T rtn(0);
 

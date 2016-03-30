@@ -79,8 +79,9 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     startGpu = 0;  // if using all available gpus, we must start on gpu 0
   } else {
     RUNTIME_EX_ASSERT(startGpu < maxNumGpus,
-                      "Invalid start GPU: " + std::to_string(startGpu) + ". There is only " +
-                          std::to_string(maxNumGpus) + " GPU" + (maxNumGpus > 1 ? "s" : "") + " available.");
+                      "QueryRenderManager initialization - Invalid start GPU: " + std::to_string(startGpu) +
+                          ". There is only " + std::to_string(maxNumGpus) + " GPU" + (maxNumGpus > 1 ? "s" : "") +
+                          " available.");
     RUNTIME_EX_ASSERT(numGpus <= maxNumGpus,
                       "QueryRenderManager initialization is requesting the use of " + std::to_string(numGpus) + "GPU" +
                           (maxNumGpus > 1 ? "s" : "") + " but only " + std::to_string(maxNumGpus) +
@@ -241,7 +242,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
     lastRenderTimeList.erase(itr);
   }
 
-  _rendererMap.emplace(userId, widgetId, new QueryRenderer(_perGpuData, doHitTest, doDepthTest));
+  _rendererMap.emplace(userId, widgetId, new QueryRenderer(userId, widgetId, _perGpuData, doHitTest, doDepthTest));
 
   _unsetCurrentRenderer();
 }

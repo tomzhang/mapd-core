@@ -14,3 +14,24 @@ std::string QueryRenderer::RapidJSONUtils::getObjAsString(const rapidjson::Value
   obj.Accept(writer);
   return std::string(sb.GetString());
 }
+
+const std::string QueryRenderer::RapidJSONUtils::jsonErrorStrPrefix = "JSON parse error";
+std::string QueryRenderer::RapidJSONUtils::getJsonParseErrorStr(const std::string& errStr) {
+  return jsonErrorStrPrefix + ": " + errStr;
+}
+
+std::string QueryRenderer::RapidJSONUtils::getJsonParseErrorStr(const rapidjson::Value& obj,
+                                                                const std::string& errStr) {
+  return jsonErrorStrPrefix + " obj: " + getObjAsString(obj) + ": " + errStr;
+}
+
+std::string QueryRenderer::RapidJSONUtils::getJsonParseErrorStr(const UserWidgetIdPair& userWidget,
+                                                                const std::string& errStr) {
+  return jsonErrorStrPrefix + " " + to_string(userWidget) + ": " + errStr;
+}
+
+std::string QueryRenderer::RapidJSONUtils::getJsonParseErrorStr(const UserWidgetIdPair& userWidget,
+                                                                const rapidjson::Value& obj,
+                                                                const std::string& errStr) {
+  return jsonErrorStrPrefix + " " + to_string(userWidget) + " obj: " + getObjAsString(obj) + ": " + errStr;
+}

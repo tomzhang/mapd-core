@@ -4,7 +4,7 @@ find_package(PNG REQUIRED)
 find_package(Glog REQUIRED)
 find_package(CUDA REQUIRED)
 
-set(QUERY_RENDERER_SOURCES QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp QueryDataTable.cpp RapidJSONUtils.cpp QueryResultVertexBuffer.cpp QueryDataLayout.cpp QueryRenderCompositor.cpp QueryIdMapPboPool.cpp QueryIdMapPixelBuffer.cpp PngData.cpp Utilities.cpp)
+set(QUERY_RENDERER_SOURCES QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp QueryDataTable.cpp RapidJSONUtils.cpp QueryResultVertexBuffer.cpp QueryDataLayout.cpp QueryRenderCompositor.cpp QueryIdMapPboPool.cpp QueryIdMapPixelBuffer.cpp PngData.cpp Utilities.cpp Types.cpp)
 
 set(QUERY_RENDERER_LIBS ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARIES} ${CUDA_LIBRARIES} ${Glog_LIBRARIES})
 

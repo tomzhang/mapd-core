@@ -8,6 +8,14 @@ namespace QueryRenderer {
 typedef size_t GpuId;
 
 struct PngData;
+
+struct UserWidgetIdPair {
+  const int userId;
+  const int widgetId;
+
+  UserWidgetIdPair(int userId, int widgetId) : userId(userId), widgetId(widgetId) {}
+};
+
 class QueryRenderManager;
 
 struct QueryDataLayout;
@@ -45,6 +53,10 @@ typedef std::shared_ptr<BaseMark> MarkShPtr;
 class BaseScale;
 typedef std::shared_ptr<BaseScale> ScaleShPtr;
 
+std::string to_string(const UserWidgetIdPair& value);
+
 }  // namespace QueryRenderer
+
+std::ostream& operator<<(std::ostream& os, const QueryRenderer::UserWidgetIdPair& value);
 
 #endif  // QUERYRENDERER_TYPES_H_

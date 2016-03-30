@@ -6,10 +6,6 @@
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>
-// #include "QueryRendererError.h"
-// #include "VertexBuffer.h"
-// #include "TypeGL.h"
-// #include "Color.h"
 
 #include <boost/lexical_cast.hpp>
 #include <boost/multi_index_container.hpp>
@@ -18,9 +14,6 @@
 #include <boost/multi_index/member.hpp>
 
 #include <map>
-// #include <string>
-// #include <memory>
-// #include <algorithm>  // minmax_element
 
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
@@ -79,7 +72,11 @@ class BaseQueryDataTableVBO {
   std::string getName() { return _name; }
   QueryDataTableType getType() { return _type; }
 
+  virtual operator std::string() const = 0;
+
  protected:
+  std::string _printInfo() const;
+
   QueryRendererContextShPtr _ctx;
   std::string _name;
 
@@ -118,45 +115,9 @@ class BaseQueryDataTableVBO {
  private:
   void _initGpuResources(const QueryRendererContext* ctx,
                          const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
-                         bool initializing = true) {
-    const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+                         bool initializing = true);
 
-    for (auto& itr : qrcPerGpuData) {
-      if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-        PerGpuData gpuData(itr.second);
-
-        if (!initializing) {
-          switch (getType()) {
-            // case QueryDataTableType::EMBEDDED:
-            // case QueryDataTableType::URL:
-            //   break;
-            case QueryDataTableType::SQLQUERY:
-              gpuData.vbo = itr.second.getQRMGpuData()->queryResultBufferPtr;
-              break;
-            default:
-              THROW_RUNTIME_EX("Unsupported data table type for mult-gpu configuration: " +
-                               std::to_string(static_cast<int>(getType())));
-          }
-        }
-
-        _perGpuData.emplace(itr.first, std::move(gpuData));
-      }
-    }
-
-    for (auto gpuId : unusedGpus) {
-      _perGpuData.erase(gpuId);
-    }
-  }
-
-  void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap) {
-    CHECK(vboMap.size() == _perGpuData.size());
-
-    for (const auto& itr : vboMap) {
-      auto myItr = _perGpuData.find(itr.first);
-      CHECK(myItr != _perGpuData.end());
-      myItr->second.vbo = itr.second;
-    }
-  }
+  void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap);
 
   friend class QueryRendererContext;
 };
@@ -177,44 +138,18 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
   ~SqlQueryDataTable() {}
 
   void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
-  bool hasColumn(const std::string& columnName) {
-    // all vbos should have the same set of columns, so only need to check the first one.
-    auto itr = _perGpuData.begin();
-    CHECK(itr != _perGpuData.end());
-    return itr->second.vbo->hasAttribute(columnName);
-  }
+  bool hasColumn(const std::string& columnName);
 
-  QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
-    auto itr = _perGpuData.find(gpuId);
+  QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName);
 
-    RUNTIME_EX_ASSERT(itr != _perGpuData.end(), "Cannot find column data VBO for gpu " + std::to_string(gpuId));
-
-    RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
-                      "SqlQueryDataTable::hasColumn(): column \"" + columnName + "\" does not exist.");
-    return itr->second.vbo;
-  }
-
-  std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) final {
-    std::map<GpuId, QueryVertexBufferShPtr> rtn;
-
-    for (auto& itr : _perGpuData) {
-      rtn.insert({itr.first, itr.second.vbo});
-    }
-
-    return rtn;
-  }
+  std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) final;
 
   QueryDataType getColumnType(const std::string& columnName);
-  int numRows(const GpuId& gpuId) {
-    auto itr = _perGpuData.find(gpuId);
-
-    RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
-                      "Cannot find number of rows for column data VBO on gpu " + std::to_string(gpuId));
-
-    return itr->second.vbo->numItems();
-  }
+  int numRows(const GpuId& gpuId);
 
   std::string getTableName() { return _tableName; }
+
+  operator std::string() const final;
 
  private:
   std::string _sqlQueryStr;
@@ -262,12 +197,7 @@ class TDataColumn : public DataColumn {
 
   // void push_back(const T& val) { _columnDataPtr->push_back(val); }
 
-  void push_back(const std::string& val) {
-    // TODO(croot): this would throw a boost::bad_lexical_cast error
-    // if the conversion can't be done.. I may need to throw
-    // a MapD-compliant exception
-    _columnDataPtr->push_back(boost::lexical_cast<T>(val));
-  }
+  void push_back(const std::string& val);
 
   QueryDataType getColumnType() { return getDataTypeForType<T>(); }
 
@@ -280,12 +210,16 @@ class TDataColumn : public DataColumn {
     auto result = std::minmax_element(_columnDataPtr->begin(), _columnDataPtr->end());
 
     RUNTIME_EX_ASSERT(result.first != _columnDataPtr->end() && result.second != _columnDataPtr->end(),
-                      "TDataColumn::getExtrema(): cannot find the extrema of the column.");
+                      std::string(*this) + " getExtrema(): cannot find the extrema of the column.");
 
     return std::make_pair(*result.first, *result.second);
   }
 
   int size() { return _columnDataPtr->size(); }
+
+  operator std::string() const {
+    return "TDataColumn<" + std::string(typeid(T).name()) + ">(column name: " + columnName + ")";
+  }
 
  private:
   std::shared_ptr<std::vector<T>> _columnDataPtr;
@@ -332,6 +266,8 @@ class DataTable : public BaseQueryDataTableVBO {
   std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) final;
 
   int numRows(const GpuId& gpuId) { return _numRows; }
+
+  operator std::string() const final;
 
  private:
   VboType _vboType;

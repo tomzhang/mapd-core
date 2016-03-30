@@ -64,11 +64,13 @@ static bool idCounterCompare(const std::pair<unsigned int, float>& a, const std:
   return (a.second < b.second);
 }
 
-QueryRenderer::QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+QueryRenderer::QueryRenderer(int userId,
+                             int widgetId,
+                             const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                              bool doHitTest,
                              bool doDepthTest)
     : _qrmPerGpuData(qrmPerGpuData),
-      _ctx(new QueryRendererContext(doHitTest, doDepthTest)),
+      _ctx(new QueryRendererContext(userId, widgetId, doHitTest, doDepthTest)),
       _perGpuData(),
       _pboGpu(EMPTY_GPUID),
       _pbo(nullptr),
@@ -76,19 +78,23 @@ QueryRenderer::QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDat
       _idPixels(nullptr) {
 }
 
-QueryRenderer::QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+QueryRenderer::QueryRenderer(int userId,
+                             int widgetId,
+                             const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                              const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                              bool doHitTest,
                              bool doDepthTest)
-    : QueryRenderer(qrmPerGpuData, doHitTest, doDepthTest) {
+    : QueryRenderer(userId, widgetId, qrmPerGpuData, doHitTest, doDepthTest) {
   _initFromJSON(jsonDocumentPtr);
 }
 
-QueryRenderer::QueryRenderer(const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+QueryRenderer::QueryRenderer(int userId,
+                             int widgetId,
+                             const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                              const std::string& configJSON,
                              bool doHitTest,
                              bool doDepthTest)
-    : QueryRenderer(qrmPerGpuData, doHitTest, doDepthTest) {
+    : QueryRenderer(userId, widgetId, qrmPerGpuData, doHitTest, doDepthTest) {
   _initFromJSON(configJSON);
 }
 
@@ -207,9 +213,10 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdat
   objPtr->Parse(configJSON.c_str());
 
   // TODO(croot): this can be removed if the executor will handle the initial parse.
-  RUNTIME_EX_ASSERT(!objPtr->HasParseError(),
-                    "JSON parse error - " + std::to_string(objPtr->GetErrorOffset()) + ", error: " +
-                        rapidjson::GetParseError_En(objPtr->GetParseError()));
+  RUNTIME_EX_ASSERT(
+      !objPtr->HasParseError(),
+      RapidJSONUtils::getJsonParseErrorStr("json offset: " + std::to_string(objPtr->GetErrorOffset()) + ", error: " +
+                                           rapidjson::GetParseError_En(objPtr->GetParseError())));
 
   _initFromJSON(objPtr);
 }
@@ -230,19 +237,27 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
     return;
   }
 
-  RUNTIME_EX_ASSERT(obj->IsObject(), "JSON parse error - Root object is not a JSON object.");
+  RUNTIME_EX_ASSERT(
+      obj->IsObject(),
+      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "Root object is not a JSON object."));
+
+  LOG(INFO) << "Render initFromJSON " << _ctx->getUserWidgetIds() << ", json: " << RapidJSONUtils::getObjAsString(*obj);
 
   rapidjson::Value::ConstMemberIterator mitr;
   rapidjson::Value::ConstValueIterator vitr;
 
   RUNTIME_EX_ASSERT((mitr = obj->FindMember("width")) != obj->MemberEnd(),
-                    "JSON parse error - \"width\" is not defined.");
-  RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"width\" is not an integer.");
+                    RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"width\" is not defined."));
+  RUNTIME_EX_ASSERT(
+      mitr->value.IsInt(),
+      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), mitr->value, "\"width\" is not an integer."));
   int width = mitr->value.GetInt();
 
   RUNTIME_EX_ASSERT((mitr = obj->FindMember("height")) != obj->MemberEnd(),
-                    "JSON parse error - \"height\" is not defined.");
-  RUNTIME_EX_ASSERT(mitr->value.IsInt(), "JSON parse error - \"height\" is not an integer.");
+                    RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"height\" is not defined."));
+  RUNTIME_EX_ASSERT(
+      mitr->value.IsInt(),
+      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), mitr->value, "\"height\" is not an integer."));
   int height = mitr->value.GetInt();
 
   setWidthHeight(width, height);
@@ -252,7 +267,9 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
   if (mitr != obj->MemberEnd()) {
     rapidjson::Pointer dataPath = rootPath.Append(propName.c_str(), propName.length());
 
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array.");
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(),
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
 
     QueryDataTableVBOShPtr dataTablePtr;
     std::unordered_set<std::string> visitedNames;
@@ -267,8 +284,10 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
       std::string tableName = getDataTableNameFromJSONObj(*vitr);
 
-      RUNTIME_EX_ASSERT(visitedNames.find(tableName) == visitedNames.end(),
-                        "JSON parse error - a data table with the name \"" + tableName + "\" already exists.");
+      RUNTIME_EX_ASSERT(
+          visitedNames.find(tableName) == visitedNames.end(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(), *vitr, "a data table with the name \"" + tableName + "\" already exists."));
 
       dataTablePtr = _ctx->getDataTable(tableName);
 
@@ -313,7 +332,9 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
   if (mitr != obj->MemberEnd()) {
     rapidjson::Pointer scalePath = rootPath.Append(propName.c_str(), propName.length());
 
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array.");
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(),
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
 
     ScaleShPtr scalePtr;
     std::unordered_set<std::string> visitedNames;
@@ -328,8 +349,10 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
       std::string scaleName = getScaleNameFromJSONObj(*vitr);
 
-      RUNTIME_EX_ASSERT(visitedNames.find(scaleName) == visitedNames.end(),
-                        "JSON parse error - a scale with the name \"" + scaleName + "\" already exists.");
+      RUNTIME_EX_ASSERT(
+          visitedNames.find(scaleName) == visitedNames.end(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(), *vitr, "a scale with the name \"" + scaleName + "\" already exists."));
 
       scalePtr = _ctx->getScale(scaleName);
 
@@ -384,7 +407,9 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
   if (mitr != obj->MemberEnd()) {
     rapidjson::Pointer markPath = rootPath.Append(propName.c_str(), propName.length());
 
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(), "JSON parse error - the \"" + propName + "\" member must be an array");
+    RUNTIME_EX_ASSERT(mitr->value.IsArray(),
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array"));
 
     size_t i;
     for (vitr = mitr->value.Begin(), i = 0; vitr != mitr->value.End(); ++vitr, ++i) {
@@ -428,7 +453,8 @@ size_t QueryRenderer::getHeight() {
 }
 
 void QueryRenderer::setWidthHeight(size_t width, size_t height) {
-  RUNTIME_EX_ASSERT(width >= 0 && height >= 0, "Cannot set a negative width/height.");
+  RUNTIME_EX_ASSERT(width >= 0 && height >= 0,
+                    to_string(_ctx->getUserWidgetIds()) + ": Cannot set a negative width/height.");
 
   bool widthChange = (width != _ctx->getWidth());
   bool heightChange = (height != _ctx->getHeight());
@@ -590,9 +616,9 @@ void QueryRenderer::renderGpu(GpuId gpuId,
 
   QueryFramebufferUqPtr& framebufferPtr = itr->second.getFramebuffer();
 
-  RUNTIME_EX_ASSERT(
-      framebufferPtr != nullptr,
-      "QueryRenderer: The framebuffer is not initialized for gpu " + std::to_string(gpuId) + ". Cannot render.");
+  RUNTIME_EX_ASSERT(framebufferPtr != nullptr,
+                    "QueryRenderer " + to_string(ctx->getUserWidgetIds()) +
+                        ": The framebuffer is not initialized for gpu " + std::to_string(gpuId) + ". Cannot render.");
 
   // need to set the hit test / depth test before the bindToRenderer()
   // TODO(croot): may want to change this API
@@ -698,7 +724,8 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
 
 PngData QueryRenderer::renderToPng(int compressionLevel) {
   RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
-                    "Invalid compression level " + std::to_string(compressionLevel) + ". It must be a " +
+                    "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + ": Invalid compression level " +
+                        std::to_string(compressionLevel) + ". It must be a " +
                         "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
 
   // int64_t time_ms;
@@ -755,7 +782,8 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 }
 
 unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
-  RUNTIME_EX_ASSERT(_ctx->doHitTest(), "QueryRenderer was not initialized for hit-testing.");
+  RUNTIME_EX_ASSERT(_ctx->doHitTest(),
+                    "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + " was not initialized for hit-testing.");
 
   unsigned int id = 0;
 
@@ -839,9 +867,10 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   return id;
 }
 
-QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)
+QueryRendererContext::QueryRendererContext(int userId, int widgetId, bool doHitTest, bool doDepthTest)
     : executor_(nullptr),
       _perGpuData(),
+      _userWidget(userId, widgetId),
       _width(0),
       _height(0),
       _doHitTest(doHitTest),
@@ -850,9 +879,15 @@ QueryRendererContext::QueryRendererContext(bool doHitTest, bool doDepthTest)
       _jsonCache(nullptr) {
 }
 
-QueryRendererContext::QueryRendererContext(int width, int height, bool doHitTest, bool doDepthTest)
+QueryRendererContext::QueryRendererContext(int userId,
+                                           int widgetId,
+                                           int width,
+                                           int height,
+                                           bool doHitTest,
+                                           bool doDepthTest)
     : executor_(nullptr),
       _perGpuData(),
+      _userWidget(userId, widgetId),
       _width(width),
       _height(height),
       _doHitTest(doHitTest),
@@ -943,7 +978,8 @@ QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(co
   PerGpuDataMap::const_iterator itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
-                    "Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
+                    "QueryRendererContext " + to_string(_userWidget) +
+                        ": Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
   QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
   CHECK(qrmGpuData);
   return qrmGpuData->queryResultBufferPtr;
@@ -971,7 +1007,8 @@ bool QueryRendererContext::isJSONCacheUpToDate(const rapidjson::Pointer& objPath
 
   // TODO(croot): throw an exception or just return false?
   RUNTIME_EX_ASSERT(cachedVal != nullptr,
-                    "The path " + RapidJSONUtils::getPointerPath(objPath) + " is not a valid path in the cached json.");
+                    "QueryRendererContext " + to_string(_userWidget) + ": The path " +
+                        RapidJSONUtils::getPointerPath(objPath) + " is not a valid path in the cached json.");
 
   return (cachedVal ? (*cachedVal == obj) : false);
 }
@@ -980,9 +1017,9 @@ void QueryRendererContext::subscribeToRefEvent(RefEventType eventType,
                                                const ScaleShPtr& eventObj,
                                                RefEventCallback cb) {
   const std::string& eventObjName = eventObj->getNameRef();
-  RUNTIME_EX_ASSERT(
-      hasScale(eventObjName),
-      "Cannot subscribe to event for scale \"" + eventObj->getNameRef() + "\". The scale does not exist.");
+  RUNTIME_EX_ASSERT(hasScale(eventObjName),
+                    "QueryRendererContext " + to_string(_userWidget) + ": Cannot subscribe to event for scale \"" +
+                        eventObj->getNameRef() + "\". The scale does not exist.");
 
   EventCallbacksMap::iterator itr;
 
@@ -1062,24 +1099,29 @@ void QueryRendererContext::_update() {
 }
 
 std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "A data object in the JSON must be an object.");
+  RUNTIME_EX_ASSERT(obj.IsObject(),
+                    RapidJSONUtils::getJsonParseErrorStr(obj, "A data object in the JSON must be an object."));
 
   rapidjson::Value::ConstMemberIterator itr;
 
   RUNTIME_EX_ASSERT((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString(),
-                    "A data object must contain a \"name\" property and it must be a string");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        obj, "A data object must contain a \"name\" property and it must be a string"));
 
   return itr->value.GetString();
 }
 
 QueryDataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsObject(), "A data table in the JSON must be an object.");
+  RUNTIME_EX_ASSERT(obj.IsObject(),
+                    RapidJSONUtils::getJsonParseErrorStr(obj, "A data table in the JSON must be an object."));
 
   rapidjson::Value::ConstMemberIterator itr;
 
   if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(itr->value.IsString(),
-                      "Cannot get data table's type - the sql property for a data table must be a string.");
+    RUNTIME_EX_ASSERT(
+        itr->value.IsString(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            itr->value, "Cannot get data table's type - the sql property for a data table must be a string."));
     return QueryDataTableType::SQLQUERY;
   } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
     return QueryDataTableType::EMBEDDED;
@@ -1087,7 +1129,8 @@ QueryDataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj) {
     return QueryDataTableType::URL;
   }
 
-  THROW_RUNTIME_EX("Cannot get data table's type - the data table's type is not supported.");
+  THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+      obj, "Cannot get data table's type - the data table's type is not supported."));
   return QueryDataTableType::UNSUPPORTED;
 }
 
@@ -1099,11 +1142,14 @@ QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
   if (!tableName.length()) {
     tableName = getDataTableNameFromJSONObj(obj);
   } else {
-    RUNTIME_EX_ASSERT(obj.IsObject(), "Cannot create data table - A data object in the JSON must be an object.");
+    RUNTIME_EX_ASSERT(obj.IsObject(),
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          obj, "Cannot create data table - A data object in the JSON must be an object."));
   }
 
   RUNTIME_EX_ASSERT(tableName.length(),
-                    "Cannot create data table - The data table has an empty name. It must have a name.");
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        obj, "Cannot create data table - The data table has an empty name. It must have a name."));
 
   QueryDataTableType tableType = getDataTableTypeFromJSONObj(obj);
   switch (tableType) {
@@ -1115,9 +1161,11 @@ QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
       return QueryDataTableVBOShPtr(
           new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
     default:
-      THROW_RUNTIME_EX(
-          "Cannot create data table \"" + tableName +
-          "\". It is not a supported table. Supported tables must have an \"sql\", \"values\" or \"url\" property.");
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj,
+                                                            "Cannot create data table \"" + tableName +
+                                                                "\". It is not a supported table. Supported tables "
+                                                                "must have an \"sql\", \"values\" or \"url\" "
+                                                                "property."));
   }
 
   return QueryDataTableVBOShPtr(nullptr);

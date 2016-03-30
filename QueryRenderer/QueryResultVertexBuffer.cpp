@@ -135,7 +135,9 @@ void QueryResultVertexBuffer::updatePostQuery(size_t numUsedBytes) {
   // TODO(croot): fill this function in. Should be called after the query is completed
   // and this buffer is filled with data. We just need to know what's in that data.
 
-  RUNTIME_EX_ASSERT(_isActive, "Query result buffer has not been prepped for a query. Cannot set data post query.");
+  RUNTIME_EX_ASSERT(_isActive,
+                    "QueryResultVertexBuffer " + std::to_string(_gpuId) +
+                        " has not been prepped for a query. Cannot set data post query.");
 
   _isActive = false;
 
@@ -151,7 +153,8 @@ void QueryResultVertexBuffer::updatePostQuery(size_t numUsedBytes) {
 void QueryResultVertexBuffer::setBufferLayout(const ::Rendering::GL::Resources::GLBufferLayoutShPtr& bufferLayout) {
   size_t bytesPerVertex = bufferLayout->getNumBytesPerVertex();
   RUNTIME_EX_ASSERT(_usedBytes % bytesPerVertex == 0,
-                    "Buffer layout bytes-per-vertex " + std::to_string(bytesPerVertex) +
+                    "QueryResultVertexBuffer " + std::to_string(_gpuId) + ": Buffer layout bytes-per-vertex " +
+                        std::to_string(bytesPerVertex) +
                         " does not align with the number of used bytes in the buffer: " + std::to_string(_usedBytes) +
                         ".");
   _vbo->setBufferLayout(bufferLayout, _usedBytes / bytesPerVertex);
@@ -159,7 +162,7 @@ void QueryResultVertexBuffer::setBufferLayout(const ::Rendering::GL::Resources::
 
 #ifdef HAVE_CUDA
 void QueryResultVertexBuffer::checkCudaErrors(CUresult result) {
-  if (result == CUDA_ERROR_INVALID_CONTEXT) {
+  if (result == CUDA_ERROR_INVALID_GRAPHICS_CONTEXT) {
     ::Rendering::GL::GLRenderer* renderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
     if (!renderer) {
       CHECK(false) << "CUDA error code=" << result << ". No gl context is set as current.";
@@ -179,7 +182,9 @@ CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {
   // TODO(croot): make thread safe? There is already a mutex in the QueryRenderManager class
   // so it is essentially thread safe now, but perhaps that mutex should be
   // here, or an additional one here. Might improve thread performance.
-  RUNTIME_EX_ASSERT(!_isActive, "Query result buffer is already in use. Cannot access cuda handle.");
+  RUNTIME_EX_ASSERT(
+      !_isActive,
+      "QueryResultVertexBuffer " + std::to_string(_gpuId) + " is already in use. Cannot access cuda handle.");
 
   // now map the buffer for cuda
   CUgraphicsResource cudaRsrc = _getCudaGraphicsResource(true);
@@ -192,11 +197,9 @@ CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {
   // checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
   checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc));
 
-  LOG_IF(WARNING, num_bytes != numVboBytes) << "QueryResultVertexBuffer: couldn't successfully map all " << numVboBytes
+  LOG_IF(WARNING, num_bytes != numVboBytes) << "QueryResultVertexBuffer " << _gpuId
+                                            << ": couldn't successfully map all " << numVboBytes
                                             << " bytes. Was only able to map " << num_bytes << " bytes for cuda.";
-  // RUNTIME_EX_ASSERT(num_bytes == numVboBytes,
-  //                   "QueryResultVertexBuffer: couldn't successfully map all " + std::to_string(numVboBytes) +
-  //                       " bytes. Was only able to map " + std::to_string(num_bytes) + " bytes.");
 
   _isActive = true;
 
@@ -212,7 +215,8 @@ CUgraphicsResource QueryResultVertexBuffer::_getCudaGraphicsResource(bool regist
   checkCudaErrors(cuCtxGetDevice(&ctxDevice));
 
   RUNTIME_EX_ASSERT(ctxDevice == _gpuId,
-                    "Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
+                    "QueryResultVertexBuffer " + std::to_string(_gpuId) +
+                        ": Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
                         " for cuda context does not match the QueryResultVertexBuffer device " +
                         std::to_string(_gpuId));
 

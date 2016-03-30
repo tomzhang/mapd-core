@@ -11,24 +11,8 @@
 #include <Rendering/RenderError.h>
 #include <vector>
 
-// #include "QueryRendererError.h"
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
-// #include <memory>  // std::unique_ptr
-// #include "Shader.h"
-// #include <string>
-// #include <utility>  // std::pair
-// #include <initializer_list>
-// #include <GL/glew.h>
-// #include "QueryRenderer.h"
-// #include "VertexBuffer.h"
-// #include "BufferLayout.h"
-// #include "TypeGL.h"
-// #include "RapidJSONUtils.h"
-// #include "DataTable.h"
-// #include "Color.h"
-// #include <cstdint>
-// #include <typeinfo>
 
 namespace QueryRenderer {
 
@@ -44,6 +28,8 @@ class BaseScaleDomainRangeData {
 
   std::string getName() { return _name; }
   bool useString() { return _useString; }
+
+  virtual operator std::string() const = 0;
 
  protected:
   std::string _name;
@@ -82,16 +68,9 @@ class BaseScale {
   QueryDataType getDomainDataType() { return _domainDataType; }
   QueryDataType getRangeDataType() { return _rangeDataType; }
 
-  const ::Rendering::GL::TypeGLShPtr& getDomainTypeGL() {
-    RUNTIME_EX_ASSERT(_domainTypeGL != nullptr, "BaseScale::getDomainTypeGL(): the domain type is uninitialized.");
-    return _domainTypeGL;
-  }
+  const ::Rendering::GL::TypeGLShPtr& getDomainTypeGL();
 
-  const ::Rendering::GL::TypeGLShPtr& getRangeTypeGL() {
-    RUNTIME_EX_ASSERT(_rangeTypeGL != nullptr, "BaseScale::getRangeTypeGL(): the range type is uninitialized.");
-
-    return _rangeTypeGL;
-  }
+  const ::Rendering::GL::TypeGLShPtr& getRangeTypeGL();
 
   std::string getScaleGLSLFuncName(const std::string& extraSuffix = "");
 
@@ -123,6 +102,8 @@ class BaseScale {
   bool hasRangeValsChanged() { return _rangeValsChanged; }
   bool hasRangeDataChanged() { return _rangeSizeChanged || _rangeValsChanged; }
 
+  virtual operator std::string() const = 0;
+
  protected:
   std::string _name;
   ScaleType _type;
@@ -147,9 +128,12 @@ class BaseScale {
   rapidjson::Pointer _jsonPath;
 
   bool _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  std::string _printInfo() const;
 
  private:
 };
+
+std::string to_string(BaseScale::ScaleType scaleType);
 
 typedef std::unique_ptr<BaseScale> ScaleUqPtr;
 typedef std::shared_ptr<BaseScale> ScaleShPtr;
@@ -180,6 +164,10 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   inline const std::type_info& getTypeInfo() { return typeid(T); }
 
   static T getDataValueFromJSONObj(const rapidjson::Value& obj);
+
+  operator std::string() const;
+
+  std::string getTypeStr() const;
 
  private:
   std::shared_ptr<std::vector<T>> _vectorPtr;
@@ -257,6 +245,8 @@ class Scale : public BaseScale {
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
   bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+
+  operator std::string() const final;
 
  private:
   // std::vector<DomainType> _domain;
@@ -337,10 +327,14 @@ class BaseScaleRef {
 
   ScaleShPtr getScalePtr() { return _scalePtr; }
 
+  virtual operator std::string() const = 0;
+
  protected:
   void _verifyScalePointer() {
-    RUNTIME_EX_ASSERT(_scalePtr != nullptr, "The scale reference object is uninitialized.");
+    RUNTIME_EX_ASSERT(_scalePtr != nullptr, std::string(*this) + ": The scale reference object is uninitialized.");
   }
+
+  std::string _printInfo() const;
 
   QueryRendererContextShPtr _ctx;
   ScaleShPtr _scalePtr;
@@ -362,6 +356,8 @@ class ScaleRef : public BaseScaleRef {
 
   void updateScaleRef(const ScaleShPtr& scalePtr);
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, const std::string& extraSuffix = "");
+
+  operator std::string() const final;
 
  private:
   std::unique_ptr<ScaleDomainRangeData<DomainType>> _coercedDomainData;
@@ -395,22 +391,14 @@ class BaseRenderProperty {
     initGpuResources(ctx.get());
   }
 
-  virtual ~BaseRenderProperty() {
-    // std::cerr << "IN BaseRenderProperty DESTRUCTOR " << _name << std::endl;
-  }
+  virtual ~BaseRenderProperty() {}
 
   void initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
                              const QueryDataTableVBOShPtr& dataPtr);
   void initializeFromData(const std::string& columnName, const QueryDataTableVBOShPtr& dataPtr);
 
-  int size(const GpuId& gpuId) const {
-    auto itr = _perGpuData.find(gpuId);
-    if (itr != _perGpuData.end()) {
-      return itr->second.vbo->numItems();
-    }
-    return 0;
-  }
+  int size(const GpuId& gpuId) const;
 
   std::string getName() const { return _name; }
 
@@ -424,60 +412,18 @@ class BaseRenderProperty {
 
   std::string getOutGLSLType() const;
 
-  bool hasVboPtr() {
-    for (auto& itr : _perGpuData) {
-      if (itr.second.vbo != nullptr) {
-        return true;
-      }
-    }
-    return false;
-  }
-  bool hasVboPtr(const GpuId& gpuId) {
-    auto itr = _perGpuData.find(gpuId);
+  bool hasVboPtr();
+  bool hasVboPtr(const GpuId& gpuId);
 
-    return (itr != _perGpuData.end() && itr->second.vbo != nullptr);
-  }
-
-  QueryVertexBufferShPtr getVboPtr(const GpuId& gpuId) const {
-    auto itr = _perGpuData.find(gpuId);
-    if (itr != _perGpuData.end()) {
-      return itr->second.vbo;
-    }
-
-    return nullptr;
-  }
-
-  QueryVertexBufferShPtr getVboPtr() const {
-    auto itr = _perGpuData.begin();
-    if (itr != _perGpuData.end()) {
-      return itr->second.vbo;
-    }
-
-    return nullptr;
-  }
+  QueryVertexBufferShPtr getVboPtr(const GpuId& gpuId) const;
+  QueryVertexBufferShPtr getVboPtr() const;
 
   bool usesScaleConfig() { return (_scaleConfigPtr != nullptr); }
 
   // ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
   const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
 
-  void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const {
-    auto itr = _perGpuData.find(gpuId);
-
-    RUNTIME_EX_ASSERT(itr->second.vbo != nullptr,
-                      "BaseRenderProperty::addToVboAttrMap(): A vertex buffer is not defined. Cannot add vbo attrs to "
-                      "vbo->shader attr map.");
-
-    ::Rendering::GL::Resources::GLVertexBufferShPtr glVbo = itr->second.vbo->getGLVertexBufferPtr();
-    auto attrMapItr = attrMap.find(glVbo);
-    if (attrMapItr == attrMap.end()) {
-      attrMap.insert({glVbo, {{_vboAttrName, _name}}});
-    } else {
-      attrMapItr->second.push_back({_vboAttrName, _name});
-    }
-
-    // _vboPtr->bindToRenderer(activeShader, _vboAttrName, _name);
-  }
+  void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const;
 
   virtual void bindUniformToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                                      const std::string& uniformAttrName) const = 0;
@@ -487,22 +433,9 @@ class BaseRenderProperty {
 
   void initGpuResources(const QueryRendererContext* ctx,
                         const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>(),
-                        bool initializing = true) {
-    const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
-    for (auto& itr : qrcPerGpuData) {
-      if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-        PerGpuData gpuData(itr.second);
-        if (!initializing && _dataPtr) {
-          gpuData.vbo = _dataPtr->getColumnDataVBO(itr.first, _vboAttrName);
-        }
-        _perGpuData.emplace(itr.first, std::move(gpuData));
-      }
-    }
+                        bool initializing = true);
 
-    for (auto gpuId : unusedGpus) {
-      _perGpuData.erase(gpuId);
-    }
-  }
+  virtual operator std::string() const = 0;
 
  protected:
   enum class VboInitType { FROM_VALUE = 0, FROM_DATAREF, UNDEFINED };
@@ -571,6 +504,8 @@ class BaseRenderProperty {
   virtual void _verifyScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
 
+  std::string _printInfo() const;
+
  private:
   void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap) {
     CHECK(vboMap.size() == _perGpuData.size());
@@ -602,6 +537,8 @@ class RenderProperty : public BaseRenderProperty {
   void initializeValue(const T& val);
   void bindUniformToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                              const std::string& uniformAttrName) const;
+
+  operator std::string() const final;
 
  private:
   T _mult;
@@ -678,6 +615,8 @@ class BaseMark {
     _buildVertexArrayObjectFromProperties();
   }
 
+  virtual operator std::string() const = 0;
+
  protected:
   GeomType _type;
 
@@ -748,80 +687,7 @@ class BaseMark {
 
   void _initGpuResources(const QueryRendererContext* ctx,
                          const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>(),
-                         bool initializing = true) {
-    const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
-
-    ::Rendering::GL::GLRenderer* renderer;
-    ::Rendering::GL::GLResourceManagerShPtr rsrcMgr;
-    int numGpus = _perGpuData.size();
-    bool update = (numGpus > 0 && _perGpuData.begin()->second.shaderPtr);
-    bool createdNewGpuRsrc = false;
-    for (auto& itr : qrcPerGpuData) {
-      auto perGpuItr = _perGpuData.find(itr.first);
-      if (perGpuItr == _perGpuData.end()) {
-        PerGpuData gpuData(itr.second);
-        if (update) {
-          auto beginItr = _perGpuData.begin();
-          CHECK(beginItr != _perGpuData.end() && beginItr->second.shaderPtr);
-
-          beginItr->second.makeActiveOnCurrentThread();
-          std::string vertSrc = beginItr->second.shaderPtr->getVertexSource();
-          std::string fragSrc = beginItr->second.shaderPtr->getFragmentSource();
-
-          itr.second.makeActiveOnCurrentThread();
-          renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
-          CHECK(renderer);
-
-          rsrcMgr = renderer->getResourceManager();
-
-          // TODO(croot): make resource copy constructors which appropriately
-          // deal with different contexts, including contexts on different gpus
-          gpuData.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
-
-          // NOTE: we need to create the VAO after the properties have
-          // been updated.
-          createdNewGpuRsrc = true;
-        }
-        _perGpuData.emplace(itr.first, std::move(gpuData));
-      }
-    }
-
-    for (auto gpuId : unusedGpus) {
-      _perGpuData.erase(gpuId);
-    }
-
-    if (numGpus && _perGpuData.size() == 0) {
-      // TODO(croot): make a makeAllDirty() function
-      setShaderDirty();
-      setPropsDirty();
-    }
-
-    key.initGpuResources(ctx, unusedGpus, initializing);
-
-    if (!initializing) {
-      _updateRenderPropertyGpuResources(ctx, unusedGpus);
-    }
-
-    if (createdNewGpuRsrc) {
-      for (auto& itr : _perGpuData) {
-        if (!itr.second.vaoPtr) {
-          itr.second.makeActiveOnCurrentThread();
-          renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
-          CHECK(renderer);
-
-          rsrcMgr = renderer->getResourceManager();
-
-          CHECK(itr.second.shaderPtr);
-          renderer->bindShader(itr.second.shaderPtr);
-
-          ::Rendering::GL::Resources::VboAttrToShaderAttrMap attrMap;
-          _addPropertiesToAttrMap(itr.first, attrMap);
-
-          itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
-        }
-      }
-    }
-  }
+                         bool initializing = true);
 
   virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
                                                  const std::unordered_set<GpuId> unusedGpus) = 0;
@@ -844,6 +710,8 @@ class PointMark : public BaseMark {
   void draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) final;
 
   bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+
+  operator std::string() const final;
 
  private:
   RenderProperty<float> x;
