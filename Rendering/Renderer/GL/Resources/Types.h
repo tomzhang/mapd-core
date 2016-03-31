@@ -84,20 +84,37 @@ class GLVertexArray;
 typedef std::weak_ptr<GLVertexArray> GLVertexArrayWkPtr;
 typedef std::shared_ptr<GLVertexArray> GLVertexArrayShPtr;
 
-typedef struct {
+struct IndirectDrawVertexData {
   unsigned int count;
   unsigned int instanceCount;
-  unsigned int first;
+  unsigned int firstIndex;
   unsigned int baseInstance;
-} IndirectDrawVertexData;
 
-typedef struct {
+  IndirectDrawVertexData(unsigned int count,
+                         unsigned int firstIndex = 0,
+                         unsigned int instanceCount = 1,
+                         unsigned int baseInstance = 0)
+      : count(count), instanceCount(instanceCount), firstIndex(firstIndex), baseInstance(baseInstance) {}
+};
+
+struct IndirectDrawIndexData {
   unsigned int count;
   unsigned int instanceCount;
   unsigned int firstIndex;
   unsigned int baseVertex;
   unsigned int baseInstance;
-} IndirectDrawIndexData;
+
+  IndirectDrawIndexData(unsigned int count,
+                        unsigned int firstIndex = 0,
+                        unsigned int baseVertex = 0,
+                        unsigned int instanceCount = 1,
+                        unsigned int baseInstance = 0)
+      : count(count),
+        instanceCount(instanceCount),
+        firstIndex(firstIndex),
+        baseVertex(baseVertex),
+        baseInstance(baseInstance) {}
+};
 
 }  // namespace GL
 }  // namespace Resources
