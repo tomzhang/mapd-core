@@ -22,6 +22,12 @@ using Resources::BufferAccessType;
 using Resources::BufferAccessFreq;
 using Resources::GLIndexBuffer;
 using Resources::GLIndexBufferShPtr;
+using Resources::IndirectDrawVertexData;
+using Resources::GLIndirectDrawVertexBuffer;
+using Resources::GLIndirectDrawVertexBufferShPtr;
+using Resources::IndirectDrawIndexData;
+using Resources::GLIndirectDrawIndexBuffer;
+using Resources::GLIndirectDrawIndexBufferShPtr;
 using Resources::GLVertexBuffer;
 using Resources::GLVertexBufferShPtr;
 using Resources::GLPixelBuffer2d;
@@ -187,6 +193,78 @@ GLIndexBufferShPtr GLResourceManager::createIndexBuffer(const std::vector<unsign
 
   // TODO(croot): make thread safe?
   GLIndexBufferShPtr rtn(new GLIndexBuffer(_prntRenderer, items, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndirectDrawVertexBufferShPtr GLResourceManager::createIndirectDrawVertexBuffer(BufferAccessType accessType,
+                                                                                  BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndirectDrawVertexBufferShPtr rtn(new GLIndirectDrawVertexBuffer(_prntRenderer, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndirectDrawVertexBufferShPtr GLResourceManager::createIndirectDrawVertexBuffer(size_t numBytes,
+                                                                                  BufferAccessType accessType,
+                                                                                  BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndirectDrawVertexBufferShPtr rtn(new GLIndirectDrawVertexBuffer(_prntRenderer, numBytes, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndirectDrawVertexBufferShPtr GLResourceManager::createIndirectDrawVertexBuffer(
+    const std::vector<IndirectDrawVertexData>& items,
+    BufferAccessType accessType,
+    BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndirectDrawVertexBufferShPtr rtn(new GLIndirectDrawVertexBuffer(_prntRenderer, items, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndirectDrawIndexBufferShPtr GLResourceManager::createIndirectDrawIndexBuffer(BufferAccessType accessType,
+                                                                                BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndirectDrawIndexBufferShPtr rtn(new GLIndirectDrawIndexBuffer(_prntRenderer, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndirectDrawIndexBufferShPtr GLResourceManager::createIndirectDrawIndexBuffer(size_t numBytes,
+                                                                                BufferAccessType accessType,
+                                                                                BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndirectDrawIndexBufferShPtr rtn(new GLIndirectDrawIndexBuffer(_prntRenderer, numBytes, accessType, accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
+GLIndirectDrawIndexBufferShPtr GLResourceManager::createIndirectDrawIndexBuffer(
+    const std::vector<IndirectDrawIndexData>& items,
+    BufferAccessType accessType,
+    BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLIndirectDrawIndexBufferShPtr rtn(new GLIndirectDrawIndexBuffer(_prntRenderer, items, accessType, accessFreq));
   _addGLResource(rtn);
 
   return rtn;

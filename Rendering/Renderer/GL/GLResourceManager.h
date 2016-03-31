@@ -13,6 +13,7 @@
 #include "Resources/GLPixelBuffer2d.h"
 #include "Resources/GLUniformBuffer.h"
 #include "Resources/GLIndexBuffer.h"
+#include "Resources/GLIndirectDrawBuffer.h"
 #include <string>
 #include <vector>
 
@@ -69,6 +70,34 @@ class GLResourceManager {
 
   Resources::GLIndexBufferShPtr createIndexBuffer(
       const std::vector<unsigned int>& items,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndirectDrawVertexBufferShPtr createIndirectDrawVertexBuffer(
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndirectDrawVertexBufferShPtr createIndirectDrawVertexBuffer(
+      size_t numBytes,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndirectDrawVertexBufferShPtr createIndirectDrawVertexBuffer(
+      const std::vector<Resources::IndirectDrawVertexData>& items,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndirectDrawIndexBufferShPtr createIndirectDrawIndexBuffer(
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndirectDrawIndexBufferShPtr createIndirectDrawIndexBuffer(
+      size_t numBytes,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
+
+  Resources::GLIndirectDrawIndexBufferShPtr createIndirectDrawIndexBuffer(
+      const std::vector<Resources::IndirectDrawIndexData>& items,
       Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
 

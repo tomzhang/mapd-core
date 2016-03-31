@@ -10,6 +10,7 @@
 #include "../Resources/GLPixelBuffer2d.h"
 #include "../Resources/GLUniformBuffer.h"
 #include "../Resources/GLIndexBuffer.h"
+#include "../Resources/GLIndirectDrawBuffer.h"
 
 namespace Rendering {
 namespace GL {
@@ -257,6 +258,22 @@ void GLBindState::bindIndexBuffer(const Resources::GLIndexBufferShPtr& iboRsrc) 
   }
 }
 
+void GLBindState::bindIndirectDrawBuffer(const Resources::GLIndirectDrawBufferShPtr& indirectRsrc) {
+  GLuint indirect = (indirectRsrc ? indirectRsrc->getId() : 0);
+
+  bool bind = (boundIndirectBuffer.owner_before(indirectRsrc) || indirectRsrc.owner_before(boundIndirectBuffer));
+
+  if (bind) {
+    if (indirectRsrc) {
+      indirectRsrc->validateRenderer(_prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect));
+
+    boundIndirectBuffer = indirectRsrc;
+  }
+}
+
 Resources::GLTexture2dShPtr GLBindState::getBoundTexture2d() const {
   return boundTex2d.lock();
 }
@@ -357,6 +374,34 @@ Resources::GLIndexBufferShPtr GLBindState::getBoundIndexBuffer() const {
 
 bool GLBindState::hasBoundIndexBuffer() const {
   return !boundIbo.expired();
+}
+
+Resources::GLIndirectDrawBufferShPtr GLBindState::getBoundIndirectDrawBuffer() const {
+  return boundIndirectBuffer.lock();
+}
+
+bool GLBindState::hasBoundIndirectDrawBuffer() const {
+  return !boundIndirectBuffer.expired();
+}
+
+Resources::GLIndirectDrawVertexBufferShPtr GLBindState::getBoundIndirectDrawVertexBuffer() const {
+  return std::static_pointer_cast<Resources::GLIndirectDrawVertexBuffer>(boundIndirectBuffer.lock());
+}
+
+bool GLBindState::hasBoundIndirectDrawVertexBuffer() const {
+  Resources::GLIndirectDrawBufferShPtr boundBuffer = boundIndirectBuffer.lock();
+  return (boundBuffer ? (boundBuffer->getResourceType() == Resources::GLResourceType::INDIRECT_DRAW_VERTEX_BUFFER)
+                      : false);
+}
+
+Resources::GLIndirectDrawIndexBufferShPtr GLBindState::getBoundIndirectDrawIndexBuffer() const {
+  return std::static_pointer_cast<Resources::GLIndirectDrawIndexBuffer>(boundIndirectBuffer.lock());
+}
+
+bool GLBindState::hasBoundIndirectDrawIndexBuffer() const {
+  Resources::GLIndirectDrawBufferShPtr boundBuffer = boundIndirectBuffer.lock();
+  return (boundBuffer ? (boundBuffer->getResourceType() == Resources::GLResourceType::INDIRECT_DRAW_INDEX_BUFFER)
+                      : false);
 }
 
 }  // namespace State

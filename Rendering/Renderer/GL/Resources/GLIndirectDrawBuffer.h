@@ -9,19 +9,35 @@ namespace Rendering {
 namespace GL {
 namespace Resources {
 
-class GLIndirectDrawVertexBuffer;
-class GLIndirectDrawIndexBuffer;
-
-template <typename T>
 class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
  public:
-  virtual ~GLBaseIndirectDrawBuffer();
+  virtual ~GLBaseIndirectDrawBuffer() {}
 
   GLResourceType getResourceType() const final { return _rsrcType; }
   size_t numItems() const { return _numItems; }
-  size_t getStructByteSize() const { return sizeof(T); }
+  virtual size_t getStructByteSize() const = 0;
 
-  // virtual GLBufferType getBufferType() const;
+ protected:
+  explicit GLBaseIndirectDrawBuffer(const RendererWkPtr& rendererPtr,
+                                    GLResourceType rsrcType,
+                                    GLBufferType bufferType,
+                                    BufferAccessType accessType,
+                                    BufferAccessFreq accessFreq)
+      : GLBaseBuffer(rendererPtr, bufferType, GL_DRAW_INDIRECT_BUFFER, accessType, accessFreq), _rsrcType(rsrcType) {}
+
+  void _makeEmpty() final { _numItems = 0; }
+  size_t _numItems;
+
+ private:
+  GLResourceType _rsrcType;
+};
+
+template <typename T>
+class GLBaseIndirectDrawTemplateBuffer : public GLBaseIndirectDrawBuffer {
+ public:
+  virtual ~GLBaseIndirectDrawTemplateBuffer() {}
+
+  size_t getStructByteSize() const final { return sizeof(T); }
 
   void bufferData(const std::vector<T>& indirectDrawData) {
     GLBaseBuffer::bufferData(&indirectDrawData[0], indirectDrawData.size() * sizeof(T));
@@ -30,21 +46,21 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
 
   // void setDataAt(size_t idx, const T& indirectData);
 
- private:
-  explicit GLBaseIndirectDrawBuffer(const RendererWkPtr& rendererPtr,
-                                    GLResourceType rsrcType,
-                                    GLBufferType bufferType,
-                                    BufferAccessType accessType,
-                                    BufferAccessFreq accessFreq)
-      : GLBaseBuffer(rendererPtr, bufferType, GL_DRAW_INDIRECT_BUFFER, accessType, accessFreq), _rsrcType(rsrcType) {}
+ protected:
+  explicit GLBaseIndirectDrawTemplateBuffer(const RendererWkPtr& rendererPtr,
+                                            GLResourceType rsrcType,
+                                            GLBufferType bufferType,
+                                            BufferAccessType accessType,
+                                            BufferAccessFreq accessFreq)
+      : GLBaseIndirectDrawBuffer(rendererPtr, rsrcType, bufferType, accessType, accessFreq) {}
 
-  explicit GLBaseIndirectDrawBuffer(const RendererWkPtr& rendererPtr,
-                                    GLResourceType rsrcType,
-                                    GLBufferType bufferType,
-                                    size_t numBytes,
-                                    BufferAccessType accessType,
-                                    BufferAccessFreq accessFreq)
-      : GLBaseIndirectDrawBuffer(rendererPtr, rsrcType, bufferType, accessType, accessFreq) {
+  explicit GLBaseIndirectDrawTemplateBuffer(const RendererWkPtr& rendererPtr,
+                                            GLResourceType rsrcType,
+                                            GLBufferType bufferType,
+                                            size_t numBytes,
+                                            BufferAccessType accessType,
+                                            BufferAccessFreq accessFreq)
+      : GLBaseIndirectDrawTemplateBuffer(rendererPtr, rsrcType, bufferType, accessType, accessFreq) {
     RUNTIME_EX_ASSERT(numBytes % sizeof(T) == 0,
                       "Cannot allocate an indirect draw buffer of type " + to_string(rsrcType) + " with " +
                           std::to_string(numBytes) + " bytes. The size of the buffer must be a multiple of " +
@@ -53,41 +69,18 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
     GLBaseBuffer::bufferData(nullptr, numBytes);
   }
 
-  explicit GLBaseIndirectDrawBuffer(const RendererWkPtr& rendererPtr,
-                                    GLResourceType rsrcType,
-                                    GLBufferType bufferType,
-                                    const std::vector<T>& items,
-                                    BufferAccessType accessType,
-                                    BufferAccessFreq accessFreq)
-      : GLBaseIndirectDrawBuffer(rendererPtr, rsrcType, bufferType, accessType, accessFreq) {
+  explicit GLBaseIndirectDrawTemplateBuffer(const RendererWkPtr& rendererPtr,
+                                            GLResourceType rsrcType,
+                                            GLBufferType bufferType,
+                                            const std::vector<T>& items,
+                                            BufferAccessType accessType,
+                                            BufferAccessFreq accessFreq)
+      : GLBaseIndirectDrawTemplateBuffer(rendererPtr, rsrcType, bufferType, accessType, accessFreq) {
     bufferData(items);
   }
-
-  void _makeEmpty() final { _numItems = 0; }
-
-  size_t _numItems;
-  GLResourceType _rsrcType;
-
-  friend class ::Rendering::GL::Resources::GLIndirectDrawVertexBuffer;
-  friend class ::Rendering::GL::Resources::GLIndirectDrawIndexBuffer;
 };
 
-typedef struct {
-  size_t count;
-  size_t instanceCount;
-  size_t first;
-  size_t baseInstance;
-} IndirectDrawVertexData;
-
-typedef struct {
-  size_t count;
-  size_t instanceCount;
-  size_t firstIndex;
-  size_t baseVertex;
-  size_t baseInstance;
-} IndirectDrawIndexData;
-
-class GLIndirectDrawVertexBuffer : public GLBaseIndirectDrawBuffer<IndirectDrawVertexData> {
+class GLIndirectDrawVertexBuffer : public GLBaseIndirectDrawTemplateBuffer<IndirectDrawVertexData> {
  public:
   ~GLIndirectDrawVertexBuffer() {}
 
@@ -109,7 +102,7 @@ class GLIndirectDrawVertexBuffer : public GLBaseIndirectDrawBuffer<IndirectDrawV
   friend class ::Rendering::GL::GLResourceManager;
 };
 
-class GLIndirectDrawIndexBuffer : public GLBaseIndirectDrawBuffer<IndirectDrawIndexData> {
+class GLIndirectDrawIndexBuffer : public GLBaseIndirectDrawTemplateBuffer<IndirectDrawIndexData> {
  public:
   ~GLIndirectDrawIndexBuffer() {}
 

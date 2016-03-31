@@ -85,6 +85,7 @@ class GLRenderer : public Renderer {
   void bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pboRsrc);
   void bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRsrc);
   void bindIndexBuffer(const Resources::GLIndexBufferShPtr& uboRsrc);
+  void bindIndirectDrawBuffer(const Resources::GLIndirectDrawBufferShPtr& indirectRsrc);
 
   Resources::GLTexture2dShPtr getBoundTexture2d() const;
   bool hasBoundTexture2d() const;
@@ -116,8 +117,20 @@ class GLRenderer : public Renderer {
   Resources::GLIndexBufferShPtr getBoundIndexBuffer() const;
   bool hasBoundIndexBuffer() const;
 
+  Resources::GLIndirectDrawBufferShPtr getBoundIndirectDrawBuffer() const;
+  bool hasBoundIndirectDrawBuffer() const;
+
+  Resources::GLIndirectDrawVertexBufferShPtr getBoundIndirectDrawVertexBuffer() const;
+  bool hasBoundIndirectDrawVertexBuffer() const;
+
+  Resources::GLIndirectDrawIndexBufferShPtr getBoundIndirectDrawIndexBuffer() const;
+  bool hasBoundIndirectDrawIndexBuffer() const;
+
   void drawVertexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);
+  void drawIndirectVertexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);
+
   void drawIndexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);
+  void drawIndirectIndexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);
 
   void getReadFramebufferPixels(GLenum attachment,
                                 size_t startx,

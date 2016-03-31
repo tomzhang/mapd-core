@@ -303,6 +303,10 @@ void GLRenderer::bindIndexBuffer(const Resources::GLIndexBufferShPtr& uboRsrc) {
   _bindState.bindIndexBuffer(uboRsrc);
 }
 
+void GLRenderer::bindIndirectDrawBuffer(const Resources::GLIndirectDrawBufferShPtr& indirectRsrc) {
+  _bindState.bindIndirectDrawBuffer(indirectRsrc);
+}
+
 Resources::GLTexture2dShPtr GLRenderer::getBoundTexture2d() const {
   return _bindState.getBoundTexture2d();
 }
@@ -383,8 +387,32 @@ bool GLRenderer::hasBoundIndexBuffer() const {
   return _bindState.hasBoundIndexBuffer();
 }
 
+Resources::GLIndirectDrawBufferShPtr GLRenderer::getBoundIndirectDrawBuffer() const {
+  return _bindState.getBoundIndirectDrawBuffer();
+}
+
+bool GLRenderer::hasBoundIndirectDrawBuffer() const {
+  return _bindState.hasBoundIndirectDrawBuffer();
+}
+
+Resources::GLIndirectDrawVertexBufferShPtr GLRenderer::getBoundIndirectDrawVertexBuffer() const {
+  return _bindState.getBoundIndirectDrawVertexBuffer();
+}
+
+bool GLRenderer::hasBoundIndirectDrawVertexBuffer() const {
+  return _bindState.hasBoundIndirectDrawVertexBuffer();
+}
+
+Resources::GLIndirectDrawIndexBufferShPtr GLRenderer::getBoundIndirectDrawIndexBuffer() const {
+  return _bindState.getBoundIndirectDrawIndexBuffer();
+}
+
+bool GLRenderer::hasBoundIndirectDrawIndexBuffer() const {
+  return _bindState.hasBoundIndirectDrawIndexBuffer();
+}
+
 void GLRenderer::drawVertexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
-  CHECK(hasBoundVertexBuffer());
+  CHECK(hasBoundVertexBuffer() || hasBoundVertexArray());
 
   if (numItemsToDraw < 0) {
     if (hasBoundVertexArray()) {
@@ -395,6 +423,18 @@ void GLRenderer::drawVertexBuffers(GLenum primitiveMode, size_t startIndex, int 
   }
 
   MAPD_CHECK_GL_ERROR(glDrawArrays(primitiveMode, startIndex, numItemsToDraw));
+}
+
+void GLRenderer::drawIndirectVertexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
+  Resources::GLIndirectDrawVertexBufferShPtr indirectBuffer = getBoundIndirectDrawVertexBuffer();
+  CHECK(indirectBuffer != nullptr && (hasBoundVertexBuffer() || hasBoundVertexArray()));
+
+  if (numItemsToDraw < 0) {
+    numItemsToDraw = indirectBuffer->numItems();
+  }
+
+  MAPD_CHECK_GL_ERROR(glMultiDrawArraysIndirect(
+      primitiveMode, BUFFER_OFFSET(startIndex * indirectBuffer->getStructByteSize()), numItemsToDraw, 0));
 }
 
 void GLRenderer::drawIndexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
@@ -409,6 +449,22 @@ void GLRenderer::drawIndexBuffers(GLenum primitiveMode, size_t startIndex, int n
                                      numItemsToDraw,
                                      static_cast<GLenum>(ibo->getIndexType()),
                                      BUFFER_OFFSET(startIndex * ibo->getIndexTypeByteSize())));
+}
+
+void GLRenderer::drawIndirectIndexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
+  Resources::GLIndirectDrawIndexBufferShPtr indirectBuffer = getBoundIndirectDrawIndexBuffer();
+  GLIndexBufferShPtr ibo = getBoundIndexBuffer();
+  CHECK(indirectBuffer != nullptr && ibo != nullptr);
+
+  if (numItemsToDraw < 0) {
+    numItemsToDraw = indirectBuffer->numItems();
+  }
+
+  MAPD_CHECK_GL_ERROR(glMultiDrawElementsIndirect(primitiveMode,
+                                                  static_cast<GLenum>(ibo->getIndexType()),
+                                                  BUFFER_OFFSET(startIndex * indirectBuffer->getStructByteSize()),
+                                                  numItemsToDraw,
+                                                  0));
 }
 
 void GLRenderer::getReadFramebufferPixels(GLenum readBuffer,

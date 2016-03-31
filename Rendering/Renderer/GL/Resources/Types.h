@@ -53,6 +53,18 @@ class GLIndexBuffer;
 typedef std::weak_ptr<GLIndexBuffer> GLIndexBufferWkPtr;
 typedef std::shared_ptr<GLIndexBuffer> GLIndexBufferShPtr;
 
+class GLBaseIndirectDrawBuffer;
+typedef std::weak_ptr<GLBaseIndirectDrawBuffer> GLIndirectDrawBufferWkPtr;
+typedef std::shared_ptr<GLBaseIndirectDrawBuffer> GLIndirectDrawBufferShPtr;
+
+class GLIndirectDrawVertexBuffer;
+typedef std::weak_ptr<GLIndirectDrawVertexBuffer> GLIndirectDrawVertexBufferWkPtr;
+typedef std::shared_ptr<GLIndirectDrawVertexBuffer> GLIndirectDrawVertexBufferShPtr;
+
+class GLIndirectDrawIndexBuffer;
+typedef std::weak_ptr<GLIndirectDrawIndexBuffer> GLIndirectDrawIndexBufferWkPtr;
+typedef std::shared_ptr<GLIndirectDrawIndexBuffer> GLIndirectDrawIndexBufferShPtr;
+
 class GLBaseBufferLayout;
 typedef std::shared_ptr<GLBaseBufferLayout> GLBufferLayoutShPtr;
 
@@ -71,6 +83,21 @@ typedef std::shared_ptr<GLShaderBlockLayout> GLShaderBlockLayoutShPtr;
 class GLVertexArray;
 typedef std::weak_ptr<GLVertexArray> GLVertexArrayWkPtr;
 typedef std::shared_ptr<GLVertexArray> GLVertexArrayShPtr;
+
+typedef struct {
+  unsigned int count;
+  unsigned int instanceCount;
+  unsigned int first;
+  unsigned int baseInstance;
+} IndirectDrawVertexData;
+
+typedef struct {
+  unsigned int count;
+  unsigned int instanceCount;
+  unsigned int firstIndex;
+  unsigned int baseVertex;
+  unsigned int baseInstance;
+} IndirectDrawIndexData;
 
 }  // namespace GL
 }  // namespace Resources
