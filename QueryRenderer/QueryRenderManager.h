@@ -233,6 +233,14 @@ class QueryRenderManager {
   typedef RendererMap::index<UserId>::type RendererMap_by_UserId;
   typedef RendererMap::index<LastRenderTime>::type RendererMap_by_LastRenderTime;
 
+  struct ActiveRendererGuard {
+    QueryRenderManager::PerGpuData* currGpuData;
+    QueryRenderManager* qrm;
+
+    ActiveRendererGuard(QueryRenderManager::PerGpuData* currGpuData = nullptr, QueryRenderManager* qrm = nullptr);
+    ~ActiveRendererGuard();
+  };
+
   RendererMap _rendererMap;
 
   mutable RendererMap::iterator _activeItr;
@@ -241,7 +249,7 @@ class QueryRenderManager {
   std::shared_ptr<QueryRenderCompositor> _compositorPtr;
 
   void _initialize(Rendering::WindowManager& windowMgr, int numGpus, int startGpu, size_t queryResultBufferSize);
-  void _resetQueryResultBuffers();
+  void _resetQueryResultBuffers() noexcept;
 
   void _setActiveUserWidget(int userId, int widgetId) const;
   QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
@@ -251,11 +259,11 @@ class QueryRenderManager {
   void _purgeUnusedWidgets();
   void _updateActiveLastRenderTime();
 
-  static void _unsetCurrentRenderer();
-
   mutable std::mutex _renderMtx;
 
   const size_t _renderCacheLimit;
+
+  friend struct ActiveRendererGuard;
 };
 
 }  // namespace QueryRenderer

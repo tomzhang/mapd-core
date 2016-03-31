@@ -68,7 +68,7 @@ QueryRenderer::QueryRenderer(int userId,
                              int widgetId,
                              const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                              bool doHitTest,
-                             bool doDepthTest)
+                             bool doDepthTest) noexcept
     : _qrmPerGpuData(qrmPerGpuData),
       _ctx(new QueryRendererContext(userId, widgetId, doHitTest, doDepthTest)),
       _perGpuData(),
@@ -99,18 +99,24 @@ QueryRenderer::QueryRenderer(int userId,
 }
 
 QueryRenderer::~QueryRenderer() {
-  _clear();
-  _clearGpuResources();
+  _clearAll();
 }
 
-void QueryRenderer::_clear() {
-  _ctx->_clear();
+void QueryRenderer::_clear(bool preserveDimensions) {
+  _ctx->_clear(preserveDimensions);
 }
 
 void QueryRenderer::_clearGpuResources() {
   _releasePbo();
 
   _perGpuData.clear();
+
+  _ctx->_clearGpuResources();
+}
+
+void QueryRenderer::_clearAll(bool preserveDimensions) {
+  _clear(preserveDimensions);
+  _clearGpuResources();
 }
 
 void QueryRenderer::_updateGpuData(const GpuId& gpuId,
@@ -227,9 +233,6 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
   if (forceUpdate) {
     _clear();
-    if (!_ctx->_jsonCache->ObjectEmpty()) {
-      _ctx->_jsonCache.reset(new rapidjson::Value());
-    }
   }
 
   if (_ctx->_jsonCache && *_ctx->_jsonCache == *jsonDocumentPtr) {
@@ -484,58 +487,78 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
 }
 
 void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate) {
-  _initFromJSON(configJSON, forceUpdate);
+  try {
+    _initFromJSON(configJSON, forceUpdate);
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
+  }
 }
 
 void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate) {
-  _initFromJSON(jsonDocumentPtr, forceUpdate);
+  try {
+    _initFromJSON(jsonDocumentPtr, forceUpdate);
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
+  }
 }
 
 #ifdef HAVE_CUDA
 void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor) {
-  std::vector<GpuId> gpuIds;
-  std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
-  CHECK(qrmPerGpuData);
-  for (const auto& kv : *qrmPerGpuData) {
-    if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
-      gpuIds.push_back(kv->gpuId);
+  try {
+    std::vector<GpuId> gpuIds;
+    std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
+    CHECK(qrmPerGpuData);
+    for (const auto& kv : *qrmPerGpuData) {
+      if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
+        gpuIds.push_back(kv->gpuId);
+      }
     }
+
+    std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
+    _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
+
+    // now update the query result buffers
+    _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
+    _ctx->_invalidKey = dataLayoutPtr->invalidKey;
+    _ctx->_queryDataLayoutPtr = dataLayoutPtr;
+    _ctx->executor_ = executor;
+
+    for (auto gpuId : gpuIds) {
+      auto itr = _perGpuData.find(gpuId);
+      CHECK(itr != _perGpuData.end());
+      itr->second.getQRMGpuData()->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
+    }
+
+    // now update the gpu resources for data, scale, and geom configs
+    // This needs to be done after the queryResultBuffers are updated.
+    _ctx->_updateConfigGpuResources(unusedGpus);
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
   }
-
-  std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
-  _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
-
-  // now update the query result buffers
-  _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
-  _ctx->_invalidKey = dataLayoutPtr->invalidKey;
-  _ctx->_queryDataLayoutPtr = dataLayoutPtr;
-  _ctx->executor_ = executor;
-
-  for (auto gpuId : gpuIds) {
-    auto itr = _perGpuData.find(gpuId);
-    CHECK(itr != _perGpuData.end());
-    itr->second.getQRMGpuData()->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
-  }
-
-  // now update the gpu resources for data, scale, and geom configs
-  // This needs to be done after the queryResultBuffers are updated.
-  _ctx->_updateConfigGpuResources(unusedGpus);
 }
 #endif  // HAVE_CUDA
 
 void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
-  std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
+  try {
+    std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
 
-  std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
-  CHECK(qrmPerGpuData);
-  if (!gpusToActivate.size()) {
-    std::vector<GpuId> gpuIds;
-    for (const auto& kv : *qrmPerGpuData) {
-      gpuIds.push_back(kv->gpuId);
+    std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
+    CHECK(qrmPerGpuData);
+    if (!gpusToActivate.size()) {
+      std::vector<GpuId> gpuIds;
+      for (const auto& kv : *qrmPerGpuData) {
+        gpuIds.push_back(kv->gpuId);
+      }
+      _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
+    } else {
+      _initGpuResources(qrmPerGpuData.get(), gpusToActivate, unusedGpus);
     }
-    _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
-  } else {
-    _initGpuResources(qrmPerGpuData.get(), gpusToActivate, unusedGpus);
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
   }
 }
 
@@ -659,66 +682,71 @@ void QueryRenderer::renderGpu(GpuId gpuId,
 }
 
 void QueryRenderer::render(bool inactivateRendererOnThread) {
-  // update everything marked dirty before rendering
-  _update();
+  try {
+    // update everything marked dirty before rendering
+    _update();
 
-  if (_ctx->doHitTest() && !_pbo) {
-    _createPbo();
-  }
-
-  // int64_t time_ms;
-  // auto clock_begin = timer_start();
-
-  int numGpusToRender = _perGpuData.size();
-  if (numGpusToRender) {
-    auto itr = _perGpuData.begin();
-    if (numGpusToRender == 1) {
-      renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
-
-      // time_ms = timer_stop(clock_begin);
-      // std::cerr << "\t\t\tCROOT - render gpu " << itr->first << ": " << time_ms << "ms" << std::endl;
-      // clock_begin = timer_start();
-
-      if (_ctx->doHitTest()) {
-        CHECK(_idPixels && _pbo);
-        QueryFramebufferUqPtr& framebufferPtr = itr->second.getFramebuffer();
-        framebufferPtr->copyIdBufferToPbo(_pbo);
-
-        // time_ms = timer_stop(clock_begin);
-        // std::cerr << "\t\t\tCROOT - pbo idmap copy: " << time_ms << "ms" << std::endl;
-        // clock_begin = timer_start();
-      }
-    } else {
-      auto& compositorPtr = itr->second.getCompositor();
-      CHECK(compositorPtr);
-
-      compositorPtr->render(this);
-
-      // time_ms = timer_stop(clock_begin);
-      // std::cerr << "\t\t\tCROOT - compositor render : " << time_ms << "ms" << std::endl;
-      // clock_begin = timer_start();
-
-      if (_ctx->doHitTest()) {
-        CHECK(_idPixels && _pbo);
-        Renderer* renderer = compositorPtr->getRenderer();
-        renderer->makeActiveOnCurrentThread();
-
-        compositorPtr->copyIdBufferToPbo(_pbo);
-
-        // time_ms = timer_stop(clock_begin);
-        // std::cerr << "\t\t\tCROOT - compositor pbo idmap copy : " << time_ms << "ms" << std::endl;
-        // clock_begin = timer_start();
-      }
+    if (_ctx->doHitTest() && !_pbo) {
+      _createPbo();
     }
 
-    _idPixelsDirty = true;
-  }
+    // int64_t time_ms;
+    // auto clock_begin = timer_start();
 
-  if (inactivateRendererOnThread) {
-    GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
-    if (currRenderer) {
-      currRenderer->makeInactive();
+    int numGpusToRender = _perGpuData.size();
+    if (numGpusToRender) {
+      auto itr = _perGpuData.begin();
+      if (numGpusToRender == 1) {
+        renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
+
+        // time_ms = timer_stop(clock_begin);
+        // std::cerr << "\t\t\tCROOT - render gpu " << itr->first << ": " << time_ms << "ms" << std::endl;
+        // clock_begin = timer_start();
+
+        if (_ctx->doHitTest()) {
+          CHECK(_idPixels && _pbo);
+          QueryFramebufferUqPtr& framebufferPtr = itr->second.getFramebuffer();
+          framebufferPtr->copyIdBufferToPbo(_pbo);
+
+          // time_ms = timer_stop(clock_begin);
+          // std::cerr << "\t\t\tCROOT - pbo idmap copy: " << time_ms << "ms" << std::endl;
+          // clock_begin = timer_start();
+        }
+      } else {
+        auto& compositorPtr = itr->second.getCompositor();
+        CHECK(compositorPtr);
+
+        compositorPtr->render(this);
+
+        // time_ms = timer_stop(clock_begin);
+        // std::cerr << "\t\t\tCROOT - compositor render : " << time_ms << "ms" << std::endl;
+        // clock_begin = timer_start();
+
+        if (_ctx->doHitTest()) {
+          CHECK(_idPixels && _pbo);
+          Renderer* renderer = compositorPtr->getRenderer();
+          renderer->makeActiveOnCurrentThread();
+
+          compositorPtr->copyIdBufferToPbo(_pbo);
+
+          // time_ms = timer_stop(clock_begin);
+          // std::cerr << "\t\t\tCROOT - compositor pbo idmap copy : " << time_ms << "ms" << std::endl;
+          // clock_begin = timer_start();
+        }
+      }
+
+      _idPixelsDirty = true;
     }
+
+    if (inactivateRendererOnThread) {
+      GLRenderer* currRenderer = GLRenderer::getCurrentThreadRenderer();
+      if (currRenderer) {
+        currRenderer->makeInactive();
+      }
+    }
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
   }
 }
 
@@ -737,134 +765,144 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   // std::cerr << "\t\tCROOT - render frame: " << time_ms << "ms." << std::endl;
   // clock_begin = timer_start();
 
-  int width = getWidth();
-  int height = getHeight();
-  std::shared_ptr<unsigned char> pixelsPtr;
+  try {
+    int width = getWidth();
+    int height = getHeight();
+    std::shared_ptr<unsigned char> pixelsPtr = nullptr;
 
-  int numGpus = _perGpuData.size();
-  if (numGpus) {
-    auto itr = _perGpuData.begin();
-    CHECK(itr != _perGpuData.end());
+    int numGpus = _perGpuData.size();
+    if (numGpus) {
+      auto itr = _perGpuData.begin();
+      CHECK(itr != _perGpuData.end());
 
-    if (_perGpuData.size() > 1) {
-      auto& compositorPtr = itr->second.getCompositor();
-      CHECK(compositorPtr);
+      if (_perGpuData.size() > 1) {
+        auto& compositorPtr = itr->second.getCompositor();
+        CHECK(compositorPtr);
 
-      Renderer* renderer = compositorPtr->getRenderer();
-      renderer->makeActiveOnCurrentThread();
-      pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
-      renderer->makeInactive();
-    } else {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+        Renderer* renderer = compositorPtr->getRenderer();
+        renderer->makeActiveOnCurrentThread();
+        pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
+        renderer->makeInactive();
+      } else {
+        QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
 
-      itr->second.makeActiveOnCurrentThread();
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
-      CHECK(renderer != nullptr);
+        itr->second.makeActiveOnCurrentThread();
+        GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
+        CHECK(renderer != nullptr);
 
-      auto& framebufferPtr = itr->second.getFramebuffer();
-      CHECK(framebufferPtr);
+        auto& framebufferPtr = itr->second.getFramebuffer();
+        CHECK(framebufferPtr);
 
-      framebufferPtr->bindToRenderer(renderer, FboBind::READ);
-      pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
+        framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+        pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
 
-      renderer->makeInactive();
+        renderer->makeInactive();
+      }
+    } else if (width > 0 && height > 0) {
+      pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
+      std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
     }
-  } else {
-    pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
-    std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
+
+    // time_ms = timer_stop(clock_begin);
+    // std::cerr << "\t\tCROOT - read color buffer: " << time_ms << "ms." << std::endl;
+    // clock_begin = timer_start();
+
+    return PngData(width, height, pixelsPtr, compressionLevel);
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
   }
-
-  // time_ms = timer_stop(clock_begin);
-  // std::cerr << "\t\tCROOT - read color buffer: " << time_ms << "ms." << std::endl;
-  // clock_begin = timer_start();
-
-  return PngData(width, height, pixelsPtr, compressionLevel);
 }
 
 unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   RUNTIME_EX_ASSERT(_ctx->doHitTest(),
                     "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + " was not initialized for hit-testing.");
 
-  unsigned int id = 0;
+  try {
+    unsigned int id = 0;
 
-  if (_idPixels && _perGpuData.size()) {
-    size_t width = _ctx->getWidth();
-    size_t height = _ctx->getHeight();
-    if (x < width && y < height) {
-      CHECK(_idPixels->getWidth() == width && _idPixels->getHeight() == height);
+    if (_idPixels && _perGpuData.size()) {
+      size_t width = _ctx->getWidth();
+      size_t height = _ctx->getHeight();
+      if (x < width && y < height) {
+        CHECK(_idPixels->getWidth() == width && _idPixels->getHeight() == height);
 
-      if (_idPixelsDirty) {
-        unsigned int* rawIds = _idPixels->getDataPtr();
-        auto itr = _perGpuData.find(_pboGpu);
+        if (_idPixelsDirty) {
+          unsigned int* rawIds = _idPixels->getDataPtr();
+          auto itr = _perGpuData.find(_pboGpu);
 
-        if (itr != _perGpuData.end()) {
-          // int64_t time_ms;
-          // auto clock_begin = timer_start();
+          if (itr != _perGpuData.end()) {
+            // int64_t time_ms;
+            // auto clock_begin = timer_start();
 
-          itr->second.makeActiveOnCurrentThread();
-          _pbo->readIdBuffer(width, height, rawIds);
-          _releasePbo();
-          itr->second.makeInactive();
+            itr->second.makeActiveOnCurrentThread();
+            _pbo->readIdBuffer(width, height, rawIds);
+            _releasePbo();
+            itr->second.makeInactive();
 
-          // time_ms = timer_stop(clock_begin);
-          // std::cerr << "CROOT - getIdAt::readIdBuffer from pbo: " << time_ms << " ms" << std::endl;
+            // time_ms = timer_stop(clock_begin);
+            // std::cerr << "CROOT - getIdAt::readIdBuffer from pbo: " << time_ms << " ms" << std::endl;
+          }
+
+          _idPixelsDirty = false;
         }
 
-        _idPixelsDirty = false;
-      }
+        if (pixelRadius == 0) {
+          id = _idPixels->get(x, y);
+        } else {
+          typedef std::unordered_map<size_t, Array2df> KernelMap;
+          static KernelMap gaussKernels;
 
-      if (pixelRadius == 0) {
-        id = _idPixels->get(x, y);
-      } else {
-        typedef std::unordered_map<size_t, Array2df> KernelMap;
-        static KernelMap gaussKernels;
+          size_t pixelRadius2xPlus1 = pixelRadius * 2 + 1;
+          auto itr = gaussKernels.find(pixelRadius);
+          if (itr == gaussKernels.end()) {
+            itr = gaussKernels.insert(itr, std::make_pair(pixelRadius, createGaussianKernel(pixelRadius2xPlus1, 0.75)));
+          }
 
-        size_t pixelRadius2xPlus1 = pixelRadius * 2 + 1;
-        auto itr = gaussKernels.find(pixelRadius);
-        if (itr == gaussKernels.end()) {
-          itr = gaussKernels.insert(itr, std::make_pair(pixelRadius, createGaussianKernel(pixelRadius2xPlus1, 0.75)));
-        }
+          const Array2df& kernel = itr->second;
+          Array2dui ids(pixelRadius2xPlus1, pixelRadius2xPlus1);
 
-        const Array2df& kernel = itr->second;
-        Array2dui ids(pixelRadius2xPlus1, pixelRadius2xPlus1);
+          ids.copyFromPixelCenter(*_idPixels,
+                                  x,
+                                  y,
+                                  pixelRadius,
+                                  pixelRadius,
+                                  pixelRadius,
+                                  pixelRadius,
+                                  ::Rendering::Objects::WrapType::USE_DEFAULT);
 
-        ids.copyFromPixelCenter(*_idPixels,
-                                x,
-                                y,
-                                pixelRadius,
-                                pixelRadius,
-                                pixelRadius,
-                                pixelRadius,
-                                ::Rendering::Objects::WrapType::USE_DEFAULT);
-
-        // build up the counter
-        std::unordered_map<unsigned int, float> idCounterMap;
-        std::unordered_map<unsigned int, float>::iterator idItr;
-        for (size_t i = 0; i < pixelRadius2xPlus1; ++i) {
-          for (size_t j = 0; j < pixelRadius2xPlus1; ++j) {
-            id = ids[i][j];
-            if (id > 0 && kernel[i][j] > 0) {  // don't include empty pixels or gaussian distro outliers
-              if ((idItr = idCounterMap.find(id)) == idCounterMap.end()) {
-                idItr = idCounterMap.insert(idItr, std::make_pair(id, 0.0));
+          // build up the counter
+          std::unordered_map<unsigned int, float> idCounterMap;
+          std::unordered_map<unsigned int, float>::iterator idItr;
+          for (size_t i = 0; i < pixelRadius2xPlus1; ++i) {
+            for (size_t j = 0; j < pixelRadius2xPlus1; ++j) {
+              id = ids[i][j];
+              if (id > 0 && kernel[i][j] > 0) {  // don't include empty pixels or gaussian distro outliers
+                if ((idItr = idCounterMap.find(id)) == idCounterMap.end()) {
+                  idItr = idCounterMap.insert(idItr, std::make_pair(id, 0.0));
+                }
+                idItr->second += kernel[i][j];
               }
-              idItr->second += kernel[i][j];
             }
           }
-        }
 
-        if (idCounterMap.size() == 0) {
-          id = 0;
-        } else if (idCounterMap.size() == 1) {
-          id = idCounterMap.begin()->first;
-        } else {
-          idItr = std::max_element(idCounterMap.begin(), idCounterMap.end(), idCounterCompare);
-          id = idItr->first;
+          if (idCounterMap.size() == 0) {
+            id = 0;
+          } else if (idCounterMap.size() == 1) {
+            id = idCounterMap.begin()->first;
+          } else {
+            idItr = std::max_element(idCounterMap.begin(), idCounterMap.end(), idCounterCompare);
+            id = idItr->first;
+          }
         }
       }
     }
-  }
 
-  return id;
+    return id;
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw e;
+  }
 }
 
 QueryRendererContext::QueryRendererContext(int userId, int widgetId, bool doHitTest, bool doDepthTest)
@@ -902,13 +940,16 @@ QueryRendererContext::~QueryRendererContext() {
   _clearGpuResources();
 }
 
-void QueryRendererContext::_clear() {
-  _width = 0;
-  _height = 0;
+void QueryRendererContext::_clear(bool preserveDimensions) {
+  if (!preserveDimensions) {
+    _width = 0;
+    _height = 0;
+  }
   _dataTableMap.clear();
   _scaleConfigMap.clear();
   _geomConfigs.clear();
   _eventCallbacksMap.clear();
+  _jsonCache = nullptr;
 }
 
 void QueryRendererContext::_clearGpuResources() {

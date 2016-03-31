@@ -121,7 +121,7 @@ class QueryRenderer {
                          int widgetId,
                          const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                          bool doHitTest = false,
-                         bool doDepthTest = false);
+                         bool doDepthTest = false) noexcept;
 
   explicit QueryRenderer(int userId,
                          int widgetId,
@@ -180,8 +180,9 @@ class QueryRenderer {
   bool _idPixelsDirty;
   std::shared_ptr<Array2dui> _idPixels;
 
-  void _clear();
+  void _clear(bool preserveDimensions = false);
   void _clearGpuResources();
+  void _clearAll(bool preserveDimensions = false);
   std::unordered_set<GpuId> _initUnusedGpus();
   void _initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
                          const std::vector<GpuId>& gpuIds,
@@ -325,7 +326,7 @@ class QueryRendererContext {
 
   QueryDataLayoutShPtr _queryDataLayoutPtr;
 
-  void _clear();
+  void _clear(bool preserveDimensions = false);
   void _clearGpuResources();
   void _initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData, const std::unordered_set<GpuId>& unusedGpus);
   void _updateConfigGpuResources(const std::unordered_set<GpuId>& unusedGpus);

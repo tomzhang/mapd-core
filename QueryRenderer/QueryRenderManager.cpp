@@ -40,6 +40,25 @@ void QueryRenderManager::ChangeLastRenderTime::operator()(SessionData& sd) {
   sd.lastRenderTime = new_time;
 }
 
+QueryRenderManager::ActiveRendererGuard::ActiveRendererGuard(QueryRenderManager::PerGpuData* currGpuData,
+                                                             QueryRenderManager* qrm)
+    : currGpuData(currGpuData), qrm(qrm) {
+  if (currGpuData) {
+    currGpuData->makeActiveOnCurrentThread();
+  }
+}
+
+QueryRenderManager::ActiveRendererGuard::~ActiveRendererGuard() {
+  ::Rendering::GL::GLRenderer* renderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
+  if (renderer) {
+    renderer->makeInactive();
+  }
+
+  if (qrm) {
+    qrm->_resetQueryResultBuffers();
+  }
+}
+
 QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryResultBufferSize, size_t renderCacheLimit)
     : _rendererMap(),
       _activeItr(_rendererMap.end()),
@@ -108,6 +127,9 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   PerGpuDataShPtr gpuDataPtr;
   size_t endDevice = startGpu + numGpus;
   size_t startDevice = startGpu;
+
+  ActiveRendererGuard renderGuard;
+
   for (size_t i = startDevice; i < endDevice; ++i) {
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
@@ -154,11 +176,9 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
   LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << endDevice
             << ", Render cache limit: " << _renderCacheLimit;
-
-  _unsetCurrentRenderer();
 }
 
-void QueryRenderManager::_resetQueryResultBuffers() {
+void QueryRenderManager::_resetQueryResultBuffers() noexcept {
   for (auto& itr : *_perGpuData) {
     itr->queryResultBufferPtr->reset();
   }
@@ -214,6 +234,8 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
                     "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
                         std::to_string(widgetId) + " already exists.");
 
+  ActiveRendererGuard activeRendererGuard;
+
   // Check if the current num of connections is maxed out, NOTE: can only add 1 at a time
   // here
   if (_rendererMap.size() == _renderCacheLimit) {
@@ -243,8 +265,6 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
   }
 
   _rendererMap.emplace(userId, widgetId, new QueryRenderer(userId, widgetId, _perGpuData, doHitTest, doDepthTest));
-
-  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
@@ -259,13 +279,13 @@ void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
                     "User id: " + std::to_string(userId) + "Widget id: " + std::to_string(widgetId) +
                         " does not exist. Cannot remove their caches.");
 
+  ActiveRendererGuard activeRendererGuard;
+
   _rendererMap.erase(itr);
 
   if (itr == _activeItr) {
     _clearActiveUserWidget();
   }
-
-  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
@@ -282,13 +302,13 @@ void QueryRenderManager::removeUser(int userId) {
   RUNTIME_EX_ASSERT(startEndItr.first != userIdMap.end(),
                     "User id " + std::to_string(userId) + " does not exist. Cannot remove its caches.");
 
+  ActiveRendererGuard activeRendererGuard;
+
   if (userId == _activeItr->userId) {
     _clearActiveUserWidget();
   }
 
   userIdMap.erase(startEndItr.first, startEndItr.second);
-
-  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::_clearActiveUserWidget() {
@@ -313,9 +333,9 @@ void QueryRenderManager::_purgeUnusedWidgets() {
   }
 
   LOG_IF(INFO, cnt > 0) << "QueryRenderManager - purging " << cnt << " idle connections.";
-  lastRenderTimeList.erase(lastRenderTimeList.begin(), itr);
 
-  _unsetCurrentRenderer();
+  ActiveRendererGuard activeRendererGuard;
+  lastRenderTimeList.erase(lastRenderTimeList.begin(), itr);
 }
 
 void QueryRenderManager::_updateActiveLastRenderTime() {
@@ -341,10 +361,8 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
-  inOrder[gpuIdx]->makeActiveOnCurrentThread();
+  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
   CudaHandle rtn = inOrder[gpuIdx]->queryResultBufferPtr->getCudaHandlePreQuery();
-
-  _unsetCurrentRenderer();
 
   return rtn;
 }
@@ -358,10 +376,8 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedByt
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
-  inOrder[gpuIdx]->makeActiveOnCurrentThread();
+  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
-
-  _unsetCurrentRenderer();
 }
 
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -372,6 +388,8 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
+
+  ActiveRendererGuard activeRendererGuard(nullptr, this);
 
   // need to update the data layout of the query result buffer before building up
   // from the json obj
@@ -384,10 +402,6 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   }
 
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
-
-  _resetQueryResultBuffers();
-
-  _unsetCurrentRenderer();
 }
 #else
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
@@ -399,13 +413,11 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 
   CHECK(_perGpuData->size());
 
+  ActiveRendererGuard activeRendererGuard(nullptr, this);
+
   _activeItr->renderer->activateGpus(_perGpuData);
 
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
-
-  _resetQueryResultBuffers();
-
-  _unsetCurrentRenderer();
 }
 #endif  // HAVE_CUDA
 
@@ -416,9 +428,9 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
                     "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
                     "setting width/height.");
 
-  _activeItr->renderer->setWidthHeight(width, height);
+  ActiveRendererGuard activeRendererGuard;
 
-  _unsetCurrentRenderer();
+  _activeItr->renderer->setWidthHeight(width, height);
 }
 
 size_t QueryRenderManager::getNumGpus() const {
@@ -440,10 +452,10 @@ void QueryRenderManager::render() {
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
+  ActiveRendererGuard activeRendererGuard;
+
   _activeItr->renderer->render();
   _updateActiveLastRenderTime();
-
-  _unsetCurrentRenderer();
 }
 
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
@@ -452,11 +464,11 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "There is no active user/widget id. Must set a user/widget id active before rendering.");
 
+  ActiveRendererGuard activeRendererGuard;
+
   PngData rtn = _activeItr->renderer->renderToPng(compressionLevel);
 
   _updateActiveLastRenderTime();
-
-  _unsetCurrentRenderer();
 
   return rtn;
 }
@@ -468,24 +480,15 @@ int64_t QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {
                     "getIdAt(): There is no active user/widget id. Must set an active user/widget id before "
                     "requesting pixel data.");
 
+  ActiveRendererGuard activeRendererGuard;
   int64_t id = _activeItr->renderer->getIdAt(x, y, pixelRadius);
   _updateActiveLastRenderTime();
-
-  _unsetCurrentRenderer();
 
   // ids go from 0 to numitems-1, but since we're storing
   // the ids as unsigned ints, and there isn't a way to specify the
   // clear value for secondary buffers, we need to account for that
   // offset here
   return id - 1;
-}
-
-void QueryRenderManager::_unsetCurrentRenderer() {
-  ::Rendering::GL::GLRenderer* renderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
-
-  if (renderer) {
-    renderer->makeInactive();
-  }
 }
 
 }  // namespace QueryRenderer
