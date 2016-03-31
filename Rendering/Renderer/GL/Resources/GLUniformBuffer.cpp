@@ -224,25 +224,36 @@ void GLUniformBuffer::setBufferLayout(const GLShaderBlockLayoutShPtr& shaderBloc
 }
 
 void GLUniformBuffer::bufferData(void* data, size_t numItems, size_t numBytesPerItem) {
+  size_t numBytesToUse = numBytesPerItem;
+  std::unique_ptr<unsigned char[]> newData = nullptr;
+
   if (_shaderBlockLayoutPtr) {
-    if (numItems == 1) {
-      RUNTIME_EX_ASSERT(numBytesPerItem == _shaderBlockLayoutPtr->getNumBytesInBlock() ||
-                            (numBytesPerItem > _shaderBlockLayoutPtr->getNumBytesInBlock() &&
-                             numBytesPerItem % _shaderBlockLayoutPtr->getNumAlignmentBytes() == 0),
-                        "Cannot allocate " + std::to_string(numBytesPerItem) +
-                            " bytes of data for uniform buffer. It must either be " +
-                            std::to_string(_shaderBlockLayoutPtr->getNumBytesInBlock()) + " or " +
-                            std::to_string(_shaderBlockLayoutPtr->getNumAlignmentBytes()) + " bytes for 1 item");
-    } else {
-      RUNTIME_EX_ASSERT(numBytesPerItem % _shaderBlockLayoutPtr->getNumAlignmentBytes() == 0,
-                        "Cannot allocate " + std::to_string(numBytesPerItem) +
-                            " bytes of data for uniform buffer. It does not meet the alignment requirement for more "
-                            "than 1 item. It must be a multiple of " +
-                            std::to_string(_shaderBlockLayoutPtr->getNumAlignmentBytes()) + " bytes.");
+    RUNTIME_EX_ASSERT(numBytesPerItem == _shaderBlockLayoutPtr->getNumBytesInBlock(),
+                      "Cannot allocate " + std::to_string(numBytesPerItem) +
+                          " bytes of data for uniform buffer. It does not match the " +
+                          std::to_string(_shaderBlockLayoutPtr->getNumBytesInBlock()) +
+                          " bytes required by the shader block layout.");
+
+    if (data && numItems > 1 && numBytesPerItem % _shaderBlockLayoutPtr->getNumAlignmentBytes() != 0) {
+      numBytesToUse = calcNumBytesPerItem(
+          _shaderBlockLayoutPtr->getNumBytesInBlock(), _shaderBlockLayoutPtr->getNumAlignmentBytes(), numItems);
+
+      size_t fullNumBytes = numBytesToUse * numItems;
+      newData.reset(new unsigned char[fullNumBytes]);
+      unsigned char* oldRawData = reinterpret_cast<unsigned char*>(data);
+      unsigned char* newRawData = newData.get();
+      std::fill(&newRawData[0], &newRawData[fullNumBytes], 0);
+
+      for (size_t i = 0; i < numItems; ++i) {
+        std::copy(
+            &oldRawData[i * numBytesPerItem], &oldRawData[(i + 1) * numBytesPerItem], &newRawData[i * numBytesToUse]);
+      }
+
+      data = newRawData;
     }
   }
 
-  GLBaseBuffer::bufferData(data, numItems * numBytesPerItem);
+  GLBaseBuffer::bufferData(data, numItems * numBytesToUse);
   _numItems = numItems;
 }
 
