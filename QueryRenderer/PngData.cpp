@@ -26,8 +26,7 @@ PngData::PngData() : pngDataPtr(nullptr), pngSize(0) {
 PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pixelsPtr, int compressionLevel)
     : pngDataPtr(nullptr), pngSize(0) {
   if (!pixelsPtr || width == 0 || height == 0) {
-    // throw std::runtime_error("Cannot create PngData(). The pixels are empty.");
-    return;
+    throw std::runtime_error("Cannot create PngData(). The pixels are empty.");
   }
 
   if (compressionLevel < -1 || compressionLevel > 9) {
