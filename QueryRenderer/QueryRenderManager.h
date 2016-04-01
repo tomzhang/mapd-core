@@ -2,11 +2,11 @@
 #define QUERYRENDERER_QUERYRENDERMANAGER_H_
 
 #include "Types.h"
+#include "Interop/Types.h"
 #include "QueryDataLayout.h"
-#include "QueryResultVertexBuffer.h"
-#include "QueryRenderCompositor.h"
-#include "QueryIdMapPboPool.h"
-#include "Types.h"
+#include "Interop/QueryResultVertexBuffer.h"
+#include "Rendering/QueryRenderCompositor.h"
+#include "Rendering/QueryIdMapPboPool.h"
 #include "PngData.h"
 #include <Rendering/Types.h>
 

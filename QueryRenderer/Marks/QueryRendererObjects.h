@@ -2,7 +2,7 @@
 #define QUERYRENDERER_QUERYRENDEREROBJECTS_H_
 
 #include "Types.h"
-#include "QueryDataTable.h"
+#include "../Data/QueryDataTable.h"
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>

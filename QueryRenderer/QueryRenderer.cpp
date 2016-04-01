@@ -1,8 +1,8 @@
 #include "QueryRenderer.h"
-#include "QueryFramebuffer.h"
-#include "QueryDataTable.h"
-#include "QueryRendererObjects.h"
-#include "QueryRenderCompositor.h"
+#include "Data/QueryDataTable.h"
+#include "Marks/QueryRendererObjects.h"
+#include "Rendering/QueryFramebuffer.h"
+#include "Rendering/QueryRenderCompositor.h"
 #include <Rendering/Window.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 

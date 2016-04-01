@@ -1,4 +1,4 @@
-#include "../QueryRenderer.h"
+#include "../../QueryRenderer.h"
 #include <Rendering/Renderer/GL/egl/EglGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "EglQueryRenderCompositorImpl.h"

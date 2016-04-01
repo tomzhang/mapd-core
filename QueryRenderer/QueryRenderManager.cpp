@@ -1,6 +1,6 @@
 #include "QueryRenderManager.h"
 #include "QueryRenderer.h"
-#include "Utilities.h"
+#include "Utils/Utilities.h"
 #include <Rendering/WindowManager.h>
 #include <Rendering/Settings/WindowSettings.h>
 #include <Rendering/Settings/RendererSettings.h>

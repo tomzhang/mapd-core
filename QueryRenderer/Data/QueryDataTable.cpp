@@ -1,5 +1,5 @@
 #include "QueryDataTable.h"
-#include "QueryRenderer.h"
+#include "../QueryRenderer.h"
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
 
 // #include "DataTable.h"

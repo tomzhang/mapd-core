@@ -5,6 +5,7 @@
 // doesn't support some extensions we're going to
 // use for compositing
 
+#include "../Types.h"
 #include "Types.h"
 #include "QueryFramebuffer.h"
 #include <Rendering/RenderError.h>

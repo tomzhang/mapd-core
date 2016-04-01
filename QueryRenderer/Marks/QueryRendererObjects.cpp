@@ -1,5 +1,5 @@
 #include "QueryRendererObjects.h"
-#include "QueryRenderer.h"
+#include "../QueryRenderer.h"
 #include "shaders/pointTemplate_vert.h"
 #include "shaders/pointTemplate_frag.h"
 #include "shaders/linearScaleTemplate_vert.h"

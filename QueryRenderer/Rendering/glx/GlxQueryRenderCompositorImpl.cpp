@@ -1,4 +1,5 @@
-#include "../QueryRenderer.h"
+#include "../../PngData.h"
+#include "../../QueryRenderer.h"
 #include <Rendering/Renderer/GL/glx/GlxGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "GlxQueryRenderCompositorImpl.h"
@@ -9,7 +10,6 @@
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
 #include <Rendering/Renderer/GL/Resources/GLTexture2d.h>
 #include <Rendering/Renderer/GL/glx/X11DisplayManager.h>
-#include "../PngData.h"
 
 namespace QueryRenderer {
 namespace Impl {

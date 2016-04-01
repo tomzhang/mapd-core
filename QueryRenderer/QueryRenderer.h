@@ -2,11 +2,16 @@
 #define QUERYRENDERER_QUERYRENDERER_H_
 
 #include "Types.h"
+#include "Rendering/Types.h"
+#include "Interop/Types.h"
+#include "Marks/Types.h"
+#include "Data/Types.h"
+
 #include "QueryRenderManager.h"
-#include "QueryRenderCompositor.h"
-#include "QueryFramebuffer.h"
-#include "QueryIdMapPixelBuffer.h"
-#include "RapidJSONUtils.h"
+#include "Rendering/QueryRenderCompositor.h"
+#include "Rendering/QueryFramebuffer.h"
+#include "Rendering/QueryIdMapPixelBuffer.h"
+#include "Utils/RapidJSONUtils.h"
 
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <Rendering/Objects/Array2d.h>

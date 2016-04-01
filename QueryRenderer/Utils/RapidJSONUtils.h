@@ -1,12 +1,14 @@
 #ifndef QUERYRENDERER_RAPIDJSONUTILS_H_
 #define QUERYRENDERER_RAPIDJSONUTILS_H_
 
-#include "QueryRendererError.h"
+#include "../Types.h"
+
+#include <Rendering/RenderError.h>
+
 #include <memory>
 #include <string>
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
-#include "Types.h"
 
 namespace QueryRenderer {
 

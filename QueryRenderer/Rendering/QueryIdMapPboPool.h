@@ -2,7 +2,7 @@
 #define QUERYRENDERER_QUERYIDMAPPBOPOOL_H_
 
 #include "Types.h"
-#include "Utilities.h"
+#include "../Utils/Utilities.h"
 #include <Rendering/Renderer/GL/Types.h>
 
 #include <boost/multi_index_container.hpp>
