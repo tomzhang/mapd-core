@@ -2,7 +2,7 @@
 #define QUERYRENDERER_QUERYDATATABLE_H_
 
 #include "Types.h"
-#include "../QueryRenderer.h"
+#include "../QueryRendererContext.h"
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>

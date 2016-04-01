@@ -1,5 +1,5 @@
 #include "../../PngData.h"
-#include "../../QueryRenderer.h"
+#include "../../QueryRendererContext.h"
 #include <Rendering/Renderer/GL/glx/GlxGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "GlxQueryRenderCompositorImpl.h"
