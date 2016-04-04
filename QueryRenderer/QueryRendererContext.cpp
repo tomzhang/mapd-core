@@ -70,7 +70,7 @@ void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPer
                                              const std::unordered_set<GpuId>& unusedGpus) {
   for (const auto& itr : qrPerGpuData) {
     if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-      _perGpuData.insert({itr.first, PerGpuData(itr.second.qrmGpuData)});
+      _perGpuData.insert({itr.first, PerGpuData(itr.second)});
     }
   }
 
@@ -131,7 +131,7 @@ QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(co
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     "QueryRendererContext " + to_string(_userWidget) +
                         ": Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+  RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
   CHECK(qrmGpuData);
   return qrmGpuData->queryResultBufferPtr;
 }
@@ -139,9 +139,9 @@ QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(co
 std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
   std::map<GpuId, QueryVertexBufferShPtr> rtn;
 
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+  RootPerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    qrmGpuData = itr.second.getQRMGpuData();
+    qrmGpuData = itr.second.getRootPerGpuData();
     CHECK(qrmGpuData);
     rtn.insert({itr.first, qrmGpuData->queryResultBufferPtr});
   }

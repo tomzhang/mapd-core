@@ -272,7 +272,7 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   itr = perGpuData->begin();
   cnt = 0;
   for (; itr != perGpuData->end(); ++itr, ++cnt) {
-    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>(itr->second.getQRMGpuData()->rendererPtr.get());
+    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>(itr->second.getRootPerGpuData()->rendererPtr.get());
     CHECK(glxRenderer != nullptr);
 
     GLXContext glxCtx = glxRenderer->getGLXContext();

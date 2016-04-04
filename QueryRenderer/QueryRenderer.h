@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYRENDERER_H_
 
 #include "Types.h"
+#include "PerGpuData.h"
 #include "Rendering/Types.h"
 #include "Interop/Types.h"
 #include "Marks/Types.h"
@@ -28,94 +29,7 @@ namespace QueryRenderer {
 
 class QueryRenderer {
  public:
-  struct PerGpuData {
-    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
-
-    PerGpuData() : qrmGpuData() {}
-
-    PerGpuData(PerGpuData&& data) noexcept : qrmGpuData(std::move(data.qrmGpuData)) {}
-
-    ~PerGpuData() {
-      // need to make active to properly destroy gpu resources
-      // TODO(croot): uncomment this if we have GL resources at
-      // this level (i.e. a framebuffer or a compositor per gpu)
-      // TODO(croot): reset to previously active renderer?
-      // makeActiveOnCurrentThread();
-    }
-
-    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() const { return qrmGpuData.lock(); }
-
-    void makeActiveOnCurrentThread() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        qrmGpuDataShPtr->makeActiveOnCurrentThread();
-      }
-    }
-
-    void makeInactive() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        qrmGpuDataShPtr->makeInactive();
-      }
-    }
-
-    ::Rendering::Renderer* getRenderer() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        return qrmGpuDataShPtr->getRenderer();
-      }
-
-      return nullptr;
-    }
-
-    ::Rendering::GL::GLRenderer* getGLRenderer() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        return qrmGpuDataShPtr->getGLRenderer();
-      }
-
-      return nullptr;
-    }
-
-    void resize(size_t width, size_t height) {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        qrmGpuDataShPtr->resize(width, height);
-      }
-    }
-
-    QueryFramebufferUqPtr& getFramebuffer() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      CHECK(qrmGpuDataShPtr);
-      return qrmGpuDataShPtr->getFramebuffer();
-    }
-
-    std::shared_ptr<QueryRenderCompositor>& getCompositor() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      CHECK(qrmGpuDataShPtr);
-      return qrmGpuDataShPtr->getCompositor();
-    }
-
-    GpuId getCompositorGpuId() {
-      auto compositorPtr = getCompositor();
-      ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
-      CHECK(renderer);
-      return renderer->getGpuId();
-    }
-
-    QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height) {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      CHECK(qrmGpuDataShPtr);
-      return qrmGpuDataShPtr->getInactiveIdMapPbo(width, height);
-    }
-
-    void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        qrmGpuDataShPtr->setIdMapPboInactive(pbo);
-      }
-    }
-  };
+  typedef BasePerGpuData PerGpuData;
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
   explicit QueryRenderer(int userId,

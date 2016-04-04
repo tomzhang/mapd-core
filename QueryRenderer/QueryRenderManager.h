@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include "Interop/Types.h"
+#include "PerGpuData.h"
 #include "QueryDataLayout.h"
 #include "Interop/QueryResultVertexBuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
@@ -36,111 +37,15 @@ typedef std::pair<int, int> UserWidgetPair;
 
 class QueryRenderManager {
  public:
-  struct PerGpuData {
-    GpuId gpuId;
-    QueryResultVertexBufferShPtr queryResultBufferPtr;
-    Rendering::WindowShPtr windowPtr;
-    Rendering::RendererShPtr rendererPtr;
-
-    // TODO(croot): make a pool of framebuffers?
-    // This would be necessary if we ever support asynchronous
-    // queries, even partially (i.e. the cuda part of the query
-    // may be serialized, but the render part could run asynchronously.)
-    QueryFramebufferUqPtr framebufferPtr;
-    std::shared_ptr<QueryRenderCompositor> compositorPtr;
-    std::unique_ptr<QueryIdMapPboPool> pboPoolPtr;
-
-    PerGpuData(GpuId gpuId)
-        : gpuId(gpuId),
-          queryResultBufferPtr(nullptr),
-          windowPtr(nullptr),
-          rendererPtr(nullptr),
-          framebufferPtr(nullptr),
-          compositorPtr(nullptr),
-          pboPoolPtr(nullptr) {}
-
-    ~PerGpuData() {
-      // need to make active to properly destroy gpu resources
-      // TODO(croot): reset to previously active renderer?
-      makeActiveOnCurrentThread();
-    }
-
-    void makeActiveOnCurrentThread() {
-      CHECK(windowPtr && rendererPtr);
-      rendererPtr->makeActiveOnCurrentThread(windowPtr);
-    }
-
-    void makeInactive() {
-      CHECK(rendererPtr);
-      rendererPtr->makeInactive();
-    }
-
-    ::Rendering::Renderer* getRenderer() {
-      if (rendererPtr) {
-        return rendererPtr.get();
-      }
-      return nullptr;
-    }
-
-    ::Rendering::GL::GLRenderer* getGLRenderer() {
-      if (rendererPtr) {
-        ::Rendering::Renderer* renderer = rendererPtr.get();
-        return dynamic_cast<::Rendering::GL::GLRenderer*>(renderer);
-      }
-
-      return nullptr;
-    }
-
-    void resize(size_t width, size_t height) {
-      CHECK(framebufferPtr);
-
-      width = std::max(width, framebufferPtr->getWidth());
-      height = std::max(height, framebufferPtr->getHeight());
-      framebufferPtr->resize(width, height);
-      if (compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
-        ::Rendering::GL::GLRenderer* prevRenderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
-        ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
-        ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
-        CHECK(renderer);
-        bool reset = false;
-        if (renderer != prevRenderer) {
-          reset = true;
-          renderer->makeActiveOnCurrentThread();
-        }
-        compositorPtr->resize(width, height);
-        if (reset) {
-          prevRenderer->makeActiveOnCurrentThread(prevWindow);
-        }
-      }
-    }
-
-    QueryFramebufferUqPtr& getFramebuffer() { return framebufferPtr; }
-    std::shared_ptr<QueryRenderCompositor>& getCompositor() { return compositorPtr; }
-    std::unique_ptr<QueryIdMapPboPool>& getIdMapPboPool() { return pboPoolPtr; }
-
-    QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height) {
-      CHECK(pboPoolPtr);
-      return pboPoolPtr->getInactiveIdMapPbo(width, height);
-    }
-
-    void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
-      CHECK(pboPoolPtr);
-      pboPoolPtr->setIdMapPboInactive(pbo);
-    }
-  };
-
-  typedef std::shared_ptr<PerGpuData> PerGpuDataShPtr;
-  typedef std::weak_ptr<PerGpuData> PerGpuDataWkPtr;
-
   struct inorder {};
 
   struct PerGpuDataId {
     typedef GpuId result_type;
 
-    result_type operator()(const PerGpuDataShPtr& perGpuData) const { return perGpuData->gpuId; }
+    result_type operator()(const RootPerGpuDataShPtr& perGpuData) const { return perGpuData->gpuId; }
   };
 
-  typedef ::boost::multi_index_container<PerGpuDataShPtr,
+  typedef ::boost::multi_index_container<RootPerGpuDataShPtr,
                                          ::boost::multi_index::indexed_by<
                                              // hashed on gpuId
                                              ::boost::multi_index::ordered_unique<PerGpuDataId>,
@@ -241,10 +146,10 @@ class QueryRenderManager {
   typedef RendererMap::index<LastRenderTime>::type RendererMap_by_LastRenderTime;
 
   struct ActiveRendererGuard {
-    QueryRenderManager::PerGpuData* currGpuData;
+    RootPerGpuData* currGpuData;
     QueryRenderManager* qrm;
 
-    ActiveRendererGuard(QueryRenderManager::PerGpuData* currGpuData = nullptr, QueryRenderManager* qrm = nullptr);
+    ActiveRendererGuard(RootPerGpuData* currGpuData = nullptr, QueryRenderManager* qrm = nullptr);
     ~ActiveRendererGuard();
   };
 

@@ -40,8 +40,7 @@ void QueryRenderManager::ChangeLastRenderTime::operator()(SessionData& sd) {
   sd.lastRenderTime = new_time;
 }
 
-QueryRenderManager::ActiveRendererGuard::ActiveRendererGuard(QueryRenderManager::PerGpuData* currGpuData,
-                                                             QueryRenderManager* qrm)
+QueryRenderManager::ActiveRendererGuard::ActiveRendererGuard(RootPerGpuData* currGpuData, QueryRenderManager* qrm)
     : currGpuData(currGpuData), qrm(qrm) {
   if (currGpuData) {
     currGpuData->makeActiveOnCurrentThread();
@@ -134,7 +133,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   GLRendererShPtr renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
 
-  PerGpuDataShPtr gpuDataPtr;
+  RootPerGpuDataShPtr gpuDataPtr;
   size_t endDevice = startGpu + numGpus;
   size_t startDevice = startGpu;
 
@@ -149,7 +148,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
-    auto itr = _perGpuData->emplace(new PerGpuData(i));
+    auto itr = _perGpuData->emplace(new RootPerGpuData(i));
 
     gpuDataPtr = *itr.first;
     gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);

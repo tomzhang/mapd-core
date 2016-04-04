@@ -386,9 +386,9 @@ void PointMark::_updateShader() {
 
   GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
   GLRenderer* currRenderer = nullptr;
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+  RootPerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    qrmGpuData = itr.second.getQRMGpuData();
+    qrmGpuData = itr.second.getRootPerGpuData();
     qrmGpuData->makeActiveOnCurrentThread();
     currRenderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
 
@@ -474,7 +474,7 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   auto itr = _perGpuData.find(gpuId);
   CHECK(itr != _perGpuData.end());
 
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+  RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
   CHECK(qrmGpuData);
 
   ::Rendering::Renderer* rndr = qrmGpuData->rendererPtr.get();

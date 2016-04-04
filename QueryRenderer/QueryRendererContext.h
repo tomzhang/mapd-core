@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYRENDERERCONTEXT_H_
 
 #include "Types.h"
+#include "PerGpuData.h"
 #include "QueryRenderer.h"
 // #include "Rendering/Types.h"
 // #include "Interop/Types.h"
@@ -18,23 +19,7 @@ namespace QueryRenderer {
 
 class QueryRendererContext {
  public:
-  struct PerGpuData {
-    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
-
-    PerGpuData() : qrmGpuData() {}
-    PerGpuData(const QueryRenderManager::PerGpuDataWkPtr& qrmGpuData) : qrmGpuData(qrmGpuData) {}
-    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData) {}
-    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)) {}
-
-    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() const { return qrmGpuData.lock(); }
-
-    void makeActiveOnCurrentThread() const {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuDataShPtr = qrmGpuData.lock();
-      if (qrmGpuDataShPtr) {
-        qrmGpuDataShPtr->makeActiveOnCurrentThread();
-      }
-    }
-  };
+  typedef BasePerGpuData PerGpuData;
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
   typedef std::shared_ptr<BaseScale> ScaleShPtr;

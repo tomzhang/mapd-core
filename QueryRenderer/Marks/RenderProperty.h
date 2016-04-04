@@ -97,29 +97,19 @@ class BaseRenderProperty {
 
   std::string _vboAttrName;
 
-  struct PerGpuData {
-    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
+  struct PerGpuData : BasePerGpuData {
     QueryVertexBufferShPtr vbo;
 
-    PerGpuData() : qrmGpuData(), vbo(nullptr) {}
-    explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData, const QueryVertexBufferShPtr& vbo = nullptr)
-        : qrmGpuData(qrcGpuData.qrmGpuData), vbo(vbo) {}
-    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), vbo(data.vbo) {}
-    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), vbo(std::move(data.vbo)) {}
+    PerGpuData() : BasePerGpuData(), vbo(nullptr) {}
+    explicit PerGpuData(const BasePerGpuData& perGpuData, const QueryVertexBufferShPtr& vbo = nullptr)
+        : BasePerGpuData(perGpuData), vbo(vbo) {}
+    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), vbo(data.vbo) {}
+    PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), vbo(std::move(data.vbo)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete GL resources per-gpu
       // TODO(croot): reset to previously active renderer?
       makeActiveOnCurrentThread();
-    }
-
-    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() { return qrmGpuData.lock(); }
-
-    void makeActiveOnCurrentThread() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuData = getQRMGpuData();
-      if (qrmGpuData) {
-        qrmGpuData->makeActiveOnCurrentThread();
-      }
     }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;

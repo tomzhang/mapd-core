@@ -107,7 +107,7 @@ void BaseQueryDataTableVBO::_initGpuResources(const QueryRendererContext* ctx,
           // case QueryDataTableType::URL:
           //   break;
           case QueryDataTableType::SQLQUERY:
-            gpuData.vbo = itr.second.getQRMGpuData()->queryResultBufferPtr;
+            gpuData.vbo = itr.second.getRootPerGpuData()->queryResultBufferPtr;
             break;
           default:
             THROW_RUNTIME_EX(std::string(*this) + ": Unsupported data table type for mult-gpu configuration: " +
@@ -569,9 +569,9 @@ QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     std::string(*this) + ": Cannot get column data vbo for gpu " + std::to_string(gpuId));
 
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+  RootPerGpuDataShPtr qrmGpuData;
   if (itr->second.vbo == nullptr) {
-    qrmGpuData = itr->second.getQRMGpuData();
+    qrmGpuData = itr->second.getRootPerGpuData();
     CHECK(qrmGpuData && qrmGpuData->rendererPtr);
     GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
     CHECK(renderer != nullptr);
@@ -592,12 +592,12 @@ std::map<GpuId, QueryVertexBufferShPtr> DataTable::getColumnDataVBOs(const std::
   std::map<GpuId, QueryVertexBufferShPtr> rtn;
   std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData;
 
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+  RootPerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
     if (itr.second.vbo == nullptr) {
       itr.second.makeActiveOnCurrentThread();
 
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
+      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.getRootPerGpuData()->rendererPtr.get());
       CHECK(renderer != nullptr);
 
       if (vboData.first == nullptr) {

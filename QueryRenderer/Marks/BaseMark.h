@@ -2,6 +2,7 @@
 #define QUERYRENDERER_MARKS_MARK_H_
 
 #include "../Types.h"
+#include "../PerGpuData.h"
 #include "RenderProperty.h"
 
 #include <Rendering/Renderer/GL/GLRenderer.h>
@@ -54,31 +55,21 @@ class BaseMark {
 
   QueryDataTableVBOShPtr _dataPtr;
 
-  struct PerGpuData {
-    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
+  struct PerGpuData : BasePerGpuData {
     ::Rendering::GL::Resources::GLShaderShPtr shaderPtr;
     ::Rendering::GL::Resources::GLVertexArrayShPtr vaoPtr;
 
-    PerGpuData() : qrmGpuData(), shaderPtr(nullptr) {}
-    explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData,
+    PerGpuData() : BasePerGpuData(), shaderPtr(nullptr) {}
+    explicit PerGpuData(const BasePerGpuData& data,
                         const ::Rendering::GL::Resources::GLShaderShPtr& shaderPtr = nullptr)
-        : qrmGpuData(qrcGpuData.qrmGpuData), shaderPtr(shaderPtr) {}
-    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), shaderPtr(data.shaderPtr) {}
-    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), shaderPtr(std::move(data.shaderPtr)) {}
+        : BasePerGpuData(data), shaderPtr(shaderPtr) {}
+    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), shaderPtr(data.shaderPtr) {}
+    PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), shaderPtr(std::move(data.shaderPtr)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete all GL resources
       // TODO(croot): reset to previously active renderer?
       makeActiveOnCurrentThread();
-    }
-
-    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() { return qrmGpuData.lock(); }
-
-    void makeActiveOnCurrentThread() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuData = getQRMGpuData();
-      if (qrmGpuData) {
-        qrmGpuData->makeActiveOnCurrentThread();
-      }
     }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;

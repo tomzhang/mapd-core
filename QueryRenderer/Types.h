@@ -16,6 +16,10 @@ struct UserWidgetIdPair {
   UserWidgetIdPair(int userId, int widgetId) : userId(userId), widgetId(widgetId) {}
 };
 
+struct RootPerGpuData;
+typedef std::weak_ptr<RootPerGpuData> RootPerGpuDataWkPtr;
+typedef std::shared_ptr<RootPerGpuData> RootPerGpuDataShPtr;
+
 class QueryRenderManager;
 
 struct QueryDataLayout;

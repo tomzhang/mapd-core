@@ -75,9 +75,9 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
   // Window* prevWindow = GLRenderer::getCurrentThreadWindow();
   GLRenderer* currRenderer = nullptr;
 
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+  RootPerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    qrmGpuData = itr.second.getQRMGpuData();
+    qrmGpuData = itr.second.getRootPerGpuData();
     CHECK(qrmGpuData);
 
     qrmGpuData->makeActiveOnCurrentThread();
@@ -133,7 +133,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx,
         std::string fragSrc = beginItr->second.shaderPtr->getFragmentSource();
 
         itr.second.makeActiveOnCurrentThread();
-        renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
+        renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getRootPerGpuData()->rendererPtr.get());
         CHECK(renderer);
 
         rsrcMgr = renderer->getResourceManager();
@@ -170,7 +170,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx,
     for (auto& itr : _perGpuData) {
       if (!itr.second.vaoPtr) {
         itr.second.makeActiveOnCurrentThread();
-        renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getQRMGpuData()->rendererPtr.get());
+        renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(itr.second.getRootPerGpuData()->rendererPtr.get());
         CHECK(renderer);
 
         rsrcMgr = renderer->getResourceManager();

@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYDATATABLE_H_
 
 #include "Types.h"
+#include "../PerGpuData.h"
 #include "../QueryRendererContext.h"
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
@@ -80,29 +81,19 @@ class BaseQueryDataTableVBO {
   QueryRendererContextShPtr _ctx;
   std::string _name;
 
-  struct PerGpuData {
-    QueryRenderManager::PerGpuDataWkPtr qrmGpuData;
+  struct PerGpuData : BasePerGpuData {
     QueryVertexBufferShPtr vbo;
 
-    PerGpuData() : qrmGpuData(), vbo(nullptr) {}
-    explicit PerGpuData(const QueryRendererContext::PerGpuData& qrcGpuData, const QueryVertexBufferShPtr& vbo = nullptr)
-        : qrmGpuData(qrcGpuData.qrmGpuData), vbo(vbo) {}
-    PerGpuData(const PerGpuData& data) : qrmGpuData(data.qrmGpuData), vbo(data.vbo) {}
-    PerGpuData(PerGpuData&& data) : qrmGpuData(std::move(data.qrmGpuData)), vbo(std::move(data.vbo)) {}
+    PerGpuData() : BasePerGpuData(), vbo(nullptr) {}
+    explicit PerGpuData(const BasePerGpuData& data, const QueryVertexBufferShPtr& vbo = nullptr)
+        : BasePerGpuData(data), vbo(vbo) {}
+    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), vbo(data.vbo) {}
+    PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), vbo(std::move(data.vbo)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete gpu resources
       // TODO(croot): reset to previously active renderer?
       makeActiveOnCurrentThread();
-    }
-
-    QueryRenderManager::PerGpuDataShPtr getQRMGpuData() { return qrmGpuData.lock(); }
-
-    void makeActiveOnCurrentThread() {
-      QueryRenderManager::PerGpuDataShPtr qrmGpuData = getQRMGpuData();
-      if (qrmGpuData) {
-        qrmGpuData->makeActiveOnCurrentThread();
-      }
     }
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;

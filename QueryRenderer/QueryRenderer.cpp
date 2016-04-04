@@ -136,7 +136,7 @@ void QueryRenderer::_updateGpuData(const GpuId& gpuId,
 
     PerGpuData gpuData;
 
-    gpuData.qrmGpuData = *itr;
+    gpuData.rootPerGpuData = *itr;
 
     // TODO(croot): validate the QueryRenderManager data is complete?
 
@@ -209,7 +209,7 @@ void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerG
 }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData;
+  RootPerGpuDataShPtr qrmGpuData;
 
   for (auto& gpuDataItr : _perGpuData) {
     gpuDataItr.second.makeActiveOnCurrentThread();
@@ -532,7 +532,7 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
     for (auto gpuId : gpuIds) {
       auto itr = _perGpuData.find(gpuId);
       CHECK(itr != _perGpuData.end());
-      itr->second.getQRMGpuData()->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
+      itr->second.getRootPerGpuData()->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
     }
 
     // now update the gpu resources for data, scale, and geom configs
@@ -639,7 +639,7 @@ void QueryRenderer::renderGpu(GpuId gpuId,
 
   CHECK(itr != gpuDataMap->end());
 
-  QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+  RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
 
   itr->second.makeActiveOnCurrentThread();
 
@@ -796,7 +796,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
         pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
         renderer->makeInactive();
       } else {
-        QueryRenderManager::PerGpuDataShPtr qrmGpuData = itr->second.getQRMGpuData();
+        RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
 
         itr->second.makeActiveOnCurrentThread();
         GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
