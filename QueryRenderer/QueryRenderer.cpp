@@ -1,7 +1,10 @@
 #include "QueryRenderer.h"
 #include "QueryRendererContext.h"
 #include "Data/QueryDataTable.h"
-#include "Marks/QueryRendererObjects.h"
+#include "Marks/BaseMark.h"
+#include "Marks/Utils.h"
+#include "Scales/Scale.h"
+#include "Scales/Utils.h"
 #include "Rendering/QueryFramebuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
 #include <Rendering/Window.h>

@@ -2,6 +2,7 @@
 #define QUERYRENDERER_RAPIDJSONUTILS_H_
 
 #include "../Types.h"
+#include "../Data/Types.h"
 
 #include <Rendering/RenderError.h>
 
@@ -26,6 +27,8 @@ struct RapidJSONUtils {
   static std::string getJsonParseErrorStr(const UserWidgetIdPair& userWidget,
                                           const rapidjson::Value& obj,
                                           const std::string& errStr);
+
+  static QueryDataType getDataTypeFromJSONObj(const rapidjson::Value& obj, bool supportString = false);
 
   template <typename T>
   static T getNumValFromJSONObj(const rapidjson::Value& obj) {

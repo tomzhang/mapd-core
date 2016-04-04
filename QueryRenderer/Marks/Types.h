@@ -5,11 +5,12 @@
 
 namespace QueryRenderer {
 
-class BaseMark;
-typedef std::shared_ptr<BaseMark> MarkShPtr;
+enum GeomType { POINTS = 0 };  // LINES, POLYS
 
-class BaseScale;
-typedef std::shared_ptr<BaseScale> ScaleShPtr;
+class BaseMark;
+typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
+
+class BaseRenderProperty;
 
 }  // namespace QueryRenderer
 

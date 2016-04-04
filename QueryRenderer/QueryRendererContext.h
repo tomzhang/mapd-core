@@ -7,25 +7,10 @@
 // #include "Interop/Types.h"
 #include "Marks/Types.h"
 #include "Data/Types.h"
+#include "Scales/Types.h"
 
 #include "QueryRenderManager.h"
-// #include "Rendering/QueryRenderCompositor.h"
-// #include "Rendering/QueryFramebuffer.h"
-// #include "Rendering/QueryIdMapPixelBuffer.h"
 #include "Utils/RapidJSONUtils.h"
-
-// #include <Rendering/Renderer/GL/Resources/Types.h>
-// #include <Rendering/Objects/Array2d.h>
-
-// #include <string>
-// #include <map>
-// #include <unordered_map>
-// #include <set>
-// #include <vector>
-
-// #ifdef HAVE_CUDA
-// #include <CudaMgr/CudaMgr.h>
-// #endif  // HAVE_CUDA
 
 class Executor;
 
