@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYDATATABLE_H_
 
 #include "Types.h"
+#include "BaseQueryDataTable.h"
 #include "../PerGpuData.h"
 #include "../QueryRendererContext.h"
 #include <Rendering/Objects/ColorRGBA.h>
@@ -42,14 +43,14 @@ QueryDataType getDataTypeForType<Rendering::Objects::ColorRGBA>();
 template <>
 QueryDataType getDataTypeForType<std::string>();
 
-class BaseQueryDataTableVBO {
+class BaseQueryDataTableVBO : public BaseQueryDataTable {
  public:
   BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
                         const std::string& name,
                         const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,
                         QueryDataTableType type)
-      : _ctx(ctx), _name(name), _perGpuData(), _type(type), _jsonPath(objPath) {
+      : BaseQueryDataTable(ctx, name, obj, objPath, type) {
     _initGpuResources(ctx.get());
   }
   explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
@@ -63,24 +64,12 @@ class BaseQueryDataTableVBO {
   }
   virtual ~BaseQueryDataTableVBO() {}
 
-  virtual void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
   virtual bool hasColumn(const std::string& columnName) = 0;
   virtual QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) = 0;
   virtual std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) = 0;
   virtual QueryDataType getColumnType(const std::string& columnName) = 0;
-  virtual int numRows(const GpuId& gpuId) = 0;
-
-  std::string getName() { return _name; }
-  QueryDataTableType getType() { return _type; }
-
-  virtual operator std::string() const = 0;
 
  protected:
-  std::string _printInfo() const;
-
-  QueryRendererContextShPtr _ctx;
-  std::string _name;
-
   struct PerGpuData : BasePerGpuData {
     QueryVertexBufferShPtr vbo;
 
@@ -99,9 +88,6 @@ class BaseQueryDataTableVBO {
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
   PerGpuDataMap _perGpuData;
-
-  QueryDataTableType _type;
-  rapidjson::Pointer _jsonPath;
 
  private:
   void _initGpuResources(const QueryRendererContext* ctx,
@@ -128,7 +114,6 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
   }
   ~SqlQueryDataTable() {}
 
-  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   bool hasColumn(const std::string& columnName);
 
   QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName);
@@ -147,6 +132,7 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
   std::string _tableName;
 
   void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
+  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
 };
 
 struct TypelessColumnData {
@@ -181,14 +167,26 @@ template <typename T>
 class TDataColumn : public DataColumn {
  public:
   TDataColumn(const std::string& name, int size = 0) : DataColumn(name), _columnDataPtr(new std::vector<T>(size)) {}
-  TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType);
+  TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType)
+      : DataColumn(name), _columnDataPtr(new std::vector<T>()) {
+    if (initType == DataColumn::InitType::ROW_MAJOR) {
+      _initFromRowMajorJSONObj(dataArrayObj);
+    } else {
+      _initFromColMajorJSONObj(dataArrayObj);
+    }
+  }
   ~TDataColumn() {}
 
   T& operator[](unsigned int i) { return (*_columnDataPtr)[i]; }
 
   // void push_back(const T& val) { _columnDataPtr->push_back(val); }
 
-  void push_back(const std::string& val);
+  void push_back(const std::string& val) {
+    // TODO(croot): this would throw a boost::bad_lexical_cast error
+    // if the conversion can't be done.. I may need to throw
+    // a MapD-compliant exception
+    _columnDataPtr->push_back(boost::lexical_cast<T>(val));
+  }
 
   QueryDataType getColumnType() { return getDataTypeForType<T>(); }
 
@@ -216,8 +214,32 @@ class TDataColumn : public DataColumn {
   std::shared_ptr<std::vector<T>> _columnDataPtr;
   // TypeGL<T> _typeGL;
 
-  void _initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
-  void _initFromColMajorJSONObj(const rapidjson::Value& dataArrayObj);
+  void _initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
+    RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
+                      RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
+
+    rapidjson::Value::ConstValueIterator vitr;
+    rapidjson::Value::ConstMemberIterator mitr;
+
+    for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
+      RUNTIME_EX_ASSERT(
+          vitr->IsObject(),
+          RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
+                                               "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                                                   "in data array must be an object for row-major-defined data."));
+      RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
+                        RapidJSONUtils::getJsonParseErrorStr(*vitr,
+                                                             "column \"" + columnName +
+                                                                 "\" does not exist in row-major-defined data item " +
+                                                                 std::to_string(vitr - dataArrayObj.Begin())));
+
+      _columnDataPtr->push_back(RapidJSONUtils::getNumValFromJSONObj<T>(mitr->value));
+    }
+  }
+
+  void _initFromColMajorJSONObj(const rapidjson::Value& dataArrayObj) {
+    THROW_RUNTIME_EX("Column-major data is not yet supported.");
+  }
 };
 
 template <>
@@ -231,6 +253,14 @@ class DataTable : public BaseQueryDataTableVBO {
   enum class VboType { SEQUENTIAL = 0, INTERLEAVED, INDIVIDUAL };
   static const std::string defaultIdColumnName;
 
+  static DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
+                                                         const rapidjson::Value& rowItem,
+                                                         const rapidjson::Value& dataArray);
+
+  static DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnName,
+                                                              const rapidjson::Value& rowItem,
+                                                              const rapidjson::Value& dataArray);
+
   DataTable(const QueryRendererContextShPtr& ctx,
             const std::string& name,
             const rapidjson::Value& obj,
@@ -242,8 +272,6 @@ class DataTable : public BaseQueryDataTableVBO {
 
   template <typename C1, typename C2>
   std::pair<C1, C2> getExtrema(const std::string& column);
-
-  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
   bool hasColumn(const std::string& columnName) {
     ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
@@ -278,6 +306,7 @@ class DataTable : public BaseQueryDataTableVBO {
 
   ColumnMap _columns;
 
+  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
   void _buildColumnsFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool buildIdColumn);
   void _populateColumnsFromJSONObj(const rapidjson::Value& obj);
   void _readDataFromFile(const std::string& filename);

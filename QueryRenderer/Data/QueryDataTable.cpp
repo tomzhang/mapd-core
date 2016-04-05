@@ -53,45 +53,6 @@ QueryDataType getDataTypeForType<std::string>() {
   return QueryDataType::STRING;
 }
 
-DataColumnUqPtr createDataColumnFromRowMajorObj(const std::string& columnName,
-                                                const rapidjson::Value& rowItem,
-                                                const rapidjson::Value& dataArray) {
-  if (rowItem.IsInt()) {
-    return DataColumnUqPtr(new TDataColumn<int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-  } else if (rowItem.IsUint()) {
-    return DataColumnUqPtr(new TDataColumn<unsigned int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-  } else if (rowItem.IsDouble()) {
-    // TODO(croot): How do we properly handle floats?
-    return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-
-    // double val = rowItem.GetDouble();
-    // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
-    //   return DataColumnUqPtr(new TDataColumn<float>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-    // } else {
-    //   return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-    // }
-  } else {
-    THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
-        rowItem,
-        "Cannot create data column for column \"" + columnName + "\". The JSON data for the column is not supported."));
-  }
-}
-
-DataColumnUqPtr createColorDataColumnFromRowMajorObj(const std::string& columnName,
-                                                     const rapidjson::Value& rowItem,
-                                                     const rapidjson::Value& dataArray) {
-  RUNTIME_EX_ASSERT(
-      rowItem.IsString(),
-      RapidJSONUtils::getJsonParseErrorStr(
-          rowItem, "Cannot create color column \"" + columnName + "\". Colors must be defined as strings."));
-
-  return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-}
-
-std::string BaseQueryDataTableVBO::_printInfo() const {
-  return to_string(_ctx->getUserWidgetIds());
-}
-
 void BaseQueryDataTableVBO::_initGpuResources(const QueryRendererContext* ctx,
                                               const std::unordered_set<GpuId>& unusedGpus,
                                               bool initializing) {
@@ -134,14 +95,7 @@ void BaseQueryDataTableVBO::_initVBOs(const std::map<GpuId, QueryVertexBufferShP
   }
 }
 
-void SqlQueryDataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  if (_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    // need to update the path in case the path has changed in the json,
-    // but the data is the same.
-    _jsonPath = objPath;
-    return;
-  }
-
+void SqlQueryDataTable::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   // force an initialization
   _initFromJSONObj(obj, objPath, true);
 }
@@ -241,6 +195,41 @@ void SqlQueryDataTable::_initFromJSONObj(const rapidjson::Value& obj,
 }
 
 const std::string DataTable::defaultIdColumnName = "rowid";
+
+DataColumnUqPtr DataTable::createDataColumnFromRowMajorObj(const std::string& columnName,
+                                                           const rapidjson::Value& rowItem,
+                                                           const rapidjson::Value& dataArray) {
+  if (rowItem.IsInt()) {
+    return DataColumnUqPtr(new TDataColumn<int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+  } else if (rowItem.IsUint()) {
+    return DataColumnUqPtr(new TDataColumn<unsigned int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+  } else if (rowItem.IsDouble()) {
+    // TODO(croot): How do we properly handle floats?
+    return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+
+    // double val = rowItem.GetDouble();
+    // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
+    //   return DataColumnUqPtr(new TDataColumn<float>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+    // } else {
+    //   return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+    // }
+  } else {
+    THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+        rowItem,
+        "Cannot create data column for column \"" + columnName + "\". The JSON data for the column is not supported."));
+  }
+}
+
+DataColumnUqPtr DataTable::createColorDataColumnFromRowMajorObj(const std::string& columnName,
+                                                                const rapidjson::Value& rowItem,
+                                                                const rapidjson::Value& dataArray) {
+  RUNTIME_EX_ASSERT(
+      rowItem.IsString(),
+      RapidJSONUtils::getJsonParseErrorStr(
+          rowItem, "Cannot create color column \"" + columnName + "\". Colors must be defined as strings."));
+
+  return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+}
 
 DataTable::DataTable(const QueryRendererContextShPtr& ctx,
                      const std::string& name,
@@ -614,16 +603,7 @@ std::map<GpuId, QueryVertexBufferShPtr> DataTable::getColumnDataVBOs(const std::
   return rtn;
 }
 
-void DataTable::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  if (_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    // need to update the path in case the path has changed in the json,
-    // but the data is the same.
-    _jsonPath = objPath;
-    return;
-  }
-
-  _jsonPath = objPath;
-
+void DataTable::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
       _ctx->getUserWidgetIds(), obj, "Updating a JSON-embedded data table is not yet supported."));
 }
@@ -632,51 +612,9 @@ DataTable::operator std::string() const {
   return "DataTable(name: " + _name + ", num columns: " + std::to_string(_columns.size()) + ") " + _printInfo();
 }
 
-template <typename T>
-TDataColumn<T>::TDataColumn(const std::string& name, const rapidjson::Value& dataArrayObj, InitType initType)
-    : DataColumn(name), _columnDataPtr(new std::vector<T>()) {
-  if (initType == DataColumn::InitType::ROW_MAJOR) {
-    _initFromRowMajorJSONObj(dataArrayObj);
-  } else {
-    _initFromColMajorJSONObj(dataArrayObj);
-  }
-}
-
-template <typename T>
-void TDataColumn<T>::push_back(const std::string& val) {
-  // TODO(croot): this would throw a boost::bad_lexical_cast error
-  // if the conversion can't be done.. I may need to throw
-  // a MapD-compliant exception
-  _columnDataPtr->push_back(boost::lexical_cast<T>(val));
-}
-
 template <>
 void TDataColumn<ColorRGBA>::push_back(const std::string& val) {
   _columnDataPtr->push_back(ColorRGBA(val));
-}
-
-template <typename T>
-void TDataColumn<T>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
-  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
-                    RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
-
-  rapidjson::Value::ConstValueIterator vitr;
-  rapidjson::Value::ConstMemberIterator mitr;
-
-  for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
-    RUNTIME_EX_ASSERT(
-        vitr->IsObject(),
-        RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
-                                             "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
-                                                 "in data array must be an object for row-major-defined data."));
-    RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
-                      RapidJSONUtils::getJsonParseErrorStr(*vitr,
-                                                           "column \"" + columnName +
-                                                               "\" does not exist in row-major-defined data item " +
-                                                               std::to_string(vitr - dataArrayObj.Begin())));
-
-    _columnDataPtr->push_back(RapidJSONUtils::getNumValFromJSONObj<T>(mitr->value));
-  }
 }
 
 template <>
@@ -703,10 +641,6 @@ void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& da
 
     _columnDataPtr->push_back(color.initFromCSSString(mitr->value.GetString()));
   }
-}
-
-template <typename T>
-void TDataColumn<T>::_initFromColMajorJSONObj(const rapidjson::Value& dataArrayObj) {
 }
 
 // template <typename T>
