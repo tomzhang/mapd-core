@@ -5,7 +5,7 @@
 #include "Interop/Types.h"
 #include "PerGpuData.h"
 #include "QueryDataLayout.h"
-#include "Interop/QueryResultVertexBuffer.h"
+#include "Interop/QueryBuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
 #include "Rendering/QueryIdMapPboPool.h"
 #include "PngData.h"

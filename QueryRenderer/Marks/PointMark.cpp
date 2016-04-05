@@ -255,20 +255,6 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
       _idJsonPath = rapidjson::Pointer();
     }
 
-    // TODO(croot): put the following in the BaseMark class somewhere so that all
-    // future marks (lines, polys) will pick up this code.
-    QueryVertexBufferShPtr vboPtr;
-    static const QueryVertexBuffer::VboType resultVBO = QueryVertexBuffer::VboType::QUERY_RESULT_VBO;
-    if ((((vboPtr = x.getVboPtr()) && vboPtr->getType() == resultVBO) ||
-         ((vboPtr = y.getVboPtr()) && vboPtr->getType() == resultVBO) ||
-         ((vboPtr = size.getVboPtr()) && vboPtr->getType() == resultVBO) ||
-         // TODO(croot): what if we have multiple sqls? How do we handle the "key" value then?
-         ((vboPtr = fillColor.getVboPtr()) && vboPtr->getType() == resultVBO)) &&
-        vboPtr->hasAttribute(key.getName())) {
-      key.initializeFromData(key.getName(), _dataPtr);
-      usedProps.push_back(&key);
-    }
-
     // Now update which props are vbo-defined, and which will be uniforms
     _vboProps.clear();
     _uniformProps.clear();

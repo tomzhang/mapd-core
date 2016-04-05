@@ -28,9 +28,6 @@ typedef std::shared_ptr<QueryDataLayout> QueryDataLayoutShPtr;
 class QueryRenderer;
 typedef std::unique_ptr<QueryRenderer> QueryRendererUqPtr;
 
-class QueryVertexBuffer;
-typedef std::shared_ptr<QueryVertexBuffer> QueryVertexBufferShPtr;
-
 enum class RefEventType { UPDATE = 0, REMOVE, REPLACE, ALL };
 class QueryRendererContext;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
