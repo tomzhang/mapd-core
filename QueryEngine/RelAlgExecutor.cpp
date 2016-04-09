@@ -422,6 +422,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
                                  executor_->row_set_mem_owner_,
                                  render_allocator_map.get()),
       targets_meta};
+#ifdef HAVE_RENDERING
   if (render_info.is_render) {
     if (error_code == Executor::ERR_OUT_OF_RENDER_MEM) {
       throw std::runtime_error("Not enough OpenGL memory to render the query results");
@@ -448,6 +449,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
     int64_t render_time_ms = timer_stop(clock_begin);
     return {ResultRows(image_bytes, 0, render_time_ms), {}};
   }
+#endif  // HAVE_RENDERING
   if (!error_code) {
     return result;
   }
