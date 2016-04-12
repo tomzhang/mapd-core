@@ -482,7 +482,7 @@ namespace {
   if (ti.is_fp()) {
     return ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE;
   }
-  if (ti.is_integer()) {
+  if (ti.is_integer() || ti.is_boolean() || ti.is_decimal()) {
     return ::QueryRenderer::QueryDataLayout::AttrType::INT64;
   }
   if (ti.is_string()) {
