@@ -89,6 +89,10 @@ void WindowSettings::setViewport(const Objects::Viewport& viewport) {
   setViewport(_viewport.getXPos(), _viewport.getYPos(), _viewport.getWidth(), _viewport.getHeight());
 }
 
+std::string WindowSettings::getName() const {
+  return getStrSetting(StrSetting::NAME);
+}
+
 int32_t WindowSettings::getViewportSetting(const WindowSettings& settings,
                                            IntSetting viewportSetting,
                                            int32_t defaultVal) {

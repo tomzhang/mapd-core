@@ -114,8 +114,7 @@ class Window {
   // TODO(croot): add an window type enum and get the window type?
   bool isGLWindow() { return _type == RendererType::OPENGL; }
 
-  void setName(const std::string& name);
-  const std::string& getName() const;
+  std::string getName() const;
 
   WindowShPtr getParent() const;
 

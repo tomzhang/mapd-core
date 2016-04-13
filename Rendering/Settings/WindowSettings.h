@@ -28,6 +28,8 @@ class WindowSettings : public BaseSettings {
   void setViewport(int x, int y, int w, int h);
   void setViewport(const Objects::Viewport& viewport);
 
+  std::string getName() const;
+
   /**
    * Helper funcs
    */

@@ -152,6 +152,10 @@ int Window::getHeight() const {
   return _settings.getViewport().getHeight();
 }
 
+std::string Window::getName() const {
+  return _settings.getName();
+}
+
 WindowShPtr Window::getParent() const {
   return WindowShPtr(_prnt);
 }
