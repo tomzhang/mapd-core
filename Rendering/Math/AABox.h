@@ -339,7 +339,9 @@ class AABox {
   /**
    * Extends a bounding box so that it would contain a specific point.
    */
-  AABox<T, DIMS>& encapsulate(const Point<T, DIMS>& pt) {
+  AABox<T, DIMS>& encapsulate(const Point<T, DIMS>& pt) { encapsulate(std::array<T, DIMS>(pt)); }
+
+  AABox<T, DIMS>& encapsulate(const std::array<T, DIMS>& pt) {
     std::size_t minIndex, maxIndex;
     if (isEmpty()) {
       for (minIndex = 0, maxIndex = DIMS; minIndex < DIMS; ++minIndex, ++maxIndex) {
