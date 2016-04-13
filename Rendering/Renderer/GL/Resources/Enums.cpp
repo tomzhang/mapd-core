@@ -120,6 +120,40 @@ GLenum getBufferUsage(BufferAccessType accessType, BufferAccessFreq accessFreq) 
   return 0;
 }
 
+std::string to_string(const ShaderBlockLayoutType value) {
+  switch (value) {
+    case ShaderBlockLayoutType::PACKED:
+      return "PACKED";
+    case ShaderBlockLayoutType::SHARED:
+      return "SHARED";
+    case ShaderBlockLayoutType::STD140:
+      return "STD140";
+    case ShaderBlockLayoutType::STD430:
+      return "STD430";
+    default:
+      return "<ShaderBlockLayoutType " + std::to_string(static_cast<int>(value)) + ">";
+  }
+
+  return "";
+}
+
+std::string to_string(const StorageQualifier value) {
+  switch (value) {
+    case StorageQualifier::IN:
+      return "IN";
+    case StorageQualifier::OUT:
+      return "OUT";
+    case StorageQualifier::UNIFORM:
+      return "UNIFORM";
+    case StorageQualifier::BUFFER:
+      return "BUFFER";
+    default:
+      return "<StorageQualifier " + std::to_string(static_cast<int>(value)) + ">";
+  }
+
+  return "";
+}
+
 }  // namespace Rendering
 
 }  // namespace Rendering
@@ -137,6 +171,16 @@ std::ostream& operator<<(std::ostream& os, const Rendering::GL::Resources::Buffe
 }
 
 std::ostream& operator<<(std::ostream& os, const Rendering::GL::Resources::BufferAccessFreq value) {
+  os << Rendering::GL::Resources::to_string(value);
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const Rendering::GL::Resources::ShaderBlockLayoutType value) {
+  os << Rendering::GL::Resources::to_string(value);
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const Rendering::GL::Resources::StorageQualifier value) {
   os << Rendering::GL::Resources::to_string(value);
   return os;
 }

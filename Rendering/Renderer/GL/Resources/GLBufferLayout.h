@@ -111,6 +111,12 @@ struct GLBufferAttrInfo {
 
   GLBufferAttrInfo(const std::string& name, GLBufferAttrType type, BaseTypeGL* typeInfo, int stride, int offset)
       : name(name), type(type), typeInfo(typeInfo), stride(stride), offset(offset) {}
+
+  bool operator==(const GLBufferAttrInfo& attrInfo) const {
+    return (type == attrInfo.type && stride == attrInfo.stride && offset == attrInfo.offset);
+  }
+
+  bool operator!=(const GLBufferAttrInfo& attrInfo) const { return !operator==(attrInfo); }
 };
 
 class GLBaseBufferLayout {
@@ -126,6 +132,7 @@ class GLBaseBufferLayout {
   GLBufferAttrType getAttributeType(const std::string& attrName) const;
 
   const GLBufferAttrInfo& getAttributeInfo(const std::string& attrName) const;
+  int getAttributeByteOffset(const std::string& attrName) const;
 
   // TODO(croot): add an iterator to iterate over the attributes?
 

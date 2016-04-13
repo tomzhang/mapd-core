@@ -107,6 +107,10 @@ const GLBufferAttrInfo& GLBaseBufferLayout::getAttributeInfo(const std::string& 
   return **itr;
 }
 
+int GLBaseBufferLayout::getAttributeByteOffset(const std::string& attrName) const {
+  return getAttributeInfo(attrName).offset;
+}
+
 const GLBufferAttrInfo& GLBaseBufferLayout::operator[](size_t i) const {
   RUNTIME_EX_ASSERT(i < _attrMap.size(),
                     "GLBaseBufferLayout::operator[]: cannot retrieve attribute info at index: " + std::to_string(i) +
