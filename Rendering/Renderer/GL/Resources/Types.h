@@ -90,6 +90,8 @@ struct IndirectDrawVertexData {
   unsigned int firstIndex;
   unsigned int baseInstance;
 
+  IndirectDrawVertexData() : count(0), instanceCount(0), firstIndex(0), baseInstance(0) {}
+
   IndirectDrawVertexData(unsigned int count,
                          unsigned int firstIndex = 0,
                          unsigned int instanceCount = 1,
@@ -103,6 +105,8 @@ struct IndirectDrawIndexData {
   unsigned int firstIndex;
   unsigned int baseVertex;
   unsigned int baseInstance;
+
+  IndirectDrawIndexData() : count(0), instanceCount(0), firstIndex(0), baseVertex(0), baseInstance(0) {}
 
   IndirectDrawIndexData(unsigned int count,
                         unsigned int firstIndex = 0,
