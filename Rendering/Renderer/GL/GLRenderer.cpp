@@ -12,6 +12,7 @@ namespace Rendering {
 namespace GL {
 
 using Objects::ColorRGBA;
+using Resources::GLResourceType;
 using Resources::GLResourceShPtr;
 using Resources::GLTexture2dShPtr;
 using Resources::FboBind;
@@ -427,7 +428,8 @@ void GLRenderer::drawVertexBuffers(GLenum primitiveMode, size_t startIndex, int 
 
 void GLRenderer::drawIndirectVertexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
   Resources::GLIndirectDrawVertexBufferShPtr indirectBuffer = getBoundIndirectDrawVertexBuffer();
-  CHECK(indirectBuffer != nullptr && (hasBoundVertexBuffer() || hasBoundVertexArray()));
+  CHECK(indirectBuffer != nullptr && indirectBuffer->getResourceType() == GLResourceType::INDIRECT_DRAW_VERTEX_BUFFER &&
+        (hasBoundVertexBuffer() || hasBoundVertexArray()));
 
   if (numItemsToDraw < 0) {
     numItemsToDraw = indirectBuffer->numItems();
@@ -454,7 +456,8 @@ void GLRenderer::drawIndexBuffers(GLenum primitiveMode, size_t startIndex, int n
 void GLRenderer::drawIndirectIndexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
   Resources::GLIndirectDrawIndexBufferShPtr indirectBuffer = getBoundIndirectDrawIndexBuffer();
   GLIndexBufferShPtr ibo = getBoundIndexBuffer();
-  CHECK(indirectBuffer != nullptr && ibo != nullptr);
+  CHECK(indirectBuffer != nullptr && indirectBuffer->getResourceType() == GLResourceType::INDIRECT_DRAW_INDEX_BUFFER &&
+        ibo != nullptr);
 
   if (numItemsToDraw < 0) {
     numItemsToDraw = indirectBuffer->numItems();
