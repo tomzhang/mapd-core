@@ -76,6 +76,8 @@ class Point {
     return s;
   }
 
+  operator std::array<T, N>() const { return _data; }
+
   friend std::ostream& operator<<(std::ostream& ostr, const Point<T, N>& v) { return ostr << std::string(v); }
 
   // Point<T, N>& transform(const AffineMatrix<T, N+1>& transformMat);
