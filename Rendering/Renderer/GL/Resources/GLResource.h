@@ -4,6 +4,7 @@
 #include "../Types.h"
 #include "../../../RenderError.h"
 #include "../GLRenderer.h"
+#include "../../../Window.h"
 #include "Types.h"
 #include <glog/logging.h>
 
@@ -48,11 +49,23 @@ class GLResource {
     if (!currRenderer) {
       currRenderer = dynamic_cast<GLRenderer*>(_rendererPtr.lock().get());
     }
+    CHECK(currRenderer);
 
-    if (checkThread) {
-      RUNTIME_EX_ASSERT(
-          currRenderer->isActiveOnCurrentThread(),
-          "The renderer for the resource hasn't been properly activated on the current thread. Cannot use resource.");
+    if (checkThread && !currRenderer->isActiveOnCurrentThread()) {
+      Window* window = currRenderer->getPrimaryWindow();
+      GLRenderer* currentRenderer = GLRenderer::getCurrentThreadRenderer();
+      Window* currentWindow = GLRenderer::getCurrentThreadWindow();
+
+      std::stringstream ss;
+
+      ss << "The renderer for the resource hasn't been properly activated on the current thread. Cannot use resource. "
+            "Renderer: " << std::hex << currRenderer << " - gpuId: " << currRenderer->getGpuId()
+         << ", window: " << std::hex << window << " - name: " << window->getName()
+         << ". Current active renderer: " << std::hex << currentRenderer
+         << " - gpuId: " << (currentRenderer ? currentRenderer->getGpuId() : -1) << ", active window: " << std::hex
+         << currentWindow << " - name: " << (currentWindow ? currentWindow->getName() : "undefined");
+
+      THROW_RUNTIME_EX(ss.str());
     }
   }
 

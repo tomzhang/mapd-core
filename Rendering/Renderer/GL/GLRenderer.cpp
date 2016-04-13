@@ -90,9 +90,6 @@ void GLRenderer::makeActiveOnCurrentThread(Window* window) {
   RUNTIME_EX_ASSERT(windowToUse != nullptr,
                     "Cannot make renderer active. Window to make active alongside is not an attached window.");
 
-  // GLWindow* glWindow = dynamic_cast<GLWindow*>(window);
-  // CHECK(glWindow != nullptr);
-
   if (_currentRenderer == this && _currentWindow == windowToUse) {
     // already active
     return;
@@ -120,7 +117,12 @@ void GLRenderer::makeInactive() {
 
 bool GLRenderer::isActiveOnCurrentThread(Window* window) {
   std::lock_guard<std::mutex> thread_lock(_currRendererMtx);
-  return (_currentRenderer == this && (window ? _currentWindow == window : _currentWindow == getPrimaryWindow()));
+
+  Window* currWindow = (window != nullptr ? window : getPrimaryWindow());
+  if (_currentRenderer != this || _currentWindow != currWindow) {
+    return false;
+  }
+  return true;
 }
 
 GLResourceManagerShPtr GLRenderer::getResourceManager() {
