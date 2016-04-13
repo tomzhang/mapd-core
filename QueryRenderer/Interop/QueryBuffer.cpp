@@ -246,6 +246,36 @@ QueryIndexBuffer::QueryIndexBuffer(Rendering::GL::GLRenderer* renderer,
   _initBuffer(renderer, indexType, accessType, accessFreq, numBytes);
 }
 
+QueryIndexBuffer::QueryIndexBuffer(::Rendering::GL::GLRenderer* renderer,
+                                   const std::vector<unsigned char>& items,
+                                   ::Rendering::GL::Resources::BufferAccessType accessType,
+                                   ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                   QueryBuffer::BufType type)
+    : QueryBuffer(type) {
+  ::Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+  _bufRsrc = rsrcMgr->createIndexBuffer(items, accessType, accessFreq);
+}
+
+QueryIndexBuffer::QueryIndexBuffer(::Rendering::GL::GLRenderer* renderer,
+                                   const std::vector<unsigned short>& items,
+                                   ::Rendering::GL::Resources::BufferAccessType accessType,
+                                   ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                   QueryBuffer::BufType type)
+    : QueryBuffer(type) {
+  ::Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+  _bufRsrc = rsrcMgr->createIndexBuffer(items, accessType, accessFreq);
+}
+
+QueryIndexBuffer::QueryIndexBuffer(::Rendering::GL::GLRenderer* renderer,
+                                   const std::vector<unsigned int>& items,
+                                   ::Rendering::GL::Resources::BufferAccessType accessType,
+                                   ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                   QueryBuffer::BufType type)
+    : QueryBuffer(type) {
+  ::Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+  _bufRsrc = rsrcMgr->createIndexBuffer(items, accessType, accessFreq);
+}
+
 QueryIndexBuffer::~QueryIndexBuffer() {
 }
 
@@ -356,6 +386,16 @@ QueryIndirectVbo::QueryIndirectVbo(Rendering::GL::GLRenderer* renderer,
   _initBuffer(renderer, accessType, accessFreq, numBytes);
 }
 
+QueryIndirectVbo::QueryIndirectVbo(::Rendering::GL::GLRenderer* renderer,
+                                   const std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>& items,
+                                   ::Rendering::GL::Resources::BufferAccessType accessType,
+                                   ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                   QueryBuffer::BufType type)
+    : QueryBuffer(type) {
+  ::Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+  _bufRsrc = rsrcMgr->createIndirectDrawVertexBuffer(items, accessType, accessFreq);
+}
+
 QueryIndirectVbo::~QueryIndirectVbo() {
 }
 
@@ -394,6 +434,16 @@ QueryIndirectIbo::QueryIndirectIbo(Rendering::GL::GLRenderer* renderer,
                                    QueryBuffer::BufType type)
     : QueryBuffer(type) {
   _initBuffer(renderer, accessType, accessFreq, numBytes);
+}
+
+QueryIndirectIbo::QueryIndirectIbo(::Rendering::GL::GLRenderer* renderer,
+                                   const std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>& items,
+                                   ::Rendering::GL::Resources::BufferAccessType accessType,
+                                   ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                   QueryBuffer::BufType type)
+    : QueryBuffer(type) {
+  ::Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+  _bufRsrc = rsrcMgr->createIndirectDrawIndexBuffer(items, accessType, accessFreq);
 }
 
 QueryIndirectIbo::~QueryIndirectIbo() {

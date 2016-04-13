@@ -1,6 +1,7 @@
 #include "Utils.h"
 #include "../Utils/RapidJSONUtils.h"
 #include "PointMark.h"
+#include "PolyMark.h"
 
 namespace QueryRenderer {
 
@@ -13,6 +14,8 @@ GeomType getMarkTypeFromJSONObj(const rapidjson::Value& obj) {
 
   if (strGeomType == "points") {
     return GeomType::POINTS;
+  } else if (strGeomType == "polys") {
+    return GeomType::POLYS;
   } else {
     THROW_RUNTIME_EX(
         RapidJSONUtils::getJsonParseErrorStr(obj, "a mark of type \"" + strGeomType + "\" is unsupported."));
@@ -27,7 +30,8 @@ GeomConfigShPtr createMark(const rapidjson::Value& obj,
   switch (getMarkTypeFromJSONObj(obj)) {
     case GeomType::POINTS:
       return GeomConfigShPtr(new PointMark(obj, objPath, ctx));
-      break;
+    case GeomType::POLYS:
+      return GeomConfigShPtr(new PolyMark(obj, objPath, ctx));
   }
 
   return GeomConfigShPtr(nullptr);

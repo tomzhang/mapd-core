@@ -16,8 +16,9 @@ class BaseQueryDataTable {
                      const std::string& name,
                      const rapidjson::Value& obj,
                      const rapidjson::Pointer& objPath,
-                     QueryDataTableType type)
-      : _ctx(ctx), _name(name), _type(type), _jsonPath(objPath) {}
+                     QueryDataTableType type,
+                     QueryDataTableBaseType baseType)
+      : _ctx(ctx), _name(name), _type(type), _baseType(baseType), _jsonPath(objPath) {}
   virtual ~BaseQueryDataTable() {}
 
   void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
@@ -33,8 +34,14 @@ class BaseQueryDataTable {
 
   virtual int numRows(const GpuId& gpuId) = 0;
 
-  std::string getName() { return _name; }
-  QueryDataTableType getType() { return _type; }
+  virtual bool hasAttribute(const std::string& attrName) = 0;
+  virtual QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) = 0;
+  virtual std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) = 0;
+  virtual QueryDataType getAttributeType(const std::string& attrName) = 0;
+
+  std::string getName() const { return _name; }
+  QueryDataTableType getType() const { return _type; }
+  QueryDataTableBaseType getBaseType() const { return _baseType; }
 
   virtual operator std::string() const = 0;
 
@@ -44,11 +51,18 @@ class BaseQueryDataTable {
   QueryRendererContextShPtr _ctx;
   std::string _name;
   QueryDataTableType _type;
+  QueryDataTableBaseType _baseType;
 
   rapidjson::Pointer _jsonPath;
 
  private:
   virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+
+  virtual void _initGpuResources(const QueryRendererContext* ctx,
+                                 const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
+                                 bool initializing = true) = 0;
+
+  friend class QueryRendererContext;
 };
 
 }  // namespace QueryRenderer

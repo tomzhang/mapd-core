@@ -116,13 +116,6 @@ class QueryRenderer {
   friend class QueryRenderCompositor;
 };
 
-std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj);
-QueryDataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj);
-QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
-                                       const rapidjson::Pointer& objPath,
-                                       const QueryRendererContextShPtr& ctx,
-                                       const std::string& name = "");
-
 };  // QueryRenderer namespace
 
 #endif  // QUERYRENDERER_QUERYRENDERER_H_

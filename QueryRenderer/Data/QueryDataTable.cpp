@@ -2,14 +2,8 @@
 #include "../QueryRenderer.h"
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
 
-// #include "DataTable.h"
-// #include "QueryRenderer.h"
-// #include "RapidJSONUtils.h"
-// #include <limits>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
-// #include <fstream>
-// #include <regex>
 
 namespace QueryRenderer {
 
@@ -100,26 +94,26 @@ void SqlQueryDataTable::_updateFromJSONObj(const rapidjson::Value& obj, const ra
   _initFromJSONObj(obj, objPath, true);
 }
 
-bool SqlQueryDataTable::hasColumn(const std::string& columnName) {
+bool SqlQueryDataTable::hasAttribute(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
-  return itr->second.vbo->hasAttribute(columnName);
+  return itr->second.vbo->hasAttribute(attrName);
 }
 
-QueryVertexBufferShPtr SqlQueryDataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
+QueryBufferShPtr SqlQueryDataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     std::string(*this) + ": Cannot find column data VBO for gpu " + std::to_string(gpuId));
 
-  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
-                    std::string(*this) + " hasColumn(): column \"" + columnName + "\" does not exist.");
+  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName),
+                    std::string(*this) + " hasColumn(): column \"" + attrName + "\" does not exist.");
   return itr->second.vbo;
 }
 
-std::map<GpuId, QueryVertexBufferShPtr> SqlQueryDataTable::getColumnDataVBOs(const std::string& columnName) {
-  std::map<GpuId, QueryVertexBufferShPtr> rtn;
+std::map<GpuId, QueryBufferShPtr> SqlQueryDataTable::getAttributeDataBuffers(const std::string& attrName) {
+  std::map<GpuId, QueryBufferShPtr> rtn;
 
   for (auto& itr : _perGpuData) {
     rtn.insert({itr.first, itr.second.vbo});
@@ -128,12 +122,12 @@ std::map<GpuId, QueryVertexBufferShPtr> SqlQueryDataTable::getColumnDataVBOs(con
   return rtn;
 }
 
-QueryDataType SqlQueryDataTable::getColumnType(const std::string& columnName) {
+QueryDataType SqlQueryDataTable::getAttributeType(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
 
-  GLBufferAttrType attrType = itr->second.vbo->getAttributeType(columnName);
+  GLBufferAttrType attrType = itr->second.vbo->getAttributeType(attrName);
   switch (attrType) {
     case GLBufferAttrType::UINT:
       return QueryDataType::UINT;
@@ -397,12 +391,12 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
   }
 }
 
-QueryDataType DataTable::getColumnType(const std::string& columnName) {
+QueryDataType DataTable::getAttributeType(const std::string& attrName) {
   ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
 
   ColumnMap_by_name::iterator itr;
-  RUNTIME_EX_ASSERT((itr = nameLookup.find(columnName)) != nameLookup.end(),
-                    std::string(*this) + " getColumnType(): column \"" + columnName + "\" does not exist.");
+  RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
+                    std::string(*this) + " getColumnType(): column \"" + attrName + "\" does not exist.");
 
   return (*itr)->getColumnType();
 }
@@ -552,7 +546,7 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
   return std::make_pair(nullptr, std::make_pair(nullptr, 0));
 }
 
-QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) {
+QueryBufferShPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
@@ -571,14 +565,14 @@ QueryVertexBufferShPtr DataTable::getColumnDataVBO(const GpuId& gpuId, const std
     itr->second.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
   }
 
-  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(columnName),
-                    std::string(*this) + " getColumnVBO(): column \"" + columnName + "\" does not exist.");
+  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName),
+                    std::string(*this) + " getColumnVBO(): column \"" + attrName + "\" does not exist.");
 
   return itr->second.vbo;
 }
 
-std::map<GpuId, QueryVertexBufferShPtr> DataTable::getColumnDataVBOs(const std::string& columnName) {
-  std::map<GpuId, QueryVertexBufferShPtr> rtn;
+std::map<GpuId, QueryBufferShPtr> DataTable::getAttributeDataBuffers(const std::string& attrName) {
+  std::map<GpuId, QueryBufferShPtr> rtn;
   std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData;
 
   RootPerGpuDataShPtr qrmGpuData;

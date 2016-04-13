@@ -46,7 +46,7 @@ class BaseScaleRef {
 
   std::string _printInfo() const;
 
-  const QueryDataTableVBOShPtr& _getDataTablePtr();
+  const QueryDataTableShPtr& _getDataTablePtr();
   std::string _getDataColumnName();
   std::string _getRndrPropName();
 
@@ -248,13 +248,20 @@ class ScaleRef : public BaseScaleRef {
     RUNTIME_EX_ASSERT(executor != nullptr,
                       std::string(*this) + ": An executor is not defined. Cannot numerically convert a string column.");
 
-    const QueryDataTableVBOShPtr& dataTable = _getDataTablePtr();
+    const QueryDataTableShPtr& dataTable = _getDataTablePtr();
 
     RUNTIME_EX_ASSERT(dataTable != nullptr,
                       std::string(*this) + ": A data table is not referenced by render property \"" +
                           _getRndrPropName() + "\". Cannot numerically convert a string column.");
 
-    SqlQueryDataTable* sqlDataTable = dynamic_cast<SqlQueryDataTable*>(dataTable.get());
+    RUNTIME_EX_ASSERT(dataTable->getBaseType() == QueryDataTableBaseType::BASIC_VBO,
+                      std::string(*this) + ": data table referenced is not the correct type. It is " +
+                          to_string(dataTable->getBaseType()) + " but needs to be a vertex buffer table type.");
+
+    QueryDataTableVBOShPtr vboDataTable = std::dynamic_pointer_cast<BaseQueryDataTableVBO>(dataTable);
+    CHECK(vboDataTable != nullptr);
+
+    SqlQueryDataTable* sqlDataTable = dynamic_cast<SqlQueryDataTable*>(vboDataTable.get());
 
     RUNTIME_EX_ASSERT(sqlDataTable != nullptr,
                       std::string(*this) + ": The data table referenced by render property \"" + _getRndrPropName() +

@@ -52,7 +52,7 @@ class QueryRendererContext {
   const PerGpuDataMap& getGpuDataMap() const { return _perGpuData; }
 
   bool hasDataTable(const std::string& tableName) const;
-  QueryDataTableVBOShPtr getDataTable(const std::string& tableName) const;
+  QueryDataTableShPtr getDataTable(const std::string& tableName) const;
 
   bool hasScale(const std::string& scaleConfigName) const;
   ScaleShPtr getScale(const std::string& scaleConfigName) const;
@@ -90,7 +90,7 @@ class QueryRendererContext {
   typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
 
   typedef std::vector<GeomConfigShPtr> GeomConfigVector;
-  typedef std::unordered_map<std::string, QueryDataTableVBOShPtr> DataTableMap;
+  typedef std::unordered_map<std::string, QueryDataTableShPtr> DataTableMap;
 
   struct func_compare {
     bool operator()(const RefEventCallback& lhs, const RefEventCallback& rhs) const {

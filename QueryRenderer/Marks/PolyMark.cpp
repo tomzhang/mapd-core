@@ -1,57 +1,50 @@
-#include "PointMark.h"
-#include "../Data/QueryDataTable.h"
-#include "../Scales/ScaleRef.h"
-#include "shaders/pointTemplate_vert.h"
-#include "shaders/pointTemplate_frag.h"
+#include "PolyMark.h"
+#include "shaders/polyTemplate_vert.h"
+#include "shaders/polyTemplate_frag.h"
 #include "../Utils/ShaderUtils.h"
-
+#include "../Data/QueryPolyDataTable.h"
+#include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
-
-#include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/regex.hpp>
 
 namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
-using ::Rendering::GL::Resources::GLShader;
-using ::Rendering::GL::Resources::VboAttrToShaderAttrMap;
 
-PointMark::PointMark(const rapidjson::Value& obj,
-                     const rapidjson::Pointer& objPath,
-                     const QueryRendererContextShPtr& ctx)
-    : BaseMark(GeomType::POINTS, ctx, obj, objPath, QueryDataTableBaseType::BASIC_VBO, false),
+PolyMark::PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, const QueryRendererContextShPtr& ctx)
+    : BaseMark(GeomType::POLYS, ctx, obj, objPath, QueryDataTableBaseType::POLY, true),
       x(this, "x", ctx),
       y(this, "y", ctx),
-      z(this, "z", ctx),
-      size(this, "size", ctx),
+      // z(this, "z", ctx),
+
+      fillColor(this, "fillColor", ctx),
 
       // TODO(croot): let's log a warning and continue onwards if
       // hit testing is asked for, but the input sql data doesn't
       // have an id.
-      id(this, "id", ctx, false),
-      fillColor(this, "fillColor", ctx) {
+      id(this, "id", ctx, false) {
   _initPropertiesFromJSONObj(obj, objPath);
   _updateShader();
 }
 
-PointMark::~PointMark() {
+PolyMark::~PolyMark() {
 }
 
-void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   // TODO(croot): move "properties" to a const somewhere
   std::string propertiesProp = "properties";
 
   rapidjson::Value::ConstMemberIterator mitr;
 
-  RUNTIME_EX_ASSERT((mitr = obj.FindMember(propertiesProp.c_str())) != obj.MemberEnd(),
-                    RapidJSONUtils::getJsonParseErrorStr(
-                        _ctx->getUserWidgetIds(), obj, "mark objects must have a \"properties\" property."));
+  RUNTIME_EX_ASSERT(
+      (mitr = obj.FindMember(propertiesProp.c_str())) != obj.MemberEnd(),
+      RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(), obj, "poly mark objects must have a \"" + propertiesProp + "\" property."));
 
   const rapidjson::Value& propObj = mitr->value;
 
   if (!_ctx->isJSONCacheUpToDate(_propertiesJsonPath, propObj)) {
-    std::vector<BaseRenderProperty*> usedProps{&x, &y, &size, &fillColor};  // TODO(croot) add z
+    std::vector<BaseRenderProperty*> usedProps{&x, &y, &fillColor};  // TODO(croot) add z
 
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
 
@@ -65,15 +58,15 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
     RUNTIME_EX_ASSERT(
         (mitr = propObj.FindMember(xProp.c_str())) != propObj.MemberEnd(),
         RapidJSONUtils::getJsonParseErrorStr(
-            _ctx->getUserWidgetIds(), propObj, "\"" + xProp + "\" mark property must exist for point marks."));
+            _ctx->getUserWidgetIds(), propObj, "\"" + xProp + "\" mark property must exist for poly marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_xJsonPath, mitr->value)) {
       _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
-      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
-                        RapidJSONUtils::getJsonParseErrorStr(
-                            _ctx->getUserWidgetIds(),
-                            mitr->value,
-                            "\"" + xProp + "\" mark property must be a scale/data reference or a number."));
+      RUNTIME_EX_ASSERT(
+          mitr->value.IsObject(),
+          RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                               mitr->value,
+                                               "\"" + xProp + "\" property for polys must be a scale/data reference."));
       x.initializeFromJSONObj(mitr->value, _xJsonPath, _dataPtr);
     } else {
       _xJsonPath = _propertiesJsonPath.Append(xProp.c_str(), xProp.length());
@@ -84,66 +77,47 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
     RUNTIME_EX_ASSERT(
         (mitr = propObj.FindMember(yProp.c_str())) != propObj.MemberEnd(),
         RapidJSONUtils::getJsonParseErrorStr(
-            _ctx->getUserWidgetIds(), propObj, "\"" + yProp + "\" mark property must exist for point marks."));
+            _ctx->getUserWidgetIds(), propObj, "\"" + yProp + "\" mark property must exist for poly marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_yJsonPath, mitr->value)) {
       _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
-      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
-                        RapidJSONUtils::getJsonParseErrorStr(
-                            _ctx->getUserWidgetIds(),
-                            mitr->value,
-                            "\"" + yProp + "\" mark property must be a scale/data reference or a number."));
+      RUNTIME_EX_ASSERT(
+          mitr->value.IsObject(),
+          RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                               mitr->value,
+                                               "\"" + yProp + "\" property for polys must be a scale/data reference."));
       y.initializeFromJSONObj(mitr->value, _yJsonPath, _dataPtr);
     } else {
       _yJsonPath = _propertiesJsonPath.Append(yProp.c_str(), yProp.length());
     }
 
     // TODO(croot): move "z" to a const somewhere
-    std::string zProp = "z";
-    if ((mitr = propObj.FindMember(zProp.c_str())) != propObj.MemberEnd()) {
-      if (!_ctx->isJSONCacheUpToDate(_zJsonPath, mitr->value)) {
-        _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
-        RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
-                          RapidJSONUtils::getJsonParseErrorStr(
-                              _ctx->getUserWidgetIds(),
-                              mitr->value,
-                              "\"" + zProp + "\" mark property must be a scale/data reference or a number."));
-        z.initializeFromJSONObj(mitr->value, _zJsonPath, _dataPtr);
-      } else {
-        _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
-      }
+    // std::string zProp = "z";
+    // if ((mitr = propObj.FindMember(zProp.c_str())) != propObj.MemberEnd()) {
+    //   if (!_ctx->isJSONCacheUpToDate(_zJsonPath, mitr->value)) {
+    //     _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
+    //     RUNTIME_EX_ASSERT(mitr->value.IsObject(),
+    //                       RapidJSONUtils::getJsonParseErrorStr(
+    //                           _ctx->getUserWidgetIds(),
+    //                           mitr->value,
+    //                           "\"" + zProp + "\" property for polys must be a scale/data reference."));
+    //     z.initializeFromJSONObj(mitr->value, _zJsonPath, _dataPtr);
+    //   } else {
+    //     _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
+    //   }
 
-      usedProps.push_back(&z);
-    } else {
-      // empty the json path for z
-      _zJsonPath = rapidjson::Pointer();
-    }
-
-    // TODO(croot): move "size" to a const somewhere
-    std::string sizeProp = "size";
-    RUNTIME_EX_ASSERT(
-        (mitr = propObj.FindMember(sizeProp.c_str())) != propObj.MemberEnd(),
-        RapidJSONUtils::getJsonParseErrorStr(
-            _ctx->getUserWidgetIds(), propObj, "\"" + sizeProp + "\" mark property must exist for point marks."));
-
-    if (!_ctx->isJSONCacheUpToDate(_sizeJsonPath, mitr->value)) {
-      _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
-      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsNumber()),
-                        RapidJSONUtils::getJsonParseErrorStr(
-                            _ctx->getUserWidgetIds(),
-                            mitr->value,
-                            "\"" + sizeProp + "\" mark property must be a scale/data reference or a number."));
-      size.initializeFromJSONObj(mitr->value, _sizeJsonPath, _dataPtr);
-    } else {
-      _sizeJsonPath = _propertiesJsonPath.Append(sizeProp.c_str(), sizeProp.length());
-    }
+    //   usedProps.push_back(&z);
+    // } else {
+    //   // empty the json path for z
+    //   _zJsonPath = rapidjson::Pointer();
+    // }
 
     // TODO(croot): move "fillColor" to a const somewhere
     std::string fillColorProp = "fillColor";
     RUNTIME_EX_ASSERT(
         (mitr = propObj.FindMember(fillColorProp.c_str())) != propObj.MemberEnd(),
         RapidJSONUtils::getJsonParseErrorStr(
-            _ctx->getUserWidgetIds(), propObj, "\"" + fillColorProp + "\" mark property must exist for point marks."));
+            _ctx->getUserWidgetIds(), propObj, "\"" + fillColorProp + "\" mark property must exist for poly marks."));
 
     if (!_ctx->isJSONCacheUpToDate(_fillColorJsonPath, mitr->value)) {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
@@ -193,11 +167,14 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     // Now update which props are vbo-defined, and which will be uniforms
     _vboProps.clear();
+    _uboProps.clear();
     _uniformProps.clear();
 
     for (const auto& prop : usedProps) {
       if (prop->hasVboPtr()) {
         _vboProps.push_back(prop);
+      } else if (prop->hasUboPtr()) {
+        _uboProps.push_back(prop);
       } else {
         _uniformProps.push_back(prop);
       }
@@ -207,31 +184,33 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
   }
 }
 
-void PointMark::_updateShader() {
-  // TODO(croot): need to determine a build-appropriate way to access
-  // shaders. The best way probably is to create a cmake build
-  // script that converts all shaders into their own header
-  // files with static strings of the shader's source to access.
-
+void PolyMark::_updateShader() {
   if (!_shaderDirty || !_perGpuData.size()) {
     // early out
     return;
   }
 
-  std::string vertSrc(PointTemplate_Vert::source);
+  std::string vertSrc(PolyTemplate_Vert::source);
 
-  std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
-
-  bool useKey = key.hasVboPtr();
-  boost::replace_first(vertSrc, "<useKey>", std::to_string(useKey));
+  std::vector<BaseRenderProperty*> props = {&x, &y, &fillColor};  // TODO: add z & fillColor
 
   // update all the types first
   for (auto& prop : props) {
     ShaderUtils::setRenderPropertyTypeInShaderSrc(*prop, vertSrc);
   }
 
-  // now set props as uniform or vertex attrs
+  // TODO(croot): support per vertex colors?
+  bool usePerVertColor = false;
+  boost::replace_first(vertSrc, "<usePerVertColor>", std::to_string(usePerVertColor));
+
+  bool useUniformBuffer = (_uboProps.size() > 0);
+  boost::replace_first(vertSrc, "<useUniformBuffer>", std::to_string(useUniformBuffer));
+
   for (auto& prop : _vboProps) {
+    ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, false);
+  }
+
+  for (auto& prop : _uboProps) {
     ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, false);
   }
 
@@ -239,15 +218,14 @@ void PointMark::_updateShader() {
     ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, true);
   }
 
+  bool useUniformId = true;
   if (_ctx->doHitTest()) {
     props.push_back(&id);
-  } else {
-    // define the id as uniform to get the shader to compile
-    ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, true);
+    useUniformId = false;
   }
+  ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, useUniformId);
 
   // now insert any additional functionality
-  // std::unordered_map<std::string, BaseScale*> visitedScales;
   std::unordered_map<std::string, BaseScale*>::iterator itr;
 
   std::string funcName;
@@ -285,11 +263,17 @@ void PointMark::_updateShader() {
 
       boost::replace_all(
           vertSrc, prop->getGLSLFunc() + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
+
+      boost::replace_all(vertSrc,
+                         prop->getGLSLFunc() + "(polyData." + prop->getName() + ")",
+                         funcName + "(polyData." + prop->getName() + ")");
     }
   }
 
   // std::string fragSrc = getShaderCodeFromFile(pointFragmentShaderFilename);
-  std::string fragSrc(PointTemplate_Frag::source);
+  std::string fragSrc(PolyTemplate_Frag::source);
+
+  boost::replace_first(fragSrc, "<usePerVertColor>", std::to_string(usePerVertColor));
 
   // static int CROOTcnt = 0;
   // CROOTcnt++;
@@ -306,6 +290,15 @@ void PointMark::_updateShader() {
 
   // TODO(croot): Make thread safe?
 
+  QueryUniformBufferShPtr ubo;
+  if (useUniformBuffer) {
+    // double check that shader block layout that the uniform buffer
+    // uses matches that in the shader
+    CHECK(_dataPtr && _dataPtr->getBaseType() == QueryDataTableBaseType::POLY);
+    ubo = (_perGpuData.size() ? _uboProps[0]->getUboPtr(_perGpuData.begin()->first) : nullptr);
+    CHECK(ubo);
+  }
+
   GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
   GLRenderer* currRenderer = nullptr;
   RootPerGpuDataShPtr qrmGpuData;
@@ -316,6 +309,13 @@ void PointMark::_updateShader() {
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
     itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+
+    if (useUniformBuffer) {
+      // NOTE: only need to check the shader block layout of only the
+      // first ubo as it will be the same for all other gpu ubos
+      CHECK(*ubo->getGLUniformBufferPtr()->getBufferLayout().get() ==
+            *itr.second.shaderPtr->getBlockLayout("PolyData"));
+    }
 
     // TODO(croot): should I make make the current thread
     // have an inactive renderer?
@@ -335,7 +335,8 @@ void PointMark::_updateShader() {
   setPropsDirty();
 }
 
-void PointMark::_addPropertiesToAttrMap(const GpuId& gpuId, VboAttrToShaderAttrMap& attrMap) {
+void PolyMark::_addPropertiesToAttrMap(const GpuId& gpuId,
+                                       ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) {
   int cnt = 0;
   int vboSize = 0;
   int itrSize = 0;
@@ -347,34 +348,40 @@ void PointMark::_addPropertiesToAttrMap(const GpuId& gpuId, VboAttrToShaderAttrM
     } else {
       RUNTIME_EX_ASSERT(itrSize == vboSize,
                         std::string(*this) +
-                            ": Invalid point mark. The sizes of the vertex buffer attributes do not match for gpuId " +
+                            ": Invalid poly mark. The sizes of the vertex buffer attributes do not match for gpuId " +
                             std::to_string(gpuId) + ". " + std::to_string(vboSize) + "!=" + std::to_string(itrSize));
     }
 
     itr->addToVboAttrMap(gpuId, attrMap);
-    // itr->bindToRenderer(activeShader);
   }
 }
 
-void PointMark::_bindUniformProperties(GLShader* activeShader) {
-  // TODO(croot): create a static invalidKeyAttrName string on the class
-  static const std::string invalidKeyAttrName = "invalidKey";
-  if (key.hasVboPtr()) {
-    if (activeShader->hasUniformAttribute(invalidKeyAttrName)) {
-      GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
-      if (type == GL_INT) {
-        activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(_invalidKey));
-      }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
-         // TODO(croot) - do we need to do the glew extension check above or
-         // would there be an error at shader compilation if the extension
-         // didn't exist?
+void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) {
+  //   // TODO(croot): create a static invalidKeyAttrName string on the class
+  // static const std::string invalidKeyAttrName = "invalidKey";
+  // if (key.hasVboPtr()) {
+  //   if (activeShader->hasUniformAttribute(invalidKeyAttrName)) {
+  //     GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
+  //     if (type == GL_INT) {
+  //       activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(_invalidKey));
+  //     }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
+  //        // TODO(croot) - do we need to do the glew extension check above or
+  //        // would there be an error at shader compilation if the extension
+  //        // didn't exist?
 
-      // TODO(croot) fill this out
-      // }
+  //     // TODO(croot) fill this out
+  //     // }
+  //   }
+  // }
+
+  for (auto prop : _vboProps) {
+    const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+    if (scalePtr != nullptr) {
+      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
     }
   }
 
-  for (auto prop : _vboProps) {
+  for (auto prop : _uboProps) {
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
     if (scalePtr != nullptr) {
       scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
@@ -391,19 +398,16 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
   }
 }
 
-void PointMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
-                                                  const std::unordered_set<GpuId> unusedGpus) {
-  // this function should only be called when not initializing.
-  // so pass 'false' for the initializing parameter in the following
+void PolyMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
+                                                 const std::unordered_set<GpuId> unusedGpus) {
   x.initGpuResources(ctx, unusedGpus, false);
   y.initGpuResources(ctx, unusedGpus, false);
-  z.initGpuResources(ctx, unusedGpus, false);
-  size.initGpuResources(ctx, unusedGpus, false);
+  // z.initGpuResources(ctx, unusedGpus, false);
   id.initGpuResources(ctx, unusedGpus, false);
   fillColor.initGpuResources(ctx, unusedGpus, false);
 }
 
-void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
+void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
   // NOTE: shader should have been updated before calling this
   auto itr = _perGpuData.find(gpuId);
   CHECK(itr != _perGpuData.end());
@@ -417,30 +421,43 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   // now bind the shader
   renderer->bindShader(itr->second.shaderPtr);
   renderer->bindVertexArray(itr->second.vaoPtr);
-
   _bindUniformProperties(itr->second.shaderPtr.get());
 
-  // TODO: render state stack -- push/pop
-  renderer->enable(GL_PROGRAM_POINT_SIZE);
+  CHECK(_dataPtr);
+  QueryPolyDataTableShPtr polyTable = std::dynamic_pointer_cast<BaseQueryPolyDataTable>(_dataPtr);
+  CHECK(polyTable);
 
-  // now draw points
-  // TODO: What about the possibility of index buffers?
-  // Probably don't have to worry about them here since
-  // we're specifically looking at a point config that
-  // is deemed not to have any index buffers, but we
-  // need to have a way to generically draw bound buffers
-  // which would be best with a renderer class
-  // MAPD_CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, x.size()));
-  renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());
+  ::Rendering::GL::Resources::GLUniformBufferShPtr ubo;
+  if (_uboProps.size()) {
+    // the same ubo should be used for all ubo props, so only need to grab
+    // from first one
+    ubo = _uboProps[0]->getUboPtr(gpuId)->getGLUniformBufferPtr();
+  }
 
-  // unset state
-  renderer->disable(GL_PROGRAM_POINT_SIZE);
+  ::Rendering::GL::Resources::GLIndexBufferShPtr ibo = polyTable->getGLIndexBuffer(gpuId);
+  ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr indibo = polyTable->getGLIndirectDrawIndexBuffer(gpuId);
+  CHECK(ibo && indibo && (!ubo || indibo->numItems() == ubo->numItems()));
+
+  renderer->bindIndexBuffer(ibo);
+  renderer->bindIndirectDrawBuffer(indibo);
+  if (ubo) {
+    renderer->bindUniformBuffer(ubo);
+    for (size_t i = 0; i < indibo->numItems(); ++i) {
+      itr->second.shaderPtr->bindUniformBufferToBlock("PolyData", ubo, i);
+      renderer->drawIndirectIndexBuffers(GL_TRIANGLES, i, 1);
+    }
+  } else {
+    renderer->drawIndirectIndexBuffers(GL_TRIANGLES);
+  }
+
+  // now draw polys
+  // renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());
 }
 
-bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+bool PolyMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::BASIC_VBO, false);
+    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::POLY, false);
     _initPropertiesFromJSONObj(obj, objPath);
     rtn = true;
   } else if (_jsonPath != objPath) {
@@ -464,8 +481,8 @@ bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::
   return rtn;
 }
 
-PointMark::operator std::string() const {
-  return "PointMark " + to_string(_ctx->getUserWidgetIds());
+PolyMark::operator std::string() const {
+  return "PolyMark " + to_string(_ctx->getUserWidgetIds());
 }
 
 }  // namespace QueryRenderer

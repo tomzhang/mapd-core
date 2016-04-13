@@ -1,6 +1,8 @@
 #include "RenderProperty.h"
 #include "BaseMark.h"
+#include "../Data/BaseQueryDataTable.h"
 #include "../Data/QueryDataTable.h"
+#include "../Data/QueryPolyDataTable.h"
 #include "../Scales/Scale.h"
 
 #include <Rendering/Objects/ColorRGBA.h>
@@ -14,7 +16,7 @@ using ::Rendering::GL::TypeGLShPtr;
 
 void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
                                                const rapidjson::Pointer& objPath,
-                                               const QueryDataTableVBOShPtr& dataPtr) {
+                                               const QueryDataTableShPtr& dataPtr) {
   if (obj.IsObject()) {
     rapidjson::Value::ConstMemberIterator mitr;
 
@@ -116,20 +118,20 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
   }
 }
 
-void BaseRenderProperty::initializeFromData(const std::string& columnName, const QueryDataTableVBOShPtr& dataPtr) {
+void BaseRenderProperty::initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr) {
   RUNTIME_EX_ASSERT(dataPtr != nullptr,
                     std::string(*this) + ": Cannot initialize mark property " + _name +
                         " from data. A valid data reference hasn't been initialized.");
 
   _dataPtr = dataPtr;
-  _vboAttrName = columnName;
+  _vboAttrName = attrName;
 
-  _initVBOs(_dataPtr->getColumnDataVBOs(columnName));
+  _initBuffers(_dataPtr->getAttributeDataBuffers(attrName));
   _vboInitType = VboInitType::FROM_DATAREF;
 
   _prntMark->setPropsDirty();
 
-  _initTypeFromVbo();
+  _initTypeFromBuffer();
 }
 
 int BaseRenderProperty::size(const GpuId& gpuId) const {
@@ -168,6 +170,39 @@ QueryVertexBufferShPtr BaseRenderProperty::getVboPtr() const {
   auto itr = _perGpuData.begin();
   if (itr != _perGpuData.end()) {
     return itr->second.vbo;
+  }
+
+  return nullptr;
+}
+
+bool BaseRenderProperty::hasUboPtr() {
+  for (auto& itr : _perGpuData) {
+    if (itr.second.ubo != nullptr) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool BaseRenderProperty::hasUboPtr(const GpuId& gpuId) {
+  auto itr = _perGpuData.find(gpuId);
+
+  return (itr != _perGpuData.end() && itr->second.ubo != nullptr);
+}
+
+QueryUniformBufferShPtr BaseRenderProperty::getUboPtr(const GpuId& gpuId) const {
+  auto itr = _perGpuData.find(gpuId);
+  if (itr != _perGpuData.end()) {
+    return itr->second.ubo;
+  }
+
+  return nullptr;
+}
+
+QueryUniformBufferShPtr BaseRenderProperty::getUboPtr() const {
+  auto itr = _perGpuData.begin();
+  if (itr != _perGpuData.end()) {
+    return itr->second.ubo;
   }
 
   return nullptr;
@@ -223,11 +258,24 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
                                           const std::unordered_set<GpuId> unusedGpus,
                                           bool initializing) {
   const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+
   for (auto& itr : qrcPerGpuData) {
     if (_perGpuData.find(itr.first) == _perGpuData.end()) {
       PerGpuData gpuData(itr.second);
       if (!initializing && _dataPtr) {
-        gpuData.vbo = _dataPtr->getColumnDataVBO(itr.first, _vboAttrName);
+        QueryBufferShPtr bufferPtr = _dataPtr->getAttributeDataBuffer(itr.first, _vboAttrName);
+        switch (bufferPtr->getGLResourceType()) {
+          case ::Rendering::GL::Resources::GLResourceType::VERTEX_BUFFER:
+            gpuData.vbo = std::dynamic_pointer_cast<QueryVertexBuffer>(bufferPtr);
+            CHECK(gpuData.vbo);
+            break;
+          case ::Rendering::GL::Resources::GLResourceType::UNIFORM_BUFFER:
+            gpuData.ubo = std::dynamic_pointer_cast<QueryUniformBuffer>(bufferPtr);
+            CHECK(gpuData.ubo);
+            break;
+          default:
+            CHECK(false) << "Unsupported resource type " << bufferPtr->getGLResourceType() << " for render properties.";
+        }
       }
       _perGpuData.emplace(itr.first, std::move(gpuData));
     }
@@ -248,6 +296,37 @@ void BaseRenderProperty::_setPropsDirty() {
 
 std::string BaseRenderProperty::_printInfo() const {
   return "(name: " + _name + ", vbo attr name: " + _vboAttrName + ") " + to_string(_ctx->getUserWidgetIds());
+}
+
+void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap) {
+  CHECK(bufferMap.size() == _perGpuData.size());
+
+  ::Rendering::GL::Resources::GLResourceType rsrcType = bufferMap.begin()->second->getGLResourceType();
+
+  switch (rsrcType) {
+    case ::Rendering::GL::Resources::GLResourceType::VERTEX_BUFFER: {
+      QueryVertexBufferShPtr qvbo;
+      for (const auto& itr : bufferMap) {
+        auto myItr = _perGpuData.find(itr.first);
+        CHECK(myItr != _perGpuData.end() && rsrcType == itr.second->getGLResourceType());
+        qvbo = std::dynamic_pointer_cast<QueryVertexBuffer>(itr.second);
+        CHECK(qvbo);
+        myItr->second.vbo = qvbo;
+      }
+    } break;
+    case ::Rendering::GL::Resources::GLResourceType::UNIFORM_BUFFER: {
+      QueryUniformBufferShPtr qubo;
+      for (const auto& itr : bufferMap) {
+        auto myItr = _perGpuData.find(itr.first);
+        CHECK(myItr != _perGpuData.end() && rsrcType == itr.second->getGLResourceType());
+        qubo = std::dynamic_pointer_cast<QueryUniformBuffer>(itr.second);
+        myItr->second.ubo = qubo;
+      }
+    } break;
+
+    default:
+      CHECK(false) << "Unsupported resource type " << rsrcType << " for render properties.";
+  }
 }
 
 template <>

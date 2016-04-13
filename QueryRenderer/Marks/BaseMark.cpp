@@ -24,15 +24,20 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
 BaseMark::BaseMark(GeomType geomType,
                    const QueryRendererContextShPtr& ctx,
                    const rapidjson::Value& obj,
-                   const rapidjson::Pointer& objPath)
+                   const rapidjson::Pointer& objPath,
+                   QueryDataTableBaseType baseType,
+                   bool mustUseDataRef)
     : BaseMark(geomType, ctx) {
-  _initFromJSONObj(obj, objPath);
+  _initFromJSONObj(obj, objPath, baseType, mustUseDataRef);
 }
 
 BaseMark::~BaseMark() {
 }
 
-void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,
+                                const rapidjson::Pointer& objPath,
+                                QueryDataTableBaseType baseType,
+                                bool mustUseDataRef) {
   RUNTIME_EX_ASSERT(
       obj.IsObject(),
       RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "definition for marks must be an object."));
@@ -55,12 +60,24 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Po
               _ctx->getUserWidgetIds(), fromObj, "mark data reference must contain a \"data\" string property."));
 
       _dataPtr = _ctx->getDataTable(mitr->value.GetString());
+
+      RUNTIME_EX_ASSERT(_dataPtr->getBaseType() == baseType,
+                        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                                             fromObj,
+                                                             "mark data table reference is the wrong type. It is a " +
+                                                                 to_string(_dataPtr->getBaseType()) + " table but a " +
+                                                                 to_string(baseType) + " table is required."));
     }
 
     _dataPtrJsonPath = objPath.Append(fromProp.c_str(), fromProp.length());
   } else {
     // TODO(croot): what about references???
     _dataPtr = nullptr;
+    RUNTIME_EX_ASSERT(!mustUseDataRef,
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          _ctx->getUserWidgetIds(),
+                          obj,
+                          "A data reference (i.e. \"" + fromProp + "\") is not defined for mark. It is required."));
   }
 }
 

@@ -18,7 +18,9 @@ class BaseMark {
   BaseMark(GeomType geomType,
            const QueryRendererContextShPtr& ctx,
            const rapidjson::Value& obj,
-           const rapidjson::Pointer& objPath);
+           const rapidjson::Pointer& objPath,
+           QueryDataTableBaseType baseType,
+           bool mustUseDataRef);
   virtual ~BaseMark();
 
   GeomType getType() { return _type; }
@@ -53,7 +55,7 @@ class BaseMark {
   RenderProperty<int> key;
   int64_t _invalidKey;
 
-  QueryDataTableVBOShPtr _dataPtr;
+  QueryDataTableShPtr _dataPtr;
 
   struct PerGpuData : BasePerGpuData {
     ::Rendering::GL::Resources::GLShaderShPtr shaderPtr;
@@ -86,9 +88,13 @@ class BaseMark {
   bool _propsDirty;
 
   std::vector<BaseRenderProperty*> _vboProps;
+  std::vector<BaseRenderProperty*> _uboProps;
   std::vector<BaseRenderProperty*> _uniformProps;
 
-  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  void _initFromJSONObj(const rapidjson::Value& obj,
+                        const rapidjson::Pointer& objPath,
+                        QueryDataTableBaseType baseType,
+                        bool mustUseDataRef);
 
  private:
   void _buildVertexArrayObjectFromProperties();

@@ -5,6 +5,9 @@
 
 namespace QueryRenderer {
 
+class QueryBuffer;
+typedef std::shared_ptr<QueryBuffer> QueryBufferShPtr;
+
 class QueryVertexBuffer;
 typedef std::shared_ptr<QueryVertexBuffer> QueryVertexBufferShPtr;
 

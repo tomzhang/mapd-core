@@ -1,6 +1,7 @@
 #include "QueryRenderer.h"
 #include "QueryRendererContext.h"
 #include "Data/QueryDataTable.h"
+#include "Data/Utils.h"
 #include "Marks/BaseMark.h"
 #include "Marks/Utils.h"
 #include "Scales/Scale.h"
@@ -278,7 +279,7 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
                       RapidJSONUtils::getJsonParseErrorStr(
                           _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
 
-    QueryDataTableVBOShPtr dataTablePtr;
+    QueryDataTableShPtr dataTablePtr;
     std::unordered_set<std::string> visitedNames;
     std::unordered_set<std::string> unvisitedNames;
     unvisitedNames.reserve(_ctx->_dataTableMap.size());
@@ -305,7 +306,8 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
         // TODO(croot): data table is changing. Need to validate any previously existing references.
         // One way to do this is store a map of all objects changing in-place in order to
         // validate.
-        if (dataTablePtr->getType() != getDataTableTypeFromJSONObj(*vitr)) {
+        auto tableTypes = getDataTableTypesFromJSONObj(*vitr);
+        if (dataTablePtr->getBaseType() != tableTypes.first || dataTablePtr->getType() != tableTypes.second) {
           // completely new data table type, so destroy previous one and
           // build a new one from scratch.
           _ctx->_dataTableMap.erase(tableName);
@@ -921,79 +923,6 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
     _clearAll(true);
     throw e;
   }
-}
-
-std::string getDataTableNameFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsObject(),
-                    RapidJSONUtils::getJsonParseErrorStr(obj, "A data object in the JSON must be an object."));
-
-  rapidjson::Value::ConstMemberIterator itr;
-
-  RUNTIME_EX_ASSERT((itr = obj.FindMember("name")) != obj.MemberEnd() && itr->value.IsString(),
-                    RapidJSONUtils::getJsonParseErrorStr(
-                        obj, "A data object must contain a \"name\" property and it must be a string"));
-
-  return itr->value.GetString();
-}
-
-QueryDataTableType getDataTableTypeFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsObject(),
-                    RapidJSONUtils::getJsonParseErrorStr(obj, "A data table in the JSON must be an object."));
-
-  rapidjson::Value::ConstMemberIterator itr;
-
-  if ((itr = obj.FindMember("sql")) != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(
-        itr->value.IsString(),
-        RapidJSONUtils::getJsonParseErrorStr(
-            itr->value, "Cannot get data table's type - the sql property for a data table must be a string."));
-    return QueryDataTableType::SQLQUERY;
-  } else if ((itr = obj.FindMember("values")) != obj.MemberEnd()) {
-    return QueryDataTableType::EMBEDDED;
-  } else if ((itr = obj.FindMember("url")) != obj.MemberEnd()) {
-    return QueryDataTableType::URL;
-  }
-
-  THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
-      obj, "Cannot get data table's type - the data table's type is not supported."));
-  return QueryDataTableType::UNSUPPORTED;
-}
-
-QueryDataTableVBOShPtr createDataTable(const rapidjson::Value& obj,
-                                       const rapidjson::Pointer& objPath,
-                                       const QueryRendererContextShPtr& ctx,
-                                       const std::string& name) {
-  std::string tableName(name);
-  if (!tableName.length()) {
-    tableName = getDataTableNameFromJSONObj(obj);
-  } else {
-    RUNTIME_EX_ASSERT(obj.IsObject(),
-                      RapidJSONUtils::getJsonParseErrorStr(
-                          obj, "Cannot create data table - A data object in the JSON must be an object."));
-  }
-
-  RUNTIME_EX_ASSERT(tableName.length(),
-                    RapidJSONUtils::getJsonParseErrorStr(
-                        obj, "Cannot create data table - The data table has an empty name. It must have a name."));
-
-  QueryDataTableType tableType = getDataTableTypeFromJSONObj(obj);
-  switch (tableType) {
-    case QueryDataTableType::SQLQUERY:
-      return QueryDataTableVBOShPtr(
-          new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));
-    case QueryDataTableType::EMBEDDED:
-    case QueryDataTableType::URL:
-      return QueryDataTableVBOShPtr(
-          new DataTable(ctx, tableName, obj, objPath, tableType, ctx->doHitTest(), DataTable::VboType::INTERLEAVED));
-    default:
-      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj,
-                                                            "Cannot create data table \"" + tableName +
-                                                                "\". It is not a supported table. Supported tables "
-                                                                "must have an \"sql\", \"values\" or \"url\" "
-                                                                "property."));
-  }
-
-  return QueryDataTableVBOShPtr(nullptr);
 }
 
 }  // namespace QueryRenderer

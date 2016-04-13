@@ -41,7 +41,7 @@ void BaseScaleRef::_verifyScalePointer() {
   RUNTIME_EX_ASSERT(_scalePtr != nullptr, std::string(*this) + ": The scale reference object is uninitialized.");
 }
 
-const QueryDataTableVBOShPtr& BaseScaleRef::_getDataTablePtr() {
+const QueryDataTableShPtr& BaseScaleRef::_getDataTablePtr() {
   return _rndrPropPtr->getDataTablePtr();
 }
 

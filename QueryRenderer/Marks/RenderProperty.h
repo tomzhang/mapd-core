@@ -46,8 +46,8 @@ class BaseRenderProperty {
 
   void initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
-                             const QueryDataTableVBOShPtr& dataPtr);
-  void initializeFromData(const std::string& columnName, const QueryDataTableVBOShPtr& dataPtr);
+                             const QueryDataTableShPtr& dataPtr);
+  void initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr);
 
   int size(const GpuId& gpuId) const;
 
@@ -66,12 +66,17 @@ class BaseRenderProperty {
   bool hasVboPtr();
   bool hasVboPtr(const GpuId& gpuId);
 
+  bool hasUboPtr();
+  bool hasUboPtr(const GpuId& gpuId);
+
   QueryVertexBufferShPtr getVboPtr(const GpuId& gpuId) const;
   QueryVertexBufferShPtr getVboPtr() const;
 
+  QueryUniformBufferShPtr getUboPtr(const GpuId& gpuId) const;
+  QueryUniformBufferShPtr getUboPtr() const;
+
   bool usesScaleConfig() { return (_scaleConfigPtr != nullptr); }
 
-  // ScaleShPtr& getScaleConfig() { return _scaleConfigPtr; }
   const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
 
   void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const;
@@ -80,7 +85,7 @@ class BaseRenderProperty {
                                      const std::string& uniformAttrName) const = 0;
 
   std::string getDataColumnName() { return _vboAttrName; }
-  const QueryDataTableVBOShPtr& getDataTablePtr() { return _dataPtr; }
+  const QueryDataTableShPtr& getDataTablePtr() { return _dataPtr; }
 
   void initGpuResources(const QueryRendererContext* ctx,
                         const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>(),
@@ -99,12 +104,16 @@ class BaseRenderProperty {
 
   struct PerGpuData : BasePerGpuData {
     QueryVertexBufferShPtr vbo;
+    QueryUniformBufferShPtr ubo;
 
-    PerGpuData() : BasePerGpuData(), vbo(nullptr) {}
-    explicit PerGpuData(const BasePerGpuData& perGpuData, const QueryVertexBufferShPtr& vbo = nullptr)
-        : BasePerGpuData(perGpuData), vbo(vbo) {}
-    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), vbo(data.vbo) {}
-    PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), vbo(std::move(data.vbo)) {}
+    PerGpuData() : BasePerGpuData(), vbo(nullptr), ubo(nullptr) {}
+    explicit PerGpuData(const BasePerGpuData& perGpuData,
+                        const QueryVertexBufferShPtr& vbo = nullptr,
+                        const QueryUniformBufferShPtr& ubo = nullptr)
+        : BasePerGpuData(perGpuData), vbo(vbo), ubo(ubo) {}
+    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), vbo(data.vbo), ubo(data.ubo) {}
+    PerGpuData(PerGpuData&& data)
+        : BasePerGpuData(std::move(data)), vbo(std::move(data.vbo)), ubo(std::move(data.ubo)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete GL resources per-gpu
@@ -117,7 +126,7 @@ class BaseRenderProperty {
   PerGpuDataMap _perGpuData;
 
   VboInitType _vboInitType;
-  QueryDataTableVBOShPtr _dataPtr;
+  QueryDataTableShPtr _dataPtr;
 
   QueryRendererContextShPtr _ctx;
 
@@ -141,7 +150,7 @@ class BaseRenderProperty {
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
-  virtual void _initTypeFromVbo() = 0;
+  virtual void _initTypeFromBuffer() = 0;
   virtual void _verifyScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
 
@@ -151,15 +160,7 @@ class BaseRenderProperty {
   std::string _printInfo() const;
 
  private:
-  void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap) {
-    CHECK(vboMap.size() == _perGpuData.size());
-
-    for (const auto& itr : vboMap) {
-      auto myItr = _perGpuData.find(itr.first);
-      CHECK(myItr != _perGpuData.end());
-      myItr->second.vbo = itr.second;
-    }
-  }
+  void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
 };
 
 template <typename T, int numComponents = 1>
@@ -300,15 +301,18 @@ class RenderProperty : public BaseRenderProperty {
     initializeValue(val);
   }
 
-  void _initTypeFromVbo() {
+  void _initTypeFromBuffer() {
     auto itr = _perGpuData.begin();
+    CHECK(itr != _perGpuData.end());
 
-    RUNTIME_EX_ASSERT((itr != _perGpuData.end() && itr->second.vbo != nullptr),
+    QueryBufferShPtr bufToUse = (itr->second.vbo ? std::dynamic_pointer_cast<QueryBuffer>(itr->second.vbo)
+                                                 : std::dynamic_pointer_cast<QueryBuffer>(itr->second.ubo));
+    RUNTIME_EX_ASSERT(bufToUse != nullptr,
                       std::string(*this) +
-                          ": Vertex buffer is uninitialized. Cannot initialize type for mark property \"" + _name +
-                          "\".");
+                          ": Vertex/uniform buffer is uninitialized. Cannot initialize type for mark property \"" +
+                          _name + "\".");
 
-    ::Rendering::GL::TypeGLShPtr vboType = itr->second.vbo->getAttributeTypeGL(_vboAttrName);
+    ::Rendering::GL::TypeGLShPtr vboType = bufToUse->getAttributeTypeGL(_vboAttrName);
 
     if (_flexibleType) {
       _inType = vboType;

@@ -50,7 +50,7 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
                         const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,
                         QueryDataTableType type)
-      : BaseQueryDataTable(ctx, name, obj, objPath, type) {
+      : BaseQueryDataTable(ctx, name, obj, objPath, type, QueryDataTableBaseType::BASIC_VBO) {
     _initGpuResources(ctx.get());
   }
   explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
@@ -63,11 +63,6 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
     _initVBOs(vboMap);
   }
   virtual ~BaseQueryDataTableVBO() {}
-
-  virtual bool hasColumn(const std::string& columnName) = 0;
-  virtual QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName) = 0;
-  virtual std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) = 0;
-  virtual QueryDataType getColumnType(const std::string& columnName) = 0;
 
  protected:
   struct PerGpuData : BasePerGpuData {
@@ -92,7 +87,7 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
  private:
   void _initGpuResources(const QueryRendererContext* ctx,
                          const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
-                         bool initializing = true);
+                         bool initializing = true) final;
 
   void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap);
 
@@ -114,14 +109,12 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
   }
   ~SqlQueryDataTable() {}
 
-  bool hasColumn(const std::string& columnName);
+  bool hasAttribute(const std::string& attrName) final;
+  QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
+  std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) final;
+  QueryDataType getAttributeType(const std::string& attrName) final;
 
-  QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName);
-
-  std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) final;
-
-  QueryDataType getColumnType(const std::string& columnName);
-  int numRows(const GpuId& gpuId);
+  int numRows(const GpuId& gpuId) final;
 
   std::string getTableName() { return _tableName; }
 
@@ -273,18 +266,18 @@ class DataTable : public BaseQueryDataTableVBO {
   template <typename C1, typename C2>
   std::pair<C1, C2> getExtrema(const std::string& column);
 
-  bool hasColumn(const std::string& columnName) {
+  bool hasAttribute(const std::string& attrName) final {
     ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
-    return (nameLookup.find(columnName) != nameLookup.end());
+    return (nameLookup.find(attrName) != nameLookup.end());
   }
 
-  QueryDataType getColumnType(const std::string& columnName);
+  QueryDataType getAttributeType(const std::string& attrName) final;
   DataColumnShPtr getColumn(const std::string& columnName);
 
-  QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName);
-  std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) final;
+  QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
+  std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) final;
 
-  int numRows(const GpuId& gpuId) { return _numRows; }
+  int numRows(const GpuId& gpuId) final { return _numRows; }
 
   operator std::string() const final;
 

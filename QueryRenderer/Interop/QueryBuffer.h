@@ -42,7 +42,21 @@ class QueryBuffer {
   void reset() { _usedBytes = 0; }
 
   BufType getType() const { return _type; }
+  ::Rendering::GL::Resources::GLResourceType getGLResourceType() const {
+    CHECK(_bufRsrc);
+    return _bufRsrc->getResourceType();
+  }
+
   ::Rendering::GL::Resources::GLBaseBufferShPtr getGLBufferPtr() const { return _bufRsrc; }
+
+  virtual ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const {
+    THROW_RUNTIME_EX("QueryBuffer::getAttributeType() is undefined for " + std::to_string(static_cast<int>(getType())));
+  }
+
+  virtual ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const {
+    THROW_RUNTIME_EX("QueryBuffer::getAttributeTypeGL() is undefined for " +
+                     std::to_string(static_cast<int>(getType())));
+  }
 
 #ifdef HAVE_CUDA
   CudaHandle getCudaHandlePreQuery();
@@ -91,12 +105,12 @@ class QueryLayoutBuffer : public QueryBuffer {
     return _getGLResource()->numItems();
   }
 
-  ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const {
+  ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const final {
     CHECK(_bufRsrc);
     return _getGLResource()->getAttributeType(attrName);
   }
 
-  ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const {
+  ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const final {
     CHECK(_bufRsrc);
     return _getGLResource()->getAttributeTypeGL(attrName);
   }
@@ -121,7 +135,7 @@ class QueryLayoutBuffer : public QueryBuffer {
   }
 
  protected:
-  std::shared_ptr<GLBufferType> _getGLResource() const { return std::static_pointer_cast<GLBufferType>(_bufRsrc); }
+  std::shared_ptr<GLBufferType> _getGLResource() const { return std::dynamic_pointer_cast<GLBufferType>(_bufRsrc); }
 
  private:
   virtual void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
@@ -191,10 +205,34 @@ class QueryIndexBuffer : public QueryBuffer {
       ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
       QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
 
+  explicit QueryIndexBuffer(
+      ::Rendering::GL::GLRenderer* renderer,
+      const std::vector<unsigned char>& items,
+      ::Rendering::GL::Resources::BufferAccessType accessType =
+          ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
+  explicit QueryIndexBuffer(
+      ::Rendering::GL::GLRenderer* renderer,
+      const std::vector<unsigned short>& items,
+      ::Rendering::GL::Resources::BufferAccessType accessType =
+          ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
+  explicit QueryIndexBuffer(
+      ::Rendering::GL::GLRenderer* renderer,
+      const std::vector<unsigned int>& items,
+      ::Rendering::GL::Resources::BufferAccessType accessType =
+          ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
   ~QueryIndexBuffer();
 
   ::Rendering::GL::Resources::GLIndexBufferShPtr getGLIndexBufferPtr() const {
-    return std::static_pointer_cast<::Rendering::GL::Resources::GLIndexBuffer>(_bufRsrc);
+    return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLIndexBuffer>(_bufRsrc);
   }
 
  private:
@@ -242,7 +280,7 @@ class QueryUniformBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::
   ~QueryUniformBuffer();
 
   ::Rendering::GL::Resources::GLUniformBufferShPtr getGLUniformBufferPtr() const {
-    return std::static_pointer_cast<::Rendering::GL::Resources::GLUniformBuffer>(_bufRsrc);
+    return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLUniformBuffer>(_bufRsrc);
   }
 
  private:
@@ -280,10 +318,18 @@ class QueryIndirectVbo : public QueryBuffer {
       ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
       QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
 
+  explicit QueryIndirectVbo(
+      ::Rendering::GL::GLRenderer* renderer,
+      const std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>& items,
+      ::Rendering::GL::Resources::BufferAccessType accessType =
+          ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
   ~QueryIndirectVbo();
 
   ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr getGLIndirectVboPtr() const {
-    return std::static_pointer_cast<::Rendering::GL::Resources::GLIndirectDrawVertexBuffer>(_bufRsrc);
+    return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLIndirectDrawVertexBuffer>(_bufRsrc);
   }
 
  private:
@@ -316,10 +362,18 @@ class QueryIndirectIbo : public QueryBuffer {
       ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
       QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
 
+  explicit QueryIndirectIbo(
+      ::Rendering::GL::GLRenderer* renderer,
+      const std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>& items,
+      ::Rendering::GL::Resources::BufferAccessType accessType =
+          ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
   ~QueryIndirectIbo();
 
-  ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr getGLIndirectIboPtr() const {
-    return std::static_pointer_cast<::Rendering::GL::Resources::GLIndirectDrawVertexBuffer>(_bufRsrc);
+  ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr getGLIndirectIboPtr() const {
+    return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLIndirectDrawIndexBuffer>(_bufRsrc);
   }
 
  private:

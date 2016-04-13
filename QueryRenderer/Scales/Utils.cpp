@@ -56,15 +56,20 @@ static QueryDataType getDataTypeFromDataRefJSONObj(const rapidjson::Value& obj, 
       (mitr = obj.FindMember("data")) != obj.MemberEnd() && mitr->value.IsString(),
       RapidJSONUtils::getJsonParseErrorStr(obj, "data reference object doesn't contain a \"data\" string property."));
   std::string dataTableName = mitr->value.GetString();
-  QueryDataTableVBOShPtr tablePtr = ctx->getDataTable(dataTableName);
+  QueryDataTableShPtr tablePtr = ctx->getDataTable(dataTableName);
 
   RUNTIME_EX_ASSERT(tablePtr != nullptr,
                     RapidJSONUtils::getJsonParseErrorStr(obj, "data table \"" + dataTableName + "\" doesn't exist."));
 
+  QueryDataTableVBOShPtr vboTablePtr = std::static_pointer_cast<BaseQueryDataTableVBO>(tablePtr);
+  RUNTIME_EX_ASSERT(vboTablePtr != nullptr,
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        obj, "data table \"" + dataTableName + "\" is not a vertex buffer-based data table."));
+
   RUNTIME_EX_ASSERT(
       (mitr = obj.FindMember("field")) != obj.MemberEnd() && mitr->value.IsString(),
       RapidJSONUtils::getJsonParseErrorStr(obj, "data reference object must contain a \"field\" string property."));
-  return tablePtr->getColumnType(mitr->value.GetString());
+  return vboTablePtr->getAttributeType(mitr->value.GetString());
 }
 
 std::string getScaleNameFromJSONObj(const rapidjson::Value& obj) {

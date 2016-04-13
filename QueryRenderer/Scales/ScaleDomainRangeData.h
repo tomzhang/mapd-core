@@ -56,7 +56,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
     rapidjson::Value::ConstValueIterator vitr;
 
     bool isObject = false, isString = false;
-    QueryDataTableVBOShPtr tablePtr;
+    QueryDataTableShPtr tablePtr;
     DataColumnShPtr columnPtr;
 
     mitr = obj.FindMember(_name.c_str());
@@ -106,6 +106,13 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
                               "scale data references only support JSON-embedded data tables currently."));
 
         DataTable* dataTablePtr = dynamic_cast<DataTable*>(tablePtr.get());
+
+        RUNTIME_EX_ASSERT(
+            dataTablePtr != nullptr,
+            RapidJSONUtils::getJsonParseErrorStr(
+                ctx->getUserWidgetIds(),
+                jsonObj,
+                "Unsupported data reference table type. Data reference is not a vertex buffer-based data table."));
 
         columnPtr = dataTablePtr->getColumn(mitr->value.GetString());
 

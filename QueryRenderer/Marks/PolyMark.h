@@ -1,14 +1,14 @@
-#ifndef QUERYRENDERER_MARKS_POINTMARK_H_
-#define QUERYRENDERER_MARKS_POINTMARK_H_
+#ifndef QUERYRENDERER_MARKS_POLYMARK_H_
+#define QUERYRENDERER_MARKS_POLYMARK_H_
 
 #include "BaseMark.h"
 
 namespace QueryRenderer {
 
-class PointMark : public BaseMark {
+class PolyMark : public BaseMark {
  public:
-  PointMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, const QueryRendererContextShPtr& ctx);
-  ~PointMark();
+  PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, const QueryRendererContextShPtr& ctx);
+  ~PolyMark();
 
   void draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) final;
 
@@ -23,22 +23,20 @@ class PointMark : public BaseMark {
   RenderProperty<float> y;
   rapidjson::Pointer _yJsonPath;
 
-  RenderProperty<float> z;
-  rapidjson::Pointer _zJsonPath;
-
-  RenderProperty<float> size;
-  rapidjson::Pointer _sizeJsonPath;
-
-  RenderProperty<unsigned int> id;
-  rapidjson::Pointer _idJsonPath;
+  // RenderProperty<float> z;
+  // rapidjson::Pointer _zJsonPath;
 
   RenderProperty<::Rendering::Objects::ColorRGBA> fillColor;
   rapidjson::Pointer _fillColorJsonPath;
+
+  RenderProperty<unsigned int> id;
+  rapidjson::Pointer _idJsonPath;
 
   void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   void _updateShader() final;
 
   void _addPropertiesToAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) final;
+
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);
 
   void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
@@ -47,4 +45,4 @@ class PointMark : public BaseMark {
 
 }  // namespace QueryRenderer
 
-#endif  // QUERYRENDERER_MARKS_POINTMARK_H_
+#endif  // QUERYRENDERER_MARKS_POLYMARK_H_

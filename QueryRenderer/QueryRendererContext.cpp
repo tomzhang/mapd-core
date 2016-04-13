@@ -1,5 +1,5 @@
 #include "QueryRenderer.h"
-#include "Data/QueryDataTable.h"
+#include "Data/BaseQueryDataTable.h"
 #include "Marks/BaseMark.h"
 #include "Scales/Scale.h"
 #include "Rendering/QueryFramebuffer.h"
@@ -97,8 +97,8 @@ bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
   return (_dataTableMap.find(tableName) != _dataTableMap.end());
 }
 
-QueryDataTableVBOShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
-  QueryDataTableVBOShPtr rtn(nullptr);
+QueryDataTableShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
+  QueryDataTableShPtr rtn(nullptr);
 
   auto itr = _dataTableMap.find(tableName);
   if (itr != _dataTableMap.end()) {
