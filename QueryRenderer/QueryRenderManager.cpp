@@ -134,7 +134,9 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
-    gpuDataPtr.reset(new PerGpuData(i));
+    auto itr = _perGpuData->emplace(new PerGpuData(i));
+
+    gpuDataPtr = *itr.first;
     gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);
     gpuDataPtr->rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuDataPtr->windowPtr);
 
@@ -170,8 +172,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();
-
-    _perGpuData->insert(gpuDataPtr);
   }
 
   LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << endDevice
@@ -198,6 +198,8 @@ void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
           "User id: " + std::to_string(userId) + ", Widget Id: " + std::to_string(widgetId) + " does not exist.");
 
       _activeItr = itr;
+      LOG(INFO) << "Active render session [userId: " << _activeItr->userId << ", widgetId: " << _activeItr->widgetId
+                << "]";
     }
 
     _updateActiveLastRenderTime();
@@ -313,6 +315,7 @@ void QueryRenderManager::removeUser(int userId) {
 
 void QueryRenderManager::_clearActiveUserWidget() {
   _activeItr = _rendererMap.end();
+  LOG(INFO) << "Active render session [userId: -1, widgetId: -1] (unset)";
 }
 
 void QueryRenderManager::_purgeUnusedWidgets() {
