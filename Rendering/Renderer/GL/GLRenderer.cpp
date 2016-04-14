@@ -99,6 +99,10 @@ void GLRenderer::makeActiveOnCurrentThread(Window* window) {
 
   _currentRenderer = this;
   _currentWindow = windowToUse;
+
+  LOG(INFO) << "threadId: " << std::this_thread::get_id() << ". Current active renderer: " << std::hex
+            << _currentRenderer << " - gpuId: " << _currentRenderer->getGpuId() << ", active window: " << std::hex
+            << _currentWindow << " - name: " << _currentWindow->getName();
 }
 
 void GLRenderer::makeInactive() {
@@ -109,6 +113,15 @@ void GLRenderer::makeInactive() {
 
     _currentRenderer = nullptr;
     _currentWindow = nullptr;
+
+    LOG(INFO) << "threadId: " << std::this_thread::get_id() << ". Current active renderer: " << std::hex
+              << _currentRenderer << " - gpuId: -1"
+              << ", active window: " << std::hex << _currentWindow << " - name: undefined";
+  } else {
+    LOG(INFO) << "threadId: " << std::this_thread::get_id() << ". Could not make renderer: " << std::hex << this
+              << " - gpuId: " << this->getGpuId()
+              << ", inactive because it is not the active renderer on the thread. The current active renderer: "
+              << std::hex << _currentRenderer << " - gpuId: " << _currentRenderer->getGpuId();
   }
 
   // TODO(croot): should I throw an error or log a warning
