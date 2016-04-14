@@ -23,7 +23,6 @@ class GLVertexArray : public GLResource {
   size_t numItems() const { return _numItems; }
   size_t numVertices() const { return _numVertices; }
 
-  GLResourceType getResourceType() const final { return GLResourceType::VERTEXARRAY; }
   GLuint getId() const final { return _vao; }
   GLenum getTarget() const final { return GL_VERTEX_ARRAY; }
 

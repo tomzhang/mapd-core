@@ -16,7 +16,6 @@ class GLTexture2dArray : public GLResource {
  public:
   ~GLTexture2dArray();
 
-  GLResourceType getResourceType() const final { return GLResourceType::TEXTURE_2D_ARRAY; }
   GLuint getId() const final { return _textureArrayId; }
   GLenum getTarget() const final { return _target; }
 

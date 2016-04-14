@@ -7,7 +7,12 @@ namespace Resources {
 GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
                                BufferAccessType accessType,
                                BufferAccessFreq accessFreq)
-    : GLBaseBuffer(rendererPtr, GLBufferType::VERTEX_BUFFER, GL_ARRAY_BUFFER, accessType, accessFreq),
+    : GLBaseBuffer(rendererPtr,
+                   GLResourceType::VERTEXBUFFER,
+                   GLBufferType::VERTEX_BUFFER,
+                   GL_ARRAY_BUFFER,
+                   accessType,
+                   accessFreq),
       _layoutPtr(nullptr),
       _numItems(0) {
 }

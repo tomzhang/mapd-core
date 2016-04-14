@@ -37,7 +37,6 @@ class GLTexture2d : public GLResource {
  public:
   ~GLTexture2d();
 
-  GLResourceType getResourceType() const final { return GLResourceType::TEXTURE_2D; }
   GLuint getId() const final { return _textureId; }
 
   size_t getWidth() const { return _width; }

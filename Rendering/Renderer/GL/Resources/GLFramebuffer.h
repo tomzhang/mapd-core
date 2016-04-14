@@ -102,7 +102,6 @@ class GLFramebuffer : public GLResource {
  public:
   ~GLFramebuffer();
 
-  GLResourceType getResourceType() const final { return GLResourceType::FRAMEBUFFER; }
   GLuint getId() const final { return _fbo; }
   GLenum getTarget() const final { return GL_FRAMEBUFFER; }
 

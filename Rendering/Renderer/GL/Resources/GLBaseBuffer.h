@@ -35,6 +35,7 @@ class GLBaseBuffer : public GLResource {
 
  protected:
   explicit GLBaseBuffer(const RendererWkPtr& rendererPtr,
+                        GLResourceType rsrcType,
                         GLBufferType type,
                         GLenum target = GL_ARRAY_BUFFER,
                         BufferAccessType = BufferAccessType::READ_AND_WRITE,

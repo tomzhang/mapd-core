@@ -15,7 +15,6 @@ class GLRenderbuffer : public GLResource {
  public:
   ~GLRenderbuffer();
 
-  GLResourceType getResourceType() const final { return GLResourceType::RENDERBUFFER; }
   GLuint getId() const final { return _bufferId; }
   GLenum getTarget() const final { return GL_RENDERBUFFER; }
 

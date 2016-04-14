@@ -64,7 +64,7 @@ void GLBindState::bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc) {
 
   if (bind) {
     if (texRsrc) {
-      texRsrc->validateRenderer(_prntRenderer);
+      texRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, multiSampleTexId));
@@ -81,7 +81,7 @@ void GLBindState::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc
 
   if (bind) {
     if (vboRsrc) {
-      vboRsrc->validateRenderer(_prntRenderer);
+      vboRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, vboId));
@@ -111,7 +111,7 @@ void GLBindState::bindFramebuffer(Resources::FboBind bindType, const Resources::
 
   if (bindRead || bindDraw) {
     if (fbRsrc) {
-      fbRsrc->validateRenderer(_prntRenderer);
+      fbRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindFramebuffer(static_cast<int>(bindType), fboId));
@@ -133,7 +133,7 @@ void GLBindState::bindShader(const Resources::GLShaderShPtr& shaderRsrc) {
 
   if (bind) {
     if (shaderRsrc) {
-      shaderRsrc->validateRenderer(_prntRenderer);
+      shaderRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glUseProgram(programId));
@@ -156,7 +156,7 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
 
   if (bind) {
     if (vaoRsrc) {
-      vaoRsrc->validateRenderer(_prntRenderer);
+      vaoRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindVertexArray(vao));
@@ -172,7 +172,7 @@ void GLBindState::bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc
 
   if (bind) {
     if (rboRsrc) {
-      rboRsrc->validateRenderer(_prntRenderer);
+      rboRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, rbo));
@@ -188,7 +188,7 @@ void GLBindState::bindReadPixelBuffer(const Resources::GLPixelBuffer2dShPtr& pbo
 
   if (bind) {
     if (pboRsrc) {
-      pboRsrc->validateRenderer(_prntRenderer);
+      pboRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
 
       BufferAccessType accessType = pboRsrc->getAccessType();
       RUNTIME_EX_ASSERT(accessType == BufferAccessType::READ || accessType == BufferAccessType::READ_AND_WRITE ||
@@ -209,7 +209,7 @@ void GLBindState::bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pb
 
   if (bind) {
     if (pboRsrc) {
-      pboRsrc->validateRenderer(_prntRenderer);
+      pboRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
 
       BufferAccessType accessType = pboRsrc->getAccessType();
       RUNTIME_EX_ASSERT(accessType == BufferAccessType::WRITE || accessType == BufferAccessType::READ_AND_WRITE ||

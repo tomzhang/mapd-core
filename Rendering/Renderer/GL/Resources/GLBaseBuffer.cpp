@@ -6,11 +6,12 @@ namespace GL {
 namespace Resources {
 
 GLBaseBuffer::GLBaseBuffer(const RendererWkPtr& rendererPtr,
+                           GLResourceType rsrcType,
                            GLBufferType type,
                            GLenum target,
                            BufferAccessType accessType,
                            BufferAccessFreq accessFreq)
-    : GLResource(rendererPtr),
+    : GLResource(rendererPtr, rsrcType),
       _type(type),
       _bufferId(0),
       _target(target),
@@ -27,7 +28,7 @@ GLBaseBuffer::~GLBaseBuffer() {
 }
 
 void GLBaseBuffer::_initResource() {
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   if (!_bufferId) {
     MAPD_CHECK_GL_ERROR(glGenBuffers(1, &_bufferId));
@@ -54,7 +55,7 @@ void GLBaseBuffer::bufferData(void* data, size_t numBytes, GLenum altTarget) {
   // https://www.opengl.org/wiki/Buffer_Object_Streaming
   // Gonna start with an orphaning technique/re-specification
 
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   // don't mess with the current state
   // TODO(croot): Apply some kind of push-pop state system

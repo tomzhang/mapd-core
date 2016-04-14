@@ -6,6 +6,7 @@
 #include "../GLRenderer.h"
 #include "../../../Window.h"
 #include "Types.h"
+#include <thread>
 #include <glog/logging.h>
 
 namespace Rendering {
@@ -16,7 +17,7 @@ class GLResource {
  public:
   virtual ~GLResource() {}
 
-  virtual GLResourceType getResourceType() const = 0;
+  GLResourceType getResourceType() const { return _rsrcType; }
   virtual GLuint getId() const = 0;
   virtual GLenum getTarget() const = 0;
 
@@ -26,7 +27,8 @@ class GLResource {
   GLRenderer* getGLRenderer() { return dynamic_cast<GLRenderer*>(_rendererPtr.lock().get()); }
 
  protected:
-  GLResource(const RendererWkPtr& rendererPtr) : _rendererPtr(), _usable(false) {
+  GLResource(const RendererWkPtr& rendererPtr, GLResourceType rsrcType)
+      : _rendererPtr(), _usable(false), _rsrcType(rsrcType) {
     CHECK(!rendererPtr.expired());
     GLRenderer* renderer = dynamic_cast<GLRenderer*>(rendererPtr.lock().get());
     CHECK(renderer != nullptr);
@@ -38,10 +40,15 @@ class GLResource {
   void setUsable() { _usable = true; }
   void setUnusable() { _usable = false; }
 
-  void validateRenderer(GLRenderer* renderer = nullptr, bool checkThread = true) const {
+  void validateRenderer(const char* filename,
+                        int lineno,
+                        GLRenderer* renderer = nullptr,
+                        bool checkThread = true) const {
     GLRenderer* currRenderer = renderer;
 
-    RUNTIME_EX_ASSERT(!_rendererPtr.expired(), "The renderer for this resource has been removed. Cannot use resource.");
+    RUNTIME_EX_ASSERT(!_rendererPtr.expired(),
+                      std::string(filename) + ":" + std::to_string(lineno) + " The renderer for a resource of type " +
+                          to_string(getResourceType()) + " has been removed. Cannot use resource.");
 
     // TODO(croot): check that the renderer is a valid renderer for this resource.
     // That means the renderer is the ownere of this resource or is a renderer
@@ -58,8 +65,9 @@ class GLResource {
 
       std::stringstream ss;
 
-      ss << "The renderer for the resource hasn't been properly activated on the current thread. Cannot use resource. "
-            "Renderer: " << std::hex << currRenderer << " - gpuId: " << currRenderer->getGpuId()
+      ss << filename << ":" << lineno << " The renderer for the resource of type " << getResourceType()
+         << " hasn't been properly activated on the current thread - threadId: " << std::this_thread::get_id()
+         << " Cannot use resource. Renderer : " << std::hex << currRenderer << " - gpuId : " << currRenderer->getGpuId()
          << ", window: " << std::hex << window << " - name: " << window->getName()
          << ". Current active renderer: " << std::hex << currentRenderer
          << " - gpuId: " << (currentRenderer ? currentRenderer->getGpuId() : -1) << ", active window: " << std::hex
@@ -69,19 +77,18 @@ class GLResource {
     }
   }
 
-  void validateUsability(GLRenderer* renderer = nullptr, bool checkThread = true) const {
-    validateRenderer(renderer, checkThread);
+  void validateUsability(const char* filename,
+                         int lineno,
+                         GLRenderer* renderer = nullptr,
+                         bool checkThread = true) const {
+    validateRenderer(filename, lineno, renderer, checkThread);
     RUNTIME_EX_ASSERT(_usable == true,
-                      "This resource hasn't been properly setup. Cannot use resource. This could be a result of the "
-                      "resource being uninitialized, an error occurred during initialization, or the resource was "
-                      "cleaned up by an outside source.");
+                      std::string(filename) + ":" + std::to_string(lineno) + " The resource of type " +
+                          to_string(getResourceType()) +
+                          "hasn't been properly setup. Cannot use resource. This could be a result of the "
+                          "resource being uninitialized, an error occurred during initialization, or the resource was "
+                          "cleaned up by an outside source.");
   }
-
-  // void validateBound(GLRenderer* renderer = nullptr, bool checkThread = true) {
-  //   validateUsability(renderer, checkThread);
-  //   RUNTIME_EX_ASSERT(renderer->getBoundResource(getResourceType()) != this, "This resource hasn't been properly
-  //   bound to the renderer.");
-  // }
 
   void cleanupResource() {
     if (isUsableOnThread()) {
@@ -112,6 +119,7 @@ class GLResource {
   virtual void _makeEmpty() = 0;
 
   bool _usable;
+  GLResourceType _rsrcType;
 
   friend class ::Rendering::GL::State::GLBindState;
   friend class ::Rendering::GL::GLResourceManager;

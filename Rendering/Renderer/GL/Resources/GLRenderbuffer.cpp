@@ -33,7 +33,6 @@ static void resizeRenderbuffer(GLuint rbo,
   }
 
   MAPD_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, rbo));
-  MAPD_CHECK_GL_ERROR(glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height));
 
   if (numSamples > 1) {
     MAPD_CHECK_GL_ERROR(glRenderbufferStorageMultisample(GL_RENDERBUFFER, numSamples, internalFormat, width, height));
@@ -52,7 +51,7 @@ GLRenderbuffer::GLRenderbuffer(const RendererWkPtr& rendererPtr,
                                size_t height,
                                GLenum internalFormat,
                                size_t numSamples)
-    : GLResource(rendererPtr),
+    : GLResource(rendererPtr, GLResourceType::RENDERBUFFER),
       _width(width),
       _height(height),
       _internalFormat(internalFormat),
@@ -67,7 +66,7 @@ GLRenderbuffer::~GLRenderbuffer() {
 }
 
 void GLRenderbuffer::_initResource() {
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   MAPD_CHECK_GL_ERROR(glGenRenderbuffers(1, &_bufferId));
 
@@ -92,7 +91,7 @@ void GLRenderbuffer::resize(size_t width, size_t height) {
   if (width != _width || height != _height) {
     RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the renderbuffer. Dimensions must be > 0");
 
-    validateUsability();
+    validateUsability(__FILE__, __LINE__);
 
     resizeRenderbuffer(_bufferId, width, height, _internalFormat, _numSamples);
 
@@ -103,7 +102,7 @@ void GLRenderbuffer::resize(size_t width, size_t height) {
 
 void GLRenderbuffer::bindToRenderer(GLRenderer* renderer) {
   // TODO(croot): perhaps write a "don't check renderer" version?
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
 
   MAPD_CHECK_GL_ERROR(glBindRenderbuffer(GL_RENDERBUFFER, _bufferId));
 }

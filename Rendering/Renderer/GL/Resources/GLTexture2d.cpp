@@ -124,7 +124,7 @@ GLTexture2d::GLTexture2d(const RendererWkPtr& rendererPtr,
                          GLenum pixelType,
                          const GLTexture2dSampleProps& sampleProps,
                          size_t numSamples)
-    : GLResource(rendererPtr),
+    : GLResource(rendererPtr, GLResourceType::TEXTURE_2D),
       _width(width),
       _height(height),
       _internalFormat(internalFormat),
@@ -142,7 +142,7 @@ GLTexture2d::~GLTexture2d() {
 }
 
 void GLTexture2d::_initResource() {
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   RUNTIME_EX_ASSERT(_numSamples > 0, "Invalid number of samples " + std::to_string(_numSamples));
 
@@ -178,7 +178,7 @@ void GLTexture2d::resize(size_t width, size_t height) {
   if (width != _width || height != _height) {
     RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the texture. Dimensions must be > 0");
 
-    validateUsability();
+    validateUsability(__FILE__, __LINE__);
 
     _width = width;
     _height = height;

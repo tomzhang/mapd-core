@@ -11,8 +11,6 @@ class GLPixelBuffer2d : public GLBaseBuffer {
  public:
   ~GLPixelBuffer2d();
 
-  GLResourceType getResourceType() const final { return GLResourceType::PIXELBUFFER_2D; }
-
   size_t getWidth() const { return _width; }
   size_t getHeight() const { return _height; }
 

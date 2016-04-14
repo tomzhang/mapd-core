@@ -165,7 +165,7 @@ void AttachmentContainer::clear() {
 }  // namespace detail
 
 GLFramebuffer::GLFramebuffer(const RendererWkPtr& rendererPtr, const GLFramebufferAttachmentMap& attachments)
-    : GLResource(rendererPtr), _fbo(0), _textureBuffers(), _renderBuffers() {
+    : GLResource(rendererPtr, GLResourceType::FRAMEBUFFER), _fbo(0), _textureBuffers(), _renderBuffers() {
   _initResource(attachments);
 }
 
@@ -174,7 +174,7 @@ GLFramebuffer::~GLFramebuffer() {
 }
 
 void GLFramebuffer::_initResource(const GLFramebufferAttachmentMap& attachments) {
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   GLint currReadFbo;
   GLint currDrawFbo;
@@ -302,7 +302,7 @@ void GLFramebuffer::readPixels(GLenum attachment,
       _attachmentManager.hasAttachment(attachment),
       "Error trying to read pixels from fbo attachment " + std::to_string(attachment) + ". Attachment doesn't exist.");
 
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
 
   GLint currReadBuffer, currReadFbo;
 
@@ -343,7 +343,7 @@ void GLFramebuffer::copyPixelsToBoundPixelBuffer(GLenum attachment,
       _attachmentManager.hasAttachment(attachment),
       "Error trying to read pixels from fbo attachment " + std::to_string(attachment) + ". Attachment doesn't exist.");
 
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
 
   GLRenderer* renderer = getGLRenderer();
   GLPixelBuffer2dShPtr pbo = renderer->getBoundReadPixelBuffer();

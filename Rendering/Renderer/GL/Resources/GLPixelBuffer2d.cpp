@@ -31,7 +31,12 @@ GLPixelBuffer2d::GLPixelBuffer2d(const RendererWkPtr& rendererPtr,
                                  GLenum pixelType,
                                  BufferAccessType accessType,
                                  BufferAccessFreq accessFreq)
-    : GLBaseBuffer(rendererPtr, GLBufferType::PIXEL_BUFFER_2D, getBufferTarget(accessType), accessType, accessFreq),
+    : GLBaseBuffer(rendererPtr,
+                   GLResourceType::PIXELBUFFER_2D,
+                   GLBufferType::PIXEL_BUFFER_2D,
+                   getBufferTarget(accessType),
+                   accessType,
+                   accessFreq),
       _width(0),
       _height(0),
       // _internalFormat(internalFormat),
@@ -63,7 +68,7 @@ void GLPixelBuffer2d::resize(size_t width, size_t height) {
 }
 
 void GLPixelBuffer2d::readPixels(size_t width, size_t height, GLenum dataType, GLvoid* data) {
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
 
   RUNTIME_EX_ASSERT(isReadable(), "The pbo is set to be writable, not readable. Cannot read pixels.");
 

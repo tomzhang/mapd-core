@@ -86,7 +86,7 @@ GLTexture2dArray::GLTexture2dArray(const RendererWkPtr& rendererPtr,
                                    GLenum internalFormat,
                                    const GLTexture2dSampleProps& sampleProps,
                                    size_t numSamples)
-    : GLResource(rendererPtr),
+    : GLResource(rendererPtr, GLResourceType::TEXTURE_2D_ARRAY),
       _width(width),
       _height(height),
       _depth(depth),
@@ -101,7 +101,7 @@ GLTexture2dArray::GLTexture2dArray(const RendererWkPtr& rendererPtr,
 }
 
 GLTexture2dArray::GLTexture2dArray(const RendererWkPtr& rendererPtr, const std::vector<GLTexture2dShPtr>& initTextures)
-    : GLResource(rendererPtr),
+    : GLResource(rendererPtr, GLResourceType::TEXTURE_2D_ARRAY),
       _width(0),
       _height(0),
       _depth(0),
@@ -132,7 +132,7 @@ GLTexture2dArray::~GLTexture2dArray() {
 }
 
 void GLTexture2dArray::_initResource() {
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   RUNTIME_EX_ASSERT(_numSamples > 0, "Invalid number of samples " + std::to_string(_numSamples));
 
@@ -174,7 +174,7 @@ void GLTexture2dArray::_makeEmpty() {
 
 void GLTexture2dArray::_rebuild(size_t width, size_t height, size_t depth) {
   if (width != _width || height != _height || depth != _depth) {
-    validateUsability();
+    validateUsability(__FILE__, __LINE__);
 
     _cleanupResource();
     _textureArrayId = createTexture2dArray(_target, width, height, depth, _internalFormat);

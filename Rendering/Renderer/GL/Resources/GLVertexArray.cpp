@@ -7,7 +7,7 @@ namespace GL {
 namespace Resources {
 
 GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr)
-    : GLResource(rendererPtr), _vao(0), _numItems(0), _numVertices(0) {
+    : GLResource(rendererPtr, GLResourceType::VERTEXARRAY), _vao(0), _numItems(0), _numVertices(0) {
   _initResource();
 }
 
@@ -21,7 +21,7 @@ GLVertexArray::~GLVertexArray() {
 }
 
 void GLVertexArray::_initResource() {
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   if (!_vao) {
     MAPD_CHECK_GL_ERROR(glGenVertexArrays(1, &_vao));
@@ -81,7 +81,7 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
 
 void GLVertexArray::_initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer) {
   // TODO(croot): make this thread safe?
-  validateRenderer(renderer);
+  validateRenderer(__FILE__, __LINE__, renderer);
 
   RUNTIME_EX_ASSERT(renderer->hasBoundShader(),
                     "Cannot initialize vertex array object. A shader needs to be bound to the renderer for vertex "

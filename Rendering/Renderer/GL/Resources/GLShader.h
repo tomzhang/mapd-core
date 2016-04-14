@@ -1,9 +1,6 @@
 #ifndef RENDERING_GL_RESOURCES_GLSHADER_H_
 #define RENDERING_GL_RESOURCES_GLSHADER_H_
 
-// #include "MapDGL.h"
-// #include "QueryRendererError.h"
-
 #include "../Types.h"
 #include "../../../RenderError.h"
 #include "GLResource.h"
@@ -13,7 +10,6 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
-// #include <iostream>
 
 namespace Rendering {
 namespace GL {
@@ -28,9 +24,7 @@ struct AttrInfo {
   GLuint location;
 
   AttrInfo(GLint t, GLint s, GLuint l) : type(t), size(s), location(l) {}
-  ~AttrInfo() {
-    // std::cout << "IN AttrInfo DESTRUCTOR" << std::endl;
-  }
+  ~AttrInfo() {}
 };
 
 struct UniformAttrInfo : AttrInfo {
@@ -56,7 +50,6 @@ class GLShader : public GLResource {
  public:
   ~GLShader();
 
-  GLResourceType getResourceType() const final { return GLResourceType::SHADER; }
   GLuint getId() const final { return _programId; }
   GLenum getTarget() const final { return GL_SHADER; }
 
@@ -80,8 +73,6 @@ class GLShader : public GLResource {
                           "\" is not the appropriate size. It is size 1 but should be " + std::to_string(attrSz) + ".");
 
     // TODO(croot): check type mismatch?
-    // setUniformByLocation(attrLoc, 1, &attrValue);
-    // iter->(*second)();
     info->setAttr((void*)&attrValue);
   }
 
@@ -96,7 +87,6 @@ class GLShader : public GLResource {
 
     // TODO(croot): check type mismatch?re2
     info->setAttr((void*)(&attrValue[0]));
-    // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
 
   template <typename T, size_t N>
@@ -110,17 +100,13 @@ class GLShader : public GLResource {
 
     // TODO(croot): check type mismatch?
     info->setAttr((void*)(&attrValue[0]));
-    // setUniformByLocation(attrLoc, attrSz, &attrValue);
   }
 
   void setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc);
 
-  // TODO(croot):
   void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
 
   GLuint getVertexAttributeLocation(const std::string& attrName) const;
-
-  // void bindToRenderer();
 
  private:
   GLShader(const RendererWkPtr& rendererPtr, const std::string& vertexShaderSrc, const std::string& fragmentShaderSrc);

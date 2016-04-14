@@ -349,7 +349,7 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
 GLShader::GLShader(const RendererWkPtr& rendererPtr,
                    const std::string& vertexShaderSrc,
                    const std::string& fragmentShaderSrc)
-    : GLResource(rendererPtr), _vertShaderId(0), _fragShaderId(0), _programId(0) {
+    : GLResource(rendererPtr, GLResourceType::SHADER), _vertShaderId(0), _fragShaderId(0), _programId(0) {
   _initResource(vertexShaderSrc, fragmentShaderSrc);
 }
 
@@ -360,7 +360,7 @@ GLShader::~GLShader() {
 void GLShader::_initResource(const std::string& vertSrc, const std::string& fragSrc) {
   std::string errStr;
 
-  validateRenderer();
+  validateRenderer(__FILE__, __LINE__);
 
   // build and compile the vertex shader
   MAPD_CHECK_GL_ERROR((_vertShaderId = glCreateShader(GL_VERTEX_SHADER)));
@@ -377,6 +377,8 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
   }
 
   MAPD_CHECK_GL_ERROR((_programId = glCreateProgram()));
+  RUNTIME_EX_ASSERT(_programId != 0, "An error occured trying to create a shader program");
+
   MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _vertShaderId));
   MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _fragShaderId));
   if (!linkProgram(_programId, errStr)) {
@@ -455,7 +457,7 @@ void GLShader::_makeEmpty() {
 }
 
 UniformAttrInfo* GLShader::_validateAttr(const std::string& attrName) {
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
 
   auto itr = _uniformAttrs.find(attrName);
 
@@ -475,12 +477,12 @@ UniformSamplerAttr* GLShader::_validateSamplerAttr(const std::string& attrName) 
 }
 
 std::string GLShader::getVertexSource() const {
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
   return getShaderSource(_vertShaderId);
 }
 
 std::string GLShader::getFragmentSource() const {
-  validateUsability();
+  validateUsability(__FILE__, __LINE__);
   return getShaderSource(_fragShaderId);
 }
 
@@ -536,7 +538,7 @@ GLuint GLShader::getVertexAttributeLocation(const std::string& attrName) const {
 //   // is invalid?
 
 //   // TODO(croot): perhaps write a "don't check renderer" version?
-//   validateUsability();
+//   validateUsability(__FILE__, __LINE__);
 
 //   if (_programId) {
 //     MAPD_CHECK_GL_ERROR(glUseProgram(_programId));
