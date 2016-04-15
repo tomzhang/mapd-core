@@ -17,10 +17,6 @@
 #include <set>
 #include <vector>
 
-#ifdef HAVE_CUDA
-#include <CudaMgr/CudaMgr.h>
-#endif  // HAVE_CUDA
-
 class Executor;
 
 namespace QueryRenderer {
@@ -146,10 +142,7 @@ class QueryRenderer {
   void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
-#ifdef HAVE_CUDA
   void updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor);
-#endif  // HAVE_CUDA
-
   void activateGpus(const std::vector<GpuId>& gpusToActivate = {});
 
   void render(bool inactivateRendererOnThread = true);

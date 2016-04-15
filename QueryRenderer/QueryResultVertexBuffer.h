@@ -17,14 +17,12 @@ namespace QueryRenderer {
 
 class QueryRenderManager;
 
-#ifdef HAVE_CUDA
 struct CudaHandle {
   void* handle;
   unsigned int numBytes;
 
   CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
 };
-#endif
 
 class QueryVertexBuffer {
  public:

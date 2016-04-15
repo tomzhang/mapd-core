@@ -365,8 +365,8 @@ void QueryRenderManager::_updateActiveLastRenderTime() {
   lastRenderTimeList.relocate(lastRenderTimeList.end(), lastRenderTimeItr);
 }
 
-#ifdef HAVE_CUDA
 CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
+#ifdef HAVE_CUDA
   PerGpuDataMap_in_order& inOrder = _perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
                     "Cannot get cuda handle for gpu index " + std::to_string(gpuIdx) + ". There are only " +
@@ -379,9 +379,13 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
   CudaHandle rtn = inOrder[gpuIdx]->queryResultBufferPtr->getCudaHandlePreQuery();
 
   return rtn;
+#else
+  CHECK(false) << "Cuda is not activated. Cannot get cuda handle.";
+#endif  // HAVE_CUDA
 }
 
 void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes) {
+#ifdef HAVE_CUDA
   PerGpuDataMap_in_order& inOrder = _perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
                     "Cannot set cuda handle results for gpu index " + std::to_string(gpuIdx) + ". There are only " +
@@ -392,6 +396,9 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedByt
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
+#else
+  CHECK(false) << "Cuda is not activated. Cannot set cuda handle bytes.";
+#endif  // HAVE_CUDA
 }
 
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -417,23 +424,6 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
 }
-#else
-void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
-  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
-                    "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
-                    "configuring the render.");
-
-  CHECK(_perGpuData->size());
-
-  ActiveRendererGuard activeRendererGuard(nullptr, this);
-
-  _activeItr->renderer->activateGpus(_perGpuData);
-
-  _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
-}
-#endif  // HAVE_CUDA
 
 void QueryRenderManager::setWidthHeight(int width, int height) {
   std::lock_guard<std::mutex> render_lock(_renderMtx);

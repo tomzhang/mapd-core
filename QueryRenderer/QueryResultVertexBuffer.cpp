@@ -84,8 +84,12 @@ QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* rend
     : QueryVertexBuffer(renderer, numBytes, accessType, accessFreq),
       _isActive(false),
       _usedBytes(0),
+#ifdef HAVE_CUDA
       _gpuId(-1),
       _cudaResourceMap() {
+#else
+      _gpuId(-1) {
+#endif
   _gpuId = renderer->getGpuId();
 #ifdef HAVE_CUDA
   _initCudaGraphicsResource();

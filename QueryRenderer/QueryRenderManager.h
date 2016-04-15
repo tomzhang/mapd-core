@@ -184,16 +184,12 @@ class QueryRenderManager {
   std::vector<GpuId> getAllGpuIds() const;
   PerGpuDataMap* getPerGpuData() { return _perGpuData.get(); }
 
-#ifdef HAVE_CUDA
   CudaHandle getCudaHandle(size_t gpuIdx);
   void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes);
+
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                        QueryDataLayoutShPtr dataLayoutPtr = nullptr,
                        const Executor* executor = nullptr);
-#else
-  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr);
-
-#endif  // HAVE_CUDA
 
   void render();
   PngData renderToPng(int compressionLevel = -1);

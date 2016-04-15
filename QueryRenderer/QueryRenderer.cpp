@@ -504,7 +504,6 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
   }
 }
 
-#ifdef HAVE_CUDA
 void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor) {
   try {
     std::vector<GpuId> gpuIds;
@@ -539,7 +538,6 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
     throw e;
   }
 }
-#endif  // HAVE_CUDA
 
 void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
   try {
