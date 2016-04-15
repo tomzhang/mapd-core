@@ -103,6 +103,10 @@ add_subdirectory(ThirdParty/googletest)
 # RapidJSON
 include_directories(ThirdParty/rapidjson)
 
+# Poly2Tri
+include_directories(ThirdParty/poly2tri)
+add_subdirectory(ThirdParty/poly2tri)
+
 option(ENABLE_RENDERING "Build backend renderer" OFF)
 if(ENABLE_RENDERING)
     add_definitions("-DHAVE_RENDERING")
