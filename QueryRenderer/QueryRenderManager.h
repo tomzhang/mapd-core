@@ -26,12 +26,9 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/tag.hpp>
 
-#ifdef HAVE_CUDA
 #include <CudaMgr/CudaMgr.h>
-#endif  // HAVE_CUDA
 
 class Executor;
-class CudaMgr;
 
 namespace QueryRenderer {
 
@@ -152,11 +149,13 @@ class QueryRenderManager {
 
   typedef PerGpuDataMap::index<inorder>::type PerGpuDataMap_in_order;
 
-  explicit QueryRenderManager(int numGpus = -1,
+  explicit QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
+                              int numGpus = -1,
                               int startGpu = 0,
                               size_t queryResultBufferSize = 500000,
                               size_t renderCacheLimit = 500);
   explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
+                              CudaMgr_Namespace::CudaMgr* cudaMgr,
                               int numGpus = -1,  // < 0 means use all available GPUs
                               int startGpu = 0,
                               size_t queryResultBufferSize = 500000,
@@ -260,7 +259,11 @@ class QueryRenderManager {
   std::shared_ptr<PerGpuDataMap> _perGpuData;
   std::shared_ptr<QueryRenderCompositor> _compositorPtr;
 
-  void _initialize(Rendering::WindowManager& windowMgr, int numGpus, int startGpu, size_t queryResultBufferSize);
+  void _initialize(Rendering::WindowManager& windowMgr,
+                   CudaMgr_Namespace::CudaMgr* cudaMgr,
+                   int numGpus,
+                   int startGpu,
+                   size_t queryResultBufferSize);
   void _resetQueryResultBuffers() noexcept;
 
   void _setActiveUserWidget(int userId, int widgetId) const;

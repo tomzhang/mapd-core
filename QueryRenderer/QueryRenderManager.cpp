@@ -59,7 +59,11 @@ QueryRenderManager::ActiveRendererGuard::~ActiveRendererGuard() {
   }
 }
 
-QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryResultBufferSize, size_t renderCacheLimit)
+QueryRenderManager::QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
+                                       int numGpus,
+                                       int startGpu,
+                                       size_t queryResultBufferSize,
+                                       size_t renderCacheLimit)
     : _rendererMap(),
       _activeItr(_rendererMap.end()),
       _perGpuData(new PerGpuDataMap()),
@@ -68,10 +72,11 @@ QueryRenderManager::QueryRenderManager(int numGpus, int startGpu, size_t queryRe
   // NOTE: this constructor needs to be used on the main thread as that is a requirement
   // for a window manager instance.
   ::Rendering::WindowManager windowMgr;
-  _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize);
+  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize);
 }
 
 QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
+                                       CudaMgr_Namespace::CudaMgr* cudaMgr,
                                        int numGpus,
                                        int startGpu,
                                        size_t queryResultBufferSize,
@@ -81,13 +86,14 @@ QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
       _perGpuData(),
       _compositorPtr(nullptr),
       _renderCacheLimit(renderCacheLimit) {
-  _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize);
+  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize);
 }
 
 QueryRenderManager::~QueryRenderManager() {
 }
 
 void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
+                                     CudaMgr_Namespace::CudaMgr* cudaMgr,
                                      int numGpus,
                                      int startGpu,
                                      size_t queryResultBufferSize) {
@@ -131,6 +137,11 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   ActiveRendererGuard renderGuard;
 
   for (size_t i = startDevice; i < endDevice; ++i) {
+    if (cudaMgr) {
+      // need to set a cuda context before creating gl/cuda interop buffers
+      cudaMgr->setContext(i);
+    }
+
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 

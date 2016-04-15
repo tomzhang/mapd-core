@@ -6,7 +6,7 @@ find_package(CUDA REQUIRED)
 
 set(QUERY_RENDERER_SOURCES QueryRenderManager.cpp QueryFramebuffer.cpp QueryRenderer.cpp QueryRendererObjects.cpp QueryDataTable.cpp RapidJSONUtils.cpp QueryResultVertexBuffer.cpp QueryDataLayout.cpp QueryRenderCompositor.cpp QueryIdMapPboPool.cpp QueryIdMapPixelBuffer.cpp PngData.cpp Utilities.cpp Types.cpp)
 
-set(QUERY_RENDERER_LIBS ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARIES} ${CUDA_LIBRARIES} ${Glog_LIBRARIES})
+set(QUERY_RENDERER_LIBS ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARIES} ${CUDA_LIBRARIES} ${Glog_LIBRARIES} CudaMgr)
 
 set(QUERY_RENDERER_INCLUDE_DIRS ${Boost_INCLUDE_DIR} ${GL_INCLUDE_DIR} ${PNG_INCLUDE_DIR} ${CUDA_INCLUDE_DIR} ${Glog_INCLUDE_DIR} ThirdParty/rapidjson)
 

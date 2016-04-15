@@ -4,30 +4,13 @@
 #include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>
 #include <Rendering/Renderer/GL/Types.h>
 
-// #include "MapDGL.h"
-// #include "QueryRendererError.h"
-// #include "BufferLayout.h"
-// #include "Shader.h"
-// #include "VertexBuffer.h"
 #include <GL/glew.h>
-// #include <glog/logging.h>
 
 #ifdef HAVE_CUDA
-// // CUDA libs
-// // #include <cuda_runtime.h>
-// // #include <cuda_gl_interop.h>
 #include <cuda.h>
 #include <cudaGL.h>
 #endif  // HAVE_CUDA
 
-// #include <vector>
-// #include <memory>
-// #include <iostream>
-// #include <unordered_map>
-// #include <string>
-// #include <stdexcept>
-// #include <cstdint>
-// #include <unordered_map>
 #include <unordered_set>
 
 namespace QueryRenderer {
@@ -37,13 +20,9 @@ class QueryRenderManager;
 #ifdef HAVE_CUDA
 struct CudaHandle {
   void* handle;
-
-  // GLuint handle;
   unsigned int numBytes;
 
   CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
-
-  // CudaHandle(GLuint handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
 };
 #endif
 
@@ -128,7 +107,8 @@ class QueryResultVertexBuffer : public QueryVertexBuffer {
   // static void checkCudaErrors(CUresult result);
   void checkCudaErrors(CUresult result);
 
-  CUgraphicsResource _getCudaGraphicsResource(bool registerResource = false);
+  void _initCudaGraphicsResource();
+  CUgraphicsResource _getCudaGraphicsResource();
 
   void _mapCudaGraphicsResource(CUgraphicsResource& rsrc);
 

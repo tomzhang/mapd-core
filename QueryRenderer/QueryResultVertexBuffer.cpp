@@ -87,6 +87,9 @@ QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* rend
       _gpuId(-1),
       _cudaResourceMap() {
   _gpuId = renderer->getGpuId();
+#ifdef HAVE_CUDA
+  _initCudaGraphicsResource();
+#endif
 }
 
 QueryResultVertexBuffer::~QueryResultVertexBuffer() {
@@ -187,7 +190,7 @@ CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {
       "QueryResultVertexBuffer " + std::to_string(_gpuId) + " is already in use. Cannot access cuda handle.");
 
   // now map the buffer for cuda
-  CUgraphicsResource cudaRsrc = _getCudaGraphicsResource(true);
+  CUgraphicsResource cudaRsrc = _getCudaGraphicsResource();
   _mapCudaGraphicsResource(cudaRsrc);
 
   size_t num_bytes = 0;
@@ -206,8 +209,39 @@ CudaHandle QueryResultVertexBuffer::getCudaHandlePreQuery() {
   return CudaHandle(reinterpret_cast<void*>(devPtr), num_bytes);
 }
 
-CUgraphicsResource QueryResultVertexBuffer::_getCudaGraphicsResource(bool registerResource) {
-  // CUcontext* currCudaCtx=nullptr;
+void QueryResultVertexBuffer::_initCudaGraphicsResource() {
+  CUcontext currCudaCtx;
+  CUdevice ctxDevice;
+
+  checkCudaErrors(cuCtxGetCurrent(&currCudaCtx));
+  checkCudaErrors(cuCtxGetDevice(&ctxDevice));
+
+  RUNTIME_EX_ASSERT(ctxDevice == _gpuId,
+                    "QueryResultVertexBuffer " + std::to_string(_gpuId) +
+                        ": Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
+                        " for cuda context does not match the QueryResultVertexBuffer device " +
+                        std::to_string(_gpuId));
+
+  CHECK(currCudaCtx != nullptr);
+  CHECK(_vbo);
+  GLuint rsrcId = _vbo->getId();
+  CHECK(rsrcId);
+
+  const auto itr = _cudaResourceMap.find(currCudaCtx);
+  if (itr == _cudaResourceMap.end()) {
+    CUgraphicsResource rsrc;
+    CUresult result = cuGraphicsGLRegisterBuffer(&rsrc, rsrcId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD);
+    RUNTIME_EX_ASSERT(
+        result != CUDA_ERROR_UNKNOWN,
+        "Cuda error code=" + std::to_string(result) +
+            ", CUDA_ERROR_UNKNOWN, possibly not enough gpu memory available for the requested buffer size of " +
+            std::to_string(_vbo->numBytes()) + " bytes.");
+    checkCudaErrors(result);
+    _cudaResourceMap.insert(std::make_pair(currCudaCtx, rsrc));
+  }
+}
+
+CUgraphicsResource QueryResultVertexBuffer::_getCudaGraphicsResource() {
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
@@ -227,15 +261,7 @@ CUgraphicsResource QueryResultVertexBuffer::_getCudaGraphicsResource(bool regist
   CHECK(rsrcId);
 
   const auto itr = _cudaResourceMap.find(currCudaCtx);
-  if (itr == _cudaResourceMap.end()) {
-    CHECK(registerResource);
-
-    CUgraphicsResource rsrc;
-    checkCudaErrors(cuGraphicsGLRegisterBuffer(&rsrc, rsrcId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
-    _cudaResourceMap.insert(std::make_pair(currCudaCtx, rsrc));
-    return rsrc;
-  }
-
+  CHECK(itr != _cudaResourceMap.end());
   return itr->second;
 }
 
