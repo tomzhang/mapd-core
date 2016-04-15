@@ -553,10 +553,14 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
   return std::string(png_data.pngDataPtr.get(), png_data.pngSize);
 }
 
-int64_t Executor::getRowidForPixel(const int64_t x, const int64_t y, const int session_id, const int render_widget_id) {
+int64_t Executor::getRowidForPixel(const int64_t x,
+                                   const int64_t y,
+                                   const int session_id,
+                                   const int render_widget_id,
+                                   const int pixelRadius) {
   set_render_widget(render_manager_, session_id, render_widget_id);
 
-  return render_manager_->getIdAt(x, y);
+  return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
 int32_t Executor::getStringId(const std::string& table_name,

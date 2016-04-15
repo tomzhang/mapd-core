@@ -352,6 +352,7 @@ class MapDHandler : virtual public MapDIf {
     sql_execute_impl(_return, session_info, query_str, column_format, nonce);
   }
 
+  // DEPRECATED - use get_row_for_pixel()
   void get_rows_for_pixels(TPixelResult& _return,
                            const TSessionId session,
                            const int64_t widget_id,
@@ -397,6 +398,52 @@ class MapDHandler : virtual public MapDIf {
       pixel_rows.pixel = pixel;
       pixel_rows.row_set = ret.row_set;
       _return.pixel_rows.push_back(pixel_rows);
+    }
+#endif  // HAVE_RENDERING
+  }
+
+  void get_row_for_pixel(TPixelRowResult& _return,
+                         const TSessionId session,
+                         const int64_t widget_id,
+                         const TPixel& pixel,
+                         const std::string& table_name,
+                         const std::vector<std::string>& col_names,
+                         const bool column_format,
+                         const int32_t pixelRadius,
+                         const std::string& nonce) {
+    _return.nonce = nonce;
+    if (!enable_rendering_) {
+      TMapDException ex;
+      ex.error_msg = "Backend rendering is disabled.";
+      LOG(ERROR) << ex.error_msg;
+      throw ex;
+    }
+#ifdef HAVE_RENDERING
+    std::lock_guard<std::mutex> render_lock(render_mutex_);
+    mapd_lock_guard<mapd_shared_mutex> write_lock(sessions_mutex_);
+    auto session_it = get_session_it(session);
+    auto session_info_ptr = session_it->second.get();
+    auto& cat = session_info_ptr->get_catalog();
+    auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
+    CHECK(executor);
+    CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
+    set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
+    ScopeGuard restore_device_type =
+        [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
+    const auto rowid = executor->getRowidForPixel(
+        pixel.x, pixel.y, session_info_ptr->get_session_id(), 1);  // TODO(alex): de-hardcode user widget
+
+    _return.pixel = pixel;
+    _return.row_id = rowid;
+
+    if (rowid >= 0) {
+      // TODO(alex): fix potential SQL injection issues?
+      const auto projection = boost::algorithm::join(col_names, ", ");
+      const auto query_str =
+          "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(rowid) + ";";
+      TQueryResult ret;
+      sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce);
+      _return.row_set = ret.row_set;
     }
 #endif  // HAVE_RENDERING
   }
