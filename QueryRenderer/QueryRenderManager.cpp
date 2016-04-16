@@ -139,7 +139,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   for (size_t i = startDevice; i < endDevice; ++i) {
     if (cudaMgr) {
       // need to set a cuda context before creating gl/cuda interop buffers
-      cudaMgr->setContext(i);
+      cudaMgr->setContext(i - startDevice);
     }
 
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
