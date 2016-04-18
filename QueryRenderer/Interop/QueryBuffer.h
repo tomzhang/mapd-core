@@ -20,7 +20,6 @@
 
 namespace QueryRenderer {
 
-#ifdef HAVE_CUDA
 struct CudaHandle {
   void* handle;
 
@@ -28,7 +27,6 @@ struct CudaHandle {
 
   CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
 };
-#endif
 
 class QueryBuffer {
  public:
@@ -79,8 +77,9 @@ class QueryBuffer {
   std::unordered_map<CUcontext, CUgraphicsResource> _cudaResourceMap;
   std::unordered_set<CUgraphicsResource> _mappedCudaResources;
 
-  void checkCudaErrors(CUresult result);
+  void checkCudaErrors(CUresult result, const char* filename, int lineno);
 
+  void _initCudaGraphicsResource();
   CUgraphicsResource _getCudaGraphicsResource(bool registerResource = false);
 
   void _mapCudaGraphicsResource(CUgraphicsResource& rsrc);

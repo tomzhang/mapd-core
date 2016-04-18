@@ -5,7 +5,16 @@
 
 namespace QueryRenderer {
 
-QueryBuffer::QueryBuffer(BufType type) : _type(type), _isActive(false), _usedBytes(0) {
+QueryBuffer::QueryBuffer(BufType type)
+    : _type(type),
+      _isActive(false),
+#ifdef HAVE_CUDA
+      _usedBytes(0),
+      _cudaResourceMap() {
+  _initCudaGraphicsResource();
+#else
+      _usedBytes(0) {
+#endif  // HAVE_CUDA
 }
 
 QueryBuffer::~QueryBuffer() {
@@ -34,12 +43,12 @@ QueryBuffer::~QueryBuffer() {
       // by a program exit, therefore cuda could
       // be in shutdown mode before we get here.
 
-      checkCudaErrors(result);
+      checkCudaErrors(result, __FILE__, __LINE__);
       for (const auto& item : _cudaResourceMap) {
-        checkCudaErrors(cuCtxSetCurrent(item.first));
-        checkCudaErrors(cuGraphicsUnregisterResource(item.second));
+        checkCudaErrors(cuCtxSetCurrent(item.first), __FILE__, __LINE__);
+        checkCudaErrors(cuGraphicsUnregisterResource(item.second), __FILE__, __LINE__);
       }
-      checkCudaErrors(cuCtxSetCurrent(currCudaCtx));
+      checkCudaErrors(cuCtxSetCurrent(currCudaCtx), __FILE__, __LINE__);
     }
   }
 #endif  // HAVE_CUDA
@@ -75,8 +84,7 @@ CudaHandle QueryBuffer::getCudaHandlePreQuery() {
   size_t numBufBytes = _bufRsrc->numBytes();
 
   CUdeviceptr devPtr;
-  // checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, _cudaResource));
-  checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc));
+  checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc), __FILE__, __LINE__);
 
   LOG_IF(WARNING, num_bytes != numBufBytes) << "QueryBuffer " << gpuId << ": couldn't successfully map all "
                                             << numBufBytes << " bytes. Was only able to map " << num_bytes
@@ -107,35 +115,39 @@ void QueryBuffer::updatePostQuery(size_t numUsedBytes) {
 }
 
 #ifdef HAVE_CUDA
-// static void checkCudaErrors(CUresult result);
-void QueryBuffer::checkCudaErrors(CUresult result) {
+void QueryBuffer::checkCudaErrors(CUresult result, const char* filename, int lineno) {
   if (result == CUDA_ERROR_INVALID_GRAPHICS_CONTEXT) {
     ::Rendering::GL::GLRenderer* renderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
     if (!renderer) {
-      CHECK(false) << "CUDA error code=" << result << ". No gl context is set as current.";
+      CHECK(false) << "CUDA error code=" << result << ". No gl context is set as current. " << filename << ":"
+                   << lineno;
     } else {
       CHECK(false) << "CUDA error code=" << result << ". Current context is on gpu: " << renderer->getGpuId()
-                   << ", but expecting it to be on " << _getGpuId() << ".";
+                   << ", but expecting it to be on " << _getGpuId() << ". " << filename << ":" << lineno;
     }
+  } else if (result == CUDA_ERROR_OUT_OF_MEMORY) {
+    auto gpuId = _getGpuId();
+    LOG(ERROR) << "CUDA out of memory error on gpu: " << gpuId << " during rendering. " << filename << ":" << lineno;
+    throw Rendering::OutOfGpuMemoryError("Cuda out of memory error on gpu: " + std::to_string(gpuId) +
+                                         " - CUDA error code =" + std::to_string(result));
   } else {
     CHECK(result == CUDA_SUCCESS) << "CUDA error code=" << result;
   }
 }
 
-CUgraphicsResource QueryBuffer::_getCudaGraphicsResource(bool registerResource) {
+void QueryBuffer::_initCudaGraphicsResource() {
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
-  checkCudaErrors(cuCtxGetCurrent(&currCudaCtx));
-  checkCudaErrors(cuCtxGetDevice(&ctxDevice));
+  checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
+  checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
 
-  size_t gpuId = _getGpuId();
-  RUNTIME_EX_ASSERT(ctxDevice == static_cast<int>(gpuId),
+  auto gpuId = _getGpuId();
+  RUNTIME_EX_ASSERT(ctxDevice == gpuId,
                     "QueryResultVertexBuffer " + std::to_string(gpuId) +
                         ": Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
                         " for cuda context does not match the QueryResultVertexBuffer device " + std::to_string(gpuId));
 
-  // TODO(croot): convert these checks to log/throw errors
   CHECK(currCudaCtx != nullptr);
   CHECK(_bufRsrc);
   GLuint rsrcId = _bufRsrc->getId();
@@ -143,20 +155,47 @@ CUgraphicsResource QueryBuffer::_getCudaGraphicsResource(bool registerResource) 
 
   const auto itr = _cudaResourceMap.find(currCudaCtx);
   if (itr == _cudaResourceMap.end()) {
-    CHECK(registerResource);
-
     CUgraphicsResource rsrc;
-    checkCudaErrors(cuGraphicsGLRegisterBuffer(&rsrc, rsrcId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD));
-    _cudaResourceMap.insert(std::make_pair(currCudaCtx, rsrc));
-    return rsrc;
-  }
+    CUresult result = cuGraphicsGLRegisterBuffer(&rsrc, rsrcId, CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD);
 
+    if (result == CUDA_ERROR_UNKNOWN) {
+      throw ::Rendering::OutOfGpuMemoryError(
+          "Cuda error code=" + std::to_string(result) +
+          ", CUDA_ERROR_UNKNOWN, possibly not enough gpu memory available for the requested buffer size of " +
+          std::to_string(_bufRsrc->numBytes()) + " bytes.");
+    }
+
+    checkCudaErrors(result, __FILE__, __LINE__);
+    _cudaResourceMap.insert(std::make_pair(currCudaCtx, rsrc));
+  }
+}
+
+CUgraphicsResource QueryBuffer::_getCudaGraphicsResource(bool registerResource) {
+  CUcontext currCudaCtx;
+  CUdevice ctxDevice;
+
+  checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
+  checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
+
+  auto gpuId = _getGpuId();
+  RUNTIME_EX_ASSERT(ctxDevice == gpuId,
+                    "QueryResultVertexBuffer " + std::to_string(gpuId) +
+                        ": Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
+                        " for cuda context does not match the QueryResultVertexBuffer device " + std::to_string(gpuId));
+
+  CHECK(currCudaCtx != nullptr);
+  CHECK(_bufRsrc);
+  GLuint rsrcId = _bufRsrc->getId();
+  CHECK(rsrcId);
+
+  const auto itr = _cudaResourceMap.find(currCudaCtx);
+  CHECK(itr != _cudaResourceMap.end());
   return itr->second;
 }
 
 void QueryBuffer::_mapCudaGraphicsResource(CUgraphicsResource& rsrc) {
   if (_mappedCudaResources.find(rsrc) == _mappedCudaResources.end()) {
-    checkCudaErrors(cuGraphicsMapResources(1, &rsrc, 0));
+    checkCudaErrors(cuGraphicsMapResources(1, &rsrc, 0), __FILE__, __LINE__);
     _mappedCudaResources.insert(rsrc);
   }  // already mapped otherwise
 }
@@ -164,7 +203,7 @@ void QueryBuffer::_mapCudaGraphicsResource(CUgraphicsResource& rsrc) {
 void QueryBuffer::_unmapCudaGraphicsResource(CUgraphicsResource& rsrc) {
   const auto itr = _mappedCudaResources.find(rsrc);
   if (itr != _mappedCudaResources.end()) {
-    checkCudaErrors(cuGraphicsUnmapResources(1, &rsrc, 0));
+    checkCudaErrors(cuGraphicsUnmapResources(1, &rsrc, 0), __FILE__, __LINE__);
     _mappedCudaResources.erase(itr);
   }
   // TODO(croot): throw an error if nothing to unmap?

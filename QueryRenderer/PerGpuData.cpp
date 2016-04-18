@@ -55,8 +55,20 @@ void RootPerGpuData::resize(size_t width, size_t height) {
   width = std::max(width, framebufferPtr->getWidth());
   height = std::max(height, framebufferPtr->getHeight());
   framebufferPtr->resize(width, height);
-  if (compositorPtr) {
+  if (compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
+    ::Rendering::GL::GLRenderer* prevRenderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
+    ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
+    ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
+    CHECK(renderer);
+    bool reset = false;
+    if (renderer != prevRenderer) {
+      reset = true;
+      renderer->makeActiveOnCurrentThread();
+    }
     compositorPtr->resize(width, height);
+    if (reset) {
+      prevRenderer->makeActiveOnCurrentThread(prevWindow);
+    }
   }
 }
 
