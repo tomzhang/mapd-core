@@ -489,7 +489,10 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
 void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdate) {
   try {
     _initFromJSON(configJSON, forceUpdate);
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }
@@ -498,7 +501,10 @@ void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdat
 void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate) {
   try {
     _initFromJSON(jsonDocumentPtr, forceUpdate);
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }
@@ -533,7 +539,10 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
     // now update the gpu resources for data, scale, and geom configs
     // This needs to be done after the queryResultBuffers are updated.
     _ctx->_updateConfigGpuResources(unusedGpus);
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }
@@ -554,7 +563,10 @@ void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
     } else {
       _initGpuResources(qrmPerGpuData.get(), gpusToActivate, unusedGpus);
     }
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }
@@ -742,7 +754,10 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
         currRenderer->makeInactive();
       }
     }
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }
@@ -806,7 +821,10 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     // clock_begin = timer_start();
 
     return PngData(width, height, pixelsPtr, compressionLevel);
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }
@@ -897,7 +915,10 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
     }
 
     return id;
-  } catch (const std::exception& e) {
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
   }

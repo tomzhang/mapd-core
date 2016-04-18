@@ -79,6 +79,7 @@ void GLBaseBuffer::bufferData(void* data, size_t numBytes, GLenum altTarget) {
   // same size here. Is that a problem? Should I employ a glMapBufferRange(...) technique
   // instead?
   MAPD_CHECK_GL_ERROR(glBufferData(target, numBytes, NULL, _usage));
+  MAPD_CHECK_GL_MEMORY_ERROR();
   _numUsedBytes = 0;
 
   // Did the orphaning above, now actually buffer the data to the orphaned
@@ -87,6 +88,7 @@ void GLBaseBuffer::bufferData(void* data, size_t numBytes, GLenum altTarget) {
   // That could be a faster, asynchronous way.
   if (data) {
     MAPD_CHECK_GL_ERROR(glBufferData(target, numBytes, data, _usage));
+    MAPD_CHECK_GL_MEMORY_ERROR();
     _numUsedBytes = numBytes;
   }
 

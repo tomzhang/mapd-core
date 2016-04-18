@@ -97,6 +97,10 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                                      int numGpus,
                                      int startGpu,
                                      size_t queryResultBufferSize) {
+#ifdef HAVE_CUDA
+  CHECK(cudaMgr);
+#endif
+
   int maxNumGpus = windowMgr.getNumGpus();
 
   if (numGpus <= 0) {

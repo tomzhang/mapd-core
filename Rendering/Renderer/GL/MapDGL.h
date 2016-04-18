@@ -16,7 +16,9 @@ GLEWContext* glewGetContext();
 #define BUFFER_OFFSET(i) ((char*)NULL + (i))
 
 std::string getGLErrorStr();
+std::string gegGLErrorStr(const GLenum err);
 void checkGLError(const char* cmd, const char* file, int line);
+void checkGLMemError(const char* file, int line);
 
 #ifndef NDEBUG
 #define MAPD_CHECK_GL_ERROR(cmd)                                                \
@@ -30,6 +32,8 @@ void checkGLError(const char* cmd, const char* file, int line);
 #else
 #define MAPD_CHECK_GL_ERROR(cmd) (cmd)
 #endif
+
+#define MAPD_CHECK_GL_MEMORY_ERROR() (checkGLMemError(__FILE__, __LINE__))
 
 }  // namespace GL
 

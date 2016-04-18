@@ -1,4 +1,5 @@
 #include "PngData.h"
+#include <Rendering/RenderError.h>
 #include <png.h>
 #include <vector>
 #include <fstream>
@@ -26,12 +27,12 @@ PngData::PngData() : pngDataPtr(nullptr), pngSize(0) {
 PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pixelsPtr, int compressionLevel)
     : pngDataPtr(nullptr), pngSize(0) {
   if (!pixelsPtr || width == 0 || height == 0) {
-    throw std::runtime_error("Cannot create PngData(). The pixels are empty.");
+    throw ::Rendering::RenderError("Cannot create PngData(). The pixels are empty.");
   }
 
   if (compressionLevel < -1 || compressionLevel > 9) {
-    throw std::runtime_error("Invalid compression level argument " + std::to_string(compressionLevel) +
-                             ". Must be a value between 0 and 9 and -1 would mean use default.");
+    throw ::Rendering::RenderError("Invalid compression level argument " + std::to_string(compressionLevel) +
+                                   ". Must be a value between 0 and 9 and -1 would mean use default.");
   }
 
   png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -142,7 +143,7 @@ PngData::PngData(int width, int height, const std::shared_ptr<unsigned char>& pi
 
 void PngData::writeToFile(const std::string& filename) {
   if (!pngDataPtr) {
-    throw std::runtime_error("Cannot write file " + filename + ". The pixels are empty.");
+    throw ::Rendering::RenderError("Cannot write file " + filename + ". The pixels are empty.");
   }
   std::ofstream pngFile(filename, std::ios::binary);
   pngFile.write(pngDataPtr.get(), pngSize);

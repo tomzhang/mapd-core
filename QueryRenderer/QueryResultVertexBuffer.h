@@ -103,7 +103,7 @@ class QueryResultVertexBuffer : public QueryVertexBuffer {
 
   // temporarily making the checkCudaErrors
   // static void checkCudaErrors(CUresult result);
-  void checkCudaErrors(CUresult result);
+  void checkCudaErrors(CUresult result, const char* filename, int lineno);
 
   void _initCudaGraphicsResource();
   CUgraphicsResource _getCudaGraphicsResource();

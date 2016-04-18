@@ -39,6 +39,7 @@ static void resizeRenderbuffer(GLuint rbo,
   } else {
     MAPD_CHECK_GL_ERROR(glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height));
   }
+  MAPD_CHECK_GL_MEMORY_ERROR();
 
   if (currRbo != static_cast<GLint>(rbo)) {
     // now reset the context bound state back
