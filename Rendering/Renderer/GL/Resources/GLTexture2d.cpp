@@ -176,7 +176,9 @@ void GLTexture2d::_makeEmpty() {
 
 void GLTexture2d::resize(size_t width, size_t height) {
   if (width != _width || height != _height) {
-    RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the texture. Dimensions must be > 0");
+    RUNTIME_EX_ASSERT(width > 0 && height > 0,
+                      "Invalid dimensions " + std::to_string(width) + "x" + std::to_string(height) +
+                          " for the texture. Dimensions must be > 0");
 
     validateUsability(__FILE__, __LINE__);
 

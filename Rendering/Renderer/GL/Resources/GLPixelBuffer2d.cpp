@@ -60,6 +60,10 @@ void GLPixelBuffer2d::_makeEmpty() {
 
 void GLPixelBuffer2d::resize(size_t width, size_t height) {
   if (width != _width || height != _height) {
+    RUNTIME_EX_ASSERT(width > 0 && height > 0,
+                      "Invalid dimensions " + std::to_string(width) + "x" + std::to_string(height) +
+                          " for the texture. Dimensions must be > 0");
+
     bufferData(nullptr, width * height * pixelTypeSize(_pixelType));
 
     _width = width;

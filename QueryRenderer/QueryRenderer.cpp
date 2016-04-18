@@ -251,17 +251,17 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
   RUNTIME_EX_ASSERT((mitr = obj->FindMember("width")) != obj->MemberEnd(),
                     RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"width\" is not defined."));
-  RUNTIME_EX_ASSERT(
-      mitr->value.IsInt(),
-      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), mitr->value, "\"width\" is not an integer."));
-  int width = mitr->value.GetInt();
+  RUNTIME_EX_ASSERT(mitr->value.IsUint(),
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(), mitr->value, "\"width\" is not an unsigned integer."));
+  size_t width = mitr->value.GetUint();
 
   RUNTIME_EX_ASSERT((mitr = obj->FindMember("height")) != obj->MemberEnd(),
                     RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"height\" is not defined."));
-  RUNTIME_EX_ASSERT(
-      mitr->value.IsInt(),
-      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), mitr->value, "\"height\" is not an integer."));
-  int height = mitr->value.GetInt();
+  RUNTIME_EX_ASSERT(mitr->value.IsUint(),
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        _ctx->getUserWidgetIds(), mitr->value, "\"height\" is not an unsigned integer."));
+  size_t height = mitr->value.GetUint();
 
   setWidthHeight(width, height);
 
@@ -459,29 +459,24 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
   RUNTIME_EX_ASSERT(width >= 0 && height >= 0,
                     to_string(_ctx->getUserWidgetIds()) + ": Cannot set a negative width/height.");
 
-  bool widthChange = (width != _ctx->getWidth());
-  bool heightChange = (height != _ctx->getHeight());
+  _ctx->_width = width;
+  _ctx->_height = height;
 
-  if (widthChange || heightChange) {
-    _ctx->_width = width;
-    _ctx->_height = height;
+  _resizeFramebuffers(_ctx->_width, _ctx->_height);
 
-    _resizeFramebuffers(_ctx->_width, _ctx->_height);
+  if (_ctx->doHitTest()) {
+    // resize the cpu-bound pixels that store the ids per-pixel
+    if (!_idPixels) {
+      _idPixels.reset(new Array2dui(width, height));
+    } else {
+      _idPixels->resize(width, height);
+    }
 
-    if (_ctx->doHitTest()) {
-      // resize the cpu-bound pixels that store the ids per-pixel
-      if (!_idPixels) {
-        _idPixels.reset(new Array2dui(width, height));
-      } else {
-        _idPixels->resize(width, height);
-      }
-
-      if (_pbo) {
-        auto itr = _perGpuData.find(_pboGpu);
-        CHECK(itr != _perGpuData.end());
-        itr->second.makeActiveOnCurrentThread();
-        _pbo->resize(width, height);
-      }
+    if (_pbo) {
+      auto itr = _perGpuData.find(_pboGpu);
+      CHECK(itr != _perGpuData.end());
+      itr->second.makeActiveOnCurrentThread();
+      _pbo->resize(width, height);
     }
   }
 }
