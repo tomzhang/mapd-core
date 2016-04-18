@@ -21,7 +21,12 @@ static size_t calcNumBytesPerItem(size_t bytesInBlock, size_t alignmentBytes, si
 GLUniformBuffer::GLUniformBuffer(const RendererWkPtr& rendererPtr,
                                  BufferAccessType accessType,
                                  BufferAccessFreq accessFreq)
-    : GLBaseBuffer(rendererPtr, GLBufferType::UNIFORM_BUFFER, GL_UNIFORM_BUFFER, accessType, accessFreq),
+    : GLBaseBuffer(rendererPtr,
+                   GLResourceType::UNIFORM_BUFFER,
+                   GLBufferType::UNIFORM_BUFFER,
+                   GL_UNIFORM_BUFFER,
+                   accessType,
+                   accessFreq),
       _shaderBlockLayoutPtr(nullptr),
       _numItems(0) {
 }

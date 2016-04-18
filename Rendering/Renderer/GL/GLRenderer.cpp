@@ -44,7 +44,6 @@ Window* GLRenderer::getCurrentThreadWindow() {
 //   }
 // }
 
-// GLRenderer::GLRenderer(const WindowShPtr& parentWindowPtr) : Renderer(parentWindowPtr), _glewInitialized(false) {
 GLRenderer::GLRenderer(const RendererSettings& settings)
     : Renderer(settings), _glRsrcMgrPtr(nullptr), _glewInitialized(false), _bindState(this) {
 #ifdef GLEW_MX

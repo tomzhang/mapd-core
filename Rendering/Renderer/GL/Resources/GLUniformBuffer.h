@@ -14,8 +14,6 @@ class GLUniformBuffer : public GLBaseBuffer {
  public:
   ~GLUniformBuffer();
 
-  GLResourceType getResourceType() const final { return GLResourceType::UNIFORM_BUFFER; }
-
   bool hasAttribute(const std::string& attrName) const;
 
   TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const;

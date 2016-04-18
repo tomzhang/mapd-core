@@ -233,7 +233,7 @@ void GLBindState::bindUniformBuffer(const Resources::GLUniformBufferShPtr& uboRs
 
   if (bind) {
     if (uboRsrc) {
-      uboRsrc->validateRenderer(_prntRenderer);
+      uboRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindBuffer(GL_UNIFORM_BUFFER, ubo));
@@ -249,7 +249,7 @@ void GLBindState::bindIndexBuffer(const Resources::GLIndexBufferShPtr& iboRsrc) 
 
   if (bind) {
     if (iboRsrc) {
-      iboRsrc->validateRenderer(_prntRenderer);
+      iboRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo));
@@ -265,7 +265,7 @@ void GLBindState::bindIndirectDrawBuffer(const Resources::GLIndirectDrawBufferSh
 
   if (bind) {
     if (indirectRsrc) {
-      indirectRsrc->validateRenderer(_prntRenderer);
+      indirectRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect));

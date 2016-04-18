@@ -13,7 +13,6 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
  public:
   virtual ~GLBaseIndirectDrawBuffer() {}
 
-  GLResourceType getResourceType() const final { return _rsrcType; }
   size_t numItems() const { return _numItems; }
   virtual size_t getStructByteSize() const = 0;
 
@@ -23,13 +22,10 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
                                     GLBufferType bufferType,
                                     BufferAccessType accessType,
                                     BufferAccessFreq accessFreq)
-      : GLBaseBuffer(rendererPtr, bufferType, GL_DRAW_INDIRECT_BUFFER, accessType, accessFreq), _rsrcType(rsrcType) {}
+      : GLBaseBuffer(rendererPtr, rsrcType, bufferType, GL_DRAW_INDIRECT_BUFFER, accessType, accessFreq) {}
 
   void _makeEmpty() final { _numItems = 0; }
   size_t _numItems;
-
- private:
-  GLResourceType _rsrcType;
 };
 
 template <typename T>

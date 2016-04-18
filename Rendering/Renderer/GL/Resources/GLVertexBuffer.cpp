@@ -8,7 +8,7 @@ GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
                                BufferAccessType accessType,
                                BufferAccessFreq accessFreq)
     : GLBaseBuffer(rendererPtr,
-                   GLResourceType::VERTEXBUFFER,
+                   GLResourceType::VERTEX_BUFFER,
                    GLBufferType::VERTEX_BUFFER,
                    GL_ARRAY_BUFFER,
                    accessType,

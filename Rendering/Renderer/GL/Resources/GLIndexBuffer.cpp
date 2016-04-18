@@ -37,7 +37,12 @@ GLIndexBuffer::GLIndexBuffer(const RendererWkPtr& rendererPtr,
                              IndexType indexType,
                              BufferAccessType accessType,
                              BufferAccessFreq accessFreq)
-    : GLBaseBuffer(rendererPtr, GLBufferType::INDEX_BUFFER, GL_ELEMENT_ARRAY_BUFFER, accessType, accessFreq),
+    : GLBaseBuffer(rendererPtr,
+                   GLResourceType::INDEX_BUFFER,
+                   GLBufferType::INDEX_BUFFER,
+                   GL_ELEMENT_ARRAY_BUFFER,
+                   accessType,
+                   accessFreq),
       _indexType(indexType),
       _numItems(0) {
 }

@@ -32,7 +32,7 @@ GLPixelBuffer2d::GLPixelBuffer2d(const RendererWkPtr& rendererPtr,
                                  BufferAccessType accessType,
                                  BufferAccessFreq accessFreq)
     : GLBaseBuffer(rendererPtr,
-                   GLResourceType::PIXELBUFFER_2D,
+                   GLResourceType::PIXEL_BUFFER_2D,
                    GLBufferType::PIXEL_BUFFER_2D,
                    getBufferTarget(accessType),
                    accessType,
