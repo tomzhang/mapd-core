@@ -11,7 +11,6 @@ QueryBuffer::QueryBuffer(BufType type)
 #ifdef HAVE_CUDA
       _usedBytes(0),
       _cudaResourceMap() {
-  _initCudaGraphicsResource();
 #else
       _usedBytes(0) {
 #endif  // HAVE_CUDA
@@ -139,14 +138,16 @@ void QueryBuffer::_initCudaGraphicsResource() {
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
+  CHECK(_type == BufType::QUERY_RESULT_BUFFER);
+
   checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
   checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
 
   auto gpuId = _getGpuId();
-  RUNTIME_EX_ASSERT(ctxDevice == gpuId,
-                    "QueryResultVertexBuffer " + std::to_string(gpuId) +
-                        ": Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
-                        " for cuda context does not match the QueryResultVertexBuffer device " + std::to_string(gpuId));
+  RUNTIME_EX_ASSERT(ctxDevice == static_cast<int>(gpuId),
+                    "QueryBuffer " + std::to_string(gpuId) + ": Invalid cuda context for QueryBuffer. Device " +
+                        std::to_string(ctxDevice) + " for cuda context does not match the QueryBuffer device " +
+                        std::to_string(gpuId));
 
   CHECK(currCudaCtx != nullptr);
   CHECK(_bufRsrc);
@@ -174,14 +175,16 @@ CUgraphicsResource QueryBuffer::_getCudaGraphicsResource(bool registerResource) 
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
+  CHECK(_type == BufType::QUERY_RESULT_BUFFER);
+
   checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
   checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
 
   auto gpuId = _getGpuId();
-  RUNTIME_EX_ASSERT(ctxDevice == gpuId,
-                    "QueryResultVertexBuffer " + std::to_string(gpuId) +
-                        ": Invalid cuda context for QueryResultVertexBuffer. Device " + std::to_string(ctxDevice) +
-                        " for cuda context does not match the QueryResultVertexBuffer device " + std::to_string(gpuId));
+  RUNTIME_EX_ASSERT(ctxDevice == static_cast<int>(gpuId),
+                    "QueryBuffer " + std::to_string(gpuId) + ": Invalid cuda context for QueryBuffer. Device " +
+                        std::to_string(ctxDevice) + " for cuda context does not match the QueryBuffer device " +
+                        std::to_string(gpuId));
 
   CHECK(currCudaCtx != nullptr);
   CHECK(_bufRsrc);
@@ -267,6 +270,9 @@ QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* rend
                                                  Rendering::GL::Resources::BufferAccessType accessType,
                                                  Rendering::GL::Resources::BufferAccessFreq accessFreq)
     : QueryVertexBuffer(renderer, numBytes, accessType, accessFreq, QueryBuffer::BufType::QUERY_RESULT_BUFFER) {
+#ifdef HAVE_CUDA
+  _initCudaGraphicsResource();
+#endif
 }
 
 QueryResultVertexBuffer::~QueryResultVertexBuffer() {
@@ -345,6 +351,9 @@ QueryResultIndexBuffer::QueryResultIndexBuffer(Rendering::GL::GLRenderer* render
                        accessType,
                        accessFreq,
                        QueryBuffer::BufType::QUERY_RESULT_BUFFER) {
+#ifdef HAVE_CUDA
+  _initCudaGraphicsResource();
+#endif
 }
 
 QueryResultIndexBuffer::~QueryResultIndexBuffer() {
@@ -408,6 +417,9 @@ QueryResultUniformBuffer::QueryResultUniformBuffer(Rendering::GL::GLRenderer* re
                                                    Rendering::GL::Resources::BufferAccessType accessType,
                                                    Rendering::GL::Resources::BufferAccessFreq accessFreq)
     : QueryUniformBuffer(renderer, numBytes, accessType, accessFreq, QueryBuffer::BufType::QUERY_RESULT_BUFFER) {
+#ifdef HAVE_CUDA
+  _initCudaGraphicsResource();
+#endif
 }
 
 QueryResultUniformBuffer::~QueryResultUniformBuffer() {
@@ -458,6 +470,9 @@ QueryResultIndirectVbo::QueryResultIndirectVbo(Rendering::GL::GLRenderer* render
                                                ::Rendering::GL::Resources::BufferAccessType accessType,
                                                ::Rendering::GL::Resources::BufferAccessFreq accessFreq)
     : QueryIndirectVbo(renderer, numBytes, accessType, accessFreq, QueryBuffer::BufType::QUERY_RESULT_BUFFER) {
+#ifdef HAVE_CUDA
+  _initCudaGraphicsResource();
+#endif
 }
 
 QueryResultIndirectVbo::~QueryResultIndirectVbo() {
@@ -508,6 +523,9 @@ QueryResultIndirectIbo::QueryResultIndirectIbo(Rendering::GL::GLRenderer* render
                                                ::Rendering::GL::Resources::BufferAccessType accessType,
                                                ::Rendering::GL::Resources::BufferAccessFreq accessFreq)
     : QueryIndirectIbo(renderer, numBytes, accessType, accessFreq, QueryBuffer::BufType::QUERY_RESULT_BUFFER) {
+#ifdef HAVE_CUDA
+  _initCudaGraphicsResource();
+#endif
 }
 
 QueryResultIndirectIbo::~QueryResultIndirectIbo() {

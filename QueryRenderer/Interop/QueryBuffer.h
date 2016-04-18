@@ -68,6 +68,10 @@ class QueryBuffer {
   size_t _getGpuId() const;
   void _setUsedBytes(size_t usedBytes) { _usedBytes = usedBytes; }
 
+#ifdef HAVE_CUDA
+  void _initCudaGraphicsResource();
+#endif
+
  private:
   BufType _type;
   bool _isActive;
@@ -79,7 +83,6 @@ class QueryBuffer {
 
   void checkCudaErrors(CUresult result, const char* filename, int lineno);
 
-  void _initCudaGraphicsResource();
   CUgraphicsResource _getCudaGraphicsResource(bool registerResource = false);
 
   void _mapCudaGraphicsResource(CUgraphicsResource& rsrc);
