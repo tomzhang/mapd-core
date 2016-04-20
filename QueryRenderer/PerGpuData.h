@@ -37,6 +37,8 @@ struct RootPerGpuData {
 
   QueryFramebufferUqPtr& getFramebuffer() { return framebufferPtr; }
   QueryRenderCompositorShPtr& getCompositor() { return compositorPtr; }
+  GpuId getCompositorGpuId();
+
   QueryIdMapPboPoolUqPtr& getIdMapPboPool() { return pboPoolPtr; }
 
   QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height);

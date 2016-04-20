@@ -43,6 +43,7 @@ class BaseQueryDataTable {
   QueryDataTableType getType() const { return _type; }
   QueryDataTableBaseType getBaseType() const { return _baseType; }
 
+  virtual std::vector<GpuId> getUsedGpuIds() const = 0;
   virtual operator std::string() const = 0;
 
  protected:
@@ -58,9 +59,7 @@ class BaseQueryDataTable {
  private:
   virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
 
-  virtual void _initGpuResources(const QueryRendererContext* ctx,
-                                 const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
-                                 bool initializing = true) = 0;
+  virtual void _initGpuResources(const QueryRendererContext* ctx) = 0;
 
   friend class QueryRendererContext;
 };

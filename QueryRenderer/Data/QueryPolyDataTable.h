@@ -23,6 +23,8 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr getGLIndirectDrawVertexBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr getGLIndirectDrawIndexBuffer(const GpuId& gpuId) const;
 
+  std::vector<GpuId> getUsedGpuIds() const final;
+
  protected:
   struct PerGpuData : BasePerGpuData {
     QueryVertexBufferShPtr vbo;
@@ -60,13 +62,21 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   PerGpuDataMap _perGpuData;
 
  private:
-  void _initGpuResources(const QueryRendererContext* ctx,
-                         const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
-                         bool initializing = true) final;
+  void _initGpuResources(const QueryRendererContext* ctx) final;
 
   void _initBuffers();
 
   friend class QueryRendererContext;
+};
+
+class SqlQueryPolyDataTable : public BaseQueryPolyDataTable {
+ public:
+  explicit SqlQueryPolyDataTable(const std::string& tableName);
+
+  std::string getTableName() const { return _tableName; }
+
+ private:
+  std::string _tableName;
 };
 
 // class SqlQueryPolyDataTable : public BaseQueryPolyDataTable {

@@ -33,7 +33,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) final;
   void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr) final;
 
-  void render(QueryRenderer* queryRenderer) final;
+  void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) final;
 
  private:
   GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,

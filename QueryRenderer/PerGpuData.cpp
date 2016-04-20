@@ -72,6 +72,14 @@ void RootPerGpuData::resize(size_t width, size_t height) {
   }
 }
 
+GpuId RootPerGpuData::getCompositorGpuId() {
+  RUNTIME_EX_ASSERT(compositorPtr != nullptr, "Cannot get the compositor gpu id. The compositor is uninitialized.");
+
+  ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
+  CHECK(renderer);
+  return renderer->getGpuId();
+}
+
 QueryIdMapPixelBufferShPtr RootPerGpuData::getInactiveIdMapPbo(size_t width, size_t height) {
   CHECK(pboPoolPtr);
   return pboPoolPtr->getInactiveIdMapPbo(width, height);

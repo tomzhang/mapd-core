@@ -13,7 +13,7 @@
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexArray.h>
 
-#include <unordered_set>
+#include <set>
 
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
@@ -38,9 +38,7 @@ class BaseRenderProperty {
         _inType(nullptr),
         _outType(nullptr),
         _scaleConfigPtr(nullptr),
-        _flexibleType(flexibleType) {
-    initGpuResources(ctx.get());
-  }
+        _flexibleType(flexibleType) {}
 
   virtual ~BaseRenderProperty() {}
 
@@ -87,9 +85,7 @@ class BaseRenderProperty {
   std::string getDataColumnName() { return _vboAttrName; }
   const QueryDataTableShPtr& getDataTablePtr() { return _dataPtr; }
 
-  void initGpuResources(const QueryRendererContext* ctx,
-                        const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>(),
-                        bool initializing = true);
+  void initGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus = std::set<GpuId>());
 
   virtual operator std::string() const = 0;
 
@@ -160,6 +156,7 @@ class BaseRenderProperty {
   std::string _printInfo() const;
 
  private:
+  std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
   void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
 };
 

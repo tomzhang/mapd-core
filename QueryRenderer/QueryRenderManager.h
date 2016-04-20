@@ -92,6 +92,18 @@ class QueryRenderManager {
   CudaHandle getCudaHandle(size_t gpuIdx);
   void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes);
 
+  bool hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const;
+  PolyCudaHandles createPolyTableCache(const std::string& polyTableName,
+                                       const size_t gpuIdx,
+                                       const PolyTableInitData& initTableData);
+
+  PolyCudaHandles getPolyCudaHandlesFromCache(const std::string& polyTableName, const size_t gpuIdx);
+  PolyCudaHandles getPolyCudaHandles(const std::string& polyTableName,
+                                     const size_t gpuIdx,
+                                     const PolyTableInitData& initTableData);
+
+  void setPolyCudaHandlesReady(const std::string& polyTableName, size_t gpuIdx);
+
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                        QueryDataLayoutShPtr dataLayoutPtr = nullptr,
                        const Executor* executor = nullptr);

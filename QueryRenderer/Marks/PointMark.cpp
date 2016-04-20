@@ -391,16 +391,13 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
   }
 }
 
-void PointMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
-                                                  const std::unordered_set<GpuId> unusedGpus) {
-  // this function should only be called when not initializing.
-  // so pass 'false' for the initializing parameter in the following
-  x.initGpuResources(ctx, unusedGpus, false);
-  y.initGpuResources(ctx, unusedGpus, false);
-  z.initGpuResources(ctx, unusedGpus, false);
-  size.initGpuResources(ctx, unusedGpus, false);
-  id.initGpuResources(ctx, unusedGpus, false);
-  fillColor.initGpuResources(ctx, unusedGpus, false);
+void PointMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) {
+  x.initGpuResources(ctx, unusedGpus);
+  y.initGpuResources(ctx, unusedGpus);
+  z.initGpuResources(ctx, unusedGpus);
+  size.initGpuResources(ctx, unusedGpus);
+  id.initGpuResources(ctx, unusedGpus);
+  fillColor.initGpuResources(ctx, unusedGpus);
 }
 
 void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
@@ -440,7 +437,7 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
 bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::BASIC_VBO, false);
+    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::BASIC_VBO, false, false);
     _initPropertiesFromJSONObj(obj, objPath);
     rtn = true;
   } else if (_jsonPath != objPath) {

@@ -419,11 +419,12 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
   // from the json obj
   if (dataLayoutPtr) {
     _activeItr->renderer->updateResultsPostQuery(dataLayoutPtr, executor);
-  } else {
-    CHECK(_perGpuData->size());
-
-    _activeItr->renderer->activateGpus();
   }
+  // else {
+  //   CHECK(_perGpuData->size());
+
+  //   _activeItr->renderer->activateGpus();
+  // }
 
   _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
 }

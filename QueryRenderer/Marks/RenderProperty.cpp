@@ -254,16 +254,14 @@ void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,
   }
 }
 
-void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
-                                          const std::unordered_set<GpuId> unusedGpus,
-                                          bool initializing) {
-  const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) {
+  auto qrmPerGpuData = ctx->getGpuDataMap();
 
-  for (auto& itr : qrcPerGpuData) {
-    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-      PerGpuData gpuData(itr.second);
-      if (!initializing && _dataPtr) {
-        QueryBufferShPtr bufferPtr = _dataPtr->getAttributeDataBuffer(itr.first, _vboAttrName);
+  for (auto& itr : *qrmPerGpuData) {
+    if (_perGpuData.find(itr->gpuId) == _perGpuData.end()) {
+      PerGpuData gpuData(itr);
+      if (_dataPtr) {
+        QueryBufferShPtr bufferPtr = _dataPtr->getAttributeDataBuffer(itr->gpuId, _vboAttrName);
         switch (bufferPtr->getGLResourceType()) {
           case ::Rendering::GL::Resources::GLResourceType::VERTEX_BUFFER:
             gpuData.vbo = std::dynamic_pointer_cast<QueryVertexBuffer>(bufferPtr);
@@ -277,7 +275,7 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
             CHECK(false) << "Unsupported resource type " << bufferPtr->getGLResourceType() << " for render properties.";
         }
       }
-      _perGpuData.emplace(itr.first, std::move(gpuData));
+      _perGpuData.emplace(itr->gpuId, std::move(gpuData));
     }
   }
 
@@ -298,7 +296,21 @@ std::string BaseRenderProperty::_printInfo() const {
   return "(name: " + _name + ", vbo attr name: " + _vboAttrName + ") " + to_string(_ctx->getUserWidgetIds());
 }
 
+std::set<GpuId> BaseRenderProperty::_initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap) {
+  std::set<GpuId> unusedGpus;
+  for (const auto& kv : _perGpuData) {
+    if (bufferMap.find(kv.first) == bufferMap.end()) {
+      unusedGpus.insert(kv.first);
+    }
+  }
+  return unusedGpus;
+}
+
 void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap) {
+  if (_perGpuData.size() != bufferMap.size()) {
+    CHECK(_prntMark->numGpus() == bufferMap.size());
+    initGpuResources(_ctx.get(), _initUnusedGpus(bufferMap));
+  }
   CHECK(bufferMap.size() == _perGpuData.size());
 
   ::Rendering::GL::Resources::GLResourceType rsrcType = bufferMap.begin()->second->getGLResourceType();

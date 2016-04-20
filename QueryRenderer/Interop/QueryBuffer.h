@@ -22,10 +22,25 @@ namespace QueryRenderer {
 
 struct CudaHandle {
   void* handle;
-
   unsigned int numBytes;
 
   CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
+};
+
+struct PolyTableInitData {
+  size_t numVerts;
+  size_t numTris;
+  size_t numLineLoops;
+  size_t numPolys;
+  size_t numDataBytes;
+};
+
+struct PolyCudaHandles {
+  CudaHandle verts;
+  CudaHandle polyIndices;
+  CudaHandle lineDrawStruct;
+  CudaHandle polyDrawStruct;
+  CudaHandle perRowData;
 };
 
 class QueryBuffer {

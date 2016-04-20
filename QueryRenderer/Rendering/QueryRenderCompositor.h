@@ -105,7 +105,7 @@ class QueryRenderCompositorImpl {
     _resizeImpl(width, height);
   }
 
-  virtual void render(QueryRenderer* queryRenderer) = 0;
+  virtual void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) = 0;
 
  protected:
   QueryRenderCompositorImpl(QueryRenderManager* prnt,
@@ -144,7 +144,7 @@ class QueryRenderCompositor {
 
   void resize(size_t width, size_t height);
 
-  void render(QueryRenderer* queryRenderer);
+  void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus);
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 

@@ -82,8 +82,9 @@ QueryDataTableShPtr createDataTable(const rapidjson::Value& obj,
     case QueryDataTableType::SQLQUERY:
       switch (tableTypes.first) {
         case QueryDataTableBaseType::BASIC_VBO:
-          return QueryDataTableVBOShPtr(
-              new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));
+          // return QueryDataTableVBOShPtr(
+          //     new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));
+          return QueryDataTableVBOShPtr(new SqlQueryDataTable(ctx, tableName, obj, objPath));
         // case QueryDataTableBaseType::POLY:
         //   return QueryPolyDataTableShPtr(
         //       new SqlQueryPolyDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));

@@ -41,8 +41,7 @@ class PointMark : public BaseMark {
   void _addPropertiesToAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) final;
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);
 
-  void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
-                                         const std::unordered_set<GpuId> unusedGpus) final;
+  void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) final;
 };
 
 }  // namespace QueryRenderer

@@ -398,13 +398,12 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
   }
 }
 
-void PolyMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
-                                                 const std::unordered_set<GpuId> unusedGpus) {
-  x.initGpuResources(ctx, unusedGpus, false);
-  y.initGpuResources(ctx, unusedGpus, false);
-  // z.initGpuResources(ctx, unusedGpus, false);
-  id.initGpuResources(ctx, unusedGpus, false);
-  fillColor.initGpuResources(ctx, unusedGpus, false);
+void PolyMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) {
+  x.initGpuResources(ctx, unusedGpus);
+  y.initGpuResources(ctx, unusedGpus);
+  // z.initGpuResources(ctx, unusedGpus);
+  id.initGpuResources(ctx, unusedGpus);
+  fillColor.initGpuResources(ctx, unusedGpus);
 }
 
 void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
@@ -457,7 +456,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 bool PolyMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::POLY, false);
+    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::POLY, false, false);
     _initPropertiesFromJSONObj(obj, objPath);
     rtn = true;
   } else if (_jsonPath != objPath) {

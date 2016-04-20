@@ -2,7 +2,6 @@
 #define QUERYRENDERER_QUERYRENDERERCONTEXT_H_
 
 #include "Types.h"
-#include "PerGpuData.h"
 #include "QueryRenderer.h"
 // #include "Rendering/Types.h"
 // #include "Interop/Types.h"
@@ -19,15 +18,18 @@ namespace QueryRenderer {
 
 class QueryRendererContext {
  public:
-  typedef BasePerGpuData PerGpuData;
-  typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
-
   typedef std::shared_ptr<BaseScale> ScaleShPtr;
   typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
 
-  explicit QueryRendererContext(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
   explicit QueryRendererContext(int userId,
                                 int widgetId,
+                                const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                                bool doHitTest = false,
+                                bool doDepthTest = false);
+
+  explicit QueryRendererContext(int userId,
+                                int widgetId,
+                                const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                                 int width,
                                 int height,
                                 bool doHitTest = false,
@@ -49,7 +51,7 @@ class QueryRendererContext {
   const Executor* const getExecutor() { return executor_; }
   const RapidJSONUtils::JsonCachePtr& getJsonCachePtr() { return _jsonCache; }
 
-  const PerGpuDataMap& getGpuDataMap() const { return _perGpuData; }
+  const std::shared_ptr<QueryRenderManager::PerGpuDataMap> getGpuDataMap() const { return _qrmPerGpuData.lock(); }
 
   bool hasDataTable(const std::string& tableName) const;
   QueryDataTableShPtr getDataTable(const std::string& tableName) const;
@@ -57,8 +59,8 @@ class QueryRendererContext {
   bool hasScale(const std::string& scaleConfigName) const;
   ScaleShPtr getScale(const std::string& scaleConfigName) const;
 
-  QueryResultVertexBufferShPtr getQueryResultVertexBuffer(const GpuId& gpuId = 0) const;
-  std::map<GpuId, QueryVertexBufferShPtr> getQueryResultVertexBuffers() const;
+  // QueryResultVertexBufferShPtr getQueryResultVertexBuffer(const GpuId& gpuId = 0) const;
+  // std::map<GpuId, QueryVertexBufferShPtr> getQueryResultVertexBuffers() const;
 
   bool isJSONCacheUpToDate(const rapidjson::Pointer& objPath, const rapidjson::Value& obj);
 
@@ -81,6 +83,7 @@ class QueryRendererContext {
   void unsubscribeFromRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
 
   const QueryDataLayoutShPtr& getQueryDataLayout() { return _queryDataLayoutPtr; }
+  std::set<GpuId> getUsedGpus() const;
 
   friend class QueryRenderer;
 
@@ -101,13 +104,13 @@ class QueryRendererContext {
   typedef std::array<EventCallbackList, static_cast<size_t>(RefEventType::ALL)> EventCallbacksArray;
   typedef std::unordered_map<std::string, EventCallbacksArray> EventCallbacksMap;
 
+  std::weak_ptr<QueryRenderManager::PerGpuDataMap> _qrmPerGpuData;
   DataTableMap _dataTableMap;
   ScaleConfigMap _scaleConfigMap;
   GeomConfigVector _geomConfigs;
 
   const Executor* executor_;
 
-  PerGpuDataMap _perGpuData;
   ::Rendering::GL::Resources::GLBufferLayoutShPtr _queryResultBufferLayout;
 
   UserWidgetIdPair _userWidget;
@@ -124,9 +127,9 @@ class QueryRendererContext {
   QueryDataLayoutShPtr _queryDataLayoutPtr;
 
   void _clear(bool preserveDimensions = false);
-  void _clearGpuResources();
-  void _initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData, const std::unordered_set<GpuId>& unusedGpus);
-  void _updateConfigGpuResources(const std::unordered_set<GpuId>& unusedGpus);
+  // void _clearGpuResources();
+  // void _initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData, const std::unordered_set<GpuId>& unusedGpus);
+  void _updateConfigGpuResources();
 
   void _fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj);
 

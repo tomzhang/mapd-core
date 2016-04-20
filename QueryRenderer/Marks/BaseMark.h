@@ -24,6 +24,8 @@ class BaseMark {
   virtual ~BaseMark();
 
   GeomType getType() { return _type; }
+  size_t numGpus() const { return _perGpuData.size(); }
+  std::set<GpuId> getUsedGpus() const { return _initUnusedGpus(); }
 
   void setShaderDirty() { _shaderDirty = true; }
   void setPropsDirty() { _propsDirty = true; }
@@ -94,7 +96,8 @@ class BaseMark {
   void _initFromJSONObj(const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,
                         QueryDataTableBaseType baseType,
-                        bool mustUseDataRef);
+                        bool mustUseDataRef,
+                        bool initializing);
 
  private:
   void _buildVertexArrayObjectFromProperties();
@@ -106,12 +109,10 @@ class BaseMark {
                                        ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) = 0;
   virtual void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) = 0;
 
-  void _initGpuResources(const QueryRendererContext* ctx,
-                         const std::unordered_set<GpuId> unusedGpus = std::unordered_set<GpuId>(),
-                         bool initializing = true);
+  std::set<GpuId> _initUnusedGpus() const;
+  void _initGpuResources(const QueryRendererContext* ctx, bool initializing = true);
 
-  virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
-                                                 const std::unordered_set<GpuId> unusedGpus) = 0;
+  virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) = 0;
 
   friend class QueryRendererContext;
 

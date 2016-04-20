@@ -87,9 +87,9 @@ void QueryRenderCompositor::resize(size_t width, size_t height) {
   _implPtr->resize(width, height);
 }
 
-void QueryRenderCompositor::render(QueryRenderer* queryRenderer) {
+void QueryRenderCompositor::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
   CHECK(_implPtr);
-  _implPtr->render(queryRenderer);
+  _implPtr->render(queryRenderer, usedGpus);
 }
 
 std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t startx,

@@ -61,36 +61,44 @@ GLIndirectDrawIndexBufferShPtr BaseQueryPolyDataTable::getGLIndirectDrawIndexBuf
   return (itr->second.indibo ? itr->second.indibo->getGLIndirectIboPtr() : nullptr);
 }
 
-void BaseQueryPolyDataTable::_initGpuResources(const QueryRendererContext* ctx,
-                                               const std::unordered_set<GpuId>& unusedGpus,
-                                               bool initializing) {
-  const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+std::vector<GpuId> BaseQueryPolyDataTable::getUsedGpuIds() const {
+  std::vector<GpuId> rtn;
 
-  for (auto& itr : qrcPerGpuData) {
-    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-      PerGpuData gpuData(itr.second);
-
-      if (!initializing) {
-        switch (getType()) {
-          // case QueryDataTableType::EMBEDDED:
-          // case QueryDataTableType::URL:
-          //   break;
-          // case QueryDataTableType::SQLQUERY:
-          //   gpuData.vbo = itr.second.getRootPerGpuData()->queryResultBufferPtr;
-          //   break;
-          default:
-            THROW_RUNTIME_EX(std::string(*this) + ": Unsupported data table type for mult-gpu configuration: " +
-                             std::to_string(static_cast<int>(getType())));
-        }
-      }
-
-      _perGpuData.emplace(itr.first, std::move(gpuData));
-    }
+  for (auto& itr : _perGpuData) {
+    rtn.push_back(itr.first);
   }
 
-  for (auto gpuId : unusedGpus) {
-    _perGpuData.erase(gpuId);
-  }
+  return rtn;
+}
+
+void BaseQueryPolyDataTable::_initGpuResources(const QueryRendererContext* ctx) {
+  // const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+
+  // for (auto& itr : qrcPerGpuData) {
+  //   if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+  //     PerGpuData gpuData(itr.second);
+
+  //     if (!initializing) {
+  //       switch (getType()) {
+  //         // case QueryDataTableType::EMBEDDED:
+  //         // case QueryDataTableType::URL:
+  //         //   break;
+  //         // case QueryDataTableType::SQLQUERY:
+  //         //   gpuData.vbo = itr.second.getRootPerGpuData()->queryResultBufferPtr;
+  //         //   break;
+  //         default:
+  //           THROW_RUNTIME_EX(std::string(*this) + ": Unsupported data table type for mult-gpu configuration: " +
+  //                            std::to_string(static_cast<int>(getType())));
+  //       }
+  //     }
+
+  //     _perGpuData.emplace(itr.first, std::move(gpuData));
+  //   }
+  // }
+
+  // for (auto gpuId : unusedGpus) {
+  //   _perGpuData.erase(gpuId);
+  // }
 }
 
 void BaseQueryPolyDataTable::_initBuffers() {
@@ -102,165 +110,6 @@ void BaseQueryPolyDataTable::_initBuffers() {
   //   myItr->second.vbo = itr.second;
   // }
 }
-
-// struct VertexData {
-//   float xmin, xmax, ymin, ymax;
-
-//   std::vector<float> coords;
-//   std::vector<unsigned int> triangulation_indices;
-//   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> lineDrawInfo;
-//   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> polyDrawInfo;
-//   // std::vector<ColorRGB> colors;
-
-//   VertexData() : xmin(0), xmax(0), ymin(0), ymax(0), coords() {}
-
-//   void beginPoly() {
-//     assert(_ended);
-//     _ended = false;
-
-//     // static const std::vector<std::string> quantizeColors = {
-//     // "#f7fbff", "#deebf7", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b"};
-
-//     // static const std::vector<std::string> quantizeColors = {"#ff0000", "#00ff00", "#0000ff"};
-
-//     size_t polyIdx = polyDrawInfo.size();
-//     // colors.push_back(initFromHexString(quantizeColors[polyIdx % quantizeColors.size()]));
-
-//     polyDrawInfo.emplace_back(0, triangulation_indices.size(), lineDrawInfo.back().firstIndex);
-//   }
-
-//   void addTriangle(unsigned int idx0, unsigned int idx1, unsigned int idx2) {
-//     triangulation_indices.push_back(idx0);
-//     triangulation_indices.push_back(idx1);
-//     triangulation_indices.push_back(idx2);
-
-//     polyDrawInfo.back().count += 3;
-//   }
-
-//   void endPoly() {
-//     assert(!_ended);
-//     _ended = true;
-//   }
-
-//   void beginLine() {
-//     assert(_ended);
-//     _ended = false;
-
-//     lineDrawInfo.emplace_back(0, size());
-//   }
-
-//   bool endLine() {
-//     bool rtn = false;
-//     auto& lineDrawItem = lineDrawInfo.back();
-//     size_t idx0 = lineDrawItem.firstIndex * 2;
-//     size_t idx1 = idx0 + (lineDrawItem.count - 1) * 2;
-//     if (coords[idx0] == coords[idx1] && coords[idx0 + 1] == coords[idx1 + 1]) {
-//       // std::shared_ptr<p2t::Point> lastVert = vertPtrs.back();
-//       // vertPtrs.pop_back();
-//       coords.pop_back();
-//       coords.pop_back();
-//       // pointIndices.erase(lastVert.get());
-//       lineDrawItem.count--;
-//       rtn = true;
-//     }
-
-//     // add an empty coord as a separator
-//     coords.push_back(-10000000.0);
-//     coords.push_back(-10000000.0);
-
-//     _ended = true;
-//     return rtn;
-//   }
-
-//   void addLinePoint(const std::shared_ptr<p2t::Point>& vertPtr) {
-//     // vertPtrs.push_back(vertPtr);
-//     // pointIndices.insert({vertPtr.get(), vertPtrs.size() - 1});
-//     _addPoint(vertPtr->x, vertPtr->y);
-//     lineDrawInfo.back().count++;
-//   }
-
-//   int size() { return coords.size() / 2; }
-
-//   std::vector<float> convertToVertexBuffer() { return std::vector<GLfloat>(std::move(coords)); }
-
-//   std::vector<unsigned int> convertToIndexBuffer() { return std::vector<GLuint>(std::move(triangulation_indices)); }
-
-//   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> convertToPolyRenderData() {
-//     return std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>(std::move(polyDrawInfo));
-//   }
-
-//   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> convertToLineRenderData() {
-//     return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>(std::move(lineDrawInfo));
-//   }
-
-//   std::vector<ColorRGB> convertToColorUniformData() { return std::vector<ColorRGB>(std::move(colors)); }
-
-//   // std::vector<GLfloat> convertToLineVertexBuffer() {
-//   //   std::move(line_y_coords.begin(), line_y_coords.end(), std::back_inserter(line_x_coords));
-//   //   return std::vector<GLfloat>(std::move(line_x_coords));
-//   // }
-
-//  private:
-//   bool _ended = true;
-
-//   void _addPoint(float x, float y) {
-//     if (coords.size() == 0) {
-//       xmin = x;
-//       xmax = x;
-//       ymin = y;
-//       ymax = y;
-//     } else {
-//       if (x < xmin) {
-//         xmin = x;
-//       } else if (x > xmax) {
-//         xmax = x;
-//       }
-
-//       if (y < ymin) {
-//         ymin = y;
-//       } else if (y > ymax) {
-//         ymax = y;
-//       }
-//     }
-
-//     coords.push_back(x);
-//     coords.push_back(y);
-//   }
-// };
-
-// static void readVerticesFromShapeFile(const std::string& filename) {
-//   SHPHandle shapeHandle = SHPOpen(fileName.c_str(), "rb");
-//   if (shapeHandle == NULL) {
-//     CHECK(false) << "Unable to open shape file " << fileName << std::endl;
-//     return;
-//   }
-
-//   int numEntities, shapeType;
-//   SHPGetInfo(shapeHandle, &numEntities, &shapeType, NULL, NULL);
-
-//   SHPObject* entity;
-//   for (int i = 0; i < numEntities; ++i) {
-//     entity = SHPReadObject(shapeHandle, i);
-//     if (!entity) {
-//       CHECK(false) << "Unable to read object " << i << " from the shapefile: " << fileName << std::endl;
-//     }
-
-//     switch (entity->nSHPType) {
-//       case SHPT_POLYGONZ:
-//         readVerticesFromShapefilePolygonZ(fileName, entity, verts);
-//         break;
-//       default:
-//         CHECK(false) << "Object " << i << " in the shapefile " << fileName
-//                      << " has an unsupported type. We currently only support reading polygons (SHPT_POLYGON or "
-//                         "SHPT_POLYGONZ) from shapefiles." << std::endl;
-//         break;
-//     }
-
-//     SHPDestroyObject(entity);
-//   }
-
-//   SHPClose(shapeHandle);
-// }
 
 template <typename T>
 struct PolyData2d {
@@ -348,25 +197,6 @@ struct PolyData2d {
 
     polyDrawInfo.back().count += 3;
   }
-
-  // std::vector<float> convertToVertexBuffer() { return std::vector<GLfloat>(std::move(coords)); }
-
-  // std::vector<unsigned int> convertToIndexBuffer() { return std::vector<GLuint>(std::move(triangulation_indices)); }
-
-  // std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> convertToPolyRenderData() {
-  //   return std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>(std::move(polyDrawInfo));
-  // }
-
-  // std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> convertToLineRenderData() {
-  //   return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>(std::move(lineDrawInfo));
-  // }
-
-  // std::vector<ColorRGB> convertToColorUniformData() { return std::vector<ColorRGB>(std::move(colors)); }
-
-  // std::vector<GLfloat> convertToLineVertexBuffer() {
-  //   std::move(line_y_coords.begin(), line_y_coords.end(), std::back_inserter(line_x_coords));
-  //   return std::vector<GLfloat>(std::move(line_x_coords));
-  // }
 
  private:
   bool _ended;

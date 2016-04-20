@@ -228,9 +228,10 @@ void GlxQueryRenderCompositorImpl::deleteFboRenderbuffer(::Rendering::GL::Resour
   }
 }
 
-void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
+void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
   QueryRendererContext* ctx = queryRenderer->getContext();
-  QueryRenderer::PerGpuDataMap* perGpuData = queryRenderer->getPerGpuData();
+
+  auto qrmPerGpuDataPtr = ctx->getGpuDataMap();
 
   GLXContext myGlxCtx = _renderer->getGLXContext();
   X11DisplayShPtr myDisplayPtr = _renderer->getXDisplayPtr();
@@ -263,16 +264,17 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   //   CHECK(_rbos.size() == _)
   // }
 
-  auto itr = perGpuData->begin();
   int cnt = 0;
-  for (; itr != perGpuData->end(); ++itr, ++cnt) {
-    QueryRenderer::renderGpu(itr->first, perGpuData, ctx, 0, 0, 0, 0);
+  for (auto gpuId : usedGpus) {
+    QueryRenderer::renderGpu(gpuId, qrmPerGpuDataPtr, ctx, 0, 0, 0, 0);
   }
 
-  itr = perGpuData->begin();
   cnt = 0;
-  for (; itr != perGpuData->end(); ++itr, ++cnt) {
-    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>(itr->second.getRootPerGpuData()->rendererPtr.get());
+  for (auto gpuId : usedGpus) {
+    auto itr = qrmPerGpuDataPtr->find(gpuId);
+    CHECK(itr != qrmPerGpuDataPtr->end());
+
+    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>((*itr)->getGLRenderer());
     CHECK(glxRenderer != nullptr);
 
     GLXContext glxCtx = glxRenderer->getGLXContext();
@@ -283,7 +285,7 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
     // TODO(croot): do we need to do a flush/finish before copying?
     // or will the copy take care of that for us?
 
-    auto& framebufferPtr = itr->second.getFramebuffer();
+    auto& framebufferPtr = (*itr)->getFramebuffer();
     CHECK(framebufferPtr);
 
     rgbaTex = framebufferPtr->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
@@ -359,11 +361,11 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer) {
   _renderer->clearAll();
 
   _shader->setSamplerAttribute("rgbaArraySampler", _rgbaTextureArray);
-  _shader->setUniformAttribute("rgbaArraySize", perGpuData->size());
+  _shader->setUniformAttribute("rgbaArraySize", usedGpus.size());
 
   if (doHitTest) {
     _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
-    _shader->setUniformAttribute("idArraySize", perGpuData->size());
+    _shader->setUniformAttribute("idArraySize", usedGpus.size());
   } else {
     _shader->setUniformAttribute("idArraySize", 0);
   }

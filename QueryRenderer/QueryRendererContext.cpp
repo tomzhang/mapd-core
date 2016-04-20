@@ -15,9 +15,13 @@
 
 namespace QueryRenderer {
 
-QueryRendererContext::QueryRendererContext(int userId, int widgetId, bool doHitTest, bool doDepthTest)
-    : executor_(nullptr),
-      _perGpuData(),
+QueryRendererContext::QueryRendererContext(int userId,
+                                           int widgetId,
+                                           const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                                           bool doHitTest,
+                                           bool doDepthTest)
+    : _qrmPerGpuData(qrmPerGpuData),
+      executor_(nullptr),
       _userWidget(userId, widgetId),
       _width(0),
       _height(0),
@@ -29,12 +33,13 @@ QueryRendererContext::QueryRendererContext(int userId, int widgetId, bool doHitT
 
 QueryRendererContext::QueryRendererContext(int userId,
                                            int widgetId,
+                                           const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                                            int width,
                                            int height,
                                            bool doHitTest,
                                            bool doDepthTest)
-    : executor_(nullptr),
-      _perGpuData(),
+    : _qrmPerGpuData(qrmPerGpuData),
+      executor_(nullptr),
       _userWidget(userId, widgetId),
       _width(width),
       _height(height),
@@ -47,7 +52,7 @@ QueryRendererContext::QueryRendererContext(int userId,
 
 QueryRendererContext::~QueryRendererContext() {
   _clear();
-  _clearGpuResources();
+  // _clearGpuResources();
 }
 
 void QueryRendererContext::_clear(bool preserveDimensions) {
@@ -62,26 +67,26 @@ void QueryRendererContext::_clear(bool preserveDimensions) {
   _jsonCache = nullptr;
 }
 
-void QueryRendererContext::_clearGpuResources() {
-  _perGpuData.clear();
-}
+// void QueryRendererContext::_clearGpuResources() {
+//   _perGpuData.clear();
+// }
 
-void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData,
-                                             const std::unordered_set<GpuId>& unusedGpus) {
-  for (const auto& itr : qrPerGpuData) {
-    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-      _perGpuData.insert({itr.first, PerGpuData(itr.second)});
-    }
-  }
+// void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData,
+//                                              const std::unordered_set<GpuId>& unusedGpus) {
+//   for (const auto& itr : qrPerGpuData) {
+//     if (_perGpuData.find(itr.first) == _perGpuData.end()) {
+//       _perGpuData.insert({itr.first, PerGpuData(itr.second)});
+//     }
+//   }
 
-  for (auto gpuId : unusedGpus) {
-    _perGpuData.erase(gpuId);
-  }
-}
+//   for (auto gpuId : unusedGpus) {
+//     _perGpuData.erase(gpuId);
+//   }
+// }
 
-void QueryRendererContext::_updateConfigGpuResources(const std::unordered_set<GpuId>& unusedGpus) {
+void QueryRendererContext::_updateConfigGpuResources() {
   for (auto dataItr : _dataTableMap) {
-    dataItr.second->_initGpuResources(this, unusedGpus, false);
+    dataItr.second->_initGpuResources(this);
   }
 
   // for (auto scaleItr : _scaleConfigMap) {
@@ -89,7 +94,7 @@ void QueryRendererContext::_updateConfigGpuResources(const std::unordered_set<Gp
   // }
 
   for (auto geomItr : _geomConfigs) {
-    geomItr->_initGpuResources(this, unusedGpus, false);
+    geomItr->_initGpuResources(this, false);
   }
 }
 
@@ -123,31 +128,31 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
   return rtn;
 }
 
-QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(const GpuId& gpuId) const {
-  // TODO(croot): make thread safe?
+// QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(const GpuId& gpuId) const {
+//   // TODO(croot): make thread safe?
 
-  PerGpuDataMap::const_iterator itr = _perGpuData.find(gpuId);
+//   auto qrmPerGpuData = _qrmPerGpuData.lock();
+//   CHECK(qrmPerGpuData != nullptr);
+//   auto itr = qrmPerGpuData->find(gpuId);
 
-  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
-                    "QueryRendererContext " + to_string(_userWidget) +
-                        ": Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
-  RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
-  CHECK(qrmGpuData);
-  return qrmGpuData->queryResultBufferPtr;
-}
+//   RUNTIME_EX_ASSERT(itr != qrmPerGpuData->end(),
+//                     "QueryRendererContext " + to_string(_userWidget) +
+//                         ": Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
+//   return (*itr)->queryResultBufferPtr;
+// }
 
-std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
-  std::map<GpuId, QueryVertexBufferShPtr> rtn;
+// std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
+//   std::map<GpuId, QueryVertexBufferShPtr> rtn;
 
-  RootPerGpuDataShPtr qrmGpuData;
-  for (auto& itr : _perGpuData) {
-    qrmGpuData = itr.second.getRootPerGpuData();
-    CHECK(qrmGpuData);
-    rtn.insert({itr.first, qrmGpuData->queryResultBufferPtr});
-  }
+//   auto qrmPerGpuData = _qrmPerGpuData.lock();
+//   CHECK(qrmPerGpuData != nullptr);
 
-  return rtn;
-}
+//   for (auto& itr : (*qrmPerGpuData)) {
+//     rtn.insert({itr->gpuId, itr->queryResultBufferPtr});
+//   }
+
+//   return rtn;
+// }
 
 bool QueryRendererContext::isJSONCacheUpToDate(const rapidjson::Pointer& objPath, const rapidjson::Value& obj) {
   if (!_jsonCache) {
@@ -212,6 +217,18 @@ void QueryRendererContext::unsubscribeFromRefEvent(RefEventType eventType,
   }
 
   // TODO(croot): throw an error or warning?
+}
+
+std::set<GpuId> QueryRendererContext::getUsedGpus() const {
+  std::set<GpuId> rtn;
+
+  for (auto& geomConfig : _geomConfigs) {
+    for (auto gpuId : geomConfig->getUsedGpus()) {
+      rtn.insert(gpuId);
+    }
+  }
+
+  return rtn;
 }
 
 void QueryRendererContext::_fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj) {

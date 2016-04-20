@@ -47,31 +47,53 @@ QueryDataType getDataTypeForType<std::string>() {
   return QueryDataType::STRING;
 }
 
-void BaseQueryDataTableVBO::_initGpuResources(const QueryRendererContext* ctx,
-                                              const std::unordered_set<GpuId>& unusedGpus,
-                                              bool initializing) {
-  const QueryRendererContext::PerGpuDataMap& qrcPerGpuData = ctx->getGpuDataMap();
+std::vector<GpuId> BaseQueryDataTableVBO::getUsedGpuIds() const {
+  std::vector<GpuId> rtn;
 
-  for (auto& itr : qrcPerGpuData) {
-    if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-      PerGpuData gpuData(itr.second);
+  for (auto& itr : _perGpuData) {
+    rtn.push_back(itr.first);
+  }
 
-      if (!initializing) {
-        switch (getType()) {
-          // case QueryDataTableType::EMBEDDED:
-          // case QueryDataTableType::URL:
-          //   break;
-          case QueryDataTableType::SQLQUERY:
-            gpuData.vbo = itr.second.getRootPerGpuData()->queryResultBufferPtr;
-            break;
-          default:
-            THROW_RUNTIME_EX(std::string(*this) + ": Unsupported data table type for mult-gpu configuration: " +
-                             std::to_string(static_cast<int>(getType())));
-        }
+  return rtn;
+}
+
+void BaseQueryDataTableVBO::_initGpuResources(const QueryRendererContext* ctx) {
+  auto qrmPerGpuData = ctx->getGpuDataMap();
+
+  std::vector<GpuId> unusedGpus;
+  switch (getType()) {
+    case QueryDataTableType::EMBEDDED:
+    case QueryDataTableType::URL: {
+      // forcing these tables to always be on the first gpu
+      auto itr = qrmPerGpuData->begin();
+      if (_perGpuData.find((*itr)->gpuId) == _perGpuData.end()) {
+        PerGpuData gpuData((*itr));
+        _perGpuData.emplace((*itr)->gpuId, std::move(gpuData));
       }
 
-      _perGpuData.emplace(itr.first, std::move(gpuData));
-    }
+      for (++itr; itr != qrmPerGpuData->end(); ++itr) {
+        unusedGpus.push_back((*itr)->gpuId);
+      }
+
+    } break;
+    case QueryDataTableType::SQLQUERY: {
+      for (const auto& item : *qrmPerGpuData) {
+        if (item->queryResultBufferPtr->getNumUsedBytes() > 0) {
+          if (_perGpuData.find(item->gpuId) == _perGpuData.end()) {
+            PerGpuData gpuData(item);
+            gpuData.vbo = item->queryResultBufferPtr;
+            _perGpuData.emplace(item->gpuId, std::move(gpuData));
+          }
+        } else {
+          unusedGpus.push_back(item->gpuId);
+        }
+        // TODO(croot): check whether poly data was generated?
+      }
+
+    } break;
+    default:
+      THROW_RUNTIME_EX(std::string(*this) + ": Unsupported data table type for mult-gpu configuration: " +
+                       std::to_string(static_cast<int>(getType())));
   }
 
   for (auto gpuId : unusedGpus) {
@@ -566,7 +588,7 @@ QueryBufferShPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std
   }
 
   RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName),
-                    std::string(*this) + " getColumnVBO(): column \"" + attrName + "\" does not exist.");
+                    std::string(*this) + " getAttributeDataBuffer(): attribute \"" + attrName + "\" does not exist.");
 
   return itr->second.vbo;
 }

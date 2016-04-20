@@ -74,9 +74,7 @@ QueryRenderer::QueryRenderer(int userId,
                              const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                              bool doHitTest,
                              bool doDepthTest) noexcept
-    : _qrmPerGpuData(qrmPerGpuData),
-      _ctx(new QueryRendererContext(userId, widgetId, doHitTest, doDepthTest)),
-      _perGpuData(),
+    : _ctx(new QueryRendererContext(userId, widgetId, qrmPerGpuData, doHitTest, doDepthTest)),
       _pboGpu(EMPTY_GPUID),
       _pbo(nullptr),
       _idPixelsDirty(false),
@@ -114,9 +112,8 @@ void QueryRenderer::_clear(bool preserveDimensions) {
 void QueryRenderer::_clearGpuResources() {
   _releasePbo();
 
-  _perGpuData.clear();
-
-  _ctx->_clearGpuResources();
+  // _perGpuData.clear();
+  // _ctx->_clearGpuResources();
 }
 
 void QueryRenderer::_clearAll(bool preserveDimensions) {
@@ -124,97 +121,98 @@ void QueryRenderer::_clearAll(bool preserveDimensions) {
   _clearGpuResources();
 }
 
-void QueryRenderer::_updateGpuData(const GpuId& gpuId,
-                                   QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
-                                   std::unordered_set<GpuId>& unusedGpus,
-                                   size_t width,
-                                   size_t height) {
-  auto myItr = _perGpuData.find(gpuId);
+// void QueryRenderer::_updateGpuData(const GpuId& gpuId,
+//                                    QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
+//                                    std::unordered_set<GpuId>& unusedGpus,
+//                                    size_t width,
+//                                    size_t height) {
+//   auto myItr = _perGpuData.find(gpuId);
 
-  if (myItr == _perGpuData.end()) {
-    auto itr = qrmPerGpuData->find(gpuId);
-    CHECK(itr != qrmPerGpuData->end());
+//   if (myItr == _perGpuData.end()) {
+//     auto itr = qrmPerGpuData->find(gpuId);
+//     CHECK(itr != qrmPerGpuData->end());
 
-    PerGpuData gpuData;
+//     PerGpuData gpuData;
 
-    gpuData.rootPerGpuData = *itr;
+//     gpuData.rootPerGpuData = *itr;
 
-    // TODO(croot): validate the QueryRenderManager data is complete?
+//     // TODO(croot): validate the QueryRenderManager data is complete?
 
-    (*itr)->makeActiveOnCurrentThread();
-    (*itr)->resize(width, height);
+//     (*itr)->makeActiveOnCurrentThread();
+//     (*itr)->resize(width, height);
 
-    _perGpuData.emplace(gpuId, std::move(gpuData));
-  } else {
-    myItr->second.makeActiveOnCurrentThread();
-    myItr->second.resize(width, height);
+//     _perGpuData.emplace(gpuId, std::move(gpuData));
+//   } else {
+//     myItr->second.makeActiveOnCurrentThread();
+//     myItr->second.resize(width, height);
 
-    unusedGpus.erase(gpuId);
-  }
-}
+//     unusedGpus.erase(gpuId);
+//   }
+// }
 
-std::unordered_set<GpuId> QueryRenderer::_initUnusedGpus() {
-  std::unordered_set<GpuId> unusedGpus;
-  unusedGpus.reserve(_perGpuData.size());
-  for (const auto& kv : _perGpuData) {
-    unusedGpus.insert(kv.first);
-  }
-  return unusedGpus;
-}
+// std::unordered_set<GpuId> QueryRenderer::_initUnusedGpus() {
+//   std::unordered_set<GpuId> unusedGpus;
+//   unusedGpus.reserve(_perGpuData.size());
+//   for (const auto& kv : _perGpuData) {
+//     unusedGpus.insert(kv.first);
+//   }
+//   return unusedGpus;
+// }
 
-void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
-                                      const std::vector<GpuId>& gpuIds,
-                                      std::unordered_set<GpuId>& unusedGpus) {
-  // make sure size is at least 1x1
-  size_t width = _ctx->getWidth();
-  if (width == 0) {
-    // TODO(croot): expose a default size?
-    width = 1;
-  }
+// void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
+//                                       const std::vector<GpuId>& gpuIds,
+//                                       std::unordered_set<GpuId>& unusedGpus) {
+//   // make sure size is at least 1x1
+//   size_t width = _ctx->getWidth();
+//   if (width == 0) {
+//     // TODO(croot): expose a default size?
+//     width = 1;
+//   }
 
-  size_t height = _ctx->getHeight();
-  if (height == 0) {
-    // TODO(croot): expose a default size?
-    height = 1;
-  }
+//   size_t height = _ctx->getHeight();
+//   if (height == 0) {
+//     // TODO(croot): expose a default size?
+//     height = 1;
+//   }
 
-  if (_pbo) {
-    bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != gpuIds[0]));
-    if (!deletePBO && gpuIds.size() > 1 && _perGpuData.size() == 1) {
-      auto itr = _perGpuData.find(_pboGpu);
-      CHECK(itr != _perGpuData.end());
-      if (itr->second.getCompositorGpuId() != _pboGpu) {
-        deletePBO = true;
-      }
-    }
+//   if (_pbo) {
+//     bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != gpuIds[0]));
+//     if (!deletePBO && gpuIds.size() > 1 && _perGpuData.size() == 1) {
+//       auto itr = _perGpuData.find(_pboGpu);
+//       CHECK(itr != _perGpuData.end());
+//       if (itr->second.getCompositorGpuId() != _pboGpu) {
+//         deletePBO = true;
+//       }
+//     }
 
-    if (deletePBO) {
-      _releasePbo();
-    }
-  }
+//     if (deletePBO) {
+//       _releasePbo();
+//     }
+//   }
 
-  for (auto gpuId : gpuIds) {
-    _updateGpuData(gpuId, qrmPerGpuData, unusedGpus, width, height);
-  }
+//   for (auto gpuId : gpuIds) {
+//     _updateGpuData(gpuId, qrmPerGpuData, unusedGpus, width, height);
+//   }
 
-  // now clean up any unused gpu resources
-  for (auto gpuId : unusedGpus) {
-    _perGpuData.erase(gpuId);
-  }
+//   // now clean up any unused gpu resources
+//   for (auto gpuId : unusedGpus) {
+//     _perGpuData.erase(gpuId);
+//   }
 
-  if (!_pbo) {
-    _createPbo(width, height);
-  }
+//   if (!_pbo) {
+//     _createPbo(width, height);
+//   }
 
-  _ctx->_initGpuResources(_perGpuData, unusedGpus);
-}
+//   _ctx->_initGpuResources(_perGpuData, unusedGpus);
+// }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
-  RootPerGpuDataShPtr qrmGpuData;
+  auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+  CHECK(qrmPerGpuDataPtr != nullptr);
 
-  for (auto& gpuDataItr : _perGpuData) {
-    gpuDataItr.second.makeActiveOnCurrentThread();
-    gpuDataItr.second.resize(width, height);
+  for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
+    gpuDataItr->makeActiveOnCurrentThread();
+    gpuDataItr->resize(width, height);
   }
 }
 
@@ -240,217 +238,222 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
     _clear();
   }
 
-  if (_ctx->_jsonCache && *_ctx->_jsonCache == *jsonDocumentPtr) {
-    // nothing's changed. Return.
-    return;
-  }
+  if (!_ctx->_jsonCache || *_ctx->_jsonCache != *jsonDocumentPtr) {
+    RUNTIME_EX_ASSERT(
+        obj->IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "Root object is not a JSON object."));
 
-  RUNTIME_EX_ASSERT(
-      obj->IsObject(),
-      RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "Root object is not a JSON object."));
+    LOG(INFO) << "Render initFromJSON " << _ctx->getUserWidgetIds()
+              << ", json: " << RapidJSONUtils::getObjAsString(*obj);
 
-  LOG(INFO) << "Render initFromJSON " << _ctx->getUserWidgetIds() << ", json: " << RapidJSONUtils::getObjAsString(*obj);
+    rapidjson::Value::ConstMemberIterator mitr;
+    rapidjson::Value::ConstValueIterator vitr;
 
-  rapidjson::Value::ConstMemberIterator mitr;
-  rapidjson::Value::ConstValueIterator vitr;
-
-  RUNTIME_EX_ASSERT((mitr = obj->FindMember("width")) != obj->MemberEnd(),
-                    RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"width\" is not defined."));
-  RUNTIME_EX_ASSERT(mitr->value.IsUint(),
-                    RapidJSONUtils::getJsonParseErrorStr(
-                        _ctx->getUserWidgetIds(), mitr->value, "\"width\" is not an unsigned integer."));
-  size_t width = mitr->value.GetUint();
-
-  RUNTIME_EX_ASSERT((mitr = obj->FindMember("height")) != obj->MemberEnd(),
-                    RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"height\" is not defined."));
-  RUNTIME_EX_ASSERT(mitr->value.IsUint(),
-                    RapidJSONUtils::getJsonParseErrorStr(
-                        _ctx->getUserWidgetIds(), mitr->value, "\"height\" is not an unsigned integer."));
-  size_t height = mitr->value.GetUint();
-
-  setWidthHeight(width, height);
-
-  std::string propName = "data";
-  mitr = obj->FindMember(propName.c_str());
-  if (mitr != obj->MemberEnd()) {
-    rapidjson::Pointer dataPath = rootPath.Append(propName.c_str(), propName.length());
-
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(),
+    RUNTIME_EX_ASSERT(
+        (mitr = obj->FindMember("width")) != obj->MemberEnd(),
+        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"width\" is not defined."));
+    RUNTIME_EX_ASSERT(mitr->value.IsUint(),
                       RapidJSONUtils::getJsonParseErrorStr(
-                          _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
+                          _ctx->getUserWidgetIds(), mitr->value, "\"width\" is not an unsigned integer."));
+    size_t width = mitr->value.GetUint();
 
-    QueryDataTableShPtr dataTablePtr;
-    std::unordered_set<std::string> visitedNames;
-    std::unordered_set<std::string> unvisitedNames;
-    unvisitedNames.reserve(_ctx->_dataTableMap.size());
-    for (auto kv : _ctx->_dataTableMap) {
-      unvisitedNames.insert(kv.first);
-    }
+    RUNTIME_EX_ASSERT(
+        (mitr = obj->FindMember("height")) != obj->MemberEnd(),
+        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), *obj, "\"height\" is not defined."));
+    RUNTIME_EX_ASSERT(mitr->value.IsUint(),
+                      RapidJSONUtils::getJsonParseErrorStr(
+                          _ctx->getUserWidgetIds(), mitr->value, "\"height\" is not an unsigned integer."));
+    size_t height = mitr->value.GetUint();
 
-    for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      rapidjson::Pointer dataObjPath = dataPath.Append(vitr - mitr->value.Begin());
+    setWidthHeight(width, height);
 
-      std::string tableName = getDataTableNameFromJSONObj(*vitr);
+    std::string propName = "data";
+    mitr = obj->FindMember(propName.c_str());
+    if (mitr != obj->MemberEnd()) {
+      rapidjson::Pointer dataPath = rootPath.Append(propName.c_str(), propName.length());
 
       RUNTIME_EX_ASSERT(
-          visitedNames.find(tableName) == visitedNames.end(),
+          mitr->value.IsArray(),
           RapidJSONUtils::getJsonParseErrorStr(
-              _ctx->getUserWidgetIds(), *vitr, "a data table with the name \"" + tableName + "\" already exists."));
+              _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
 
-      dataTablePtr = _ctx->getDataTable(tableName);
+      QueryDataTableShPtr dataTablePtr;
+      std::unordered_set<std::string> visitedNames;
+      std::unordered_set<std::string> unvisitedNames;
+      unvisitedNames.reserve(_ctx->_dataTableMap.size());
+      for (auto kv : _ctx->_dataTableMap) {
+        unvisitedNames.insert(kv.first);
+      }
 
-      if (!dataTablePtr) {
-        dataTablePtr = createDataTable(*vitr, dataObjPath, _ctx, tableName);
-        _ctx->_dataTableMap.insert(std::make_pair(tableName, dataTablePtr));
-      } else {
-        // TODO(croot): data table is changing. Need to validate any previously existing references.
-        // One way to do this is store a map of all objects changing in-place in order to
-        // validate.
-        auto tableTypes = getDataTableTypesFromJSONObj(*vitr);
-        if (dataTablePtr->getBaseType() != tableTypes.first || dataTablePtr->getType() != tableTypes.second) {
-          // completely new data table type, so destroy previous one and
-          // build a new one from scratch.
-          _ctx->_dataTableMap.erase(tableName);
+      for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
+        rapidjson::Pointer dataObjPath = dataPath.Append(vitr - mitr->value.Begin());
+
+        std::string tableName = getDataTableNameFromJSONObj(*vitr);
+
+        RUNTIME_EX_ASSERT(
+            visitedNames.find(tableName) == visitedNames.end(),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), *vitr, "a data table with the name \"" + tableName + "\" already exists."));
+
+        dataTablePtr = _ctx->getDataTable(tableName);
+
+        if (!dataTablePtr) {
           dataTablePtr = createDataTable(*vitr, dataObjPath, _ctx, tableName);
           _ctx->_dataTableMap.insert(std::make_pair(tableName, dataTablePtr));
         } else {
-          dataTablePtr->updateFromJSONObj(*vitr, dataObjPath);
+          // TODO(croot): data table is changing. Need to validate any previously existing references.
+          // One way to do this is store a map of all objects changing in-place in order to
+          // validate.
+          auto tableTypes = getDataTableTypesFromJSONObj(*vitr);
+          if (dataTablePtr->getBaseType() != tableTypes.first || dataTablePtr->getType() != tableTypes.second) {
+            // completely new data table type, so destroy previous one and
+            // build a new one from scratch.
+            _ctx->_dataTableMap.erase(tableName);
+            dataTablePtr = createDataTable(*vitr, dataObjPath, _ctx, tableName);
+            _ctx->_dataTableMap.insert(std::make_pair(tableName, dataTablePtr));
+          } else {
+            dataTablePtr->updateFromJSONObj(*vitr, dataObjPath);
+          }
         }
+
+        unvisitedNames.erase(tableName);
+        visitedNames.insert(std::move(tableName));
       }
 
-      unvisitedNames.erase(tableName);
-      visitedNames.insert(std::move(tableName));
+      // now remove any unused tables that may be lingering around
+      for (const auto& itr : unvisitedNames) {
+        _ctx->_dataTableMap.erase(itr);
+      }
+    } else {
+      // need to clear out the previous data
+      // TODO(croot): Need to invalidate any previous data references
+      // This should probably be handled by some data reference object.
+      // That or do an object validation check after everything's been rebuilt.
+      // The latter would be the easiest way.
+      _ctx->_dataTableMap.clear();
     }
 
-    // now remove any unused tables that may be lingering around
-    for (const auto& itr : unvisitedNames) {
-      _ctx->_dataTableMap.erase(itr);
-    }
-  } else {
-    // need to clear out the previous data
-    // TODO(croot): Need to invalidate any previous data references
-    // This should probably be handled by some data reference object.
-    // That or do an object validation check after everything's been rebuilt.
-    // The latter would be the easiest way.
-    _ctx->_dataTableMap.clear();
-  }
-
-  std::array<std::vector<ScaleShPtr>, static_cast<size_t>(RefEventType::ALL)> scaleEvents;
-  propName = "scales";
-  mitr = obj->FindMember(propName.c_str());
-  if (mitr != obj->MemberEnd()) {
-    rapidjson::Pointer scalePath = rootPath.Append(propName.c_str(), propName.length());
-
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(),
-                      RapidJSONUtils::getJsonParseErrorStr(
-                          _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
-
-    ScaleShPtr scalePtr;
-    std::unordered_set<std::string> visitedNames;
-    std::unordered_set<std::string> unvisitedNames;
-    unvisitedNames.reserve(_ctx->_scaleConfigMap.size());
-    for (auto kv : _ctx->_scaleConfigMap) {
-      unvisitedNames.insert(kv.first);
-    }
-
-    for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
-      rapidjson::Pointer scaleObjPath = scalePath.Append(vitr - mitr->value.Begin());
-
-      std::string scaleName = getScaleNameFromJSONObj(*vitr);
+    std::array<std::vector<ScaleShPtr>, static_cast<size_t>(RefEventType::ALL)> scaleEvents;
+    propName = "scales";
+    mitr = obj->FindMember(propName.c_str());
+    if (mitr != obj->MemberEnd()) {
+      rapidjson::Pointer scalePath = rootPath.Append(propName.c_str(), propName.length());
 
       RUNTIME_EX_ASSERT(
-          visitedNames.find(scaleName) == visitedNames.end(),
+          mitr->value.IsArray(),
           RapidJSONUtils::getJsonParseErrorStr(
-              _ctx->getUserWidgetIds(), *vitr, "a scale with the name \"" + scaleName + "\" already exists."));
+              _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array."));
 
-      scalePtr = _ctx->getScale(scaleName);
+      ScaleShPtr scalePtr;
+      std::unordered_set<std::string> visitedNames;
+      std::unordered_set<std::string> unvisitedNames;
+      unvisitedNames.reserve(_ctx->_scaleConfigMap.size());
+      for (auto kv : _ctx->_scaleConfigMap) {
+        unvisitedNames.insert(kv.first);
+      }
 
-      if (!scalePtr) {
-        scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
-        _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
+      for (vitr = mitr->value.Begin(); vitr != mitr->value.End(); ++vitr) {
+        rapidjson::Pointer scaleObjPath = scalePath.Append(vitr - mitr->value.Begin());
 
-        // TODO(croot): add an Add event type?
-      } else {
-        // TODO(croot): scale config is changing. Need to validate any previously existing references.
-        // One way to do this is store a map of all objects changing in-place in order to
-        // validate.
-        if (scalePtr->getType() != getScaleTypeFromJSONObj(*vitr) ||
-            scalePtr->getDomainDataType() != getScaleDomainDataTypeFromJSONObj(*vitr, _ctx) ||
-            scalePtr->getRangeDataType() != getScaleRangeDataTypeFromJSONObj(*vitr, _ctx)) {
-          // completely new scale type, so destroy previous one and
-          // build a new one from scratch.
-          _ctx->_scaleConfigMap.erase(scaleName);
+        std::string scaleName = getScaleNameFromJSONObj(*vitr);
+
+        RUNTIME_EX_ASSERT(
+            visitedNames.find(scaleName) == visitedNames.end(),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), *vitr, "a scale with the name \"" + scaleName + "\" already exists."));
+
+        scalePtr = _ctx->getScale(scaleName);
+
+        if (!scalePtr) {
           scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
           _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
 
-          scaleEvents[static_cast<size_t>(RefEventType::REPLACE)].push_back(scalePtr);
+          // TODO(croot): add an Add event type?
         } else {
-          if (scalePtr->updateFromJSONObj(*vitr, scaleObjPath)) {
-            scaleEvents[static_cast<size_t>(RefEventType::UPDATE)].push_back(scalePtr);
+          // TODO(croot): scale config is changing. Need to validate any previously existing references.
+          // One way to do this is store a map of all objects changing in-place in order to
+          // validate.
+          if (scalePtr->getType() != getScaleTypeFromJSONObj(*vitr) ||
+              scalePtr->getDomainDataType() != getScaleDomainDataTypeFromJSONObj(*vitr, _ctx) ||
+              scalePtr->getRangeDataType() != getScaleRangeDataTypeFromJSONObj(*vitr, _ctx)) {
+            // completely new scale type, so destroy previous one and
+            // build a new one from scratch.
+            _ctx->_scaleConfigMap.erase(scaleName);
+            scalePtr = createScale(*vitr, scaleObjPath, _ctx, scaleName);
+            _ctx->_scaleConfigMap.insert(std::make_pair(scaleName, scalePtr));
+
+            scaleEvents[static_cast<size_t>(RefEventType::REPLACE)].push_back(scalePtr);
+          } else {
+            if (scalePtr->updateFromJSONObj(*vitr, scaleObjPath)) {
+              scaleEvents[static_cast<size_t>(RefEventType::UPDATE)].push_back(scalePtr);
+            }
+          }
+        }
+
+        unvisitedNames.erase(scaleName);
+        visitedNames.insert(std::move(scaleName));
+      }
+
+      // now remove any unused scales that may be lingering around
+      for (const auto& unvisitedName : unvisitedNames) {
+        scalePtr = _ctx->getScale(unvisitedName);
+        _ctx->_scaleConfigMap.erase(unvisitedName);
+        scaleEvents[static_cast<size_t>(RefEventType::REMOVE)].push_back(scalePtr);
+      }
+
+    } else {
+      // need to clear out the previous data
+      // TODO(croot): Need to invalidate any previous data references
+      // This should probably be handled by some scale reference object.
+      // That or do an object validation check after everything's been rebuilt.
+      // The latter would be the easiest way.
+      _ctx->_scaleConfigMap.clear();
+    }
+
+    propName = "marks";
+    mitr = obj->FindMember(propName.c_str());
+    if (mitr != obj->MemberEnd()) {
+      rapidjson::Pointer markPath = rootPath.Append(propName.c_str(), propName.length());
+
+      RUNTIME_EX_ASSERT(mitr->value.IsArray(),
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array"));
+
+      size_t i;
+      for (vitr = mitr->value.Begin(), i = 0; vitr != mitr->value.End(); ++vitr, ++i) {
+        rapidjson::Pointer markObjPath = markPath.Append(vitr - mitr->value.Begin());
+
+        if (i == _ctx->_geomConfigs.size()) {
+          GeomConfigShPtr geomConfigPtr = createMark(*vitr, markObjPath, _ctx);
+
+          _ctx->_geomConfigs.push_back(geomConfigPtr);
+        } else {
+          // do an update
+          if (_ctx->_geomConfigs[i]->getType() != getMarkTypeFromJSONObj(*vitr)) {
+            // TODO(croot): need to do a replace
+            THROW_RUNTIME_EX("The type of mark " + RapidJSONUtils::getPointerPath(markObjPath) +
+                             " has changed in-place in the json. This has yet to be implemented.");
+          } else {
+            _ctx->_geomConfigs[i]->updateFromJSONObj(*vitr, markObjPath);
           }
         }
       }
-
-      unvisitedNames.erase(scaleName);
-      visitedNames.insert(std::move(scaleName));
+    } else {
+      _ctx->_geomConfigs.clear();
     }
 
-    // now remove any unused scales that may be lingering around
-    for (const auto& unvisitedName : unvisitedNames) {
-      scalePtr = _ctx->getScale(unvisitedName);
-      _ctx->_scaleConfigMap.erase(unvisitedName);
-      scaleEvents[static_cast<size_t>(RefEventType::REMOVE)].push_back(scalePtr);
-    }
-
-  } else {
-    // need to clear out the previous data
-    // TODO(croot): Need to invalidate any previous data references
-    // This should probably be handled by some scale reference object.
-    // That or do an object validation check after everything's been rebuilt.
-    // The latter would be the easiest way.
-    _ctx->_scaleConfigMap.clear();
-  }
-
-  propName = "marks";
-  mitr = obj->FindMember(propName.c_str());
-  if (mitr != obj->MemberEnd()) {
-    rapidjson::Pointer markPath = rootPath.Append(propName.c_str(), propName.length());
-
-    RUNTIME_EX_ASSERT(mitr->value.IsArray(),
-                      RapidJSONUtils::getJsonParseErrorStr(
-                          _ctx->getUserWidgetIds(), mitr->value, "the \"" + propName + "\" member must be an array"));
-
-    size_t i;
-    for (vitr = mitr->value.Begin(), i = 0; vitr != mitr->value.End(); ++vitr, ++i) {
-      rapidjson::Pointer markObjPath = markPath.Append(vitr - mitr->value.Begin());
-
-      if (i == _ctx->_geomConfigs.size()) {
-        GeomConfigShPtr geomConfigPtr = createMark(*vitr, markObjPath, _ctx);
-
-        _ctx->_geomConfigs.push_back(geomConfigPtr);
-      } else {
-        // do an update
-        if (_ctx->_geomConfigs[i]->getType() != getMarkTypeFromJSONObj(*vitr)) {
-          // TODO(croot): need to do a replace
-          THROW_RUNTIME_EX("The type of mark " + RapidJSONUtils::getPointerPath(markObjPath) +
-                           " has changed in-place in the json. This has yet to be implemented.");
-        } else {
-          _ctx->_geomConfigs[i]->updateFromJSONObj(*vitr, markObjPath);
-        }
+    // now fire events so dependencies are cleaned and validated
+    for (size_t i = 0; i < scaleEvents.size(); ++i) {
+      for (auto scalePtr : scaleEvents[i]) {
+        _ctx->_fireRefEvent(static_cast<RefEventType>(i), scalePtr);
       }
     }
-  } else {
-    _ctx->_geomConfigs.clear();
+
+    _ctx->_jsonCache = jsonDocumentPtr;
   }
 
-  // now fire events so dependencies are cleaned and validated
-  for (size_t i = 0; i < scaleEvents.size(); ++i) {
-    for (auto scalePtr : scaleEvents[i]) {
-      _ctx->_fireRefEvent(static_cast<RefEventType>(i), scalePtr);
-    }
-  }
-
-  _ctx->_jsonCache = jsonDocumentPtr;
+  // now update the data
+  _ctx->_updateConfigGpuResources();
 }
 
 size_t QueryRenderer::getWidth() {
@@ -479,9 +482,12 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
     }
 
     if (_pbo) {
-      auto itr = _perGpuData.find(_pboGpu);
-      CHECK(itr != _perGpuData.end());
-      itr->second.makeActiveOnCurrentThread();
+      auto qrmPerGpuData = _ctx->getGpuDataMap();
+      CHECK(qrmPerGpuData);
+      auto itr = qrmPerGpuData->find(_pboGpu);
+      CHECK(itr != qrmPerGpuData->end());
+
+      (*itr)->makeActiveOnCurrentThread();
       _pbo->resize(width, height);
     }
   }
@@ -513,57 +519,30 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
 
 void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor) {
   try {
-    std::vector<GpuId> gpuIds;
-    std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
-    CHECK(qrmPerGpuData);
-    for (const auto& kv : *qrmPerGpuData) {
-      if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
-        gpuIds.push_back(kv->gpuId);
-      }
-    }
-
-    std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
-    _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
-
     // now update the query result buffers
     _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
     _ctx->_invalidKey = dataLayoutPtr->invalidKey;
     _ctx->_queryDataLayoutPtr = dataLayoutPtr;
     _ctx->executor_ = executor;
 
-    for (auto gpuId : gpuIds) {
-      auto itr = _perGpuData.find(gpuId);
-      CHECK(itr != _perGpuData.end());
-      itr->second.getRootPerGpuData()->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
-    }
-
-    // now update the gpu resources for data, scale, and geom configs
-    // This needs to be done after the queryResultBuffers are updated.
-    _ctx->_updateConfigGpuResources(unusedGpus);
-  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
-    _clearAll();
-    throw e;
-  } catch (const ::Rendering::RenderError& e) {
-    _clearAll(true);
-    throw e;
-  }
-}
-
-void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
-  try {
-    std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
-
-    std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
+    std::vector<GpuId> gpuIds;
+    auto qrmPerGpuData = _ctx->getGpuDataMap();
     CHECK(qrmPerGpuData);
-    if (!gpusToActivate.size()) {
-      std::vector<GpuId> gpuIds;
-      for (const auto& kv : *qrmPerGpuData) {
+    for (const auto& kv : *qrmPerGpuData) {
+      if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
         gpuIds.push_back(kv->gpuId);
+        kv->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
       }
-      _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
-    } else {
-      _initGpuResources(qrmPerGpuData.get(), gpusToActivate, unusedGpus);
+
+      // TODO(croot): check whether poly data was generated?
     }
+
+    // std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
+    // _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
+
+    // // now update the gpu resources for data, scale, and geom configs
+    // // This needs to be done after the queryResultBuffers are updated.
+    // _ctx->_updateConfigGpuResources(unusedGpus);
   } catch (const ::Rendering::OutOfGpuMemoryError& e) {
     _clearAll();
     throw e;
@@ -572,27 +551,49 @@ void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
     throw e;
   }
 }
+
+// void QueryRenderer::activateGpus(const std::vector<GpuId>& gpusToActivate) {
+//   try {
+//     std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
+
+//     std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
+//     CHECK(qrmPerGpuData);
+//     if (!gpusToActivate.size()) {
+//       std::vector<GpuId> gpuIds;
+//       for (const auto& kv : *qrmPerGpuData) {
+//         gpuIds.push_back(kv->gpuId);
+//       }
+//       _initGpuResources(qrmPerGpuData.get(), gpuIds, unusedGpus);
+//     } else {
+//       _initGpuResources(qrmPerGpuData.get(), gpusToActivate, unusedGpus);
+//     }
+//   } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+//     _clearAll();
+//     throw e;
+//   } catch (const ::Rendering::RenderError& e) {
+//     _clearAll(true);
+//     throw e;
+//   }
+// }
 
 void QueryRenderer::_update() {
   _ctx->_update();
 }
 
-void QueryRenderer::_createPbo(int width, int height, bool makeContextInactive) {
+void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int height, bool makeContextInactive) {
   CHECK(!_pbo);
 
-  auto itr = _perGpuData.begin();
-  if (itr != _perGpuData.end()) {
-    QueryRenderManager::PerGpuDataMap::iterator qrmItr;
-    std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
-    CHECK(qrmPerGpuData);
+  auto itr = usedGpus.begin();
+  if (itr != usedGpus.end()) {
+    auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+    CHECK(qrmPerGpuDataPtr);
+    auto qrmItr = qrmPerGpuDataPtr->find(*itr);
+    CHECK(qrmItr != qrmPerGpuDataPtr->end());
 
-    if (_perGpuData.size() > 1) {
-      qrmItr = qrmPerGpuData->find(itr->second.getCompositorGpuId());
-    } else {
-      qrmItr = qrmPerGpuData->find(itr->first);
+    if (usedGpus.size() > 1) {
+      qrmItr = qrmPerGpuDataPtr->find((*qrmItr)->getCompositorGpuId());
+      CHECK(qrmItr != qrmPerGpuDataPtr->end());
     }
-
-    CHECK(qrmItr != qrmPerGpuData->end());
 
     (*qrmItr)->makeActiveOnCurrentThread();
 
@@ -609,7 +610,7 @@ void QueryRenderer::_createPbo(int width, int height, bool makeContextInactive) 
 
 void QueryRenderer::_releasePbo(bool makeContextInactive) {
   if (_pbo) {
-    std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
+    auto qrmPerGpuData = _ctx->getGpuDataMap();
 
     if (qrmPerGpuData) {
       auto itr = qrmPerGpuData->find(_pboGpu);
@@ -629,7 +630,7 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
 }
 
 void QueryRenderer::renderGpu(GpuId gpuId,
-                              PerGpuDataMap* gpuDataMap,
+                              const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
                               QueryRendererContext* ctx,
                               int r,
                               int g,
@@ -637,18 +638,15 @@ void QueryRenderer::renderGpu(GpuId gpuId,
                               int a) {
   // TODO(croot): make thread safe?
 
-  auto itr = gpuDataMap->find(gpuId);
+  auto itr = qrmPerGpuData->find(gpuId);
+  CHECK(itr != qrmPerGpuData->end());
 
-  CHECK(itr != gpuDataMap->end());
+  (*itr)->makeActiveOnCurrentThread();
 
-  RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
-
-  itr->second.makeActiveOnCurrentThread();
-
-  GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
+  GLRenderer* renderer = (*itr)->getGLRenderer();
   CHECK(renderer != nullptr);
 
-  QueryFramebufferUqPtr& framebufferPtr = itr->second.getFramebuffer();
+  auto& framebufferPtr = (*itr)->getFramebuffer();
 
   RUNTIME_EX_ASSERT(framebufferPtr != nullptr,
                     "QueryRenderer " + to_string(ctx->getUserWidgetIds()) +
@@ -674,6 +672,8 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   }
 
   for (size_t i = 0; i < ctx->_geomConfigs.size(); ++i) {
+    // TODO(croot): only draw geom on this gpu if the geom is configured to use
+    // this gpu
     ctx->_geomConfigs[i]->draw(renderer, gpuId);
   }
 
@@ -693,22 +693,28 @@ void QueryRenderer::renderGpu(GpuId gpuId,
 }
 
 void QueryRenderer::render(bool inactivateRendererOnThread) {
+  _render(_ctx->getUsedGpus(), inactivateRendererOnThread);
+}
+
+void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRendererOnThread) {
   try {
     // update everything marked dirty before rendering
     _update();
 
     if (_ctx->doHitTest() && !_pbo) {
-      _createPbo();
+      _createPbo(usedGpus);
     }
 
     // int64_t time_ms;
     // auto clock_begin = timer_start();
 
-    int numGpusToRender = _perGpuData.size();
+    int numGpusToRender = usedGpus.size();
     if (numGpusToRender) {
-      auto itr = _perGpuData.begin();
+      auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+      auto qrmItr = qrmPerGpuDataPtr->find((*usedGpus.begin()));
+      CHECK(qrmItr != qrmPerGpuDataPtr->end());
       if (numGpusToRender == 1) {
-        renderGpu(itr->first, &_perGpuData, _ctx.get(), 0, 0, 0, 0);
+        renderGpu((*qrmItr)->gpuId, qrmPerGpuDataPtr, _ctx.get(), 0, 0, 0, 0);
 
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - render gpu " << itr->first << ": " << time_ms << "ms" << std::endl;
@@ -716,7 +722,7 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
 
         if (_ctx->doHitTest()) {
           CHECK(_idPixels && _pbo);
-          QueryFramebufferUqPtr& framebufferPtr = itr->second.getFramebuffer();
+          QueryFramebufferUqPtr& framebufferPtr = (*qrmItr)->getFramebuffer();
           framebufferPtr->copyIdBufferToPbo(_pbo);
 
           // time_ms = timer_stop(clock_begin);
@@ -724,10 +730,10 @@ void QueryRenderer::render(bool inactivateRendererOnThread) {
           // clock_begin = timer_start();
         }
       } else {
-        auto& compositorPtr = itr->second.getCompositor();
+        auto& compositorPtr = (*qrmItr)->getCompositor();
         CHECK(compositorPtr);
 
-        compositorPtr->render(this);
+        compositorPtr->render(this, usedGpus);
 
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - compositor render : " << time_ms << "ms" << std::endl;
@@ -773,7 +779,8 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   // int64_t time_ms;
   // auto clock_begin = timer_start();
 
-  render(false);
+  auto usedGpus = _ctx->getUsedGpus();
+  _render(usedGpus, false);
 
   // time_ms = timer_stop(clock_begin);
   // std::cerr << "\t\tCROOT - render frame: " << time_ms << "ms." << std::endl;
@@ -784,13 +791,14 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     int height = getHeight();
     std::shared_ptr<unsigned char> pixelsPtr = nullptr;
 
-    int numGpus = _perGpuData.size();
+    int numGpus = usedGpus.size();
     if (numGpus) {
-      auto itr = _perGpuData.begin();
-      CHECK(itr != _perGpuData.end());
+      auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+      auto itr = qrmPerGpuDataPtr->find(*usedGpus.begin());
+      CHECK(itr != qrmPerGpuDataPtr->end());
 
-      if (_perGpuData.size() > 1) {
-        auto& compositorPtr = itr->second.getCompositor();
+      if (numGpus > 1) {
+        auto& compositorPtr = (*itr)->getCompositor();
         CHECK(compositorPtr);
 
         Renderer* renderer = compositorPtr->getRenderer();
@@ -798,13 +806,11 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
         pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
         renderer->makeInactive();
       } else {
-        RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
-
-        itr->second.makeActiveOnCurrentThread();
-        GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
+        (*itr)->makeActiveOnCurrentThread();
+        GLRenderer* renderer = (*itr)->getGLRenderer();
         CHECK(renderer != nullptr);
 
-        auto& framebufferPtr = itr->second.getFramebuffer();
+        auto& framebufferPtr = (*itr)->getFramebuffer();
         CHECK(framebufferPtr);
 
         framebufferPtr->bindToRenderer(renderer, FboBind::READ);
@@ -838,7 +844,7 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   try {
     unsigned int id = 0;
 
-    if (_idPixels && _perGpuData.size()) {
+    if (_idPixels) {
       size_t width = _ctx->getWidth();
       size_t height = _ctx->getHeight();
       if (x < width && y < height) {
@@ -846,16 +852,19 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
 
         if (_idPixelsDirty) {
           unsigned int* rawIds = _idPixels->getDataPtr();
-          auto itr = _perGpuData.find(_pboGpu);
 
-          if (itr != _perGpuData.end()) {
+          auto qrmPerGpuData = _ctx->getGpuDataMap();
+          CHECK(qrmPerGpuData);
+          auto itr = qrmPerGpuData->find(_pboGpu);
+
+          if (itr != qrmPerGpuData->end()) {
             // int64_t time_ms;
             // auto clock_begin = timer_start();
 
-            itr->second.makeActiveOnCurrentThread();
+            (*itr)->makeActiveOnCurrentThread();
             _pbo->readIdBuffer(width, height, rawIds);
             _releasePbo();
-            itr->second.makeInactive();
+            (*itr)->makeInactive();
 
             // time_ms = timer_stop(clock_begin);
             // std::cerr << "CROOT - getIdAt::readIdBuffer from pbo: " << time_ms << " ms" << std::endl;

@@ -53,6 +53,7 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
       : BaseQueryDataTable(ctx, name, obj, objPath, type, QueryDataTableBaseType::BASIC_VBO) {
     _initGpuResources(ctx.get());
   }
+
   explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
                                  const std::string& name,
                                  const rapidjson::Value& obj,
@@ -63,6 +64,8 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
     _initVBOs(vboMap);
   }
   virtual ~BaseQueryDataTableVBO() {}
+
+  std::vector<GpuId> getUsedGpuIds() const final;
 
  protected:
   struct PerGpuData : BasePerGpuData {
@@ -85,9 +88,7 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
   PerGpuDataMap _perGpuData;
 
  private:
-  void _initGpuResources(const QueryRendererContext* ctx,
-                         const std::unordered_set<GpuId>& unusedGpus = std::unordered_set<GpuId>(),
-                         bool initializing = true) final;
+  void _initGpuResources(const QueryRendererContext* ctx) final;
 
   void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap);
 
@@ -100,9 +101,10 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
                     const std::string& name,
                     const rapidjson::Value& obj,
                     const rapidjson::Pointer& objPath,
-                    const std::map<GpuId, QueryVertexBufferShPtr>& vboMap,
+                    // const std::map<GpuId, QueryVertexBufferShPtr>& vboMap,
                     const std::string& sqlQueryStr = "")
-      : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vboMap),
+      // : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vboMap),
+      : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY),
         _sqlQueryStr(sqlQueryStr),
         _tableName() {
     _initFromJSONObj(obj, objPath);
