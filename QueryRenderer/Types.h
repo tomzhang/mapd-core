@@ -32,6 +32,9 @@ enum class RefEventType { UPDATE = 0, REMOVE, REPLACE, ALL };
 class QueryRendererContext;
 typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 
+struct RootCache;
+typedef std::shared_ptr<RootCache> RootCacheShPtr;
+
 std::string to_string(const UserWidgetIdPair& value);
 
 }  // namespace QueryRenderer

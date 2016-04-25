@@ -71,10 +71,10 @@ static bool idCounterCompare(const std::pair<unsigned int, float>& a, const std:
 
 QueryRenderer::QueryRenderer(int userId,
                              int widgetId,
-                             const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                             const std::shared_ptr<RootCache>& qrmGpuCache,
                              bool doHitTest,
                              bool doDepthTest) noexcept
-    : _ctx(new QueryRendererContext(userId, widgetId, qrmPerGpuData, doHitTest, doDepthTest)),
+    : _ctx(new QueryRendererContext(userId, widgetId, qrmGpuCache, doHitTest, doDepthTest)),
       _pboGpu(EMPTY_GPUID),
       _pbo(nullptr),
       _idPixelsDirty(false),
@@ -83,21 +83,21 @@ QueryRenderer::QueryRenderer(int userId,
 
 QueryRenderer::QueryRenderer(int userId,
                              int widgetId,
-                             const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                             const std::shared_ptr<RootCache>& qrmGpuCache,
                              const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                              bool doHitTest,
                              bool doDepthTest)
-    : QueryRenderer(userId, widgetId, qrmPerGpuData, doHitTest, doDepthTest) {
+    : QueryRenderer(userId, widgetId, qrmGpuCache, doHitTest, doDepthTest) {
   _initFromJSON(jsonDocumentPtr);
 }
 
 QueryRenderer::QueryRenderer(int userId,
                              int widgetId,
-                             const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                             const std::shared_ptr<RootCache>& qrmGpuCache,
                              const std::string& configJSON,
                              bool doHitTest,
                              bool doDepthTest)
-    : QueryRenderer(userId, widgetId, qrmPerGpuData, doHitTest, doDepthTest) {
+    : QueryRenderer(userId, widgetId, qrmGpuCache, doHitTest, doDepthTest) {
   _initFromJSON(configJSON);
 }
 
@@ -122,7 +122,7 @@ void QueryRenderer::_clearAll(bool preserveDimensions) {
 }
 
 // void QueryRenderer::_updateGpuData(const GpuId& gpuId,
-//                                    QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
+//                                    RootPerGpuDataMap* qrmPerGpuData,
 //                                    std::unordered_set<GpuId>& unusedGpus,
 //                                    size_t width,
 //                                    size_t height) {
@@ -159,7 +159,7 @@ void QueryRenderer::_clearAll(bool preserveDimensions) {
 //   return unusedGpus;
 // }
 
-// void QueryRenderer::_initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
+// void QueryRenderer::_initGpuResources(RootPerGpuDataMap* qrmPerGpuData,
 //                                       const std::vector<GpuId>& gpuIds,
 //                                       std::unordered_set<GpuId>& unusedGpus) {
 //   // make sure size is at least 1x1
@@ -207,7 +207,9 @@ void QueryRenderer::_clearAll(bool preserveDimensions) {
 // }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
-  auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+  auto qrmGpuCache = _ctx->getRootGpuCache();
+  CHECK(qrmGpuCache);
+  auto qrmPerGpuDataPtr = qrmGpuCache->perGpuData;
   CHECK(qrmPerGpuDataPtr != nullptr);
 
   for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
@@ -312,7 +314,9 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
             dataTablePtr = createDataTable(*vitr, dataObjPath, _ctx, tableName);
             _ctx->_dataTableMap.insert(std::make_pair(tableName, dataTablePtr));
           } else {
-            dataTablePtr->updateFromJSONObj(*vitr, dataObjPath);
+            auto dataTableJSONPtr = dynamic_cast<BaseQueryDataTableJSON*>(dataTablePtr.get());
+            CHECK(dataTableJSONPtr);
+            dataTableJSONPtr->updateFromJSONObj(*vitr, dataObjPath);
           }
         }
 
@@ -482,7 +486,9 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
     }
 
     if (_pbo) {
-      auto qrmPerGpuData = _ctx->getGpuDataMap();
+      auto qrmGpuCache = _ctx->getRootGpuCache();
+      CHECK(qrmGpuCache);
+      auto qrmPerGpuData = qrmGpuCache->perGpuData;
       CHECK(qrmPerGpuData);
       auto itr = qrmPerGpuData->find(_pboGpu);
       CHECK(itr != qrmPerGpuData->end());
@@ -517,21 +523,19 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
   }
 }
 
-void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor) {
+void QueryRenderer::updateResultsPostQuery(const Executor* executor) {
   try {
     // now update the query result buffers
-    _ctx->_queryResultBufferLayout = dataLayoutPtr->convertToBufferLayout();
-    _ctx->_invalidKey = dataLayoutPtr->invalidKey;
-    _ctx->_queryDataLayoutPtr = dataLayoutPtr;
     _ctx->executor_ = executor;
 
     std::vector<GpuId> gpuIds;
-    auto qrmPerGpuData = _ctx->getGpuDataMap();
+    auto qrmGpuCache = _ctx->getRootGpuCache();
+    CHECK(qrmGpuCache);
+    auto qrmPerGpuData = qrmGpuCache->perGpuData;
     CHECK(qrmPerGpuData);
     for (const auto& kv : *qrmPerGpuData) {
       if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
         gpuIds.push_back(kv->gpuId);
-        kv->queryResultBufferPtr->setBufferLayout(_ctx->_queryResultBufferLayout);
       }
 
       // TODO(croot): check whether poly data was generated?
@@ -556,7 +560,7 @@ void QueryRenderer::updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, 
 //   try {
 //     std::unordered_set<GpuId> unusedGpus = _initUnusedGpus();
 
-//     std::shared_ptr<QueryRenderManager::PerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
+//     std::shared_ptr<RootPerGpuDataMap> qrmPerGpuData = _qrmPerGpuData.lock();
 //     CHECK(qrmPerGpuData);
 //     if (!gpusToActivate.size()) {
 //       std::vector<GpuId> gpuIds;
@@ -585,7 +589,8 @@ void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int h
 
   auto itr = usedGpus.begin();
   if (itr != usedGpus.end()) {
-    auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+    auto qrmGpuCache = _ctx->getRootGpuCache();
+    auto qrmPerGpuDataPtr = qrmGpuCache->perGpuData;
     CHECK(qrmPerGpuDataPtr);
     auto qrmItr = qrmPerGpuDataPtr->find(*itr);
     CHECK(qrmItr != qrmPerGpuDataPtr->end());
@@ -610,27 +615,30 @@ void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int h
 
 void QueryRenderer::_releasePbo(bool makeContextInactive) {
   if (_pbo) {
-    auto qrmPerGpuData = _ctx->getGpuDataMap();
+    auto qrmGpuCache = _ctx->getRootGpuCache();
+    if (qrmGpuCache) {
+      auto qrmPerGpuData = _ctx->getRootGpuCache()->perGpuData;
 
-    if (qrmPerGpuData) {
-      auto itr = qrmPerGpuData->find(_pboGpu);
-      CHECK(itr != qrmPerGpuData->end()) << "Couldn't find gpu data for gpuid: " << _pboGpu << ". Can't release pb";
+      if (qrmPerGpuData) {
+        auto itr = qrmPerGpuData->find(_pboGpu);
+        CHECK(itr != qrmPerGpuData->end()) << "Couldn't find gpu data for gpuid: " << _pboGpu << ". Can't release pb";
 
-      (*itr)->makeActiveOnCurrentThread();
-      (*itr)->setIdMapPboInactive(_pbo);
+        (*itr)->makeActiveOnCurrentThread();
+        (*itr)->setIdMapPboInactive(_pbo);
 
-      _pbo = nullptr;
-      _pboGpu = EMPTY_GPUID;
+        _pbo = nullptr;
+        _pboGpu = EMPTY_GPUID;
 
-      if (makeContextInactive) {
-        (*itr)->makeInactive();
+        if (makeContextInactive) {
+          (*itr)->makeInactive();
+        }
       }
     }
   }
 }
 
 void QueryRenderer::renderGpu(GpuId gpuId,
-                              const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                              const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
                               QueryRendererContext* ctx,
                               int r,
                               int g,
@@ -710,7 +718,9 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
 
     int numGpusToRender = usedGpus.size();
     if (numGpusToRender) {
-      auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+      auto qrmGpuCache = _ctx->getRootGpuCache();
+      CHECK(qrmGpuCache);
+      auto qrmPerGpuDataPtr = qrmGpuCache->perGpuData;
       auto qrmItr = qrmPerGpuDataPtr->find((*usedGpus.begin()));
       CHECK(qrmItr != qrmPerGpuDataPtr->end());
       if (numGpusToRender == 1) {
@@ -793,7 +803,9 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 
     int numGpus = usedGpus.size();
     if (numGpus) {
-      auto qrmPerGpuDataPtr = _ctx->getGpuDataMap();
+      auto qrmGpuCache = _ctx->getRootGpuCache();
+      CHECK(qrmGpuCache);
+      auto qrmPerGpuDataPtr = qrmGpuCache->perGpuData;
       auto itr = qrmPerGpuDataPtr->find(*usedGpus.begin());
       CHECK(itr != qrmPerGpuDataPtr->end());
 
@@ -853,7 +865,8 @@ unsigned int QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
         if (_idPixelsDirty) {
           unsigned int* rawIds = _idPixels->getDataPtr();
 
-          auto qrmPerGpuData = _ctx->getGpuDataMap();
+          auto qrmGpuCache = _ctx->getRootGpuCache();
+          auto qrmPerGpuData = qrmGpuCache->perGpuData;
           CHECK(qrmPerGpuData);
           auto itr = qrmPerGpuData->find(_pboGpu);
 

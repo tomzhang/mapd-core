@@ -22,6 +22,7 @@ class BaseScaleRef {
       : _ctx(ctx), _scalePtr(scalePtr), _rndrPropPtr(rndrProp) {}
   virtual ~BaseScaleRef() {}
 
+  std::string getName() const;
   const std::string& getNameRef();
 
   virtual const ::Rendering::GL::TypeGLShPtr& getDomainTypeGL();
@@ -42,7 +43,7 @@ class BaseScaleRef {
   virtual operator std::string() const = 0;
 
  protected:
-  void _verifyScalePointer();
+  void _verifyScalePointer() const;
 
   std::string _printInfo() const;
 
@@ -280,7 +281,7 @@ class ScaleRef : public BaseScaleRef {
         std::string(*this) + ": The render property \"" + _getRndrPropName() +
             "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
 
-    const QueryDataLayoutShPtr& queryDataLayoutPtr = _ctx->getQueryDataLayout();
+    QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getQueryDataLayout();
     CHECK(queryDataLayoutPtr != nullptr);
 
     std::vector<std::string>& vec = domainData->getVectorData();

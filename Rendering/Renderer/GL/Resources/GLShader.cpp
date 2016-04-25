@@ -671,6 +671,10 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
     // TODO(croot): support different layouts for shader blocks. I don't think there's
     // a way to query this using the program introspection API, so we'll need to parse the
     // shader's source code. Right now, hard-coding STD140 for QueryRenderer
+
+    // TODO(croot): I think we'll need to add the order the attributes are added to the
+    // shader block layout by parsing the block as well, so we'll need to manually parse
+    // the block code
     auto blockItr = _uniformBlockAttrs.insert(
         make_pair(attrBlockName,
                   std::make_unique<UniformBlockAttrInfo>(
@@ -702,6 +706,9 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
       RUNTIME_EX_ASSERT(blockItr != _uniformBlockAttrs.end(),
                         "Could not find uniform block " + dotSepNames[0] + " in shader.");
 
+      // TODO(croot): it turns out adding attrs to the block in their location order is
+      // not the right order the attrs are defined in the block
+      // we may need to parse the block in the src line-by-line to get the right order
       blockItr->second->addActiveAttr(dotSepNames[1], attrType, attrSz, i);
     } else {
       attrLoc = MAPD_CHECK_GL_ERROR(glGetUniformLocation(_programId, attrName));

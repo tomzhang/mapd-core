@@ -6,8 +6,8 @@
 #include "Interop/Types.h"
 #include "Marks/Types.h"
 #include "Data/Types.h"
+#include "RootCache.h"
 
-#include "QueryRenderManager.h"
 #include "Rendering/QueryRenderCompositor.h"
 #include "Rendering/QueryFramebuffer.h"
 #include "Rendering/QueryIdMapPixelBuffer.h"
@@ -30,20 +30,20 @@ class QueryRenderer {
  public:
   explicit QueryRenderer(int userId,
                          int widgetId,
-                         const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                         const std::shared_ptr<RootCache>& qrmGpuCache,
                          bool doHitTest = false,
                          bool doDepthTest = false) noexcept;
 
   explicit QueryRenderer(int userId,
                          int widgetId,
-                         const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                         const std::shared_ptr<RootCache>& qrmGpuCache,
                          const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                          bool doHitTest = false,
                          bool doDepthTest = false);
 
   explicit QueryRenderer(int userId,
                          int widgetId,
-                         const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                         const std::shared_ptr<RootCache>& qrmGpuCache,
                          const std::string& configJSON,
                          bool doHitTest = false,
                          bool doDepthTest = false);
@@ -57,7 +57,7 @@ class QueryRenderer {
   void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
-  void updateResultsPostQuery(QueryDataLayoutShPtr& dataLayoutPtr, const Executor* executor);
+  void updateResultsPostQuery(const Executor* executor);
   // void activateGpus(const std::vector<GpuId>& gpusToActivate = {});
 
   void render(bool inactivateRendererOnThread = true);
@@ -68,7 +68,7 @@ class QueryRenderer {
   QueryRendererContext* getContext() { return _ctx.get(); }
 
   static void renderGpu(GpuId gpuId,
-                        const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                        const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
                         QueryRendererContext* ctx,
                         int r = -1,
                         int g = -1,
@@ -90,11 +90,11 @@ class QueryRenderer {
   void _clearAll(bool preserveDimensions = false);
 
   // std::unordered_set<GpuId> _initUnusedGpus();
-  // void _initGpuResources(QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
+  // void _initGpuResources(RootPerGpuDataMap* qrmPerGpuData,
   //                        const std::vector<GpuId>& gpuIds,
   //                        std::unordered_set<GpuId>& unusedGpus);
   // void _updateGpuData(const GpuId& gpuId,
-  //                     QueryRenderManager::PerGpuDataMap* qrmPerGpuData,
+  //                     RootPerGpuDataMap* qrmPerGpuData,
   //                     std::unordered_set<GpuId>& unusedGpus,
   //                     size_t width,
   //                     size_t height);

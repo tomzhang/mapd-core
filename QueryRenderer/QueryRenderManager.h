@@ -3,13 +3,16 @@
 
 #include "Types.h"
 #include "Interop/Types.h"
-#include "PerGpuData.h"
 #include "QueryDataLayout.h"
 #include "Interop/QueryBuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
 #include "Rendering/QueryIdMapPboPool.h"
 #include "PngData.h"
+#include "RootCache.h"
 #include <Rendering/Types.h>
+#include <CudaMgr/CudaMgr.h>
+
+#include "rapidjson/document.h"
 
 #include <unordered_map>
 #include <map>
@@ -17,17 +20,11 @@
 #include <mutex>
 #include <chrono>
 
-#include "rapidjson/document.h"
-
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/composite_key.hpp>
 #include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/member.hpp>
-#include <boost/multi_index/tag.hpp>
-
-#include <CudaMgr/CudaMgr.h>
+#include <boost/multi_index/mem_fun.hpp>
 
 class Executor;
 
@@ -37,23 +34,6 @@ typedef std::pair<int, int> UserWidgetPair;
 
 class QueryRenderManager {
  public:
-  struct inorder {};
-
-  struct PerGpuDataId {
-    typedef GpuId result_type;
-
-    result_type operator()(const RootPerGpuDataShPtr& perGpuData) const { return perGpuData->gpuId; }
-  };
-
-  typedef ::boost::multi_index_container<RootPerGpuDataShPtr,
-                                         ::boost::multi_index::indexed_by<
-                                             // hashed on gpuId
-                                             ::boost::multi_index::ordered_unique<PerGpuDataId>,
-                                             ::boost::multi_index::random_access<::boost::multi_index::tag<inorder>>>>
-      PerGpuDataMap;
-
-  typedef PerGpuDataMap::index<inorder>::type PerGpuDataMap_in_order;
-
   explicit QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
                               int numGpus = -1,
                               int startGpu = 0,
@@ -87,26 +67,30 @@ class QueryRenderManager {
 
   size_t getNumGpus() const;
   std::vector<GpuId> getAllGpuIds() const;
-  PerGpuDataMap* getPerGpuData() { return _perGpuData.get(); }
+  RootPerGpuDataMap* getPerGpuData() { return _gpuCache->perGpuData.get(); }
 
   CudaHandle getCudaHandle(size_t gpuIdx);
-  void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes);
+  void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes, const QueryDataLayoutShPtr& vertLayoutPtr);
 
+  int getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const;
   bool hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const;
+  PolyTableDataInfo getPolyTableCacheDataInfo(const std::string& polyTableName, const size_t gpuIdx) const;
   PolyCudaHandles createPolyTableCache(const std::string& polyTableName,
                                        const size_t gpuIdx,
-                                       const PolyTableInitData& initTableData);
+                                       const PolyTableByteData& initTableData);
 
   PolyCudaHandles getPolyCudaHandlesFromCache(const std::string& polyTableName, const size_t gpuIdx);
-  PolyCudaHandles getPolyCudaHandles(const std::string& polyTableName,
-                                     const size_t gpuIdx,
-                                     const PolyTableInitData& initTableData);
+  // PolyCudaHandles getPolyCudaHandles(const std::string& polyTableName,
+  //                                    const size_t gpuIdx,
+  //                                    const PolyTableByteData& initTableData);
 
-  void setPolyCudaHandlesReady(const std::string& polyTableName, size_t gpuIdx);
+  void setPolyTableReadyForRender(const std::string& polyTableName,
+                                  size_t gpuIdx,
+                                  const PolyTableByteData& usedByteInfo,
+                                  const QueryDataLayoutShPtr& vertLayoutPtr,
+                                  const QueryDataLayoutShPtr& uniformLayoutPtr = nullptr);
 
-  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                       QueryDataLayoutShPtr dataLayoutPtr = nullptr,
-                       const Executor* executor = nullptr);
+  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, const Executor* executor = nullptr);
 
   void render();
   PngData renderToPng(int compressionLevel = -1);
@@ -169,7 +153,7 @@ class QueryRenderManager {
 
   mutable RendererMap::iterator _activeItr;
 
-  std::shared_ptr<PerGpuDataMap> _perGpuData;
+  std::shared_ptr<RootCache> _gpuCache;
   std::shared_ptr<QueryRenderCompositor> _compositorPtr;
 
   void _initialize(Rendering::WindowManager& windowMgr,

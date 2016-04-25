@@ -13,7 +13,7 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
  public:
   virtual ~GLBaseIndirectDrawBuffer() {}
 
-  size_t numItems() const { return _numItems; }
+  size_t numItems() const { return numBytes() / getStructByteSize(); }
   virtual size_t getStructByteSize() const = 0;
 
  protected:
@@ -24,8 +24,7 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
                                     BufferAccessFreq accessFreq)
       : GLBaseBuffer(rendererPtr, rsrcType, bufferType, GL_DRAW_INDIRECT_BUFFER, accessType, accessFreq) {}
 
-  void _makeEmpty() final { _numItems = 0; }
-  size_t _numItems;
+  void _makeEmpty() final {}
 };
 
 template <typename T>
@@ -37,7 +36,15 @@ class GLBaseIndirectDrawTemplateBuffer : public GLBaseIndirectDrawBuffer {
 
   void bufferData(const std::vector<T>& indirectDrawData) {
     GLBaseBuffer::bufferData(&indirectDrawData[0], indirectDrawData.size() * sizeof(T));
-    _numItems = indirectDrawData.size();
+  }
+
+  void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0) {
+    RUNTIME_EX_ASSERT(numBytes % sizeof(T) == 0,
+                      "Cannot allocate an indirect draw buffer of type " + to_string(getResourceType()) + " with " +
+                          std::to_string(numBytes) + " bytes. The size of the buffer must be a multiple of " +
+                          std::to_string(sizeof(T)));
+
+    GLBaseBuffer::bufferData(data, numBytes, altTarget);
   }
 
   // void setDataAt(size_t idx, const T& indirectData);

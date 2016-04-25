@@ -17,35 +17,33 @@ namespace QueryRenderer {
 
 QueryRendererContext::QueryRendererContext(int userId,
                                            int widgetId,
-                                           const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                                           const std::shared_ptr<RootCache>& qrmGpuCache,
                                            bool doHitTest,
                                            bool doDepthTest)
-    : _qrmPerGpuData(qrmPerGpuData),
+    : _qrmGpuCache(qrmGpuCache),
       executor_(nullptr),
       _userWidget(userId, widgetId),
       _width(0),
       _height(0),
       _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
-      _invalidKey(std::numeric_limits<int64_t>::max()),
       _jsonCache(nullptr) {
 }
 
 QueryRendererContext::QueryRendererContext(int userId,
                                            int widgetId,
-                                           const std::shared_ptr<QueryRenderManager::PerGpuDataMap>& qrmPerGpuData,
+                                           const std::shared_ptr<RootCache>& qrmGpuCache,
                                            int width,
                                            int height,
                                            bool doHitTest,
                                            bool doDepthTest)
-    : _qrmPerGpuData(qrmPerGpuData),
+    : _qrmGpuCache(qrmGpuCache),
       executor_(nullptr),
       _userWidget(userId, widgetId),
       _width(width),
       _height(height),
       _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
-      _invalidKey(std::numeric_limits<int64_t>::max()),
       _jsonCache(nullptr),
       _queryDataLayoutPtr(nullptr) {
 }
@@ -85,8 +83,11 @@ void QueryRendererContext::_clear(bool preserveDimensions) {
 // }
 
 void QueryRendererContext::_updateConfigGpuResources() {
+  auto qrmGpuCache = getRootGpuCache();
+  CHECK(qrmGpuCache);
+
   for (auto dataItr : _dataTableMap) {
-    dataItr.second->_initGpuResources(this);
+    dataItr.second->_initGpuResources(qrmGpuCache);
   }
 
   // for (auto scaleItr : _scaleConfigMap) {
@@ -131,11 +132,11 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
 // QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(const GpuId& gpuId) const {
 //   // TODO(croot): make thread safe?
 
-//   auto qrmPerGpuData = _qrmPerGpuData.lock();
-//   CHECK(qrmPerGpuData != nullptr);
-//   auto itr = qrmPerGpuData->find(gpuId);
+//   auto qrmGpuCache = _qrmGpuCache.lock();
+//   CHECK(qrmGpuCache != nullptr);
+//   auto itr = qrmGpuCache->find(gpuId);
 
-//   RUNTIME_EX_ASSERT(itr != qrmPerGpuData->end(),
+//   RUNTIME_EX_ASSERT(itr != qrmGpuCache->end(),
 //                     "QueryRendererContext " + to_string(_userWidget) +
 //                         ": Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
 //   return (*itr)->queryResultBufferPtr;
@@ -144,10 +145,10 @@ ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) co
 // std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
 //   std::map<GpuId, QueryVertexBufferShPtr> rtn;
 
-//   auto qrmPerGpuData = _qrmPerGpuData.lock();
-//   CHECK(qrmPerGpuData != nullptr);
+//   auto qrmGpuCache = _qrmGpuCache.lock();
+//   CHECK(qrmGpuCache != nullptr);
 
-//   for (auto& itr : (*qrmPerGpuData)) {
+//   for (auto& itr : (*qrmGpuCache)) {
 //     rtn.insert({itr->gpuId, itr->queryResultBufferPtr});
 //   }
 

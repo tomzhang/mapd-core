@@ -133,7 +133,7 @@ void GLCustomBufferLayout::addAttribute(const std::string& attrName, GLBufferAtt
       new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[static_cast<int>(type)].get(), stride, offset)));
 
   int enumVal = static_cast<int>(type);
-  _vertexByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+  _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
 }
 
 void GLInterleavedBufferLayout::addAttribute(const std::string& attrName, GLBufferAttrType type) {
@@ -147,14 +147,14 @@ void GLInterleavedBufferLayout::addAttribute(const std::string& attrName, GLBuff
   int enumVal = static_cast<int>(type);
   // _attrMap[attrName] = BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(),
   // -1,
-  // _vertexByteSize));
+  // _itemByteSize));
 
   // _attrMap.emplace_back(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1,
-  // _vertexByteSize));
-  _attrMap.push_back(BufferAttrInfoPtr(
-      new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, _vertexByteSize)));
+  // _itemByteSize));
+  _attrMap.push_back(
+      BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, _itemByteSize)));
 
-  _vertexByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+  _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
 }
 
 void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
@@ -172,7 +172,7 @@ void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
       bufAttrPtr = itr->get();
       attrLoc = activeShader->getVertexAttributeLocation(bufAttrPtr->name);
       attrPtr = bufAttrPtr->typeInfo;
-      attrPtr->bind(attrLoc, _vertexByteSize, bufAttrPtr->offset);
+      attrPtr->bind(attrLoc, _itemByteSize, bufAttrPtr->offset);
     }
   } else {
     BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
@@ -183,7 +183,7 @@ void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
     bufAttrPtr = itr->get();
     attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
     attrPtr = bufAttrPtr->typeInfo;
-    attrPtr->bind(attrLoc, _vertexByteSize, bufAttrPtr->offset);
+    attrPtr->bind(attrLoc, _itemByteSize, bufAttrPtr->offset);
   }
 }
 
@@ -200,7 +200,7 @@ void GLSequentialBufferLayout::addAttribute(const std::string& attrName, GLBuffe
   _attrMap.push_back(BufferAttrInfoPtr(new GLBufferAttrInfo(
       attrName, type, detail::attrTypeInfo[enumVal].get(), detail::attrTypeInfo[enumVal]->numBytes(), -1)));
 
-  _vertexByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+  _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
 }
 
 void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,

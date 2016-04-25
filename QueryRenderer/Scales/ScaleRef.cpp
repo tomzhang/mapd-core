@@ -6,6 +6,11 @@ namespace QueryRenderer {
 
 using ::Rendering::Objects::ColorRGBA;
 
+std::string BaseScaleRef::getName() const {
+  _verifyScalePointer();
+  return _scalePtr->getName();
+}
+
 const std::string& BaseScaleRef::getNameRef() {
   _verifyScalePointer();
   return _scalePtr->getNameRef();
@@ -37,7 +42,7 @@ void BaseScaleRef::bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* 
   return _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix);
 }
 
-void BaseScaleRef::_verifyScalePointer() {
+void BaseScaleRef::_verifyScalePointer() const {
   RUNTIME_EX_ASSERT(_scalePtr != nullptr, std::string(*this) + ": The scale reference object is uninitialized.");
 }
 

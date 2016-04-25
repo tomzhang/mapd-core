@@ -1,6 +1,8 @@
 #ifndef QUERYRENDERER_INTEROP_QUERYBUFFER_H_
 #define QUERYRENDERER_INTEROP_QUERYBUFFER_H_
 
+#include "../Types.h"
+#include "../QueryDataLayout.h"
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/Resources/Enums.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
@@ -24,15 +26,28 @@ struct CudaHandle {
   void* handle;
   unsigned int numBytes;
 
+  CudaHandle() : handle(nullptr), numBytes(0) {}
   CudaHandle(void* handle, unsigned int numBytes) : handle(handle), numBytes(numBytes) {}
 };
 
-struct PolyTableInitData {
+struct PolyTableByteData {
+  size_t numVertBytes;
+  size_t numIndexBytes;
+  size_t numLineLoopBytes;
+  size_t numPolyBytes;
+  size_t numDataBytes;
+
+  // PolyTableByteData() : numVertBytes(0), numIndexBytes(0), numLineLoopBytes(0), numPolyBytes(0), numDataBytes(0) {}
+};
+
+struct PolyTableDataInfo {
   size_t numVerts;
   size_t numTris;
   size_t numLineLoops;
   size_t numPolys;
   size_t numDataBytes;
+
+  PolyTableDataInfo() : numVerts(0), numTris(0), numLineLoops(0), numPolys(0), numDataBytes(0) {}
 };
 
 struct PolyCudaHandles {
@@ -41,6 +56,8 @@ struct PolyCudaHandles {
   CudaHandle lineDrawStruct;
   CudaHandle polyDrawStruct;
   CudaHandle perRowData;
+
+  PolyCudaHandles() {}
 };
 
 class QueryBuffer {
@@ -51,7 +68,8 @@ class QueryBuffer {
 
   virtual ~QueryBuffer();
 
-  size_t getNumUsedBytes() { return _usedBytes; }
+  size_t getNumUsedBytes() const { return _usedBytes; }
+  size_t numBytes() const { return (_bufRsrc ? _bufRsrc->numBytes() : 0); }
   void reset() { _usedBytes = 0; }
 
   BufType getType() const { return _type; }
@@ -76,6 +94,8 @@ class QueryBuffer {
 #endif
 
   void updatePostQuery(size_t numUsedBytes);
+
+  void resize(size_t numBytes);
 
  protected:
   Rendering::GL::Resources::GLBaseBufferShPtr _bufRsrc;
@@ -133,7 +153,7 @@ class QueryLayoutBuffer : public QueryBuffer {
   }
 
   void setBufferLayout(const std::shared_ptr<GLLayoutType>& bufferLayout) {
-    size_t bytesPerVertex = bufferLayout->getNumBytesPerVertex();
+    size_t bytesPerVertex = bufferLayout->getNumBytesPerItem();
     size_t usedBytes = getNumUsedBytes();
     RUNTIME_EX_ASSERT(usedBytes % bytesPerVertex == 0,
                       "QueryLayoutBuffer " + std::to_string(_getGpuId()) + ": Buffer layout bytes-per-vertex " +
@@ -151,6 +171,14 @@ class QueryLayoutBuffer : public QueryBuffer {
     _setUsedBytes(numItems * numBytesPerItem);
   }
 
+  QueryDataLayoutShPtr getQueryDataLayout() const { return _queryDataLayoutPtr; }
+
+  void setQueryDataLayout(const QueryDataLayoutShPtr& queryDataLayoutPtr) {
+    CHECK(queryDataLayoutPtr && getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER);
+    _queryDataLayoutPtr = queryDataLayoutPtr;
+    setBufferLayout(queryDataLayoutPtr->convertToBufferLayout());
+  }
+
  protected:
   std::shared_ptr<GLBufferType> _getGLResource() const { return std::dynamic_pointer_cast<GLBufferType>(_bufRsrc); }
 
@@ -159,6 +187,8 @@ class QueryLayoutBuffer : public QueryBuffer {
                                  Rendering::GL::Resources::BufferAccessType accessType,
                                  Rendering::GL::Resources::BufferAccessFreq accessFreq,
                                  const std::shared_ptr<GLLayoutType>& layoutPtr) = 0;
+
+  QueryDataLayoutShPtr _queryDataLayoutPtr;
 };
 
 class QueryVertexBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::GLVertexBuffer> {
@@ -184,6 +214,11 @@ class QueryVertexBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::G
   ~QueryVertexBuffer();
 
   ::Rendering::GL::Resources::GLVertexBufferShPtr getGLVertexBufferPtr() const { return _getGLResource(); }
+
+  int numVertices() const {
+    auto rsrc = getGLVertexBufferPtr();
+    return (rsrc ? rsrc->numVertices() : 0);
+  }
 
  private:
   void _initBuffer(Rendering::GL::GLRenderer* renderer,
@@ -250,6 +285,11 @@ class QueryIndexBuffer : public QueryBuffer {
 
   ::Rendering::GL::Resources::GLIndexBufferShPtr getGLIndexBufferPtr() const {
     return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLIndexBuffer>(_bufRsrc);
+  }
+
+  size_t numItems() const {
+    auto rsrc = getGLIndexBufferPtr();
+    return (rsrc ? rsrc->numItems() : 0);
   }
 
  private:
@@ -349,6 +389,11 @@ class QueryIndirectVbo : public QueryBuffer {
     return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLIndirectDrawVertexBuffer>(_bufRsrc);
   }
 
+  size_t numItems() const {
+    auto rsrc = getGLIndirectVboPtr();
+    return (rsrc ? rsrc->numItems() : 0);
+  }
+
  private:
   void _initBuffer(::Rendering::GL::GLRenderer* renderer,
                    ::Rendering::GL::Resources::BufferAccessType accessType,
@@ -391,6 +436,11 @@ class QueryIndirectIbo : public QueryBuffer {
 
   ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr getGLIndirectIboPtr() const {
     return std::dynamic_pointer_cast<::Rendering::GL::Resources::GLIndirectDrawIndexBuffer>(_bufRsrc);
+  }
+
+  size_t numItems() const {
+    auto rsrc = getGLIndirectIboPtr();
+    return (rsrc ? rsrc->numItems() : 0);
   }
 
  private:

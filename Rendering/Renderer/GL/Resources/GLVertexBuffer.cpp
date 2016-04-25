@@ -68,7 +68,7 @@ GLBufferAttrType GLVertexBuffer::getAttributeType(const std::string& attrName) c
 }
 
 void GLVertexBuffer::setBufferLayout(const GLBufferLayoutShPtr& layoutPtr, size_t numItems) {
-  size_t bytesPerVertex = layoutPtr->getNumBytesPerVertex();
+  size_t bytesPerVertex = layoutPtr->getNumBytesPerItem();
 
   if (bytesPerVertex * numItems > numBytes()) {
     LOG(WARNING) << "Total number of bytes in vertex buffer after setting a new buffer layout exceeds the current size "
@@ -96,7 +96,7 @@ int GLVertexBuffer::numVertices() const {
                     "The vertex buffer has not been properly initialized with a layout. Cannot retrieve the number of "
                     "vertices in the buffer.");
 
-  return numBytes() / _layoutPtr->getNumBytesPerVertex();
+  return numBytes() / _layoutPtr->getNumBytesPerItem();
 }
 
 const GLBufferAttrInfo& GLVertexBuffer::operator[](size_t i) const {

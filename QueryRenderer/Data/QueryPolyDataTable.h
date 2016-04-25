@@ -8,14 +8,11 @@ namespace QueryRenderer {
 
 class BaseQueryPolyDataTable : public BaseQueryDataTable {
  public:
-  BaseQueryPolyDataTable(const QueryRendererContextShPtr& ctx,
-                         const std::string& name,
-                         const rapidjson::Value& obj,
-                         const rapidjson::Pointer& objPath,
-                         QueryDataTableType type)
-      : BaseQueryDataTable(ctx, name, obj, objPath, type, QueryDataTableBaseType::POLY) {
-    _initGpuResources(ctx.get());
-  }
+  static std::string xcoordName;
+  static std::string ycoordName;
+
+  BaseQueryPolyDataTable(const RootCacheShPtr& qrmGpuCache, QueryDataTableType type)
+      : BaseQueryDataTable(type, QueryDataTableBaseType::POLY) {}
   virtual ~BaseQueryPolyDataTable() {}
 
   ::Rendering::GL::Resources::GLIndexBufferShPtr getGLIndexBuffer(const GpuId& gpuId) const;
@@ -23,7 +20,12 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr getGLIndirectDrawVertexBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr getGLIndirectDrawIndexBuffer(const GpuId& gpuId) const;
 
+  bool usesGpu(const GpuId& gpuId) const { return (_perGpuData.find(gpuId) != _perGpuData.end()); }
   std::vector<GpuId> getUsedGpuIds() const final;
+
+  PolyTableDataInfo getPolyBufferData(const GpuId& gpuId) const;
+
+  BaseQueryPolyDataTable& operator=(const BaseQueryPolyDataTable& rhs);
 
  protected:
   struct PerGpuData : BasePerGpuData {
@@ -61,66 +63,78 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
 
   PerGpuDataMap _perGpuData;
 
+  std::string _printInfo(bool useClassSuffix = false) const;
+
  private:
-  void _initGpuResources(const QueryRendererContext* ctx) final;
-
-  void _initBuffers();
-
   friend class QueryRendererContext;
 };
 
-class SqlQueryPolyDataTable : public BaseQueryPolyDataTable {
+class SqlQueryPolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDataTableSQL {
  public:
-  explicit SqlQueryPolyDataTable(const std::string& tableName);
+  SqlQueryPolyDataTable(const RootCacheShPtr& qrmGpuCache,
+                        const std::string& tableName,
+                        const std::string& sqlQueryStr = "")
+      : BaseQueryPolyDataTable(qrmGpuCache, QueryDataTableType::SQLQUERY),
+        BaseQueryDataTableSQL(tableName, sqlQueryStr),
+        _qrmGpuCache(qrmGpuCache) {}
+  virtual ~SqlQueryPolyDataTable() {}
 
-  std::string getTableName() const { return _tableName; }
+  bool hasAttribute(const std::string& attrName) final;
+  QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
+  std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) final;
+  QueryDataType getAttributeType(const std::string& attrName) final;
+
+  int numRows(const GpuId& gpuId) final;
+
+ protected:
+  std::string _printInfo(bool useClassSuffix = false) const {
+    std::string rtn = BaseQueryPolyDataTable::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
+
+    if (useClassSuffix) {
+      rtn = "SqlQueryPolyDataTable(" + rtn + ")";
+    }
+
+    return rtn;
+  }
+
+  virtual void _initGpuResources(const RootCacheShPtr& qrmGpuCache);
 
  private:
-  std::string _tableName;
+  std::weak_ptr<RootCache> _qrmGpuCache;
+
+  void allocBuffers(const GpuId& gpuId, const PolyTableByteData& initData);
+  void reset();
+  PolyCudaHandles getCudaHandlesPreQuery(const GpuId& gpuId);
+  void updatePostQuery(const GpuId& gpuId,
+                       const PolyTableByteData& usedByteInfo,
+                       const QueryDataLayoutShPtr& vertLayoutPtr,
+                       const QueryDataLayoutShPtr& uniformLayoutPtr);
+
+  friend class QueryRenderManager;
 };
 
-// class SqlQueryPolyDataTable : public BaseQueryPolyDataTable {
-//  public:
-//   SqlQueryPolyDataTable(const QueryRendererContextShPtr& ctx,
-//                     const std::string& name,
-//                     const rapidjson::Value& obj,
-//                     const rapidjson::Pointer& objPath,
-//                     const std::map<GpuId, QueryVertexBufferShPtr>& vboMap,
-//                     const std::string& sqlQueryStr = "")
-//       : BaseQueryPolyDataTable(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vboMap),
-//         _sqlQueryStr(sqlQueryStr),
-//         _tableName() {
-//     _initFromJSONObj(obj, objPath);
-//   }
-//   ~SqlQueryPolyDataTable() {}
+class SqlQueryPolyDataTableJSON : public SqlQueryPolyDataTable, public BaseQueryDataTableJSON {
+ public:
+  SqlQueryPolyDataTableJSON(const QueryRendererContextShPtr& ctx,
+                            const std::string& name,
+                            const rapidjson::Value& obj,
+                            const rapidjson::Pointer& objPath,
+                            const std::string& tableName = "",
+                            const std::string& sqlQueryStr = "");
+  ~SqlQueryPolyDataTableJSON() {}
 
-//   bool hasColumn(const std::string& columnName);
+  operator std::string() const final;
 
-//   QueryVertexBufferShPtr getColumnDataVBO(const GpuId& gpuId, const std::string& columnName);
-
-//   std::map<GpuId, QueryVertexBufferShPtr> getColumnDataVBOs(const std::string& columnName) final;
-
-//   QueryDataType getColumnType(const std::string& columnName);
-//   int numRows(const GpuId& gpuId);
-
-//   std::string getTableName() { return _tableName; }
-
-//   operator std::string() const final;
-
-//  private:
-//   std::string _sqlQueryStr;
-//   std::string _tableName;
-
-//   void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
-//   void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
-// };
+ private:
+  void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
+  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
+  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+};
 
 // TODO(croot): create a base class for basic data tables (i.e. DataTable/PolyDataTable)
-class PolyDataTable : public BaseQueryPolyDataTable {
+class PolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDataTableJSON {
  public:
   static std::string defaultPolyDataColumnName;
-  static std::string xcoordName;
-  static std::string ycoordName;
 
   PolyDataTable(const QueryRendererContextShPtr& ctx,
                 const std::string& name,
@@ -193,6 +207,8 @@ class PolyDataTable : public BaseQueryPolyDataTable {
   std::vector<unsigned int> _createIBOData();
   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> _createLineDrawData();
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> _createPolyDrawData();
+
+  void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
 };
 
 }  // namespace QueryRenderer

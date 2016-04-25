@@ -515,19 +515,10 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
                                  const int session_id,
                                  const int render_widget_id) {
   CHECK(render_allocator_map);
-  // the following function unmaps the gl buffers used by cuda
-  render_allocator_map->prepForRendering();
-
-  set_render_widget(render_manager_, session_id, render_widget_id);
-
-  std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
-  json_doc->Parse(config_json.c_str());
-  CHECK(!json_doc->HasParseError());
 
   std::vector<std::string> attr_names{"key"};
   std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types{::QueryRenderer::QueryDataLayout::AttrType::INT64};
   std::unordered_map<std::string, std::string> alias_to_name;
-
   for (const auto te : targets) {
     const auto alias = te->get_resname();
     attr_names.push_back(alias);
@@ -551,7 +542,17 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
                                            0,
                                            EMPTY_KEY_64,
                                            ::QueryRenderer::QueryDataLayout::LayoutType::INTERLEAVED));
-  render_manager_->configureRender(json_doc, query_data_layout, this);
+
+  // the following function unmaps the gl buffers used by cuda
+  render_allocator_map->prepForRendering(query_data_layout);
+
+  set_render_widget(render_manager_, session_id, render_widget_id);
+
+  std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
+  json_doc->Parse(config_json.c_str());
+  CHECK(!json_doc->HasParseError());
+
+  render_manager_->configureRender(json_doc, this);
 
   const auto png_data = render_manager_->renderToPng(3);
 

@@ -255,7 +255,7 @@ void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,
 }
 
 void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) {
-  auto qrmPerGpuData = ctx->getGpuDataMap();
+  auto qrmPerGpuData = ctx->getRootGpuCache()->perGpuData;
 
   for (auto& itr : *qrmPerGpuData) {
     if (_perGpuData.find(itr->gpuId) == _perGpuData.end()) {

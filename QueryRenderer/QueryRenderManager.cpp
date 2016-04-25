@@ -65,7 +65,7 @@ QueryRenderManager::QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
                                        size_t renderCacheLimit)
     : _rendererMap(),
       _activeItr(_rendererMap.end()),
-      _perGpuData(new PerGpuDataMap()),
+      _gpuCache(new RootCache()),
       _compositorPtr(nullptr),
       _renderCacheLimit(renderCacheLimit) {
   // NOTE: this constructor needs to be used on the main thread as that is a requirement
@@ -82,7 +82,7 @@ QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
                                        size_t renderCacheLimit)
     : _rendererMap(),
       _activeItr(_rendererMap.end()),
-      _perGpuData(),
+      _gpuCache(new RootCache()),
       _compositorPtr(nullptr),
       _renderCacheLimit(renderCacheLimit) {
   _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize);
@@ -148,7 +148,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
-    auto itr = _perGpuData->emplace(new RootPerGpuData(i));
+    auto itr = _gpuCache->perGpuData->emplace(new RootPerGpuData(i));
 
     gpuDataPtr = *itr.first;
     gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);
@@ -193,8 +193,12 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 }
 
 void QueryRenderManager::_resetQueryResultBuffers() noexcept {
-  for (auto& itr : *_perGpuData) {
+  for (auto& itr : *(_gpuCache->perGpuData)) {
     itr->queryResultBufferPtr->reset();
+  }
+
+  for (auto& cacheItr : _gpuCache->polyCacheMap) {
+    cacheItr.second.reset();
   }
 }
 
@@ -280,7 +284,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
     lastRenderTimeList.erase(itr);
   }
 
-  _rendererMap.emplace(userId, widgetId, new QueryRenderer(userId, widgetId, _perGpuData, doHitTest, doDepthTest));
+  _rendererMap.emplace(userId, widgetId, new QueryRenderer(userId, widgetId, _gpuCache, doHitTest, doDepthTest));
 }
 
 void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
@@ -370,7 +374,7 @@ void QueryRenderManager::_updateActiveLastRenderTime() {
 
 CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
 #ifdef HAVE_CUDA
-  PerGpuDataMap_in_order& inOrder = _perGpuData->get<inorder>();
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
                     "Cannot get cuda handle for gpu index " + std::to_string(gpuIdx) + ". There are only " +
                         std::to_string(inOrder.size()) + " gpus available.");
@@ -387,9 +391,11 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
 #endif  // HAVE_CUDA
 }
 
-void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes) {
+void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx,
+                                                size_t numUsedBytes,
+                                                const QueryDataLayoutShPtr& vertLayoutPtr) {
 #ifdef HAVE_CUDA
-  PerGpuDataMap_in_order& inOrder = _perGpuData->get<inorder>();
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
                     "Cannot set cuda handle results for gpu index " + std::to_string(gpuIdx) + ". There are only " +
                         std::to_string(inOrder.size()) + " gpus available.");
@@ -399,13 +405,131 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedByt
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
+
+  if (vertLayoutPtr) {
+    inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(vertLayoutPtr);
+  }
+#else
+  CHECK(false) << "Cuda is not activated. Cannot set cuda handle bytes.";
+#endif  // HAVE_CUDA
+}
+
+int QueryRenderManager::getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "QueryRenderManager::createPolyTableCache(): Invalid gpu index " + std::to_string(gpuIdx) +
+                        ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
+
+  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
+
+  return ::Rendering::GL::Resources::GLShaderBlockLayout::getNumAlignmentBytes();
+}
+
+bool QueryRenderManager::hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const {
+  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
+  if (itr == _gpuCache->polyCacheMap.end()) {
+    return false;
+  }
+
+  return itr->second.usesGpu(gpuIdx);
+}
+
+PolyTableDataInfo QueryRenderManager::getPolyTableCacheDataInfo(const std::string& polyTableName,
+                                                                const size_t gpuIdx) const {
+  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
+  RUNTIME_EX_ASSERT(itr != _gpuCache->polyCacheMap.end(),
+                    "Cannot get poly table cache info for poly table " + polyTableName + ". The cache does not exist.");
+
+  return itr->second.getPolyBufferData(gpuIdx);
+}
+
+PolyCudaHandles QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
+                                                         const size_t gpuIdx,
+                                                         const PolyTableByteData& initTableData) {
+#ifdef HAVE_CUDA
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
+  if (itr == _gpuCache->polyCacheMap.end()) {
+    auto insertItr = _gpuCache->polyCacheMap.emplace(std::piecewise_construct,
+                                                     std::forward_as_tuple(polyTableName),
+                                                     std::forward_as_tuple(_gpuCache, polyTableName));
+    itr = insertItr.first;
+  }
+
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "QueryRenderManager::createPolyTableCache(): Invalid gpu index " + std::to_string(gpuIdx) +
+                        ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
+
+  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
+  itr->second.allocBuffers(gpuIdx, initTableData);
+
+  return itr->second.getCudaHandlesPreQuery(gpuIdx);
+#else
+  CHECK(false) << "Cuda is not activated. Cannot create a cache and get its cuda handle.";
+#endif  // HAVE_CUDA
+}
+
+PolyCudaHandles QueryRenderManager::getPolyCudaHandlesFromCache(const std::string& polyTableName, const size_t gpuIdx) {
+#ifdef HAVE_CUDA
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
+  RUNTIME_EX_ASSERT(
+      itr != _gpuCache->polyCacheMap.end(),
+      "Cannot get cuda handles for poly table " + polyTableName + ". A cache for the table does not exist.");
+
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "QueryRenderManager::getPolyCudaHandlesFromCache(): Invalid gpu index " + std::to_string(gpuIdx) +
+                        ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
+
+  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
+  return itr->second.getCudaHandlesPreQuery(gpuIdx);
+#else
+  CHECK(false) << "Cuda is not activated. Cannot get cuda handle.";
+#endif  // HAVE_CUDA
+}
+
+// PolyCudaHandles QueryRenderManager::getPolyCudaHandles(const std::string& polyTableName,
+//                                                        const size_t gpuIdx,
+//                                                        const PolyTableByteData& initTableData) {
+//   CHECK(false) << "getPolyCudaHandles() not implemented yet";
+// }
+
+void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTableName,
+                                                    size_t gpuIdx,
+                                                    const PolyTableByteData& usedByteInfo,
+                                                    const QueryDataLayoutShPtr& vertLayoutPtr,
+                                                    const QueryDataLayoutShPtr& uniformLayoutPtr) {
+#ifdef HAVE_CUDA
+
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
+  RUNTIME_EX_ASSERT(
+      itr != _gpuCache->polyCacheMap.end(),
+      "Cannot get cuda handles for poly table " + polyTableName + ". A cache for the table does not exist.");
+
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "QueryRenderManager::setPolyTableReadyForRender(): Invalid gpu index " + std::to_string(gpuIdx) +
+                        ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
+
+  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
+  itr->second.updatePostQuery(gpuIdx, usedByteInfo, vertLayoutPtr, uniformLayoutPtr);
 #else
   CHECK(false) << "Cuda is not activated. Cannot set cuda handle bytes.";
 #endif  // HAVE_CUDA
 }
 
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                                         QueryDataLayoutShPtr dataLayoutPtr,
                                          const Executor* executor) {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
@@ -417,11 +541,11 @@ void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Docume
 
   // need to update the data layout of the query result buffer before building up
   // from the json obj
-  if (dataLayoutPtr) {
-    _activeItr->renderer->updateResultsPostQuery(dataLayoutPtr, executor);
+  if (executor) {
+    _activeItr->renderer->updateResultsPostQuery(executor);
   }
   // else {
-  //   CHECK(_perGpuData->size());
+  //   CHECK(_gpuCache->perGpuData->size());
 
   //   _activeItr->renderer->activateGpus();
   // }
@@ -442,12 +566,12 @@ void QueryRenderManager::setWidthHeight(int width, int height) {
 }
 
 size_t QueryRenderManager::getNumGpus() const {
-  return _perGpuData->size();
+  return _gpuCache->perGpuData->size();
 }
 
 std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
   std::vector<GpuId> rtn;
-  for (auto itr : *_perGpuData) {
+  for (auto itr : *(_gpuCache->perGpuData)) {
     rtn.push_back(itr->gpuId);
   }
 

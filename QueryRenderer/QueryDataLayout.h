@@ -2,6 +2,7 @@
 #define QUERYRENDERER_QUERYDATALAYOUT_H_
 
 #include "Types.h"
+#include <Rendering/Renderer/GL/Resources/Enums.h>
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
 #include <map>
 #include <unordered_map>
@@ -39,6 +40,12 @@ struct QueryDataLayout {
   ~QueryDataLayout() {}
 
   Rendering::GL::Resources::GLBufferLayoutShPtr convertToBufferLayout();
+  Rendering::GL::Resources::GLShaderBlockLayoutShPtr convertToUniformBufferLayout();
+
+ private:
+  static const std::string dummyPrefix;
+
+  ::Rendering::GL::Resources::GLBufferLayoutShPtr _convertedLayout;
 };
 
 }  // namespace QueryRenderer

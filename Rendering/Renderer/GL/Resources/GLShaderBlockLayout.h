@@ -21,8 +21,10 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
   size_t getNumBytesInBlock() const {
     CHECK(!_addingAttrs)
         << "Please call the endAddingAttrs() method before calling methods requiring the all attributes to be added.";
-    return _vertexByteSize;
+    return _itemByteSize;
   }
+
+  size_t getNumBytesPerItem() const final { return getNumAlignmentBytes(); }
 
   void beginAddingAttrs();
   void endAddingAttrs();
@@ -67,8 +69,8 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
         break;
     }
 
-    _attrMap.push_back(BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, typeGL, -1, _vertexByteSize)));
-    _vertexByteSize += offset;
+    _attrMap.push_back(BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, typeGL, -1, _itemByteSize)));
+    _itemByteSize += offset;
   }
 
   // TODO(croot): what about other shader block options (i.e. bindings/locations, matrix storage order, etc.)
@@ -106,7 +108,7 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
     // TODO(croot): does the appropriate context need to be active?
     GLShaderShPtr shader = _shaderPtr.lock();
 
-    CHECK(shader && _vertexByteSize > 0);
+    CHECK(shader && _itemByteSize > 0);
     MAPD_CHECK_GL_ERROR(glGetActiveUniformsiv(shader->getId(), 1, &attrIdx, GL_UNIFORM_OFFSET, &offset));
     CHECK(offset >= 0) << "Attribute " << attrName
                        << " is not a part of a shader storage block. Cannot retrieve its offset";

@@ -211,17 +211,14 @@ void GLUniformBuffer::setBufferLayout(const GLShaderBlockLayoutShPtr& shaderBloc
         "Uniform buffer has " + std::to_string(currNumBytes) +
             " bytes allocated, but the number of bytes required after setting a new shader block layout is either " +
             std::to_string(shaderBlockLayoutPtr->getNumBytesInBlock()) + " or " +
-            std::to_string(shaderBlockLayoutPtr->getNumAlignmentBytes()) +
-            " bytes for 1 item. You must properly reallocate the unifor buffer using the bufferData() method "
-            "beforehand.");
+            std::to_string(shaderBlockLayoutPtr->getNumAlignmentBytes()) + " bytes for 1 item.");
   } else {
     RUNTIME_EX_ASSERT(
         currNumBytes == numItems * shaderBlockLayoutPtr->getNumAlignmentBytes(),
         "Uniform buffer has " + std::to_string(currNumBytes) +
             " bytes allocated, but the number of bytes required after setting a new shader block layout with " +
             std::to_string(numItems) + " items is " +
-            std::to_string(numItems * shaderBlockLayoutPtr->getNumAlignmentBytes()) +
-            " bytes. You must properly reallocate the unifor buffer using the bufferData() method beforehand.");
+            std::to_string(numItems * shaderBlockLayoutPtr->getNumAlignmentBytes()) + " bytes.");
   }
 
   _shaderBlockLayoutPtr = shaderBlockLayoutPtr;

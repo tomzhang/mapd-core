@@ -1,4 +1,5 @@
 #include "../../PngData.h"
+#include "../../QueryRenderManager.h"
 #include "../../QueryRendererContext.h"
 #include <Rendering/Renderer/GL/glx/GlxGLRenderer.h>
 #include "../QueryFramebuffer.h"
@@ -231,7 +232,7 @@ void GlxQueryRenderCompositorImpl::deleteFboRenderbuffer(::Rendering::GL::Resour
 void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
   QueryRendererContext* ctx = queryRenderer->getContext();
 
-  auto qrmPerGpuDataPtr = ctx->getGpuDataMap();
+  auto qrmPerGpuDataPtr = ctx->getRootGpuCache()->perGpuData;
 
   GLXContext myGlxCtx = _renderer->getGLXContext();
   X11DisplayShPtr myDisplayPtr = _renderer->getXDisplayPtr();

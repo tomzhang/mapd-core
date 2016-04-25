@@ -4,9 +4,15 @@
 #include "Types.h"
 #include "Rendering/Types.h"
 #include "Interop/Types.h"
+#include "Interop/QueryBuffer.h"
 
 #include <Rendering/Types.h>
 #include <Rendering/Renderer/GL/Types.h>
+
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/random_access_index.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/tag.hpp>
 
 namespace QueryRenderer {
 
@@ -45,6 +51,21 @@ struct RootPerGpuData {
 
   void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo);
 };
+
+struct inorder {};
+struct RootPerGpuDataId {
+  typedef GpuId result_type;
+  result_type operator()(const RootPerGpuDataShPtr& perGpuData) const { return perGpuData->gpuId; }
+};
+
+typedef ::boost::multi_index_container<RootPerGpuDataShPtr,
+                                       ::boost::multi_index::indexed_by<
+                                           // hashed on gpuId
+                                           ::boost::multi_index::ordered_unique<RootPerGpuDataId>,
+                                           ::boost::multi_index::random_access<::boost::multi_index::tag<inorder>>>>
+    RootPerGpuDataMap;
+
+typedef RootPerGpuDataMap::index<inorder>::type RootPerGpuDataMap_in_order;
 
 struct BasePerGpuData {
   RootPerGpuDataWkPtr rootPerGpuData;

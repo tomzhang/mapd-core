@@ -30,14 +30,7 @@ in inTfillColor fillColor;
 
 #define useUniformBuffer <useUniformBuffer>
 #if useUniformBuffer == 1
-layout(std140) uniform PolyData {
-#if !usePerVertColor && !useUfillColor
-  inTfillColor fillColor;
-#endif
-#if !useUid
-  uint id;
-#endif
-} polyData;
+<polyData>
 #endif
 
 

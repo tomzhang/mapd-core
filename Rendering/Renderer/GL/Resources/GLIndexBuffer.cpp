@@ -53,12 +53,7 @@ GLIndexBuffer::GLIndexBuffer(const RendererWkPtr& rendererPtr,
                              BufferAccessType accessType,
                              BufferAccessFreq accessFreq)
     : GLIndexBuffer(rendererPtr, indexType, accessType, accessFreq) {
-  RUNTIME_EX_ASSERT(numBytes % getIndexTypeSize(indexType) == 0,
-                    "Cannot allocate an index buffer of type " + to_string(indexType) + " with " +
-                        std::to_string(numBytes) + " bytes. The size of the buffer must be a multiple of " +
-                        std::to_string(getIndexTypeSize(indexType)));
-
-  GLBaseBuffer::bufferData(nullptr, numBytes);
+  bufferData(nullptr, numBytes);
 }
 
 GLIndexBuffer::GLIndexBuffer(const RendererWkPtr& rendererPtr,
@@ -95,6 +90,18 @@ void GLIndexBuffer::_makeEmpty() {
 
 size_t GLIndexBuffer::getIndexTypeByteSize() const {
   return getIndexTypeSize(_indexType);
+}
+
+void GLIndexBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarget) {
+  auto typesz = getIndexTypeByteSize();
+  RUNTIME_EX_ASSERT(numBytes % typesz == 0,
+                    "Cannot allocate an index buffer of type " + to_string(_indexType) + " with " +
+                        std::to_string(numBytes) + " bytes. The size of the buffer must be a multiple of " +
+                        std::to_string(typesz));
+
+  GLBaseBuffer::bufferData(data, numBytes, altTarget);
+
+  _numItems = numBytes / typesz;
 }
 
 void GLIndexBuffer::bufferData(const std::vector<unsigned char>& indices) {

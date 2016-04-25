@@ -6,6 +6,8 @@
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 
+#include <iostream>
+
 namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
@@ -225,6 +227,32 @@ void PolyMark::_updateShader() {
   }
   ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, useUniformId);
 
+  QueryUniformBufferShPtr ubo;
+  if (useUniformBuffer) {
+    // double check that shader block layout that the uniform buffer
+    // uses matches that in the shader
+    CHECK(_dataPtr && _dataPtr->getBaseType() == QueryDataTableBaseType::POLY);
+    ubo = (_perGpuData.size() ? _uboProps[0]->getUboPtr(_perGpuData.begin()->first) : nullptr);
+    CHECK(ubo);
+
+    auto shaderBlockLayout = ubo->getGLUniformBufferPtr()->getBufferLayout();
+
+    std::string shaderBlockCode = shaderBlockLayout->buildShaderBlockCode(
+        "PolyData", "polyData", ::Rendering::GL::Resources::StorageQualifier::UNIFORM);
+
+    std::string propName;
+    std::string colName;
+    for (auto& prop : _uboProps) {
+      propName = prop->getName();
+      colName = prop->getDataColumnName();
+      CHECK(colName.length() > 0) << "prop " << propName << " isn't initialized with buffer data";
+
+      boost::replace_first(shaderBlockCode, colName, propName);
+    }
+
+    boost::replace_first(vertSrc, "<polyData>", shaderBlockCode);
+  }
+
   // now insert any additional functionality
   std::unordered_map<std::string, BaseScale*>::iterator itr;
 
@@ -290,15 +318,6 @@ void PolyMark::_updateShader() {
 
   // TODO(croot): Make thread safe?
 
-  QueryUniformBufferShPtr ubo;
-  if (useUniformBuffer) {
-    // double check that shader block layout that the uniform buffer
-    // uses matches that in the shader
-    CHECK(_dataPtr && _dataPtr->getBaseType() == QueryDataTableBaseType::POLY);
-    ubo = (_perGpuData.size() ? _uboProps[0]->getUboPtr(_perGpuData.begin()->first) : nullptr);
-    CHECK(ubo);
-  }
-
   GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
   GLRenderer* currRenderer = nullptr;
   RootPerGpuDataShPtr qrmGpuData;
@@ -310,12 +329,12 @@ void PolyMark::_updateShader() {
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
     itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
 
-    if (useUniformBuffer) {
-      // NOTE: only need to check the shader block layout of only the
-      // first ubo as it will be the same for all other gpu ubos
-      CHECK(*ubo->getGLUniformBufferPtr()->getBufferLayout().get() ==
-            *itr.second.shaderPtr->getBlockLayout("PolyData"));
-    }
+    // if (useUniformBuffer) {
+    //   // NOTE: only need to check the shader block layout of only the
+    //   // first ubo as it will be the same for all other gpu ubos
+    //   CHECK(*ubo->getGLUniformBufferPtr()->getBufferLayout().get() ==
+    //         *itr.second.shaderPtr->getBlockLayout("PolyData"));
+    // }
 
     // TODO(croot): should I make make the current thread
     // have an inactive renderer?

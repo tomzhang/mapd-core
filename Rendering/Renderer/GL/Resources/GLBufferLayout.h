@@ -123,7 +123,7 @@ class GLBaseBufferLayout {
  public:
   virtual ~GLBaseBufferLayout() {}
 
-  size_t getNumBytesPerVertex() const { return _vertexByteSize; }
+  virtual size_t getNumBytesPerItem() const { return _itemByteSize; }
 
   bool hasAttribute(const std::string& attrName) const;
 
@@ -141,7 +141,7 @@ class GLBaseBufferLayout {
   const GLBufferAttrInfo& operator[](size_t i) const;
 
  protected:
-  GLBaseBufferLayout(GLBufferLayoutType layoutType) : _layoutType(layoutType), _attrMap(), _vertexByteSize(0) {}
+  GLBaseBufferLayout(GLBufferLayoutType layoutType) : _layoutType(layoutType), _attrMap(), _itemByteSize(0) {}
 
   typedef std::unique_ptr<GLBufferAttrInfo> BufferAttrInfoPtr;
   typedef boost::multi_index_container<
@@ -158,7 +158,7 @@ class GLBaseBufferLayout {
 
   GLBufferLayoutType _layoutType;
   BufferAttrMap _attrMap;
-  size_t _vertexByteSize;
+  size_t _itemByteSize;
 
  private:
   virtual void bindToShader(GLShader* activeShader,
@@ -202,9 +202,9 @@ class GLInterleavedBufferLayout : public GLBaseBufferLayout {
     int enumVal = static_cast<int>(type);
 
     _attrMap.push_back(BufferAttrInfoPtr(
-        new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, _vertexByteSize)));
+        new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, _itemByteSize)));
 
-    _vertexByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+    _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
   }
 
  private:
@@ -235,7 +235,7 @@ class GLSequentialBufferLayout : public GLBaseBufferLayout {
     _attrMap.push_back(BufferAttrInfoPtr(new GLBufferAttrInfo(
         attrName, type, detail::attrTypeInfo[enumVal].get(), detail::attrTypeInfo[enumVal]->numBytes(), -1)));
 
-    _vertexByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+    _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
   }
 
  private:

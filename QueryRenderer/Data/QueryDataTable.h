@@ -4,7 +4,7 @@
 #include "Types.h"
 #include "BaseQueryDataTable.h"
 #include "../PerGpuData.h"
-#include "../QueryRendererContext.h"
+#include "../Utils/RapidJSONUtils.h"
 #include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>
@@ -45,24 +45,20 @@ QueryDataType getDataTypeForType<std::string>();
 
 class BaseQueryDataTableVBO : public BaseQueryDataTable {
  public:
-  BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
-                        const std::string& name,
-                        const rapidjson::Value& obj,
-                        const rapidjson::Pointer& objPath,
-                        QueryDataTableType type)
-      : BaseQueryDataTable(ctx, name, obj, objPath, type, QueryDataTableBaseType::BASIC_VBO) {
-    _initGpuResources(ctx.get());
+  BaseQueryDataTableVBO(const RootCacheShPtr& qrmGpuCache, QueryDataTableType type)
+      : BaseQueryDataTable(type, QueryDataTableBaseType::BASIC_VBO) {
+    _initGpuResources(qrmGpuCache);
   }
 
-  explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
-                                 const std::string& name,
-                                 const rapidjson::Value& obj,
-                                 const rapidjson::Pointer& objPath,
-                                 QueryDataTableType type,
-                                 const std::map<GpuId, QueryVertexBufferShPtr>& vboMap)
-      : BaseQueryDataTableVBO(ctx, name, obj, objPath, type) {
-    _initVBOs(vboMap);
-  }
+  // explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
+  //                                const std::string& name,
+  //                                const rapidjson::Value& obj,
+  //                                const rapidjson::Pointer& objPath,
+  //                                QueryDataTableType type,
+  //                                const std::map<GpuId, QueryVertexBufferShPtr>& vboMap)
+  //     : BaseQueryDataTableVBO(ctx, name, obj, objPath, type) {
+  //   _initVBOs(vboMap);
+  // }
   virtual ~BaseQueryDataTableVBO() {}
 
   std::vector<GpuId> getUsedGpuIds() const final;
@@ -87,29 +83,24 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
 
   PerGpuDataMap _perGpuData;
 
- private:
-  void _initGpuResources(const QueryRendererContext* ctx) final;
+  std::string _printInfo() const;
 
-  void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap);
+ private:
+  void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
+
+  // void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap);
 
   friend class QueryRendererContext;
 };
 
-class SqlQueryDataTable : public BaseQueryDataTableVBO {
+class SqlQueryDataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableSQL {
  public:
-  SqlQueryDataTable(const QueryRendererContextShPtr& ctx,
-                    const std::string& name,
-                    const rapidjson::Value& obj,
-                    const rapidjson::Pointer& objPath,
-                    // const std::map<GpuId, QueryVertexBufferShPtr>& vboMap,
+  SqlQueryDataTable(const RootCacheShPtr& qrmGpuCache,
+                    const std::string& tableName,
                     const std::string& sqlQueryStr = "")
-      // : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY, vboMap),
-      : BaseQueryDataTableVBO(ctx, name, obj, objPath, QueryDataTableType::SQLQUERY),
-        _sqlQueryStr(sqlQueryStr),
-        _tableName() {
-    _initFromJSONObj(obj, objPath);
-  }
-  ~SqlQueryDataTable() {}
+      : BaseQueryDataTableVBO(qrmGpuCache, QueryDataTableType::SQLQUERY),
+        BaseQueryDataTableSQL(tableName, sqlQueryStr) {}
+  virtual ~SqlQueryDataTable() {}
 
   bool hasAttribute(const std::string& attrName) final;
   QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
@@ -118,14 +109,33 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO {
 
   int numRows(const GpuId& gpuId) final;
 
-  std::string getTableName() { return _tableName; }
+  QueryDataLayoutShPtr getQueryDataLayout() const;
+
+ protected:
+  std::string _printInfo(bool useClassSuffix = false) const {
+    std::string rtn = BaseQueryDataTableVBO::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
+
+    if (useClassSuffix) {
+      rtn = "SqlQueryDataTable(" + rtn + ")";
+    }
+
+    return rtn;
+  }
+};
+
+class SqlQueryDataTableJSON : public SqlQueryDataTable, public BaseQueryDataTableJSON {
+ public:
+  SqlQueryDataTableJSON(const QueryRendererContextShPtr& ctx,
+                        const std::string& name,
+                        const rapidjson::Value& obj,
+                        const rapidjson::Pointer& objPath,
+                        const std::string& tableName = "",
+                        const std::string& sqlQueryStr = "");
+  ~SqlQueryDataTableJSON() {}
 
   operator std::string() const final;
 
  private:
-  std::string _sqlQueryStr;
-  std::string _tableName;
-
   void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
   void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
 };
@@ -243,7 +253,7 @@ void TDataColumn<::Rendering::Objects::ColorRGBA>::push_back(const std::string& 
 template <>
 void TDataColumn<::Rendering::Objects::ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
 
-class DataTable : public BaseQueryDataTableVBO {
+class DataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableJSON {
  public:
   enum class VboType { SEQUENTIAL = 0, INTERLEAVED, INDIVIDUAL };
   static const std::string defaultIdColumnName;

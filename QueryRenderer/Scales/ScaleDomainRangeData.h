@@ -5,7 +5,7 @@
 #include "../Types.h"
 #include "../Data/Types.h"
 #include "../Data/QueryDataTable.h"
-// #include "Scale.h"
+#include "../QueryRendererContext.h"
 #include <Rendering/Renderer/GL/TypeGL.h>
 
 #include <vector>

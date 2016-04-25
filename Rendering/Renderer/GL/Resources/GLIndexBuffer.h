@@ -23,6 +23,7 @@ class GLIndexBuffer : public GLBaseBuffer {
   size_t numItems() const { return _numItems; }
   size_t getIndexTypeByteSize() const;
 
+  void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0) final;
   void bufferData(const std::vector<unsigned char>& indices);
   void bufferData(const std::vector<unsigned short>& indices);
   void bufferData(const std::vector<unsigned int>& indices);

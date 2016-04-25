@@ -33,6 +33,8 @@ class GLBaseBuffer : public GLResource {
             _accessType == BufferAccessType::COPY);
   }
 
+  virtual void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0);
+
  protected:
   explicit GLBaseBuffer(const RendererWkPtr& rendererPtr,
                         GLResourceType rsrcType,
@@ -46,7 +48,6 @@ class GLBaseBuffer : public GLResource {
   virtual void _cleanupResource() override;
   virtual void _makeEmpty() override;
   static GLenum _getBufferBinding(GLenum target);
-  void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0);
 
   GLBufferType _type;
   GLuint _bufferId;

@@ -10,7 +10,7 @@ using ::Rendering::GL::Resources::VboAttrToShaderAttrMap;
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
     : _type(geomType),
       key(this, "key", ctx, false, false),
-      _invalidKey(ctx->getInvalidKey()),
+      _invalidKey(std::numeric_limits<int64_t>::max()),
       _dataPtr(nullptr),
       _perGpuData(),
       _ctx(ctx),
@@ -138,7 +138,7 @@ std::set<GpuId> BaseMark::_initUnusedGpus() const {
 }
 
 void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializing) {
-  auto qrmPerGpuDataPtr = ctx->getGpuDataMap();
+  auto qrmPerGpuDataPtr = ctx->getRootGpuCache()->perGpuData;
   CHECK(qrmPerGpuDataPtr);
 
   ::Rendering::GL::GLRenderer* renderer;

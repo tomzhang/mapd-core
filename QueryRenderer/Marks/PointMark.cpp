@@ -363,7 +363,13 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
     if (activeShader->hasUniformAttribute(invalidKeyAttrName)) {
       GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
       if (type == GL_INT) {
-        activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(_invalidKey));
+        auto vboPtr = key.getVboPtr();
+        CHECK(vboPtr);
+        auto queryResultBuffer = dynamic_cast<QueryResultVertexBuffer*>(vboPtr.get());
+        if (queryResultBuffer) {
+          auto queryDataLayoutPtr = queryResultBuffer->getQueryDataLayout();
+          activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(queryDataLayoutPtr->invalidKey));
+        }
       }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
          // TODO(croot) - do we need to do the glew extension check above or
          // would there be an error at shader compilation if the extension

@@ -41,7 +41,7 @@ RenderAllocatorMap::~RenderAllocatorMap() {
 #ifdef HAVE_RENDERING
   for (size_t i = 0; i < render_allocator_map_.size(); ++i) {
     cuda_mgr_->setContext(i);
-    render_manager_->setCudaHandleUsedBytes(i, 0);
+    render_manager_->setCudaHandleUsedBytes(i, 0, nullptr);
   }
 #endif
 }
@@ -58,11 +58,11 @@ RenderAllocator* RenderAllocatorMap::operator[](size_t device_id) {
   return &render_allocator_map_[device_id];
 }
 
-void RenderAllocatorMap::prepForRendering() {
+void RenderAllocatorMap::prepForRendering(const std::shared_ptr<::QueryRenderer::QueryDataLayout>& query_data_layout) {
 #ifdef HAVE_RENDERING
   for (size_t i = 0; i < render_allocator_map_.size(); ++i) {
     cuda_mgr_->setContext(i);
-    render_manager_->setCudaHandleUsedBytes(i, render_allocator_map_[i].getAllocatedSize());
+    render_manager_->setCudaHandleUsedBytes(i, render_allocator_map_[i].getAllocatedSize(), query_data_layout);
   }
 
   render_allocator_map_.clear();

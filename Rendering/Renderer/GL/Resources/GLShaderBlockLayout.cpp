@@ -12,7 +12,7 @@ int GLShaderBlockLayout::maxUniformBlockSize = -1;
 // a specific shader block layout.
 GLShaderBlockLayout::GLShaderBlockLayout(ShaderBlockLayoutType layoutType)
     : GLBaseBufferLayout(GLBufferLayoutType::INTERLEAVED), _layoutType(layoutType), _addingAttrs(false) {
-  _vertexByteSize = 0;
+  _itemByteSize = 0;
 }
 
 GLShaderBlockLayout::GLShaderBlockLayout(ShaderBlockLayoutType layoutType,
@@ -33,7 +33,7 @@ GLShaderBlockLayout::GLShaderBlockLayout(ShaderBlockLayoutType layoutType,
                         std::to_string(maxUniformBlockSize) + " bytes.");
 
   if (layoutType == ShaderBlockLayoutType::PACKED || layoutType == ShaderBlockLayoutType::SHARED) {
-    _vertexByteSize = blockByteSize;
+    _itemByteSize = blockByteSize;
   }
 }
 
@@ -73,8 +73,8 @@ void GLShaderBlockLayout::endAddingAttrs() {
   if (_layoutType == ShaderBlockLayoutType::STD140 || _layoutType == ShaderBlockLayoutType::STD430) {
     static const size_t byteAlignment = 4 * sizeof(float);
     size_t offset;
-    if ((offset = _vertexByteSize % byteAlignment) != 0) {
-      _vertexByteSize += byteAlignment - offset;
+    if ((offset = _itemByteSize % byteAlignment) != 0) {
+      _itemByteSize += byteAlignment - offset;
     }
   }
 
@@ -105,19 +105,21 @@ std::string GLShaderBlockLayout::buildShaderBlockCode(const std::string& blockNa
       break;
   }
 
-  rtn += to_string(storageQualifier) + " ";
+  std::string qualifier = to_string(storageQualifier);
+  std::transform(qualifier.begin(), qualifier.end(), qualifier.begin(), ::tolower);
+  rtn += qualifier + " ";
 
-  rtn += blockName + " {\\n";
+  rtn += blockName + " {\n";
 
   for (auto& attrInfoPtr : _attrMap) {
-    rtn += "  " + attrInfoPtr->typeInfo->glslType() + " " + attrInfoPtr->name + ";\\n";
+    rtn += "  " + attrInfoPtr->typeInfo->glslType() + " " + attrInfoPtr->name + ";\n";
   }
 
   rtn += "}";
   if (instanceName.length()) {
-    rtn += " " + instanceName + ";\\n";
+    rtn += " " + instanceName + ";\n";
   } else {
-    rtn += ";\\n";
+    rtn += ";\n";
   }
 
   return rtn;

@@ -1,6 +1,7 @@
 #include "Utils.h"
 #include "QueryDataTable.h"
 #include "QueryPolyDataTable.h"
+#include "../QueryRendererContext.h"
 #include "../Utils/RapidJSONUtils.h"
 
 namespace QueryRenderer {
@@ -82,12 +83,9 @@ QueryDataTableShPtr createDataTable(const rapidjson::Value& obj,
     case QueryDataTableType::SQLQUERY:
       switch (tableTypes.first) {
         case QueryDataTableBaseType::BASIC_VBO:
-          // return QueryDataTableVBOShPtr(
-          //     new SqlQueryDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));
-          return QueryDataTableVBOShPtr(new SqlQueryDataTable(ctx, tableName, obj, objPath));
-        // case QueryDataTableBaseType::POLY:
-        //   return QueryPolyDataTableShPtr(
-        //       new SqlQueryPolyDataTable(ctx, tableName, obj, objPath, ctx->getQueryResultVertexBuffers()));
+          return QueryDataTableVBOShPtr(new SqlQueryDataTableJSON(ctx, tableName, obj, objPath));
+        case QueryDataTableBaseType::POLY:
+          return QueryPolyDataTableShPtr(new SqlQueryPolyDataTableJSON(ctx, tableName, obj, objPath));
 
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj,

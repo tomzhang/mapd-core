@@ -10,7 +10,7 @@ set(QUERY_RENDERER_INCLUDE_DIRS ${Boost_INCLUDE_DIR} ${GL_INCLUDE_DIR} ${PNG_INC
 
 set(QUERY_RENDERER_SOURCES PngData.cpp QueryDataLayout.cpp QueryRenderManager.cpp QueryRenderer.cpp QueryRendererContext.cpp Types.cpp PerGpuData.cpp)
 
-list(APPEND QUERY_RENDERER_SOURCES Data/QueryDataTable.cpp Data/QueryPolyDataTable.cpp Data/Utils.cpp Data/Types.cpp)
+list(APPEND QUERY_RENDERER_SOURCES Data/BaseQueryDataTable.cpp Data/QueryDataTable.cpp Data/QueryPolyDataTable.cpp Data/Utils.cpp Data/Types.cpp)
 
 list(APPEND QUERY_RENDERER_SOURCES Interop/QueryBuffer.cpp)
 

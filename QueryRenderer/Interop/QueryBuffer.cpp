@@ -113,6 +113,18 @@ void QueryBuffer::updatePostQuery(size_t numUsedBytes) {
   _usedBytes = numUsedBytes;
 }
 
+void QueryBuffer::resize(size_t numBytes) {
+  RUNTIME_EX_ASSERT(!_isActive, "Cannot resize a buffer while it is currently mapped for cuda.");
+
+  if (_bufRsrc) {
+    if (numBytes > _bufRsrc->numBytes()) {
+      _bufRsrc->bufferData(nullptr, numBytes);
+    }
+
+    reset();
+  }
+}
+
 #ifdef HAVE_CUDA
 void QueryBuffer::checkCudaErrors(CUresult result, const char* filename, int lineno) {
   if (result == CUDA_ERROR_INVALID_GRAPHICS_CONTEXT) {
