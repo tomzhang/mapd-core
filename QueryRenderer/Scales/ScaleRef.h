@@ -10,7 +10,7 @@
 #include <Rendering/Renderer/GL/TypeGL.h>
 #include <Rendering/Renderer/GL/Resources/GLShader.h>
 
-#include <QueryEngine/Execute.h>
+// #include <QueryEngine/Execute.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -288,12 +288,12 @@ class ScaleRef : public BaseScaleRef {
     _coercedDomainData.reset(
         new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
 
-    std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
-    for (size_t i = 0; i < vec.size(); ++i) {
-      // get data from the executor
-      coercedVec[i] =
-          static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i], queryDataLayoutPtr.get()));
-    }
+    // std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
+    // for (size_t i = 0; i < vec.size(); ++i) {
+    //   // get data from the executor
+    //   coercedVec[i] =
+    //       static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i], queryDataLayoutPtr.get()));
+    // }
   }
 
   void _sort() {

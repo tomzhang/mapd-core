@@ -38,7 +38,9 @@ class PointMark : public BaseMark {
   void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   void _updateShader() final;
 
-  void _addPropertiesToAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) final;
+  void _buildVAOData(const GpuId& gpuId,
+                     ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
+                     ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) final;
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);
 
   void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) final;

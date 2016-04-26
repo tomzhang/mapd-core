@@ -351,8 +351,9 @@ void PolyMark::_updateShader() {
   setPropsDirty();
 }
 
-void PolyMark::_addPropertiesToAttrMap(const GpuId& gpuId,
-                                       ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) {
+void PolyMark::_buildVAOData(const GpuId& gpuId,
+                             ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
+                             ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) {
   int cnt = 0;
   int vboSize = 0;
   int itrSize = 0;
@@ -370,6 +371,11 @@ void PolyMark::_addPropertiesToAttrMap(const GpuId& gpuId,
 
     itr->addToVboAttrMap(gpuId, attrMap);
   }
+
+  CHECK(_dataPtr);
+  QueryPolyDataTableShPtr polyTable = std::dynamic_pointer_cast<BaseQueryPolyDataTable>(_dataPtr);
+  CHECK(polyTable);
+  ibo = polyTable->getGLIndexBuffer(gpuId);
 }
 
 void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) {
@@ -435,6 +441,8 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 
   // now bind the shader
   renderer->bindShader(itr->second.shaderPtr);
+
+  // NOTE: the ibo will be bound with the vao object
   renderer->bindVertexArray(itr->second.vaoPtr);
   _bindUniformProperties(itr->second.shaderPtr.get());
 
@@ -449,11 +457,9 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
     ubo = _uboProps[0]->getUboPtr(gpuId)->getGLUniformBufferPtr();
   }
 
-  ::Rendering::GL::Resources::GLIndexBufferShPtr ibo = polyTable->getGLIndexBuffer(gpuId);
   ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr indibo = polyTable->getGLIndirectDrawIndexBuffer(gpuId);
-  CHECK(ibo && indibo && (!ubo || indibo->numItems() == ubo->numItems()));
+  CHECK(indibo && (!ubo || indibo->numItems() == ubo->numItems()));
 
-  renderer->bindIndexBuffer(ibo);
   renderer->bindIndirectDrawBuffer(indibo);
 
   if (ubo) {
@@ -466,8 +472,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
     renderer->drawIndirectIndexBuffers(GL_TRIANGLES);
   }
 
-  // now draw polys
-  // renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());
+  // now draw outlines
 }
 
 bool PolyMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {

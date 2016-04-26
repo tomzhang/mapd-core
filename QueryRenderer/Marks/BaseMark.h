@@ -105,8 +105,9 @@ class BaseMark {
   virtual void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
   virtual void _updateShader() = 0;
 
-  virtual void _addPropertiesToAttrMap(const GpuId& gpuId,
-                                       ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) = 0;
+  virtual void _buildVAOData(const GpuId& gpuId,
+                             ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
+                             ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) = 0;
   virtual void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) = 0;
 
   std::set<GpuId> _initUnusedGpus() const;

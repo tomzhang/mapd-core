@@ -335,7 +335,9 @@ void PointMark::_updateShader() {
   setPropsDirty();
 }
 
-void PointMark::_addPropertiesToAttrMap(const GpuId& gpuId, VboAttrToShaderAttrMap& attrMap) {
+void PointMark::_buildVAOData(const GpuId& gpuId,
+                              VboAttrToShaderAttrMap& attrMap,
+                              ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) {
   int cnt = 0;
   int vboSize = 0;
   int itrSize = 0;

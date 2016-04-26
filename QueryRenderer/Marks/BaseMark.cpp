@@ -111,11 +111,12 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
     // build property map for how vertex buffer attributes will
     // be bound to shader attributes
     VboAttrToShaderAttrMap attrMap;
-    _addPropertiesToAttrMap(itr.first, attrMap);
+    ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
+    _buildVAOData(itr.first, attrMap, ibo);
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
-    itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
+    itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap, ibo);
   }
 
   // if (currRenderer && prevRenderer != currRenderer) {
@@ -249,7 +250,8 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
         renderer->bindShader(itr.second.shaderPtr);
 
         ::Rendering::GL::Resources::VboAttrToShaderAttrMap attrMap;
-        _addPropertiesToAttrMap(itr.first, attrMap);
+        ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
+        _buildVAOData(itr.first, attrMap, ibo);
 
         itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
       }
