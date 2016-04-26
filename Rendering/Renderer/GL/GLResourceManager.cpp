@@ -374,11 +374,12 @@ GLVertexArrayShPtr GLResourceManager::createVertexArray() {
   return rtn;
 }
 
-GLVertexArrayShPtr GLResourceManager::createVertexArray(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap) {
+GLVertexArrayShPtr GLResourceManager::createVertexArray(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                                                        const GLIndexBufferShPtr& iboPtr) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLVertexArrayShPtr rtn(new GLVertexArray(_prntRenderer, vboAttrToShaderAttrMap));
+  GLVertexArrayShPtr rtn(new GLVertexArray(_prntRenderer, vboAttrToShaderAttrMap, iboPtr));
   _addGLResource(rtn);
 
   for (auto& item : vboAttrToShaderAttrMap) {

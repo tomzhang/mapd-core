@@ -94,7 +94,6 @@ void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarge
 
   // restore the state
   MAPD_CHECK_GL_ERROR(glBindBuffer(target, currArrayBuf));
-
   _numBytes = numBytes;
 
   setUsable();

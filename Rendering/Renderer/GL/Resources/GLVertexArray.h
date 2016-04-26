@@ -22,17 +22,25 @@ class GLVertexArray : public GLResource {
 
   size_t numItems() const { return _numItems; }
   size_t numVertices() const { return _numVertices; }
+  size_t numIndices() const;
 
   GLuint getId() const final { return _vao; }
   GLenum getTarget() const final { return GL_VERTEX_ARRAY; }
 
-  void initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer = nullptr);
+  void initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                  const GLIndexBufferShPtr& iboPtr = nullptr,
+                  GLRenderer* renderer = nullptr);
 
-  void validateVBOs();
+  void validateBuffers();
+
+  GLVertexBufferShPtr getLastBoundVbo() const { return _boundVboPtr.lock(); }
+  GLIndexBufferShPtr getLastBoundIbo() const { return _boundIboPtr.lock(); }
 
  private:
   explicit GLVertexArray(const RendererWkPtr& rendererPtr);
-  explicit GLVertexArray(const RendererWkPtr& rendererPtr, const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap);
+  explicit GLVertexArray(const RendererWkPtr& rendererPtr,
+                         const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                         const GLIndexBufferShPtr& iboPtr = nullptr);
 
   GLuint _vao;
 
@@ -42,11 +50,18 @@ class GLVertexArray : public GLResource {
   size_t _numVertices;
   GLVertexBufferWkPtr _numVerticesVbo;
 
+  GLVertexBufferWkPtr _boundVboPtr;
+
+  bool _useIbo;
+  GLIndexBufferWkPtr _boundIboPtr;
+
   void _initResource();
   void _cleanupResource() final;
   void _makeEmpty() final;
 
-  void _initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer);
+  void _initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                   const GLIndexBufferShPtr& iboPtr,
+                   GLRenderer* renderer);
   void _addVertexBuffer(const GLVertexBufferShPtr& vbo);
   void _deleteVertexBuffer(GLVertexBuffer* vbo);
   void _deleteAllVertexBuffers();

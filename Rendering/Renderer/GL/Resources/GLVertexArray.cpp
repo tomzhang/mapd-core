@@ -1,5 +1,6 @@
 #include "GLVertexArray.h"
 #include "GLVertexBuffer.h"
+#include "GLIndexBuffer.h"
 #include "../GLResourceManager.h"
 
 namespace Rendering {
@@ -7,13 +8,15 @@ namespace GL {
 namespace Resources {
 
 GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr)
-    : GLResource(rendererPtr, GLResourceType::VERTEXARRAY), _vao(0), _numItems(0), _numVertices(0) {
+    : GLResource(rendererPtr, GLResourceType::VERTEXARRAY), _vao(0), _numItems(0), _numVertices(0), _useIbo(false) {
   _initResource();
 }
 
-GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr, const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap)
+GLVertexArray::GLVertexArray(const RendererWkPtr& rendererPtr,
+                             const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                             const GLIndexBufferShPtr& iboPtr)
     : GLVertexArray(rendererPtr) {
-  _initialize(vboAttrToShaderAttrMap, getGLRenderer());
+  _initialize(vboAttrToShaderAttrMap, iboPtr, getGLRenderer());
 }
 
 GLVertexArray::~GLVertexArray() {
@@ -46,20 +49,35 @@ void GLVertexArray::_makeEmpty() {
   _numVerticesVbo.reset();
 }
 
-void GLVertexArray::validateVBOs() {
+void GLVertexArray::validateBuffers() {
   for (auto& vbo : _usedVbos) {
     if (vbo.expired()) {
-      THROW_RUNTIME_EX(
-          "A vbo used by a vertex array has been removed. The vertex array is now unusable. The vertex "
-          "array will need to be re-initialized to be usable.");
+      THROW_RUNTIME_EX("A vbo used by vertex array " + std::to_string(getId()) +
+                       " has been removed. The vertex array is now unusable. The vertex "
+                       "array will need to be re-initialized to be usable.");
 
       setUnusable();
       break;
     }
   }
+
+  if (_useIbo && _boundIboPtr.expired()) {
+    THROW_RUNTIME_EX("The ibo used by vertex array " + std::to_string(getId()) +
+                     " has been removed. The vertex array is now unusable. The vertex array will need to be "
+                     "re-initialized to be usable.");
+
+    setUnusable();
+  }
 }
 
-void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer) {
+size_t GLVertexArray::numIndices() const {
+  auto ibo = _boundIboPtr.lock();
+  return (ibo ? ibo->numItems() : 0);
+}
+
+void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                               const GLIndexBufferShPtr& iboPtr,
+                               GLRenderer* renderer) {
   GLRenderer* rendererToUse = renderer;
   GLRenderer* myRenderer = dynamic_cast<GLRenderer*>(_rendererPtr.lock().get());
   CHECK(rendererToUse);
@@ -68,7 +86,7 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
     rendererToUse = myRenderer;
   }
 
-  _initialize(vboAttrToShaderAttrMap, renderer);
+  _initialize(vboAttrToShaderAttrMap, iboPtr, renderer);
 
   GLResourceManagerShPtr rsrcMgr = myRenderer->getResourceManager();
   GLVertexArrayShPtr myRsrc = std::dynamic_pointer_cast<GLVertexArray>(rsrcMgr->getResourcePtr(this));
@@ -79,7 +97,9 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
   }
 }
 
-void GLVertexArray::_initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap, GLRenderer* renderer) {
+void GLVertexArray::_initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                                const GLIndexBufferShPtr& iboPtr,
+                                GLRenderer* renderer) {
   // TODO(croot): make this thread safe?
   validateRenderer(__FILE__, __LINE__, renderer);
 
@@ -96,9 +116,15 @@ void GLVertexArray::_initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAtt
   _numVertices = 0;
   _numVerticesVbo.reset();
 
-  GLint currVao, currVbo;
+  _boundVboPtr.reset();
+
+  _useIbo = false;
+  _boundIboPtr.reset();
+
+  GLint currVao, currVbo, currIbo;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &currVao));
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &currVbo));
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &currIbo));
 
   MAPD_CHECK_GL_ERROR(glBindVertexArray(_vao));
 
@@ -118,13 +144,21 @@ void GLVertexArray::_initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAtt
     }
 
     _addVertexBuffer(vbo);
+    _boundVboPtr = vbo;
   }
+
+  if (iboPtr) {
+    _useIbo = true;
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboPtr->getId()));
+  }
+  _boundIboPtr = iboPtr;
 
   if (currVao != static_cast<GLint>(_vao)) {
     MAPD_CHECK_GL_ERROR(glBindVertexArray(currVao));
   }
 
   MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, currVbo));
+  MAPD_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, currIbo));
 
   setUsable();
 }

@@ -152,7 +152,7 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
     vao = vaoRsrc->getId();
 
     // verify that the attached vbos are still valid.
-    vaoRsrc->validateVBOs();
+    vaoRsrc->validateBuffers();
   }
 
   bool bind = (boundVao.owner_before(vaoRsrc) || vaoRsrc.owner_before(boundVao));
@@ -165,6 +165,13 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
     MAPD_CHECK_GL_ERROR(glBindVertexArray(vao));
 
     boundVao = vaoRsrc;
+  }
+
+  if (vaoRsrc) {
+    // need to make sure we update our state to the last bound vbo/ibo from the
+    // vertex array
+    bindVertexBuffer(vaoRsrc->getLastBoundVbo());
+    bindIndexBuffer(vaoRsrc->getLastBoundIbo());
   }
 }
 

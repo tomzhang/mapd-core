@@ -170,7 +170,8 @@ class GLResourceManager {
   }
 
   Resources::GLVertexArrayShPtr createVertexArray();
-  Resources::GLVertexArrayShPtr createVertexArray(const Resources::VboAttrToShaderAttrMap& vboAttrToShaderAttrMap);
+  Resources::GLVertexArrayShPtr createVertexArray(const Resources::VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
+                                                  const Resources::GLIndexBufferShPtr& iboPtr = nullptr);
 
   Resources::GLResourceShPtr getResourcePtr(Resources::GLResource* rsrc);
 
