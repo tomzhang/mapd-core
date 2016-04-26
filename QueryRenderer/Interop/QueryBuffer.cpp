@@ -164,7 +164,7 @@ void QueryBuffer::_initCudaGraphicsResource() {
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
-  CHECK(_type == BufType::QUERY_RESULT_BUFFER);
+  CHECK(_type == BufType::QUERY_RESULT_BUFFER && !_isActive);
 
   checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
   checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
@@ -201,7 +201,7 @@ void QueryBuffer::_removeCudaGraphicsResource() {
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
-  CHECK(_type == BufType::QUERY_RESULT_BUFFER);
+  CHECK(_type == BufType::QUERY_RESULT_BUFFER && !_isActive);
 
   checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
   checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
