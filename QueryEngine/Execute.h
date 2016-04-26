@@ -211,6 +211,10 @@ class Executor {
                            const int render_widget_id,
                            const int pixelRadius = 0);
 
+  ResultRows testRenderSimplePolys(const Planner::RootPlan* root_plan,
+                                   const Catalog_Namespace::SessionInfo& session,
+                                   const int render_widget_id);
+
 #ifdef HAVE_RENDERING
   int32_t getStringId(const std::string& table_name,
                       const std::string& col_name,

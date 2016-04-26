@@ -572,6 +572,220 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
+ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
+                                           const Catalog_Namespace::SessionInfo& session,
+                                           const int render_widget_id) {
+  catalog_ = &root_plan->get_catalog();
+  // capture the lock acquistion time
+  auto clock_begin = timer_start();
+  std::lock_guard<std::mutex> lock(execute_mutex_);
+  int64_t queue_time_ms = timer_stop(clock_begin);
+
+  const int session_id = session.get_session_id();
+
+  clock_begin = timer_start();
+
+  const int gpuId = 0;
+  catalog_->get_dataMgr().cudaMgr_->setContext(gpuId);
+
+  const std::string polyTableName = "polyTable";
+  const std::string render_config_json =
+      R"({
+    "width" : 1024,
+    "height" : 1024,
+    "data": [
+        {
+            "name" : "table",
+            "format" : "polys",
+            "sql": "<fill in with a query>",
+            "dbTableName" : "polyTable"
+        }
+    ],
+    "scales" : [
+        {
+            "name" : "color",
+            "type" : "ordinal",
+            "domain" : [10, 20, 30, 40],
+            "range" : ["red", "blue", "green", "yellow"],
+            "default" : "cyan"
+        }
+    ],
+    "marks" : [
+        {
+            "type" : "polys",
+            "from" : {"data" : "table"},
+            "properties" : {
+                "x" : {
+                    "field" : "x"
+                },
+                "y" : {
+                    "field" : "y"
+                },
+                "fillColor" : {
+                    "scale" : "color",
+                    "field" : "population"
+                }
+            }
+        }
+    ]
+})";
+
+  // initialize the poly rendering data
+
+  // setup the verts - 2 squares and 2 triangles
+  std::vector<double> verts = {-1.0,
+                               -0.0,
+                               0.0,
+                               -0.0,
+                               0.0,
+                               1.0,
+                               -1.0,
+                               1.0,
+                               0.0,
+                               0.0,
+                               1.0,
+                               0.0,
+                               1.0,
+                               1.0,
+                               0.0,
+                               1.0,
+                               -1.0,
+                               -1.0,
+                               -0.0,
+                               -1.0,
+                               -0.5,
+                               0.0,
+                               0.5,
+                               -1.0,
+                               1.0,
+                               0.0,
+                               0.0,
+                               0.0};
+
+  // setup the tri tesselation by index (must be unsigned int)
+  std::vector<unsigned int> indices = {3, 1, 2, 3, 0, 1, 3, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2};
+
+  // setup the struct for stroke/outline rendering -- 4 items
+  // first argument is number of verts in poly, second argument is the
+  // start vertex index/offset of the poly.
+  std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> lineDrawData = {
+      ::Rendering::GL::Resources::IndirectDrawVertexData(4),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(4, 4),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(3, 7),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(3, 10)};
+
+  // setup the struct for filled polygon rendering -- 4 items
+  // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
+  // Second argument is the index/offset of the start index.
+  // Third argument is the vertex index/offset of the start vertex for the poly
+  std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> polyDrawData = {
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 4),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 8),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 11)};
+
+  // Extra data for rendering / rowids
+  std::vector<int64_t> population = {10, 20, 30, 40};
+  std::vector<double> unemployment = {100.0, 200.0, 300.0, 400.0};
+  std::vector<uint64_t> rowid = {0, 1, 2, 3};
+
+  CHECK(unemployment.size() == population.size() && unemployment.size() == rowid.size());
+
+  // the rendering/rowid data is put in a special "uniform" buffer. This buffer
+  // has specific byte alignment rules. As long as we're dealing with
+  // basic types here (and not arrays or structs), then the only rule we need
+  // to worry about is the padding/byte alignment. The number of bytes per row must
+  // be a multiple of the alignBytes below.
+  size_t alignBytes = render_manager_->getPolyDataBufferAlignmentBytes(gpuId);
+
+  // NOTE: the number of bytes per query result row should be <= alignBytes
+  CHECK(sizeof(double) + sizeof(int64_t) + sizeof(uint64_t) <= alignBytes);
+  size_t numDataBytes = population.size() * alignBytes;
+
+  // setting the rendering/rowid data. Tightly packed at the front of each row
+  // with extra padding at end to align with alignBytes.
+  std::unique_ptr<char[]> data(new char[numDataBytes]);
+  char* rawData = data.get();
+  std::memset(rawData, 0, numDataBytes);
+  size_t offset;
+  for (size_t idx = 0, i = 0; i < population.size(); ++i, idx += alignBytes) {
+    offset = idx;
+    std::memcpy(rawData + offset, &population[i], sizeof(int64_t));
+    offset += sizeof(int64_t);
+    std::memcpy(rawData + offset, &unemployment[i], sizeof(double));
+    offset += sizeof(double);
+    std::memcpy(rawData + offset, &rowid[i], sizeof(uint64_t));
+    offset += sizeof(uint64_t);
+  }
+
+  // build a struct specifying the number of bytes needed for each buffer used
+  // for poly rendering:
+  // 1) vertex buffer
+  // 2) index buffer (triangles)
+  // 3) line draw struct (for strokes/outlines)
+  // 4) poly draw struct (for filled polys)
+  // 5) extra rendering data / rowids
+  ::QueryRenderer::PolyTableByteData polyByteData(
+      {verts.size() * sizeof(double),
+       indices.size() * sizeof(unsigned int),
+       lineDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
+       polyDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawIndexData),
+       numDataBytes});
+
+  if (!render_manager_->hasPolyTableCache(polyTableName, gpuId)) {
+    // setup the layout for the cached vertex buffer.
+    // Since we're caching, this layout should never change, hence only necessary at
+    // cache creation
+    std::shared_ptr<::QueryRenderer::QueryDataLayout> vertLayout(new ::QueryRenderer::QueryDataLayout(
+        {"x", "y"},
+        {::QueryRenderer::QueryDataLayout::AttrType::DOUBLE, ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE},
+        {}));
+
+    // now create the cache
+    render_manager_->createPolyTableCache(polyTableName, gpuId, polyByteData, vertLayout);
+  }
+
+  // get cuda handles for each of the 5 buffers for poly rendering
+  ::QueryRenderer::PolyCudaHandles polyData = render_manager_->getPolyTableCudaHandles(polyTableName, gpuId);
+
+  // using simple cuda driver calls to push data to buffers
+  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.verts.handle), &verts[0], polyByteData.numVertBytes);
+  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.polyIndices.handle), &indices[0], polyByteData.numIndexBytes);
+  cuMemcpyHtoD(
+      reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle), &lineDrawData[0], polyByteData.numLineLoopBytes);
+  cuMemcpyHtoD(
+      reinterpret_cast<CUdeviceptr>(polyData.polyDrawStruct.handle), &polyDrawData[0], polyByteData.numPolyBytes);
+  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.perRowData.handle), rawData, polyByteData.numDataBytes);
+
+  // create the layout for the rendering/rowid data buffer
+  std::shared_ptr<::QueryRenderer::QueryDataLayout> polyRenderDataLayout(
+      new ::QueryRenderer::QueryDataLayout({"population", "unemployment", "rowid"},
+                                           {::QueryRenderer::QueryDataLayout::AttrType::INT64,
+                                            ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE,
+                                            ::QueryRenderer::QueryDataLayout::AttrType::UINT64},
+                                           {}));
+
+  // set the buffers as renderable
+  render_manager_->setPolyTableReadyForRender(polyTableName, gpuId, polyRenderDataLayout);
+
+  // set the session, like normal
+  set_render_widget(render_manager_, session_id, render_widget_id);
+
+  // now configure the render like normal
+  std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
+  json_doc->Parse(render_config_json.c_str());
+  CHECK(!json_doc->HasParseError());
+
+  render_manager_->configureRender(json_doc, this);
+
+  // now perform the render
+  const auto png_data = render_manager_->renderToPng(3);
+
+  int64_t render_time_ms = timer_stop(clock_begin);
+
+  return ResultRows(std::string(png_data.pngDataPtr.get(), png_data.pngSize), queue_time_ms, render_time_ms);
+}
+
 int32_t Executor::getStringId(const std::string& table_name,
                               const std::string& col_name,
                               const std::string& col_val,
