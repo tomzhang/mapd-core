@@ -102,11 +102,13 @@ class SqlQueryPolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDat
  private:
   std::weak_ptr<RootCache> _qrmGpuCache;
 
-  void allocBuffers(const GpuId& gpuId, const PolyTableByteData& initData);
+  void allocBuffers(const GpuId& gpuId,
+                    const PolyTableByteData& initData,
+                    const QueryDataLayoutShPtr& vertLayoutPtr = nullptr,
+                    const QueryDataLayoutShPtr& uniformLayoutPtr = nullptr);
   void reset();
   PolyCudaHandles getCudaHandlesPreQuery(const GpuId& gpuId);
   void updatePostQuery(const GpuId& gpuId,
-                       const PolyTableByteData& usedByteInfo,
                        const QueryDataLayoutShPtr& vertLayoutPtr,
                        const QueryDataLayoutShPtr& uniformLayoutPtr);
 

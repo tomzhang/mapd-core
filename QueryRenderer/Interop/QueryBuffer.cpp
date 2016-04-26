@@ -61,7 +61,7 @@ size_t QueryBuffer::_getGpuId() const {
 }
 
 #ifdef HAVE_CUDA
-CudaHandle QueryBuffer::getCudaHandlePreQuery() {
+CudaHandle QueryBuffer::getCudaHandlePreQuery(bool useAllAllocatedBytes) {
   // Handling the state of the buffer since the GL VBO needs to be mapped/unmapped to/from a CUDA buffer.
   // Managing the state ensures that the mapping/unmapping is done in the appropriate order.
 
@@ -85,9 +85,16 @@ CudaHandle QueryBuffer::getCudaHandlePreQuery() {
   CUdeviceptr devPtr;
   checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc), __FILE__, __LINE__);
 
-  LOG_IF(WARNING, num_bytes != numBufBytes) << "QueryBuffer " << gpuId << ": couldn't successfully map all "
+  if (useAllAllocatedBytes) {
+    LOG_IF(ERROR, num_bytes != numBufBytes) << "QueryBuffer " << gpuId << ": couldn't successfully map all "
                                             << numBufBytes << " bytes. Was only able to map " << num_bytes
                                             << " bytes for cuda.";
+
+  } else {
+    LOG_IF(WARNING, num_bytes != numBufBytes) << "QueryBuffer " << gpuId << ": couldn't successfully map all "
+                                              << numBufBytes << " bytes. Was only able to map " << num_bytes
+                                              << " bytes for cuda.";
+  }
 
   _isActive = true;
 
@@ -117,8 +124,15 @@ void QueryBuffer::resize(size_t numBytes) {
   RUNTIME_EX_ASSERT(!_isActive, "Cannot resize a buffer while it is currently mapped for cuda.");
 
   if (_bufRsrc) {
-    if (numBytes > _bufRsrc->numBytes()) {
+    if (numBytes != _bufRsrc->numBytes()) {
       _bufRsrc->bufferData(nullptr, numBytes);
+
+#ifdef HAVE_CUDA
+      if (_type == BufType::QUERY_RESULT_BUFFER) {
+        _removeCudaGraphicsResource();
+        _initCudaGraphicsResource();
+      }
+#endif  // HAVE_CUDA
     }
 
     reset();
@@ -180,6 +194,34 @@ void QueryBuffer::_initCudaGraphicsResource() {
 
     checkCudaErrors(result, __FILE__, __LINE__);
     _cudaResourceMap.insert(std::make_pair(currCudaCtx, rsrc));
+  }
+}
+
+void QueryBuffer::_removeCudaGraphicsResource() {
+  CUcontext currCudaCtx;
+  CUdevice ctxDevice;
+
+  CHECK(_type == BufType::QUERY_RESULT_BUFFER);
+
+  checkCudaErrors(cuCtxGetCurrent(&currCudaCtx), __FILE__, __LINE__);
+  checkCudaErrors(cuCtxGetDevice(&ctxDevice), __FILE__, __LINE__);
+
+  auto gpuId = _getGpuId();
+  RUNTIME_EX_ASSERT(ctxDevice == static_cast<int>(gpuId),
+                    "QueryBuffer " + std::to_string(gpuId) + ": Invalid cuda context for QueryBuffer. Device " +
+                        std::to_string(ctxDevice) + " for cuda context does not match the QueryBuffer device " +
+                        std::to_string(gpuId));
+
+  CHECK(currCudaCtx != nullptr);
+  CHECK(_bufRsrc);
+  GLuint rsrcId = _bufRsrc->getId();
+  CHECK(rsrcId);
+
+  const auto itr = _cudaResourceMap.find(currCudaCtx);
+  if (itr != _cudaResourceMap.end()) {
+    checkCudaErrors(cuGraphicsUnregisterResource(itr->second), __FILE__, __LINE__);
+
+    _cudaResourceMap.erase(itr);
   }
 }
 

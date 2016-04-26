@@ -419,8 +419,9 @@ int QueryRenderManager::getPolyDataBufferAlignmentBytes(const size_t gpuIdx) con
 
   RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
-                    "QueryRenderManager::createPolyTableCache(): Invalid gpu index " + std::to_string(gpuIdx) +
-                        ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
+                    "QueryRenderManager::getPolyDataBufferAlignmentBytes(): Invalid gpu index " +
+                        std::to_string(gpuIdx) + ". There are only " + std::to_string(inOrder.size()) +
+                        " gpus available.");
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
 
@@ -445,12 +446,14 @@ PolyTableDataInfo QueryRenderManager::getPolyTableCacheDataInfo(const std::strin
   return itr->second.getPolyBufferData(gpuIdx);
 }
 
-PolyCudaHandles QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
-                                                         const size_t gpuIdx,
-                                                         const PolyTableByteData& initTableData) {
-#ifdef HAVE_CUDA
+void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
+                                              const size_t gpuIdx,
+                                              const PolyTableByteData& initTableData,
+                                              const QueryDataLayoutShPtr& vertLayoutPtr) {
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard;
 
   auto itr = _gpuCache->polyCacheMap.find(polyTableName);
   if (itr == _gpuCache->polyCacheMap.end()) {
@@ -460,21 +463,32 @@ PolyCudaHandles QueryRenderManager::createPolyTableCache(const std::string& poly
     itr = insertItr.first;
   }
 
-  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
-  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
-                    "QueryRenderManager::createPolyTableCache(): Invalid gpu index " + std::to_string(gpuIdx) +
-                        ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
-
-  ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
-  itr->second.allocBuffers(gpuIdx, initTableData);
-
-  return itr->second.getCudaHandlesPreQuery(gpuIdx);
-#else
-  CHECK(false) << "Cuda is not activated. Cannot create a cache and get its cuda handle.";
-#endif  // HAVE_CUDA
+  itr->second.allocBuffers(gpuIdx, initTableData, vertLayoutPtr);
 }
 
-PolyCudaHandles QueryRenderManager::getPolyCudaHandlesFromCache(const std::string& polyTableName, const size_t gpuIdx) {
+void QueryRenderManager::deletePolyTableCache(const std::string& polyTableName) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard;
+  _gpuCache->polyCacheMap.erase(polyTableName);
+
+  // TODO(croot): what do we do about any query renderer data tables that might be
+  // referencing removed caches? Right now the buffers will be kept around until
+  // all those query renderers are configured with different data table references
+}
+
+void QueryRenderManager::deleteAllPolyTableCaches() {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard;
+  _gpuCache->polyCacheMap.clear();
+
+  // TODO(croot): see TODO in deletePolyTableCache()
+}
+
+PolyCudaHandles QueryRenderManager::getPolyTableCudaHandles(const std::string& polyTableName,
+                                                            const size_t gpuIdx,
+                                                            const PolyTableByteData* initTableData) {
 #ifdef HAVE_CUDA
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_renderMtx);
@@ -484,12 +498,19 @@ PolyCudaHandles QueryRenderManager::getPolyCudaHandlesFromCache(const std::strin
       itr != _gpuCache->polyCacheMap.end(),
       "Cannot get cuda handles for poly table " + polyTableName + ". A cache for the table does not exist.");
 
+  // TODO(croot): add a non-cached approach
+
   RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
                     "QueryRenderManager::getPolyCudaHandlesFromCache(): Invalid gpu index " + std::to_string(gpuIdx) +
                         ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
+
+  if (initTableData) {
+    itr->second.allocBuffers(gpuIdx, *initTableData);
+  }
+
   return itr->second.getCudaHandlesPreQuery(gpuIdx);
 #else
   CHECK(false) << "Cuda is not activated. Cannot get cuda handle.";
@@ -504,9 +525,8 @@ PolyCudaHandles QueryRenderManager::getPolyCudaHandlesFromCache(const std::strin
 
 void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTableName,
                                                     size_t gpuIdx,
-                                                    const PolyTableByteData& usedByteInfo,
-                                                    const QueryDataLayoutShPtr& vertLayoutPtr,
-                                                    const QueryDataLayoutShPtr& uniformLayoutPtr) {
+                                                    const QueryDataLayoutShPtr& uniformLayoutPtr,
+                                                    const QueryDataLayoutShPtr& vertLayoutPtr) {
 #ifdef HAVE_CUDA
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
@@ -523,7 +543,7 @@ void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTable
                         ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
-  itr->second.updatePostQuery(gpuIdx, usedByteInfo, vertLayoutPtr, uniformLayoutPtr);
+  itr->second.updatePostQuery(gpuIdx, vertLayoutPtr, uniformLayoutPtr);
 #else
   CHECK(false) << "Cuda is not activated. Cannot set cuda handle bytes.";
 #endif  // HAVE_CUDA

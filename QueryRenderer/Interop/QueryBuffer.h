@@ -90,7 +90,7 @@ class QueryBuffer {
   }
 
 #ifdef HAVE_CUDA
-  CudaHandle getCudaHandlePreQuery();
+  CudaHandle getCudaHandlePreQuery(bool useAllAllocatedBytes = false);
 #endif
 
   void updatePostQuery(size_t numUsedBytes);
@@ -105,6 +105,7 @@ class QueryBuffer {
 
 #ifdef HAVE_CUDA
   void _initCudaGraphicsResource();
+  void _removeCudaGraphicsResource();
 #endif
 
  private:

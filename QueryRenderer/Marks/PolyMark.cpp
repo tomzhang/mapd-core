@@ -6,8 +6,6 @@
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 
-#include <iostream>
-
 namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
@@ -329,12 +327,11 @@ void PolyMark::_updateShader() {
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
     itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
 
-    // if (useUniformBuffer) {
-    //   // NOTE: only need to check the shader block layout of only the
-    //   // first ubo as it will be the same for all other gpu ubos
-    //   CHECK(*ubo->getGLUniformBufferPtr()->getBufferLayout().get() ==
-    //         *itr.second.shaderPtr->getBlockLayout("PolyData"));
-    // }
+    // TODO(croot): should check the shader block layout attached
+    // to the uniform buffer with that in the shader when the GLShader
+    // is fixed to parse the shader code to add uniform interface block
+    // attrs in the order they're defined in the shader because there
+    // doesn't seem to be an opengl api to get those in order.
 
     // TODO(croot): should I make make the current thread
     // have an inactive renderer?
@@ -458,6 +455,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 
   renderer->bindIndexBuffer(ibo);
   renderer->bindIndirectDrawBuffer(indibo);
+
   if (ubo) {
     renderer->bindUniformBuffer(ubo);
     for (size_t i = 0; i < indibo->numItems(); ++i) {

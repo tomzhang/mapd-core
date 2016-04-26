@@ -224,7 +224,10 @@ void SqlQueryPolyDataTable::_initGpuResources(const RootCacheShPtr& qrmGpuCache)
   // manager of the cache where appropriate.
 }
 
-void SqlQueryPolyDataTable::allocBuffers(const GpuId& gpuId, const PolyTableByteData& initData) {
+void SqlQueryPolyDataTable::allocBuffers(const GpuId& gpuId,
+                                         const PolyTableByteData& initData,
+                                         const QueryDataLayoutShPtr& vertLayoutPtr,
+                                         const QueryDataLayoutShPtr& uniformLayoutPtr) {
   auto itr = _perGpuData.find(gpuId);
 
   if (itr == _perGpuData.end()) {
@@ -238,15 +241,19 @@ void SqlQueryPolyDataTable::allocBuffers(const GpuId& gpuId, const PolyTableByte
     itr = insertItr.first;
   }
 
+  itr->second.makeActiveOnCurrentThread();
   auto renderer = itr->second.getGLRenderer();
   CHECK(renderer);
-  CHECK(renderer->isActiveOnCurrentThread());
 
   if (initData.numVertBytes) {
     if (!itr->second.vbo) {
       itr->second.vbo.reset(new QueryResultVertexBuffer(renderer, initData.numVertBytes));
     } else {
       itr->second.vbo->resize(initData.numVertBytes);
+    }
+
+    if (vertLayoutPtr) {
+      itr->second.vbo->setBufferLayout(vertLayoutPtr->convertToBufferLayout());
     }
   } else {
     itr->second.vbo = nullptr;
@@ -257,6 +264,10 @@ void SqlQueryPolyDataTable::allocBuffers(const GpuId& gpuId, const PolyTableByte
       itr->second.ubo.reset(new QueryResultUniformBuffer(renderer, initData.numDataBytes));
     } else {
       itr->second.ubo->resize(initData.numDataBytes);
+    }
+
+    if (uniformLayoutPtr) {
+      itr->second.ubo->setBufferLayout(uniformLayoutPtr->convertToUniformBufferLayout());
     }
   } else {
     itr->second.ubo = nullptr;
@@ -348,7 +359,6 @@ PolyCudaHandles SqlQueryPolyDataTable::getCudaHandlesPreQuery(const GpuId& gpuId
 }
 
 void SqlQueryPolyDataTable::updatePostQuery(const GpuId& gpuId,
-                                            const PolyTableByteData& usedByteInfo,
                                             const QueryDataLayoutShPtr& vertLayoutPtr,
                                             const QueryDataLayoutShPtr& uniformLayoutPtr) {
   auto itr = _perGpuData.find(gpuId);
@@ -357,7 +367,7 @@ void SqlQueryPolyDataTable::updatePostQuery(const GpuId& gpuId,
 
   // NOTE: it is assumed that all the bytes allocated are used
   if (itr->second.vbo) {
-    itr->second.vbo->updatePostQuery(usedByteInfo.numVertBytes);
+    itr->second.vbo->updatePostQuery(itr->second.vbo->numBytes());
 
     if (vertLayoutPtr) {
       itr->second.vbo->setBufferLayout(vertLayoutPtr->convertToBufferLayout());
@@ -365,7 +375,7 @@ void SqlQueryPolyDataTable::updatePostQuery(const GpuId& gpuId,
   }
 
   if (itr->second.ubo) {
-    itr->second.ubo->updatePostQuery(usedByteInfo.numDataBytes);
+    itr->second.ubo->updatePostQuery(itr->second.ubo->numBytes());
 
     if (uniformLayoutPtr) {
       itr->second.ubo->setBufferLayout(uniformLayoutPtr->convertToUniformBufferLayout());
@@ -373,15 +383,15 @@ void SqlQueryPolyDataTable::updatePostQuery(const GpuId& gpuId,
   }
 
   if (itr->second.ibo) {
-    itr->second.ibo->updatePostQuery(usedByteInfo.numIndexBytes);
+    itr->second.ibo->updatePostQuery(itr->second.ibo->numBytes());
   }
 
   if (itr->second.indvbo) {
-    itr->second.indvbo->updatePostQuery(usedByteInfo.numLineLoopBytes);
+    itr->second.indvbo->updatePostQuery(itr->second.indvbo->numBytes());
   }
 
   if (itr->second.indibo) {
-    itr->second.indibo->updatePostQuery(usedByteInfo.numPolyBytes);
+    itr->second.indibo->updatePostQuery(itr->second.indibo->numBytes());
   }
 }
 

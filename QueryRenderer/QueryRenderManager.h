@@ -75,20 +75,21 @@ class QueryRenderManager {
   int getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const;
   bool hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const;
   PolyTableDataInfo getPolyTableCacheDataInfo(const std::string& polyTableName, const size_t gpuIdx) const;
-  PolyCudaHandles createPolyTableCache(const std::string& polyTableName,
-                                       const size_t gpuIdx,
-                                       const PolyTableByteData& initTableData);
+  void createPolyTableCache(const std::string& polyTableName,
+                            const size_t gpuIdx,
+                            const PolyTableByteData& initTableData,
+                            const QueryDataLayoutShPtr& vertLayoutPtr);
+  void deletePolyTableCache(const std::string& polyTableName);
+  void deleteAllPolyTableCaches();
 
-  PolyCudaHandles getPolyCudaHandlesFromCache(const std::string& polyTableName, const size_t gpuIdx);
-  // PolyCudaHandles getPolyCudaHandles(const std::string& polyTableName,
-  //                                    const size_t gpuIdx,
-  //                                    const PolyTableByteData& initTableData);
+  PolyCudaHandles getPolyTableCudaHandles(const std::string& polyTableName,
+                                          const size_t gpuIdx,
+                                          const PolyTableByteData* initTableData = nullptr);
 
   void setPolyTableReadyForRender(const std::string& polyTableName,
                                   size_t gpuIdx,
-                                  const PolyTableByteData& usedByteInfo,
-                                  const QueryDataLayoutShPtr& vertLayoutPtr,
-                                  const QueryDataLayoutShPtr& uniformLayoutPtr = nullptr);
+                                  const QueryDataLayoutShPtr& uniformLayoutPtr,
+                                  const QueryDataLayoutShPtr& vertLayoutPtr = nullptr);
 
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, const Executor* executor = nullptr);
 
