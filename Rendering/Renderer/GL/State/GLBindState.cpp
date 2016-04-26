@@ -170,8 +170,8 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
   if (vaoRsrc) {
     // need to make sure we update our state to the last bound vbo/ibo from the
     // vertex array
-    bindVertexBuffer(vaoRsrc->getLastBoundVbo());
-    bindIndexBuffer(vaoRsrc->getLastBoundIbo());
+    boundVbo = vaoRsrc->getLastBoundVbo();
+    boundIbo = vaoRsrc->getLastBoundIbo();
   }
 }
 
