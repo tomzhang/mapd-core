@@ -125,8 +125,8 @@ class MapDHandler : virtual public MapDIf {
     // or cpu-mode with software rendering is supported.
     if (enable_rendering_ && !cpu_mode_only_) {
       try {
-        render_manager_.reset(
-            new ::QueryRenderer::QueryRenderManager(data_mgr_->cudaMgr_, num_gpus, start_gpu, render_mem_bytes));
+        render_manager_.reset(new ::QueryRenderer::QueryRenderManager(
+            data_mgr_->cudaMgr_, num_gpus, start_gpu, render_mem_bytes, 500, 4));
       } catch (const std::exception& e) {
         enable_rendering_ = false;
         LOG(ERROR) << "Backend rendering disabled: " << e.what();

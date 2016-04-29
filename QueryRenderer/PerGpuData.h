@@ -26,7 +26,8 @@ struct RootPerGpuData {
   // This would be necessary if we ever support asynchronous
   // queries, even partially (i.e. the cuda part of the query
   // may be serialized, but the render part could run asynchronously.)
-  QueryFramebufferUqPtr framebufferPtr;
+  QueryFramebufferUqPtr msFramebufferPtr;
+  QueryFramebufferShPtr blitFramebufferPtr;
   QueryRenderCompositorShPtr compositorPtr;
   QueryIdMapPboPoolUqPtr pboPoolPtr;
 
@@ -41,7 +42,8 @@ struct RootPerGpuData {
 
   void resize(size_t width, size_t height);
 
-  QueryFramebufferUqPtr& getFramebuffer() { return framebufferPtr; }
+  QueryFramebufferUqPtr& getRenderFramebuffer() { return msFramebufferPtr; }
+  QueryFramebufferShPtr& getBlitFramebuffer() { return blitFramebufferPtr; }
   QueryRenderCompositorShPtr& getCompositor() { return compositorPtr; }
   GpuId getCompositorGpuId();
 
@@ -92,7 +94,8 @@ struct BasePerGpuData {
 
   virtual void resize(size_t width, size_t height);
 
-  QueryFramebufferUqPtr& getFramebuffer();
+  QueryFramebufferUqPtr& getRenderFramebuffer();
+  QueryFramebufferShPtr& getBlitFramebuffer();
   std::shared_ptr<QueryRenderCompositor>& getCompositor();
   GpuId getCompositorGpuId();
 

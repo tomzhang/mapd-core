@@ -9,7 +9,6 @@
 #include "RootCache.h"
 
 #include "Rendering/QueryRenderCompositor.h"
-#include "Rendering/QueryFramebuffer.h"
 #include "Rendering/QueryIdMapPixelBuffer.h"
 #include "Utils/RapidJSONUtils.h"
 
@@ -67,13 +66,13 @@ class QueryRenderer {
 
   QueryRendererContext* getContext() { return _ctx.get(); }
 
-  static void renderGpu(GpuId gpuId,
-                        const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
-                        QueryRendererContext* ctx,
-                        int r = -1,
-                        int g = -1,
-                        int b = -1,
-                        int a = -1);
+  static QueryFramebufferUqPtr& renderGpu(GpuId gpuId,
+                                          const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
+                                          QueryRendererContext* ctx,
+                                          int r = -1,
+                                          int g = -1,
+                                          int b = -1,
+                                          int a = -1);
 
  private:
   std::shared_ptr<QueryRendererContext> _ctx;

@@ -12,7 +12,8 @@ RootPerGpuData::RootPerGpuData(GpuId gpuId)
       queryResultBufferPtr(nullptr),
       windowPtr(nullptr),
       rendererPtr(nullptr),
-      framebufferPtr(nullptr),
+      msFramebufferPtr(nullptr),
+      blitFramebufferPtr(nullptr),
       compositorPtr(nullptr),
       pboPoolPtr(nullptr) {
 }
@@ -50,25 +51,38 @@ void RootPerGpuData::makeInactive() const {
 }
 
 void RootPerGpuData::resize(size_t width, size_t height) {
-  CHECK(framebufferPtr);
+  CHECK(msFramebufferPtr);
 
-  width = std::max(width, framebufferPtr->getWidth());
-  height = std::max(height, framebufferPtr->getHeight());
-  framebufferPtr->resize(width, height);
+  width = std::max(width, msFramebufferPtr->getWidth());
+  height = std::max(height, msFramebufferPtr->getHeight());
+  msFramebufferPtr->resize(width, height);
+
+  ::Rendering::GL::GLRenderer* prevRenderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
+  ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
+  bool reset = false;
+
   if (compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
-    ::Rendering::GL::GLRenderer* prevRenderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
-    ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
     ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
     CHECK(renderer);
-    bool reset = false;
     if (renderer != prevRenderer) {
       reset = true;
       renderer->makeActiveOnCurrentThread();
     }
     compositorPtr->resize(width, height);
-    if (reset) {
-      prevRenderer->makeActiveOnCurrentThread(prevWindow);
+  }
+
+  if (blitFramebufferPtr && (blitFramebufferPtr->getWidth() < width || blitFramebufferPtr->getHeight() < height)) {
+    ::Rendering::GL::GLRenderer* renderer = blitFramebufferPtr->getGLRenderer();
+    CHECK(renderer);
+    if (renderer != prevRenderer) {
+      reset = true;
+      renderer->makeActiveOnCurrentThread();
     }
+    blitFramebufferPtr->resize(width, height);
+  }
+
+  if (reset) {
+    prevRenderer->makeActiveOnCurrentThread(prevWindow);
   }
 }
 
@@ -129,10 +143,16 @@ void BasePerGpuData::resize(size_t width, size_t height) {
   }
 }
 
-QueryFramebufferUqPtr& BasePerGpuData::getFramebuffer() {
+QueryFramebufferUqPtr& BasePerGpuData::getRenderFramebuffer() {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
-  return qrmGpuDataShPtr->getFramebuffer();
+  return qrmGpuDataShPtr->getRenderFramebuffer();
+}
+
+QueryFramebufferShPtr& BasePerGpuData::getBlitFramebuffer() {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  CHECK(qrmGpuDataShPtr);
+  return qrmGpuDataShPtr->getBlitFramebuffer();
 }
 
 std::shared_ptr<QueryRenderCompositor>& BasePerGpuData::getCompositor() {

@@ -47,7 +47,7 @@ class AttachmentContainer {
   ~AttachmentContainer();
 
   bool hasAttachment(GLenum attachment);
-  void addTexture2dAttachment(GLenum attachment, GLuint tex);
+  void addTexture2dAttachment(GLenum attachment, GLuint tex, GLenum target);
   void addRenderbufferAttachment(GLenum attachment, GLuint rbo);
   void removeAttachment(GLenum attachment);
 
@@ -107,6 +107,7 @@ class GLFramebuffer : public GLResource {
 
   size_t getWidth() const;
   size_t getHeight() const;
+  size_t getNumSamples() const;
 
   void readPixels(GLenum attachment,
                   size_t startx,
@@ -116,6 +117,19 @@ class GLFramebuffer : public GLResource {
                   GLenum format,
                   GLenum type,
                   GLvoid* data);
+
+  void blitToFramebuffer(GLFramebuffer& dstFbo,
+                         GLenum srcAttachment,
+                         size_t srcX,
+                         size_t srcY,
+                         size_t srcWidth,
+                         size_t srcHeight,
+                         GLenum dstAttachment,
+                         size_t dstX,
+                         size_t dstY,
+                         size_t dstWidth,
+                         size_t dstHeight,
+                         GLenum filter);
 
   void copyPixelsToBoundPixelBuffer(GLenum attachment,
                                     size_t startx,
@@ -138,6 +152,7 @@ class GLFramebuffer : public GLResource {
 
   void resize(size_t width, size_t height);
 
+  bool hasAttachment(GLenum attachment);
   void enableAllAttachments();
   void disableAllAttachments();
   void enableAttachments(const std::vector<GLenum>& activeAttachments);

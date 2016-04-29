@@ -62,16 +62,17 @@ QueryRenderManager::QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
                                        int numGpus,
                                        int startGpu,
                                        size_t queryResultBufferSize,
-                                       size_t renderCacheLimit)
+                                       size_t renderCacheLimit,
+                                       size_t numSamples)
     : _rendererMap(),
       _activeItr(_rendererMap.end()),
-      _gpuCache(new RootCache()),
+      _gpuCache(new RootCache(numSamples)),
       _compositorPtr(nullptr),
       _renderCacheLimit(renderCacheLimit) {
   // NOTE: this constructor needs to be used on the main thread as that is a requirement
   // for a window manager instance.
   ::Rendering::WindowManager windowMgr;
-  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize);
+  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
 }
 
 QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
@@ -79,13 +80,14 @@ QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
                                        int numGpus,
                                        int startGpu,
                                        size_t queryResultBufferSize,
-                                       size_t renderCacheLimit)
+                                       size_t renderCacheLimit,
+                                       size_t numSamples)
     : _rendererMap(),
       _activeItr(_rendererMap.end()),
-      _gpuCache(new RootCache()),
+      _gpuCache(new RootCache(numSamples)),
       _compositorPtr(nullptr),
       _renderCacheLimit(renderCacheLimit) {
-  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize);
+  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
 }
 
 QueryRenderManager::~QueryRenderManager() {
@@ -95,7 +97,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                                      CudaMgr_Namespace::CudaMgr* cudaMgr,
                                      int numGpus,
                                      int startGpu,
-                                     size_t queryResultBufferSize) {
+                                     size_t queryResultBufferSize,
+                                     size_t numSamples) {
 #ifdef HAVE_CUDA
   CHECK(cudaMgr);
 #endif
@@ -132,7 +135,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
   GLRendererShPtr renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
-
+  QueryFramebufferShPtr blitFramebuffer;
   RootPerGpuDataShPtr gpuDataPtr;
   size_t endDevice = startGpu + numGpus;
   size_t startDevice = startGpu;
@@ -154,35 +157,43 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);
     gpuDataPtr->rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuDataPtr->windowPtr);
 
+    renderer = std::dynamic_pointer_cast<GLRenderer>(gpuDataPtr->rendererPtr);
+    CHECK(renderer != nullptr);
+
     gpuDataPtr->makeActiveOnCurrentThread();
 
-    if (i == startDevice && numGpus > 1) {
-      _compositorPtr.reset(new QueryRenderCompositor(this,
-                                                     gpuDataPtr->rendererPtr,
-                                                     defaultWidth,
-                                                     defaultHeight,
-                                                     // TODO(croot): should we support num samples
-                                                     1,  //_ctx->getNumSamples(),
-                                                     true,
-                                                     // TODO(croot): do depth testing
-                                                     false));
-    }
+    if (i == startDevice) {
+      if (numGpus > 1) {
+        _compositorPtr.reset(new QueryRenderCompositor(this,
+                                                       gpuDataPtr->rendererPtr,
+                                                       defaultWidth,
+                                                       defaultHeight,
+                                                       numSamples,
+                                                       true,
+                                                       // TODO(croot): do depth testing
+                                                       false));
+      }
 
-    // renderer = dynamic_cast<GLRenderer*>(gpuDataPtr->rendererPtr.get());
-    renderer = std::static_pointer_cast<GLRenderer>(gpuDataPtr->rendererPtr);
-    CHECK(renderer != nullptr);
+      if (numSamples > 1) {
+        // create a framebuffer to blit the multi-sampled framebuffers into
+        blitFramebuffer.reset(new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false, 1));
+      }
+    }
 
     gpuDataPtr->queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer.get(), queryResultBufferSize));
 
     if (_compositorPtr) {
       gpuDataPtr->compositorPtr = _compositorPtr;
-      gpuDataPtr->framebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer.get()));
+      gpuDataPtr->msFramebufferPtr.reset(new QueryFramebuffer(_compositorPtr.get(), renderer.get()));
     } else {
       // TODO(croot): do depth testing
-      gpuDataPtr->framebufferPtr.reset(new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false));
+      gpuDataPtr->msFramebufferPtr.reset(
+          new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false, numSamples));
     }
 
     gpuDataPtr->pboPoolPtr.reset(new QueryIdMapPboPool(renderer));
+
+    gpuDataPtr->blitFramebufferPtr = blitFramebuffer;
 
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();

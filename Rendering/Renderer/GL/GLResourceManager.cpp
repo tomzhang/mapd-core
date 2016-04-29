@@ -91,13 +91,13 @@ GLTexture2dShPtr GLResourceManager::createTexture2d(size_t width,
                                                     GLenum internalFormat,
                                                     GLenum pixelFormat,
                                                     GLenum pixelType,
-                                                    const GLTexture2dSampleProps& sampleProps,
-                                                    size_t numSamples) {
+                                                    size_t numSamples,
+                                                    const GLTexture2dSampleProps& sampleProps) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
   GLTexture2dShPtr rtn(
-      new GLTexture2d(_prntRenderer, width, height, internalFormat, pixelFormat, pixelType, sampleProps, numSamples));
+      new GLTexture2d(_prntRenderer, width, height, internalFormat, pixelFormat, pixelType, numSamples, sampleProps));
   _addGLResource(rtn);
 
   return rtn;
@@ -107,13 +107,13 @@ GLTexture2dArrayShPtr GLResourceManager::createTexture2dArray(size_t width,
                                                               size_t height,
                                                               size_t depth,
                                                               GLenum internalFormat,
-                                                              const GLTexture2dSampleProps& sampleProps,
-                                                              size_t numSamples) {
+                                                              size_t numSamples,
+                                                              const GLTexture2dSampleProps& sampleProps) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
   GLTexture2dArrayShPtr rtn(
-      new GLTexture2dArray(_prntRenderer, width, height, depth, internalFormat, sampleProps, numSamples));
+      new GLTexture2dArray(_prntRenderer, width, height, depth, internalFormat, numSamples, sampleProps));
 
   return rtn;
 }

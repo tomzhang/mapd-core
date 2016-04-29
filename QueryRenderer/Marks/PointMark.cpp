@@ -425,21 +425,25 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
 
   _bindUniformProperties(itr->second.shaderPtr.get());
 
-  // TODO: render state stack -- push/pop
+  // TODO(croot): render state stack -- push/pop
   renderer->enable(GL_PROGRAM_POINT_SIZE);
 
+  // Because we're doing a "discard" in the point shader,
+  // we can benefit from turning on GL_SAMPLE_SHADING so
+  // that all multi-samples are evaluated in the shader.
+  // TODO(croot): evaluating the frag shader for every
+  // sample can be constly, so look into only doing so
+  // if points can be small, i.e. < 3 pixels wide. That's
+  // where we get the most benefit from GL_SAMPLE_SHADING.
+  renderer->enable(GL_SAMPLE_SHADING);
+  MAPD_CHECK_GL_ERROR(glMinSampleShading(1.0));
+
   // now draw points
-  // TODO: What about the possibility of index buffers?
-  // Probably don't have to worry about them here since
-  // we're specifically looking at a point config that
-  // is deemed not to have any index buffers, but we
-  // need to have a way to generically draw bound buffers
-  // which would be best with a renderer class
-  // MAPD_CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, x.size()));
   renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());
 
   // unset state
   renderer->disable(GL_PROGRAM_POINT_SIZE);
+  renderer->disable(GL_SAMPLE_SHADING);
 }
 
 bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {

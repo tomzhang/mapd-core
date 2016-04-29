@@ -32,16 +32,16 @@ class GLResourceManager {
       GLenum internalFormat,
       GLenum pixelFormat,
       GLenum pixelType,
-      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps(),
-      size_t numSamples = 1);
+      size_t numSamples = 1,
+      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps());
 
   Resources::GLTexture2dArrayShPtr createTexture2dArray(
       size_t width,
       size_t height,
       size_t depth,
       GLenum internalFormat,
-      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps(),
-      size_t numSamples = 1);
+      size_t numSamples = 1,
+      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps());
 
   Resources::GLTexture2dArrayShPtr createTexture2dArray(const std::vector<Resources::GLTexture2dShPtr>& initTextures);
 

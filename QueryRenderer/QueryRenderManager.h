@@ -38,13 +38,16 @@ class QueryRenderManager {
                               int numGpus = -1,
                               int startGpu = 0,
                               size_t queryResultBufferSize = 500000,
-                              size_t renderCacheLimit = 500);
+                              size_t renderCacheLimit = 500,
+                              size_t numSamples = 1);
+
   explicit QueryRenderManager(Rendering::WindowManager& windowMgr,
                               CudaMgr_Namespace::CudaMgr* cudaMgr,
                               int numGpus = -1,  // < 0 means use all available GPUs
                               int startGpu = 0,
                               size_t queryResultBufferSize = 500000,
-                              size_t renderCacheLimit = 500);  // only applicable if a GPU or CUDA_INTEROP render
+                              size_t renderCacheLimit = 500,  // only applicable if a GPU or CUDA_INTEROP render
+                              size_t numSamples = 1);
   ~QueryRenderManager();
 
   bool hasUser(int userId) const;
@@ -161,7 +164,8 @@ class QueryRenderManager {
                    CudaMgr_Namespace::CudaMgr* cudaMgr,
                    int numGpus,
                    int startGpu,
-                   size_t queryResultBufferSize);
+                   size_t queryResultBufferSize,
+                   size_t numSamples);
   void _resetQueryResultBuffers() noexcept;
 
   void _setActiveUserWidget(int userId, int widgetId) const;

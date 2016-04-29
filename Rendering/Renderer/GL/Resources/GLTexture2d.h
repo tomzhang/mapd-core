@@ -57,8 +57,8 @@ class GLTexture2d : public GLResource {
                        GLenum internalFormat,
                        GLenum pixelFormat,
                        GLenum pixelType,
-                       const GLTexture2dSampleProps& sampleProps = GLTexture2dSampleProps(),
-                       size_t numSamples = 1);
+                       size_t numSamples = 1,
+                       const GLTexture2dSampleProps& sampleProps = GLTexture2dSampleProps());
 
   void _initResource();
   void _cleanupResource() final;

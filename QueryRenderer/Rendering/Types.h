@@ -7,6 +7,7 @@ namespace QueryRenderer {
 
 class QueryFramebuffer;
 typedef std::unique_ptr<QueryFramebuffer> QueryFramebufferUqPtr;
+typedef std::shared_ptr<QueryFramebuffer> QueryFramebufferShPtr;
 
 class QueryIdMapPixelBuffer;
 typedef std::shared_ptr<QueryIdMapPixelBuffer> QueryIdMapPixelBufferShPtr;

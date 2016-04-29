@@ -17,6 +17,8 @@
 #include <cstring>
 #include "rapidjson/error/en.h"
 
+#include <iostream>
+
 // #include <Shared/measure.h>
 // #include <iostream>
 
@@ -637,13 +639,13 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
   }
 }
 
-void QueryRenderer::renderGpu(GpuId gpuId,
-                              const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
-                              QueryRendererContext* ctx,
-                              int r,
-                              int g,
-                              int b,
-                              int a) {
+QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
+                                                const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
+                                                QueryRendererContext* ctx,
+                                                int r,
+                                                int g,
+                                                int b,
+                                                int a) {
   // TODO(croot): make thread safe?
 
   auto itr = qrmPerGpuData->find(gpuId);
@@ -654,7 +656,7 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   GLRenderer* renderer = (*itr)->getGLRenderer();
   CHECK(renderer != nullptr);
 
-  auto& framebufferPtr = (*itr)->getFramebuffer();
+  auto& framebufferPtr = (*itr)->getRenderFramebuffer();
 
   RUNTIME_EX_ASSERT(framebufferPtr != nullptr,
                     "QueryRenderer " + to_string(ctx->getUserWidgetIds()) +
@@ -697,7 +699,7 @@ void QueryRenderer::renderGpu(GpuId gpuId,
   // PngData pngData(width, height, pixelsPtr);
   // pngData.writeToFile("render_" + std::to_string(gpuId) + ".png");
 
-  // renderer->makeInactive();
+  return framebufferPtr;
 }
 
 void QueryRenderer::render(bool inactivateRendererOnThread) {
@@ -724,7 +726,15 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
       auto qrmItr = qrmPerGpuDataPtr->find((*usedGpus.begin()));
       CHECK(qrmItr != qrmPerGpuDataPtr->end());
       if (numGpusToRender == 1) {
-        renderGpu((*qrmItr)->gpuId, qrmPerGpuDataPtr, _ctx.get(), 0, 0, 0, 0);
+        auto usedFramebuffer = renderGpu((*qrmItr)->gpuId, qrmPerGpuDataPtr, _ctx.get(), 0, 0, 0, 0).get();
+
+        if (usedFramebuffer->getNumSamples() > 1) {
+          // need to blit the multisampled fbo into a non-sampled fbo
+          auto& blitFramebuffer = (*qrmItr)->getBlitFramebuffer();
+          CHECK(blitFramebuffer);
+          usedFramebuffer->blitToFramebuffer(*blitFramebuffer, 0, 0, _ctx->getWidth(), _ctx->getHeight());
+          usedFramebuffer = blitFramebuffer.get();
+        }
 
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - render gpu " << itr->first << ": " << time_ms << "ms" << std::endl;
@@ -732,8 +742,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
 
         if (_ctx->doHitTest()) {
           CHECK(_idPixels && _pbo);
-          QueryFramebufferUqPtr& framebufferPtr = (*qrmItr)->getFramebuffer();
-          framebufferPtr->copyIdBufferToPbo(_pbo);
+          usedFramebuffer->copyIdBufferToPbo(_pbo);
 
           // time_ms = timer_stop(clock_begin);
           // std::cerr << "\t\t\tCROOT - pbo idmap copy: " << time_ms << "ms" << std::endl;
@@ -743,7 +752,15 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
         auto& compositorPtr = (*qrmItr)->getCompositor();
         CHECK(compositorPtr);
 
-        compositorPtr->render(this, usedGpus);
+        auto usedFramebuffer = compositorPtr->render(this, usedGpus).get();
+
+        if (usedFramebuffer->getNumSamples() > 1) {
+          // need to blit the multisampled fbo into a non-sampled fbo
+          auto& blitFramebuffer = (*qrmItr)->getBlitFramebuffer();
+          CHECK(blitFramebuffer && blitFramebuffer->getGLRenderer() == usedFramebuffer->getGLRenderer());
+          usedFramebuffer->blitToFramebuffer(*blitFramebuffer, 0, 0, _ctx->getWidth(), _ctx->getHeight());
+          usedFramebuffer = blitFramebuffer.get();
+        }
 
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - compositor render : " << time_ms << "ms" << std::endl;
@@ -813,17 +830,31 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
         auto& compositorPtr = (*itr)->getCompositor();
         CHECK(compositorPtr);
 
-        Renderer* renderer = compositorPtr->getRenderer();
+        auto renderer = compositorPtr->getGLRenderer();
         renderer->makeActiveOnCurrentThread();
-        pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
+
+        auto framebufferPtr = (*itr)->getBlitFramebuffer().get();
+        if (framebufferPtr) {
+          framebufferPtr->bindToRenderer(renderer, FboBind::READ);
+          pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
+        } else {
+          pixelsPtr = compositorPtr->readColorBuffer(0, 0, width, height);
+        }
         renderer->makeInactive();
       } else {
-        (*itr)->makeActiveOnCurrentThread();
-        GLRenderer* renderer = (*itr)->getGLRenderer();
-        CHECK(renderer != nullptr);
+        GLRenderer* renderer;
 
-        auto& framebufferPtr = (*itr)->getFramebuffer();
+        auto framebufferPtr = (*itr)->getBlitFramebuffer().get();
+        if (!framebufferPtr) {
+          framebufferPtr = (*itr)->getRenderFramebuffer().get();
+          renderer = framebufferPtr->getGLRenderer();
+        } else {
+          renderer = (*itr)->getGLRenderer();
+        }
+        CHECK(renderer != nullptr);
         CHECK(framebufferPtr);
+
+        renderer->makeActiveOnCurrentThread();
 
         framebufferPtr->bindToRenderer(renderer, FboBind::READ);
         pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);

@@ -39,7 +39,8 @@ class QueryFramebuffer {
                    int width,
                    int height,
                    bool doHitTest = false,
-                   bool doDepthTest = false);
+                   bool doDepthTest = false,
+                   size_t numSamples = 1);
 
   QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer);
   ~QueryFramebuffer();
@@ -50,14 +51,16 @@ class QueryFramebuffer {
       ::Rendering::GL::Resources::FboBind bindType = ::Rendering::GL::Resources::FboBind::READ_AND_DRAW);
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
-
   void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
   std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+
+  void blitToFramebuffer(QueryFramebuffer& dstFboPtr, size_t startx, size_t starty, size_t width, size_t height);
 
   void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo);
 
   size_t getWidth() const;
   size_t getHeight() const;
+  size_t getNumSamples() const;
   bool doHitTest() const { return _doHitTest; }
   bool doDepthTest() const { return _doDepthTest; }
 
@@ -67,9 +70,10 @@ class QueryFramebuffer {
   ::Rendering::Renderer* getRenderer();
   ::Rendering::GL::GLRenderer* getGLRenderer();
 
-  ::Rendering::GL::Resources::GLTexture2dShPtr getColorTexture2d(FboColorBuffer texType);
-  ::Rendering::GL::Resources::GLRenderbufferShPtr getRenderbuffer(
-      FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER);
+  ::Rendering::GL::Resources::GLFramebufferShPtr getGLFramebuffer() const { return _fbo; }
+  ::Rendering::GL::Resources::GLTexture2dShPtr getGLTexture2d(FboColorBuffer texType) const;
+  ::Rendering::GL::Resources::GLRenderbufferShPtr getGLRenderbuffer(
+      FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER) const;
 
   GLuint getId(FboColorBuffer buffer);
   GLuint getId(FboRenderBuffer buffer);
@@ -78,13 +82,15 @@ class QueryFramebuffer {
       ::Rendering::GL::GLResourceManagerShPtr& rsrcMgr,
       FboColorBuffer texType,
       size_t width,
-      size_t height);
+      size_t height,
+      size_t numSamples);
 
   static ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(
       ::Rendering::GL::GLResourceManagerShPtr& rsrcMgr,
       FboRenderBuffer rboType,
       size_t width,
-      size_t height);
+      size_t height,
+      size_t numSamples);
 
  private:
   bool _defaultDoHitTest, _defaultDoDepthTest;
@@ -107,7 +113,7 @@ class QueryFramebuffer {
   // attachment manager
   // AttachmentContainer _attachmentManager;
 
-  void _init(::Rendering::GL::GLRenderer* renderer, int width, int height);
+  void _init(::Rendering::GL::GLRenderer* renderer, int width, int height, size_t numSamples);
   void _init(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer);
 };
 

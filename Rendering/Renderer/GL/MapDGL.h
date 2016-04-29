@@ -16,7 +16,7 @@ GLEWContext* glewGetContext();
 #define BUFFER_OFFSET(i) ((char*)NULL + (i))
 
 std::string getGLErrorStr();
-std::string gegGLErrorStr(const GLenum err);
+std::string getGLErrorStr(const GLenum err);
 void checkGLError(const char* cmd, const char* file, int line);
 void checkGLMemError(const char* file, int line);
 

@@ -87,9 +87,10 @@ void QueryRenderCompositor::resize(size_t width, size_t height) {
   _implPtr->resize(width, height);
 }
 
-void QueryRenderCompositor::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
+QueryFramebufferUqPtr& QueryRenderCompositor::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
   CHECK(_implPtr);
   _implPtr->render(queryRenderer, usedGpus);
+  return _implPtr->getFramebuffer();
 }
 
 std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t startx,
@@ -131,14 +132,14 @@ void QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width
 }
 
 void QueryRenderCompositor::addQueryFramebuffer(QueryFramebuffer* fbo) {
-  ::Rendering::GL::Resources::GLTexture2dShPtr rgbaTex = fbo->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
+  ::Rendering::GL::Resources::GLTexture2dShPtr rgbaTex = fbo->getGLTexture2d(FboColorBuffer::COLOR_BUFFER);
 
   CHECK(_compositeTextures.find(rgbaTex.get()) == _compositeTextures.end());
   _implPtr->addFboTexture2d(rgbaTex, FboColorBuffer::COLOR_BUFFER);
   _compositeTextures.insert({rgbaTex.get(), rgbaTex});
 
   if (fbo->doHitTest()) {
-    ::Rendering::GL::Resources::GLTexture2dShPtr idTex = fbo->getColorTexture2d(FboColorBuffer::ID_BUFFER);
+    ::Rendering::GL::Resources::GLTexture2dShPtr idTex = fbo->getGLTexture2d(FboColorBuffer::ID_BUFFER);
     CHECK(_compositeTextures.find(idTex.get()) == _compositeTextures.end());
     _implPtr->addFboTexture2d(idTex, FboColorBuffer::ID_BUFFER);
     _compositeTextures.insert({idTex.get(), idTex});
@@ -146,7 +147,7 @@ void QueryRenderCompositor::addQueryFramebuffer(QueryFramebuffer* fbo) {
 
   if (fbo->doDepthTest()) {
     // TODO(croot): fill this out
-    // ::Rendering::GL::Resources::GLRenderbufferShPtr rbo = fbo->getColorTexture2d(FboRenderBuffer::DEPTH_BUFFER);
+    // ::Rendering::GL::Resources::GLRenderbufferShPtr rbo = fbo->getGLTexture2d(FboRenderBuffer::DEPTH_BUFFER);
     // _implPtr->addFboRenderbuffer(rbo, FboRenderBuffer::DEPTH_BUFFER);
     // _compositeRbos.insert({rbo.get(), rbo});
   }

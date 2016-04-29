@@ -84,8 +84,8 @@ GLTexture2dArray::GLTexture2dArray(const RendererWkPtr& rendererPtr,
                                    size_t height,
                                    size_t depth,
                                    GLenum internalFormat,
-                                   const GLTexture2dSampleProps& sampleProps,
-                                   size_t numSamples)
+                                   size_t numSamples,
+                                   const GLTexture2dSampleProps& sampleProps)
     : GLResource(rendererPtr, GLResourceType::TEXTURE_2D_ARRAY),
       _width(width),
       _height(height),

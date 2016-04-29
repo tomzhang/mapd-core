@@ -51,7 +51,12 @@ static bool clampWidthAndHeightToSrc(size_t startx,
   return rtn;
 }
 
-QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, bool doHitTest, bool doDepthTest)
+QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer,
+                                   int width,
+                                   int height,
+                                   bool doHitTest,
+                                   bool doDepthTest,
+                                   size_t numSamples)
     : _defaultDoHitTest(doHitTest),
       _defaultDoDepthTest(doDepthTest),
       _doHitTest(doHitTest),
@@ -60,7 +65,7 @@ QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer, int width, int height, 
       _idTex(nullptr),
       _rbo(nullptr),
       _fbo(nullptr) {
-  _init(renderer, width, height);
+  _init(renderer, width, height, numSamples);
 }
 
 QueryFramebuffer::QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer)
@@ -78,20 +83,20 @@ QueryFramebuffer::QueryFramebuffer(QueryRenderCompositor* compositor, ::Renderin
 QueryFramebuffer::~QueryFramebuffer() {
 }
 
-void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, int height) {
+void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, int height, size_t numSamples) {
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
-  _rgbaTex = createFboTexture2d(rsrcMgr, FboColorBuffer::COLOR_BUFFER, width, height);
+  _rgbaTex = createFboTexture2d(rsrcMgr, FboColorBuffer::COLOR_BUFFER, width, height, numSamples);
 
   GLFramebufferAttachmentMap attachments({{GL_COLOR_ATTACHMENT0, _rgbaTex}});
 
   if (_defaultDoHitTest) {
-    _idTex = createFboTexture2d(rsrcMgr, FboColorBuffer::ID_BUFFER, width, height);
+    _idTex = createFboTexture2d(rsrcMgr, FboColorBuffer::ID_BUFFER, width, height, numSamples);
     attachments.insert({GL_COLOR_ATTACHMENT1, _idTex});
   }
 
   if (_defaultDoDepthTest) {
-    _rbo = createFboRenderbuffer(rsrcMgr, FboRenderBuffer::DEPTH_BUFFER, width, height);
+    _rbo = createFboRenderbuffer(rsrcMgr, FboRenderBuffer::DEPTH_BUFFER, width, height, numSamples);
     attachments.insert({GL_DEPTH_ATTACHMENT, _rbo});
   }
 
@@ -130,6 +135,10 @@ size_t QueryFramebuffer::getHeight() const {
   return _fbo->getHeight();
 }
 
+size_t QueryFramebuffer::getNumSamples() const {
+  return _fbo->getNumSamples();
+}
+
 void QueryFramebuffer::setHitTest(bool doHitTest) {
   if (doHitTest) {
     RUNTIME_EX_ASSERT(_defaultDoHitTest,
@@ -154,7 +163,7 @@ void QueryFramebuffer::setDepthTest(bool doDepthTest) {
   return _fbo->getGLRenderer();
 }
 
-GLTexture2dShPtr QueryFramebuffer::getColorTexture2d(FboColorBuffer texType) {
+GLTexture2dShPtr QueryFramebuffer::getGLTexture2d(FboColorBuffer texType) const {
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
       return _rgbaTex;
@@ -166,7 +175,7 @@ GLTexture2dShPtr QueryFramebuffer::getColorTexture2d(FboColorBuffer texType) {
   return nullptr;
 }
 
-GLRenderbufferShPtr QueryFramebuffer::getRenderbuffer(FboRenderBuffer rboType) {
+GLRenderbufferShPtr QueryFramebuffer::getGLRenderbuffer(FboRenderBuffer rboType) const {
   switch (rboType) {
     case FboRenderBuffer::DEPTH_BUFFER:
       return _rbo;
@@ -304,6 +313,51 @@ std::shared_ptr<unsigned int> QueryFramebuffer::readIdBuffer(size_t startx, size
   return pixels;
 }
 
+void QueryFramebuffer::blitToFramebuffer(QueryFramebuffer& dstFboPtr,
+                                         size_t startx,
+                                         size_t starty,
+                                         size_t width,
+                                         size_t height) {
+  CHECK(dstFboPtr.getGLRenderer() == getGLRenderer());
+
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  CHECK(myWidth == dstFboPtr.getWidth() && myHeight == dstFboPtr.getHeight());
+
+  _fbo->blitToFramebuffer(*(dstFboPtr.getGLFramebuffer()),
+                          GL_COLOR_ATTACHMENT0,
+                          startx,
+                          starty,
+                          width,
+                          height,
+                          GL_COLOR_ATTACHMENT0,
+                          startx,
+                          starty,
+                          width,
+                          height,
+                          GL_NEAREST);
+
+  if (_doHitTest) {
+    _fbo->blitToFramebuffer(*(dstFboPtr.getGLFramebuffer()),
+                            GL_COLOR_ATTACHMENT1,
+                            startx,
+                            starty,
+                            width,
+                            height,
+                            GL_COLOR_ATTACHMENT1,
+                            startx,
+                            starty,
+                            width,
+                            height,
+                            GL_NEAREST);
+  }
+
+  // if (_doDepthTest) {
+  //   _fbo->blitToFramebuffer(GL_COLOR_ATTACHMENT0, dstFboPtr->getGLFramebuffer());
+  // }
+}
+
 void QueryFramebuffer::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
   RUNTIME_EX_ASSERT(pbo != nullptr, "Pbo is empty. Cannot copy pixels to an undefined pbo.");
   RUNTIME_EX_ASSERT(
@@ -335,12 +389,13 @@ void QueryFramebuffer::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
 GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rsrcMgr,
                                                       FboColorBuffer texType,
                                                       size_t width,
-                                                      size_t height) {
+                                                      size_t height,
+                                                      size_t numSamples) {
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
-      return rsrcMgr->createTexture2d(width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+      return rsrcMgr->createTexture2d(width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, numSamples);
     case FboColorBuffer::ID_BUFFER:
-      return rsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT);
+      return rsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, numSamples);
     default:
       CHECK(false);
   }
@@ -351,10 +406,11 @@ GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rs
 GLRenderbufferShPtr QueryFramebuffer::createFboRenderbuffer(GLResourceManagerShPtr& rsrcMgr,
                                                             FboRenderBuffer rboType,
                                                             size_t width,
-                                                            size_t height) {
+                                                            size_t height,
+                                                            size_t numSamples) {
   switch (rboType) {
     case FboRenderBuffer::DEPTH_BUFFER:
-      return rsrcMgr->createRenderbuffer(width, height, GL_DEPTH_COMPONENT);
+      return rsrcMgr->createRenderbuffer(width, height, GL_DEPTH_COMPONENT, numSamples);
     default:
       CHECK(false);
   }

@@ -64,6 +64,8 @@ class QueryRenderCompositorImpl {
     return _framebufferPtr->getGLRenderer();
   }
 
+  QueryFramebufferUqPtr& getFramebuffer() { return _framebufferPtr; }
+
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0,
                                                  size_t starty = 0,
                                                  int width = -1,
@@ -144,7 +146,7 @@ class QueryRenderCompositor {
 
   void resize(size_t width, size_t height);
 
-  void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus);
+  QueryFramebufferUqPtr& render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus);
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 

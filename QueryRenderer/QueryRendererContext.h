@@ -41,8 +41,13 @@ class QueryRendererContext {
   int getWidgetId() const { return _userWidget.widgetId; }
   const UserWidgetIdPair& getUserWidgetIds() const { return _userWidget; }
 
-  bool doHitTest() { return _doHitTest; }
-  bool doDepthTest() { return _doDepthTest; }
+  bool doHitTest() const { return _doHitTest; }
+  bool doDepthTest() const { return _doDepthTest; }
+  size_t numSamples() const {
+    auto qrmGpuCache = _qrmGpuCache.lock();
+    CHECK(qrmGpuCache);
+    return qrmGpuCache->numSamples;
+  }
 
   const Executor* const getExecutor() { return executor_; }
   const RapidJSONUtils::JsonCachePtr& getJsonCachePtr() { return _jsonCache; }

@@ -27,8 +27,8 @@ bool AttachmentContainer::hasAttachment(GLenum attachment) {
   return (_attachmentMap.find(attachment) != _attachmentMap.end());
 }
 
-void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex) {
-  MAPD_CHECK_GL_ERROR(glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, tex, 0));
+void AttachmentContainer::addTexture2dAttachment(GLenum attachment, GLuint tex, GLenum target) {
+  MAPD_CHECK_GL_ERROR(glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, target, tex, 0));
 
   AttachmentData data = {attachment, tex, true};
   _attachmentMap.insert(data);
@@ -190,7 +190,7 @@ void GLFramebuffer::_initResource(const GLFramebufferAttachmentMap& attachments)
     GLResourceType rsrcType = itr.second->getResourceType();
     switch (rsrcType) {
       case GLResourceType::TEXTURE_2D:
-        _attachmentManager.addTexture2dAttachment(atchmnt, itr.second->getId());
+        _attachmentManager.addTexture2dAttachment(atchmnt, itr.second->getId(), itr.second->getTarget());
         _textureBuffers.push_back(std::static_pointer_cast<GLTexture2d>(itr.second));
         break;
       case GLResourceType::RENDERBUFFER:
@@ -285,6 +285,15 @@ size_t GLFramebuffer::getHeight() const {
   return 0;
 }
 
+size_t GLFramebuffer::getNumSamples() const {
+  if (_textureBuffers.size()) {
+    return _textureBuffers[0]->getNumSamples();
+  } else if (_renderBuffers.size()) {
+    return _renderBuffers[0]->getNumSamples();
+  }
+  return 0;
+}
+
 void GLFramebuffer::readPixels(GLenum attachment,
                                size_t startx,
                                size_t starty,
@@ -324,6 +333,138 @@ void GLFramebuffer::readPixels(GLenum attachment,
   if (bind) {
     MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, currReadFbo));
   }
+}
+
+void GLFramebuffer::blitToFramebuffer(GLFramebuffer& dstFbo,
+                                      GLenum srcAttachment,
+                                      size_t srcX,
+                                      size_t srcY,
+                                      size_t srcWidth,
+                                      size_t srcHeight,
+                                      GLenum dstAttachment,
+                                      size_t dstX,
+                                      size_t dstY,
+                                      size_t dstWidth,
+                                      size_t dstHeight,
+                                      GLenum filter) {
+  RUNTIME_EX_ASSERT(hasAttachment(srcAttachment),
+                    "Error trying to blit fbo attachment " + std::to_string(srcAttachment) +
+                        ". Attachment doesn't exist in src fbo.");
+
+  RUNTIME_EX_ASSERT(dstFbo.hasAttachment(dstAttachment),
+                    "Error trying to blit fbo attachment " + std::to_string(dstAttachment) +
+                        ". Attachment doesn't exist in dst fbo.");
+
+  bool isSrcColor =
+      detail::AttachmentContainer::isColorAttachment(srcAttachment, _attachmentManager._maxColorAttachments);
+  bool isDstColor =
+      detail::AttachmentContainer::isColorAttachment(dstAttachment, dstFbo._attachmentManager._maxColorAttachments);
+
+  RUNTIME_EX_ASSERT(isSrcColor == isDstColor,
+                    "Error trying to blit an fbo to another fbo. The attachments " + std::to_string(srcAttachment) +
+                        " and " + std::to_string(dstAttachment) + " are not compatible types.");
+
+  if (!isSrcColor) {
+    RUNTIME_EX_ASSERT(srcAttachment == dstAttachment,
+                      "Error trying to blit an fbo to another fbo. The attachments " + std::to_string(srcAttachment) +
+                          " and " + std::to_string(dstAttachment) + " are not compatible types.");
+  }
+
+  RUNTIME_EX_ASSERT(srcWidth > 0 && srcHeight > 0 && dstWidth > 0 && dstHeight > 0,
+                    "Error trying to blit fbos: Invalid dimensions: " + std::to_string(srcWidth) + "x" +
+                        std::to_string(srcHeight) + " blit to " + std::to_string(dstWidth) + "x" +
+                        std::to_string(dstHeight));
+
+  auto srcX0 = srcX + srcWidth;
+  auto srcY0 = srcY + srcHeight;
+
+  auto dstX0 = dstX + dstWidth;
+  auto dstY0 = dstY + dstHeight;
+
+  auto srcFullWidth = getWidth();
+  auto srcFullHeight = getHeight();
+  auto dstFullWidth = dstFbo.getWidth();
+  auto dstFullHeight = dstFbo.getHeight();
+
+  RUNTIME_EX_ASSERT(srcX <= srcFullWidth && srcX0 <= srcFullWidth && srcY <= srcFullHeight && srcY0 <= srcFullHeight,
+                    "Error trying to blit fbos: src bounds extend beyond the bounds of the fbo - startPt: [" +
+                        std::to_string(srcX) + ", " + std::to_string(srcY) + "], endPt: [" + std::to_string(srcX0) +
+                        ", " + std::to_string(srcY0) + "], dims: " + std::to_string(srcFullWidth) + "x" +
+                        std::to_string(srcFullHeight));
+
+  RUNTIME_EX_ASSERT(dstX <= dstFullWidth && dstX0 <= dstFullWidth && dstY <= dstFullHeight && dstY0 <= dstFullHeight,
+                    "Error trying to blit fbos: dst bounds extend beyond the bounds of the fbo - startPt: [" +
+                        std::to_string(dstX) + ", " + std::to_string(dstY) + "], endPt: [" + std::to_string(dstX0) +
+                        ", " + std::to_string(dstY0) + "], dims: " + std::to_string(dstFullWidth) + "x" +
+                        std::to_string(dstFullHeight));
+
+  GLbitfield mask;
+
+  if (isSrcColor) {
+    mask = GL_COLOR_BUFFER_BIT;
+  } else {
+    switch (srcAttachment) {
+      case GL_DEPTH_ATTACHMENT:
+        mask = GL_DEPTH_BUFFER_BIT;
+        break;
+      case GL_STENCIL_ATTACHMENT:
+        mask = GL_STENCIL_BUFFER_BIT;
+        break;
+      case GL_DEPTH_STENCIL_ATTACHMENT:
+        mask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+        break;
+      default:
+        THROW_RUNTIME_EX("Error trying to blit fbos: unsupported attachment " + std::to_string(srcAttachment));
+    }
+  }
+
+  validateUsability(__FILE__, __LINE__);
+  dstFbo.validateUsability(__FILE__, __LINE__);
+
+  GLint currReadBuffer, currReadFbo;
+  GLint currDrawBuffer, currDrawFbo;
+  GLint srcFboId = static_cast<GLint>(_fbo);
+  GLint dstFboId = static_cast<GLint>(dstFbo.getId());
+  bool bindSrc, bindDst;
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &currReadFbo));
+  bindSrc = (currReadFbo != srcFboId);
+  if (bindSrc) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, srcFboId));
+  }
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_READ_BUFFER, &currReadBuffer));
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &currDrawFbo));
+  bindDst = (currDrawFbo != dstFboId);
+  if (bindDst) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dstFboId));
+  }
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_DRAW_BUFFER, &currDrawBuffer));
+
+  MAPD_CHECK_GL_ERROR(glReadBuffer(srcAttachment));
+  MAPD_CHECK_GL_ERROR(glDrawBuffer(dstAttachment));
+
+  MAPD_CHECK_GL_ERROR(glBlitFramebuffer(srcX, srcY, srcX0, srcY0, dstX, dstY, dstX0, dstY0, mask, filter));
+
+  GLenum err = glGetError();
+
+  if (currReadBuffer != static_cast<GLint>(srcAttachment)) {
+    MAPD_CHECK_GL_ERROR(glReadBuffer(currReadBuffer));
+  }
+
+  if (bindSrc) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_READ_FRAMEBUFFER, currReadFbo));
+  }
+
+  if (currDrawBuffer != static_cast<GLint>(dstAttachment)) {
+    MAPD_CHECK_GL_ERROR(glDrawBuffer(currDrawBuffer));
+  }
+
+  if (bindDst) {
+    MAPD_CHECK_GL_ERROR(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, currDrawFbo));
+  }
+
+  RUNTIME_EX_ASSERT(err == GL_NO_ERROR, "Error trying to blit framebuffers: " + getGLErrorStr(err));
 }
 
 void GLFramebuffer::copyPixelsToBoundPixelBuffer(GLenum attachment,
@@ -410,6 +551,10 @@ void GLFramebuffer::resize(size_t width, size_t height) {
   for (auto& rb : _renderBuffers) {
     rb->resize(width, height);
   }
+}
+
+bool GLFramebuffer::hasAttachment(GLenum attachment) {
+  return _attachmentManager.hasAttachment(attachment);
 }
 
 void GLFramebuffer::enableAllAttachments() {

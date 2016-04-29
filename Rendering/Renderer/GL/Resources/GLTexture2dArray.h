@@ -49,8 +49,8 @@ class GLTexture2dArray : public GLResource {
                    size_t height,
                    size_t depth,
                    GLenum internalFormat,
-                   const GLTexture2dSampleProps& sampleProps = GLTexture2dSampleProps(),
-                   size_t numSamples = 1);
+                   size_t numSamples = 1,
+                   const GLTexture2dSampleProps& sampleProps = GLTexture2dSampleProps());
 
   GLTexture2dArray(const RendererWkPtr& rendererPtr, const std::vector<GLTexture2dShPtr>& initTextures);
 

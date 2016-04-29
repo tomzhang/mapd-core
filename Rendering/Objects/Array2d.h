@@ -272,11 +272,30 @@ class Array2d {
         "The 2d array is empty (" + std::to_string(width) + "x" + std::to_string(height) + "). Cannot retrieve data.");
     return &data[0];
   }
+
   const T* getDataPtr() const {
     RUNTIME_EX_ASSERT(
         data.size() > 0,
         "The 2d array is empty (" + std::to_string(width) + "x" + std::to_string(height) + "). Cannot retrieve data.");
     return &data[0];
+  }
+
+  operator std::string() const {
+    std::string rtn = "[";
+
+    for (int j = static_cast<int>(height) - 1; j >= 0; --j) {
+      for (size_t i = 0; i < width; ++i) {
+        rtn += (i > 0 ? ", " : "");
+        rtn += std::to_string(operator[](j)[i]);
+      }
+      if (j > 0) {
+        rtn += "\n";
+      }
+    }
+
+    rtn += "]";
+
+    return rtn;
   }
 
  private:

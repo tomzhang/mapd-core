@@ -98,10 +98,10 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
   GLTexture2dSampleProps sampleProps;
   size_t numSamples = getNumSamples();
 
-  _rgbaTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_RGBA8, sampleProps, numSamples);
+  _rgbaTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_RGBA8, numSamples, sampleProps);
 
   if (doHitTest()) {
-    _idTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, sampleProps, numSamples);
+    _idTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
   }
 }
 
@@ -128,10 +128,11 @@ GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
                                                                   FboColorBuffer texType) {
   size_t width = getWidth();
   size_t height = getHeight();
+  size_t numSamples = getNumSamples();
 
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
-  GLTexture2dShPtr tex = QueryFramebuffer::createFboTexture2d(rsrcMgr, texType, width, height);
+  GLTexture2dShPtr tex = QueryFramebuffer::createFboTexture2d(rsrcMgr, texType, width, height, numSamples);
 
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
@@ -151,10 +152,11 @@ GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Render
                                                                         FboRenderBuffer rboType) {
   size_t width = getWidth();
   size_t height = getHeight();
+  size_t numSamples = getNumSamples();
 
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
-  GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, width, height);
+  GLRenderbufferShPtr rbo = QueryFramebuffer::createFboRenderbuffer(rsrcMgr, rboType, width, height, numSamples);
 
   _rbos.insert(rbo.get());
 
@@ -286,10 +288,10 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
     // TODO(croot): do we need to do a flush/finish before copying?
     // or will the copy take care of that for us?
 
-    auto& framebufferPtr = (*itr)->getFramebuffer();
+    auto& framebufferPtr = (*itr)->getRenderFramebuffer();
     CHECK(framebufferPtr);
 
-    rgbaTex = framebufferPtr->getColorTexture2d(FboColorBuffer::COLOR_BUFFER);
+    rgbaTex = framebufferPtr->getGLTexture2d(FboColorBuffer::COLOR_BUFFER);
     CHECK(rgbaTex);
 
     auto rgbaItr = _rgbaTextures.find(rgbaTex.get());
@@ -315,7 +317,7 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
                           1);
 
     if (doHitTest) {
-      idTex = framebufferPtr->getColorTexture2d(FboColorBuffer::ID_BUFFER);
+      idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
       CHECK(idTex);
 
       auto idItr = _idTextures.find(idTex.get());

@@ -57,7 +57,7 @@ static void resizeTexture2d(GLenum& target,
 
   MAPD_CHECK_GL_ERROR(glBindTexture(target, tex));
 
-  if (sampleProps) {
+  if (sampleProps && numSamples == 1) {
     sampleProps->apply(target);
   }
 
@@ -122,8 +122,8 @@ GLTexture2d::GLTexture2d(const RendererWkPtr& rendererPtr,
                          GLenum internalFormat,
                          GLenum pixelFormat,
                          GLenum pixelType,
-                         const GLTexture2dSampleProps& sampleProps,
-                         size_t numSamples)
+                         size_t numSamples,
+                         const GLTexture2dSampleProps& sampleProps)
     : GLResource(rendererPtr, GLResourceType::TEXTURE_2D),
       _width(width),
       _height(height),
