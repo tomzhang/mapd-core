@@ -739,7 +739,7 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
     std::shared_ptr<::QueryRenderer::QueryDataLayout> vertLayout(new ::QueryRenderer::QueryDataLayout(
         {"x", "y"},
         {::QueryRenderer::QueryDataLayout::AttrType::DOUBLE, ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE},
-        {}));
+        {{}}));
 
     // now create the cache
     render_manager_->createPolyTableCache(polyTableName, gpuId, polyByteData, vertLayout);
@@ -763,7 +763,7 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
                                            {::QueryRenderer::QueryDataLayout::AttrType::INT64,
                                             ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE,
                                             ::QueryRenderer::QueryDataLayout::AttrType::UINT64},
-                                           {}));
+                                           {{}}));
 
   // set the buffers as renderable
   render_manager_->setPolyTableReadyForRender(polyTableName, gpuId, polyRenderDataLayout);
