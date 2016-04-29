@@ -21,7 +21,7 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr getGLIndirectDrawIndexBuffer(const GpuId& gpuId) const;
 
   bool usesGpu(const GpuId& gpuId) const { return (_perGpuData.find(gpuId) != _perGpuData.end()); }
-  std::vector<GpuId> getUsedGpuIds() const final;
+  std::set<GpuId> getUsedGpuIds() const final;
 
   PolyTableDataInfo getPolyBufferData(const GpuId& gpuId) const;
 

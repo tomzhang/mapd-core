@@ -68,11 +68,11 @@ GLIndirectDrawIndexBufferShPtr BaseQueryPolyDataTable::getGLIndirectDrawIndexBuf
   return (itr->second.indibo ? itr->second.indibo->getGLIndirectIboPtr() : nullptr);
 }
 
-std::vector<GpuId> BaseQueryPolyDataTable::getUsedGpuIds() const {
-  std::vector<GpuId> rtn;
+std::set<GpuId> BaseQueryPolyDataTable::getUsedGpuIds() const {
+  std::set<GpuId> rtn;
 
   for (auto& itr : _perGpuData) {
-    rtn.push_back(itr.first);
+    rtn.insert(itr.first);
   }
 
   return rtn;
@@ -103,12 +103,13 @@ BaseQueryPolyDataTable& BaseQueryPolyDataTable::operator=(const BaseQueryPolyDat
 std::string BaseQueryPolyDataTable::_printInfo(bool useClassSuffix) const {
   std::ostringstream oss;
 
-  std::vector<GpuId> usedGpus = getUsedGpuIds();
+  auto usedGpus = getUsedGpuIds();
 
   if (!usedGpus.empty()) {
-    std::copy(usedGpus.begin(), usedGpus.end() - 1, std::ostream_iterator<GpuId>(oss, ","));
+    auto end = usedGpus.end()--;
+    std::copy(usedGpus.begin(), end, std::ostream_iterator<GpuId>(oss, ","));
 
-    oss << usedGpus.back();
+    oss << *end;
   }
 
   std::string rtn = BaseQueryDataTable::_printInfo() + ", usedGpus: [" + oss.str() + "]";

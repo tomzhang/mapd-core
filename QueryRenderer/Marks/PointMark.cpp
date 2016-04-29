@@ -399,13 +399,15 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
   }
 }
 
-void PointMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) {
-  x.initGpuResources(ctx, unusedGpus);
-  y.initGpuResources(ctx, unusedGpus);
-  z.initGpuResources(ctx, unusedGpus);
-  size.initGpuResources(ctx, unusedGpus);
-  id.initGpuResources(ctx, unusedGpus);
-  fillColor.initGpuResources(ctx, unusedGpus);
+void PointMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
+                                                  const std::set<GpuId>& usedGpus,
+                                                  const std::set<GpuId>& unusedGpus) {
+  x.initGpuResources(ctx, usedGpus, unusedGpus);
+  y.initGpuResources(ctx, usedGpus, unusedGpus);
+  z.initGpuResources(ctx, usedGpus, unusedGpus);
+  size.initGpuResources(ctx, usedGpus, unusedGpus);
+  id.initGpuResources(ctx, usedGpus, unusedGpus);
+  fillColor.initGpuResources(ctx, usedGpus, unusedGpus);
 }
 
 void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {

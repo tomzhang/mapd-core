@@ -113,7 +113,9 @@ class BaseMark {
   std::set<GpuId> _initUnusedGpus() const;
   void _initGpuResources(const QueryRendererContext* ctx, bool initializing = true);
 
-  virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) = 0;
+  virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
+                                                 const std::set<GpuId>& usedGpus,
+                                                 const std::set<GpuId>& unusedGpus) = 0;
 
   friend class QueryRendererContext;
 

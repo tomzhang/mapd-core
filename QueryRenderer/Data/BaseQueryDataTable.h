@@ -9,7 +9,7 @@
 #include "rapidjson/pointer.h"
 
 #include <map>
-#include <vector>
+#include <set>
 
 namespace QueryRenderer {
 
@@ -27,7 +27,7 @@ class BaseQueryDataTable {
   QueryDataTableType getType() const { return _type; }
   QueryDataTableBaseType getBaseType() const { return _baseType; }
 
-  virtual std::vector<GpuId> getUsedGpuIds() const = 0;
+  virtual std::set<GpuId> getUsedGpuIds() const = 0;
 
  protected:
   QueryDataTableType _type;

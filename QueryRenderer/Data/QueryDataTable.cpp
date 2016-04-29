@@ -50,11 +50,11 @@ QueryDataType getDataTypeForType<std::string>() {
   return QueryDataType::STRING;
 }
 
-std::vector<GpuId> BaseQueryDataTableVBO::getUsedGpuIds() const {
-  std::vector<GpuId> rtn;
+std::set<GpuId> BaseQueryDataTableVBO::getUsedGpuIds() const {
+  std::set<GpuId> rtn;
 
   for (auto& itr : _perGpuData) {
-    rtn.push_back(itr.first);
+    rtn.insert(itr.first);
   }
 
   return rtn;
@@ -63,12 +63,13 @@ std::vector<GpuId> BaseQueryDataTableVBO::getUsedGpuIds() const {
 std::string BaseQueryDataTableVBO::_printInfo() const {
   std::ostringstream oss;
 
-  std::vector<GpuId> usedGpus = getUsedGpuIds();
+  auto usedGpus = getUsedGpuIds();
 
   if (!usedGpus.empty()) {
-    std::copy(usedGpus.begin(), usedGpus.end() - 1, std::ostream_iterator<GpuId>(oss, ","));
+    auto end = usedGpus.end()--;
+    std::copy(usedGpus.begin(), end, std::ostream_iterator<GpuId>(oss, ","));
 
-    oss << usedGpus.back();
+    oss << *end;
   }
 
   return BaseQueryDataTable::_printInfo() + ", usedGpus: [" + oss.str() + "]";

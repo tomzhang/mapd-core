@@ -85,7 +85,9 @@ class BaseRenderProperty {
   std::string getDataColumnName() { return _vboAttrName; }
   const QueryDataTableShPtr& getDataTablePtr() { return _dataPtr; }
 
-  void initGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus = std::set<GpuId>());
+  void initGpuResources(const QueryRendererContext* ctx,
+                        const std::set<GpuId>& usedGpus,
+                        const std::set<GpuId>& unusedGpus);
 
   virtual operator std::string() const = 0;
 
@@ -157,6 +159,7 @@ class BaseRenderProperty {
 
  private:
   std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
+  std::set<GpuId> _initUnusedGpus(const std::set<GpuId>& usedGpus);
   void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
 };
 

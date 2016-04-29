@@ -41,7 +41,9 @@ class PolyMark : public BaseMark {
 
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);
 
-  void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx, const std::set<GpuId> unusedGpus) final;
+  void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
+                                         const std::set<GpuId>& usedGpus,
+                                         const std::set<GpuId>& unusedGpus) final;
 };
 
 }  // namespace QueryRenderer

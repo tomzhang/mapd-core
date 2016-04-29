@@ -61,7 +61,7 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
   // }
   virtual ~BaseQueryDataTableVBO() {}
 
-  std::vector<GpuId> getUsedGpuIds() const final;
+  std::set<GpuId> getUsedGpuIds() const final;
 
  protected:
   struct PerGpuData : BasePerGpuData {

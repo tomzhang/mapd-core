@@ -149,10 +149,13 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
   bool update = (numGpus > 0 && _perGpuData.begin()->second.shaderPtr);
   bool createdNewGpuRsrc = false;
 
+  std::set<GpuId> usedGpuIds;
   auto unusedGpus = _initUnusedGpus();
 
   auto qrmItr = qrmPerGpuDataPtr->begin();
+
   if (!_dataPtr) {
+    usedGpuIds.insert((*qrmItr)->gpuId);
     auto perGpuItr = _perGpuData.find((*qrmItr)->gpuId);
     if (perGpuItr == _perGpuData.end()) {
       PerGpuData gpuData(*qrmItr);
@@ -182,7 +185,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
     }
     unusedGpus.erase((*qrmItr)->gpuId);
   } else {
-    std::vector<GpuId> usedGpuIds = _dataPtr->getUsedGpuIds();
+    usedGpuIds = _dataPtr->getUsedGpuIds();
 
     for (auto& gpuId : usedGpuIds) {
       auto perGpuItr = _perGpuData.find(gpuId);
@@ -231,10 +234,10 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
   }
 
   // key.initGpuResources(ctx, unusedGpus, initializing);
-  key.initGpuResources(ctx, unusedGpus);
+  key.initGpuResources(ctx, usedGpuIds, unusedGpus);
 
   if (!initializing) {
-    _updateRenderPropertyGpuResources(ctx, unusedGpus);
+    _updateRenderPropertyGpuResources(ctx, usedGpuIds, unusedGpus);
   }
 
   if (createdNewGpuRsrc) {
