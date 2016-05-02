@@ -267,12 +267,11 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   //   CHECK(_rbos.size() == _)
   // }
 
-  int cnt = 0;
   for (auto gpuId : usedGpus) {
     QueryRenderer::renderGpu(gpuId, qrmPerGpuDataPtr, ctx, 0, 0, 0, 0);
   }
 
-  cnt = 0;
+  int cnt = 0;
   for (auto gpuId : usedGpus) {
     auto itr = qrmPerGpuDataPtr->find(gpuId);
     CHECK(itr != qrmPerGpuDataPtr->end());
@@ -346,6 +345,8 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
     // if (doDepthTest) {
     //   depthRbo = itr->second.framebufferPtr->getRenderbuffer(FboRenderBuffer::DEPTH_BUFFER);
     // }
+
+    ++cnt;
   }
 
   // now do the composite pass

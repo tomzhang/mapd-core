@@ -758,6 +758,8 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
           // need to blit the multisampled fbo into a non-sampled fbo
           auto& blitFramebuffer = (*qrmItr)->getBlitFramebuffer();
           CHECK(blitFramebuffer && blitFramebuffer->getGLRenderer() == usedFramebuffer->getGLRenderer());
+          auto renderer = usedFramebuffer->getRenderer();
+          renderer->makeActiveOnCurrentThread();
           usedFramebuffer->blitToFramebuffer(*blitFramebuffer, 0, 0, _ctx->getWidth(), _ctx->getHeight());
           usedFramebuffer = blitFramebuffer.get();
         }
@@ -768,10 +770,10 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
 
         if (_ctx->doHitTest()) {
           CHECK(_idPixels && _pbo);
-          Renderer* renderer = compositorPtr->getRenderer();
+          Renderer* renderer = usedFramebuffer->getRenderer();
           renderer->makeActiveOnCurrentThread();
 
-          compositorPtr->copyIdBufferToPbo(_pbo);
+          usedFramebuffer->copyIdBufferToPbo(_pbo);
 
           // time_ms = timer_stop(clock_begin);
           // std::cerr << "\t\t\tCROOT - compositor pbo idmap copy : " << time_ms << "ms" << std::endl;

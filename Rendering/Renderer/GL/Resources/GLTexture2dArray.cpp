@@ -142,7 +142,7 @@ void GLTexture2dArray::_initResource() {
     _target = GL_TEXTURE_2D_ARRAY;
   }
 
-  _textureArrayId = createTexture2dArray(_target, _width, _height, _depth, _internalFormat);
+  _textureArrayId = createTexture2dArray(_target, _width, _height, _depth, _internalFormat, _numSamples);
 
   setUsable();
 }
@@ -177,7 +177,7 @@ void GLTexture2dArray::_rebuild(size_t width, size_t height, size_t depth) {
     validateUsability(__FILE__, __LINE__);
 
     _cleanupResource();
-    _textureArrayId = createTexture2dArray(_target, width, height, depth, _internalFormat);
+    _textureArrayId = createTexture2dArray(_target, width, height, depth, _internalFormat, _numSamples);
     _width = width;
     _height = height;
     _depth = depth;

@@ -121,7 +121,7 @@ class QueryRenderCompositorImpl {
     CHECK(rendererPtr);
     ::Rendering::GL::GLRenderer* renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(rendererPtr.get());
     CHECK(renderer);
-    _framebufferPtr.reset(new QueryFramebuffer(renderer, width, height, doHitTest, doDepthTest));
+    _framebufferPtr.reset(new QueryFramebuffer(renderer, width, height, doHitTest, doDepthTest, numSamples));
   }
   QueryFramebufferUqPtr _framebufferPtr;
 
