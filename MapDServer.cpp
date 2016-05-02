@@ -445,7 +445,7 @@ class MapDHandler : virtual public MapDIf {
     ScopeGuard restore_device_type =
         [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
     const auto rowid = executor->getRowidForPixel(
-        pixel.x, pixel.y, session_info_ptr->get_session_id(), 1);  // TODO(alex): de-hardcode user widget
+        pixel.x, pixel.y, session_info_ptr->get_session_id(), 1, pixelRadius);  // TODO(alex): de-hardcode user widget
 
     _return.pixel = pixel;
     _return.row_id = rowid;
