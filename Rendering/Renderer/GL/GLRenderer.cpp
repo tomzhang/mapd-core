@@ -259,6 +259,10 @@ void GLRenderer::setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int 
   }
 }
 
+void GLRenderer::setMinSampleShading(const float minSampleShading) {
+  MAPD_CHECK_GL_ERROR(glMinSampleShading(minSampleShading));
+}
+
 void GLRenderer::bindResource(const GLResourceShPtr& rsrc) {
   _bindState.bindResource(rsrc);
 }

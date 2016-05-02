@@ -12,6 +12,8 @@
 #include <Rendering/Renderer/GL/Resources/GLTexture2d.h>
 #include <Rendering/Renderer/GL/glx/X11DisplayManager.h>
 
+#include <boost/algorithm/string/replace.hpp>
+
 namespace QueryRenderer {
 namespace Impl {
 namespace GLX {
@@ -75,11 +77,13 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
   // and textured with the textures from all the gpus
   GLInterleavedBufferLayoutShPtr bufferLayout(new GLInterleavedBufferLayout());
   bufferLayout->addAttribute<float, 2>("pos");
-  bufferLayout->addAttribute<float, 2>("texCoords");
-  _rectvbo = rsrcMgr->createVertexBuffer<float>(
-      {-1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0}, bufferLayout);
+  _rectvbo = rsrcMgr->createVertexBuffer<float>({-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, bufferLayout);
 
-  _shader = rsrcMgr->createShader(Compositor_vert::source, Compositor_frag::source);
+  std::string fragSrc(Compositor_frag::source);
+  bool doMultiSample = (getNumSamples() > 1);
+  boost::replace_first(fragSrc, "<doMultiSample>", std::to_string(doMultiSample));
+
+  _shader = rsrcMgr->createShader(Compositor_vert::source, fragSrc);
   _renderer->bindShader(_shader);
 
   // TODO(croot): automate the texture image unit binding
@@ -360,6 +364,11 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   // we're doing the blending manually in the shader, so disable any blending here
   _renderer->disable(GL_BLEND);
 
+  // When multi-sampling, we want to read from all the samples too,
+  // so enable sample shading to enforce that.
+  _renderer->enable(GL_SAMPLE_SHADING);
+  _renderer->setMinSampleShading(1.0);
+
   _renderer->setViewport(0, 0, getWidth(), getHeight());
   _renderer->setClearColor(0, 0, 0, 0);
   _renderer->clearAll();
@@ -375,6 +384,9 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   }
 
   _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
+
+  // TODO(croot): push/pop a state?
+  _renderer->disable(GL_SAMPLE_SHADING);
 }
 
 }  // namespace GLX

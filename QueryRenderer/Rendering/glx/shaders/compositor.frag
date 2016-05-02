@@ -3,13 +3,18 @@
 layout(location = 0) out vec4 color;
 layout(location = 1) out uint id;
 
+#define doMultiSample <doMultiSample>
+
+#if doMultiSample==1
+uniform sampler2DMSArray rgbaArraySampler;
+uniform usampler2DMSArray idArraySampler;
+#else
 uniform sampler2DArray rgbaArraySampler;
-uniform int rgbaArraySize;
-
 uniform usampler2DArray idArraySampler;
-uniform int idArraySize;
+#endif
 
-in vec2 oTexCoords;
+uniform int rgbaArraySize;
+uniform int idArraySize;
 
 void main() {
     vec4 dstColor = vec4(0,0,0,0);
@@ -32,7 +37,11 @@ void main() {
       // were to ever change, we'd have to change that here as well.
       // We should look at ways of exposing all those options as subroutines.
 
-      srcColor = texture(rgbaArraySampler, vec3(oTexCoords, i));
+#if doMultiSample == 1
+      srcColor = texelFetch(rgbaArraySampler, ivec3(gl_FragCoord.xy, i), 0, gl_SampleID);
+#else
+      srcColor = texelFetch(rgbaArraySampler, ivec3(gl_FragCoord.xy, i), 0);
+#endif
 
       if (srcColor.a > 0.0) {
         if (srcColor.a < 1.0) {
@@ -59,7 +68,11 @@ void main() {
     }
 
     if (idArraySize > 0) {
-      primitveId = texture(idArraySampler, vec3(oTexCoords, i)).r;
+#if doMultiSample == 1
+      primitveId = texelFetch(idArraySampler, ivec3(gl_FragCoord.xy, i), 0, gl_SampleID).r;
+#else
+      primitveId = texelFetch(idArraySampler, ivec3(gl_FragCoord.xy, i), 0).r;
+#endif
     }
 
     color = dstColor;

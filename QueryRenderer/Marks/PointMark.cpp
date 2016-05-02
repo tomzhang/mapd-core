@@ -438,7 +438,7 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   // if points can be small, i.e. < 3 pixels wide. That's
   // where we get the most benefit from GL_SAMPLE_SHADING.
   renderer->enable(GL_SAMPLE_SHADING);
-  MAPD_CHECK_GL_ERROR(glMinSampleShading(1.0));
+  renderer->setMinSampleShading(1.0);
 
   // now draw points
   renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());

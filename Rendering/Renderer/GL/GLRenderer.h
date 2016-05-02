@@ -74,6 +74,8 @@ class GLRenderer : public Renderer {
   void setBlendEquation(GLenum mode, int drawBufferId = -1);
   void setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int drawBufferId = -1);
 
+  void setMinSampleShading(const float minSampleShading);
+
   void bindResource(const Resources::GLResourceShPtr& rsrc);
   void bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc);
   void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
