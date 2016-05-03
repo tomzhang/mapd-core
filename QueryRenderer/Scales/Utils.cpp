@@ -100,6 +100,8 @@ ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj) {
       rtn = ScaleType::LINEAR;
     } else if (strScaleType == "ordinal") {
       rtn = ScaleType::ORDINAL;
+    } else if (strScaleType == "quantize") {
+      rtn = ScaleType::QUANTIZE;
     } else {
       THROW_RUNTIME_EX(
           RapidJSONUtils::getJsonParseErrorStr(obj, "scale type \"" + strScaleType + "\" is not a supported type."));
@@ -195,6 +197,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
 
   QueryDataType domainType = getScaleDomainDataTypeFromJSONObj(obj, ctx);
   QueryDataType rangeType = getScaleRangeDataTypeFromJSONObj(obj, ctx);
+
+  // TODO(croot): make scale classes per scale and put this in the quantize scale class
+  if (scaleType == ScaleType::QUANTIZE) {
+    RUNTIME_EX_ASSERT(
+        domainType == QueryDataType::UINT || domainType == QueryDataType::INT || domainType != QueryDataType::FLOAT ||
+            domainType == QueryDataType::DOUBLE,
+        RapidJSONUtils::getJsonParseErrorStr(
+            obj, "Domain type " + to_string(domainType) + " is not a supported domain for a quantize scale."));
+  }
 
   switch (domainType) {
     case QueryDataType::UINT:

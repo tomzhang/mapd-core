@@ -19,7 +19,8 @@ class BaseScaleDomainRangeData {
  public:
   BaseScaleDomainRangeData(const std::string& name, bool useString = false) : _name(name), _useString(useString) {}
   virtual ~BaseScaleDomainRangeData() {}
-  virtual int size() = 0;
+  virtual int size() const = 0;
+  virtual QueryDataType getType() const = 0;
   virtual const ::Rendering::GL::TypeGLShPtr& getTypeGL() = 0;
   virtual const std::type_info& getTypeInfo() = 0;
 
@@ -166,9 +167,17 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
   void updateJSONPath(const rapidjson::Pointer& objPath) { _jsonPath = objPath.Append(_name.c_str(), _name.length()); }
 
-  int size() { return (_vectorPtr == nullptr ? 0 : _vectorPtr->size()); }
+  int size() const { return (_vectorPtr == nullptr ? 0 : _vectorPtr->size()); }
+
+  double getDifference(const double divisor = 1) const {
+    int sz = size();
+    RUNTIME_EX_ASSERT(sz > 0, "Cannot get difference from an empty domain/range.");
+    return double((*_vectorPtr)[sz - 1] - (*_vectorPtr)[0]) / divisor;
+  }
 
   std::vector<T>& getVectorData() { return *_vectorPtr; }
+
+  QueryDataType getType() const final { return dataType; }
 
   const ::Rendering::GL::TypeGLShPtr& getTypeGL() {
     if (!_cachedTypeGL) {
@@ -213,13 +222,19 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   }
 
   void _updateVectorDataByType(TDataColumn<T>* dataColumnPtr, ScaleType type) {
-    if (type == ScaleType::LINEAR) {
+    if (type == ScaleType::LINEAR || type == ScaleType::QUANTIZE) {
       std::pair<T, T> minmaxDomain = dataColumnPtr->getExtrema();
 
       _vectorPtr.reset(new std::vector<T>({minmaxDomain.first, minmaxDomain.second}));
     }
   }
 };
+
+template <>
+double ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::getDifference(const double divisor) const;
+
+template <>
+double ScaleDomainRangeData<std::string>::getDifference(const double divisor) const;
 
 template <>
 const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::getTypeGL();

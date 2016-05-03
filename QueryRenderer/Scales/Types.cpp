@@ -8,6 +8,8 @@ std::string to_string(ScaleType scaleType) {
       return "LINEAR";
     case ScaleType::ORDINAL:
       return "ORDINAL";
+    case ScaleType::QUANTIZE:
+      return "QUANTIZE";
     case ScaleType::UNDEFINED:
       return "UNDEFINED";
     default:

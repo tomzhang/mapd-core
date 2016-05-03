@@ -7,6 +7,16 @@ using ::Rendering::GL::TypeGLShPtr;
 using ::Rendering::Objects::ColorRGBA;
 
 template <>
+double ScaleDomainRangeData<ColorRGBA>::getDifference(const double divisor) const {
+  THROW_RUNTIME_EX("Mathematical operations on color objects aren't currently supported.");
+}
+
+template <>
+double ScaleDomainRangeData<std::string>::getDifference(const double divisor) const {
+  THROW_RUNTIME_EX("Cannot run mathematical operations on string objects.");
+}
+
+template <>
 const TypeGLShPtr& ScaleDomainRangeData<ColorRGBA>::getTypeGL() {
   // TODO(croot): combine all the different types into a utility file somewhere.
   // i.e. this is already defined in BufferLayout.h, so let's find a

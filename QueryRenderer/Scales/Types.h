@@ -5,7 +5,7 @@
 
 namespace QueryRenderer {
 
-enum class ScaleType { LINEAR = 0, ORDINAL, UNDEFINED };
+enum class ScaleType { LINEAR = 0, ORDINAL, QUANTIZE, UNDEFINED };
 
 class BaseScaleDomainRangeData;
 

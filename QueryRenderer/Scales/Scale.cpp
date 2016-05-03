@@ -2,12 +2,14 @@
 #include "Utils.h"
 #include "shaders/linearScaleTemplate_vert.h"
 #include "shaders/ordinalScaleTemplate_vert.h"
+#include "shaders/quantizeScaleTemplate_vert.h"
 
 namespace QueryRenderer {
 
 const std::vector<std::string> BaseScale::scaleVertexShaderSource = {
-    LinearScaleTemplate_vert::source,  // LINEAR
-    OrdinalScaleTemplate_vert::source  // ORDINAL
+    LinearScaleTemplate_vert::source,    // LINEAR
+    OrdinalScaleTemplate_vert::source,   // ORDINAL
+    QuantizeScaleTemplate_vert::source,  // QUANTIZE
 };
 
 BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
@@ -54,18 +56,17 @@ bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::P
       _type = getScaleTypeFromJSONObj(obj);
     }
 
+    // TODO(croot): create a separate derived class per scale?
+    // once we do this, there's no need to do any updates to the BaseScale class
+    // since it would only handle _name & _type & if either of those ever
+    // change, a new object is built. Therefore the _initFromJSONObj() call in
+    // the derived class's updateFromJSONObj() can be removed and this _initFromJSONObj()
+    // method can be made private.
+    // Also, by doing this, the _jsonPath property can be fullty managed
+    // by the derived class, so this base class can provide a "_setJsonPath()"
+    // method or something.
+    rapidjson::Value::ConstMemberIterator itr;
     if (_type == ScaleType::LINEAR) {
-      // TODO(croot): create a separate derived class per scale?
-      // once we do this, there's no need to do any updates to the BaseScale class
-      // since it would only handle _name & _type & if either of those ever
-      // change, a new object is built. Therefore the _initFromJSONObj() call in
-      // the derived class's updateFromJSONObj() can be removed and this _initFromJSONObj()
-      // method can be made private.
-      // Also, by doing this, the _jsonPath property can be fullty managed
-      // by the derived class, so this base class can provide a "_setJsonPath()"
-      // method or something.
-      rapidjson::Value::ConstMemberIterator itr;
-
       // TODO(croot): move the "clamp" prop name into a const somewhere.
       std::string clampProp = "clamp";
 
@@ -86,6 +87,17 @@ bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::P
         _clampChanged = true;
       } else {
         _clampChanged = false;
+      }
+    } else if (_type == ScaleType::QUANTIZE) {
+      if ((itr = obj.FindMember("domain")) != obj.MemberEnd() && itr->value.IsArray()) {
+        // NOTE: not doing any validation that "domain" is an array as that is
+        // being done at a later point. Just checking that the domain size here is always
+        // 2.
+        RUNTIME_EX_ASSERT(itr->value.Size() == 2,
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              _ctx->getUserWidgetIds(),
+                              obj,
+                              "the \"domain\" property for quantize scales must always be a length 2 array."));
       }
     }
 
@@ -117,6 +129,9 @@ std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
       break;
     case ScaleType::ORDINAL:
       scaleName = "Ordinal";
+      break;
+    case ScaleType::QUANTIZE:
+      scaleName = "Quantize";
       break;
     default:
       THROW_RUNTIME_EX(std::string(*this) + " getScaleGLSLFuncName(): scale type is not supported.");

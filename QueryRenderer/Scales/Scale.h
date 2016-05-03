@@ -157,6 +157,7 @@ class Scale : public BaseScale {
 
     boost::replace_all(shaderCode, "<name>", _name + extraSuffix);
 
+    // TODO(croot): create a derived class per scale type?
     if (_type == ScaleType::LINEAR) {
       ss.str("");
       ss << _useClamp;
@@ -180,8 +181,12 @@ class Scale : public BaseScale {
       activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorData());
     }
 
+    // TODO(croot): create a derived class per scale type?
     if (_type == ScaleType::ORDINAL) {
       activeShader->setUniformAttribute(getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
+    } else if (_type == ScaleType::QUANTIZE) {
+      double diff = _domainPtr.getDifference(_rangePtr.size());
+      activeShader->setUniformAttribute<double>("quantizeDiff", diff);
     }
   }
 
