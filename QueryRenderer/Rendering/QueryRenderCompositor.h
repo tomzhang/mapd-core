@@ -39,9 +39,8 @@ class QueryRenderCompositorImpl {
   }
 
   size_t getNumSamples() {
-    // CHECK(_framebufferPtr);
-    // return _framebufferPtr->getNumSamples();
-    return 1;
+    CHECK(_framebufferPtr);
+    return _framebufferPtr->getNumSamples();
   }
 
   bool doHitTest() {

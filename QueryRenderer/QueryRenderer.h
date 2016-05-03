@@ -105,6 +105,7 @@ class QueryRenderer {
   void _update();
   void _createPbo(const std::set<GpuId>& usedGpus, int width = -1, int height = -1, bool makeContextInactive = false);
   void _releasePbo(bool makeContextInactive = false);
+  void _updatePbo();
 
   void _render(const std::set<GpuId>& usedGpus, bool inactivateRendererOnThread = true);
 

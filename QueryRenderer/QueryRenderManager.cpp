@@ -135,7 +135,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
   GLRendererShPtr renderer;
   GLResourceManagerShPtr rsrcMgrPtr;
-  QueryFramebufferShPtr blitFramebuffer;
   RootPerGpuDataShPtr gpuDataPtr;
   size_t endDevice = startGpu + numGpus;
   size_t startDevice = startGpu;
@@ -173,11 +172,6 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                                                        // TODO(croot): do depth testing
                                                        false));
       }
-
-      if (numSamples > 1) {
-        // create a framebuffer to blit the multi-sampled framebuffers into
-        blitFramebuffer.reset(new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false, 1));
-      }
     }
 
     gpuDataPtr->queryResultBufferPtr.reset(new QueryResultVertexBuffer(renderer.get(), queryResultBufferSize));
@@ -193,7 +187,11 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
     gpuDataPtr->pboPoolPtr.reset(new QueryIdMapPboPool(renderer));
 
-    gpuDataPtr->blitFramebufferPtr = blitFramebuffer;
+    if (numSamples > 1) {
+      // create a framebuffer to blit the multi-sampled framebuffers into
+      gpuDataPtr->blitFramebufferPtr.reset(
+          new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false, 1));
+    }
 
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();

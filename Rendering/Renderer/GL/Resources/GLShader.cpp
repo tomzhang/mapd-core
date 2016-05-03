@@ -525,8 +525,12 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     case GL_SAMPLER_2D_ARRAY:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
       break;
-    // case GL_SAMPLER_2D_MULTISAMPLE:
-    // case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+    case GL_SAMPLER_2D_MULTISAMPLE:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
+      break;
+    case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
+      break;
 
     // case GL_SAMPLER_2D_SHADOW:
     // case GL_SAMPLER_2D_ARRAY_SHADOW:
@@ -542,8 +546,12 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
       break;
-    // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
-    // case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+    case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
+      break;
+    case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
+      break;
 
     // case GL_SAMPLER_3D:
     // case GL_INT_SAMPLER_3D:

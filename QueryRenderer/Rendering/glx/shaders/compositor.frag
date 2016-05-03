@@ -38,7 +38,7 @@ void main() {
       // We should look at ways of exposing all those options as subroutines.
 
 #if doMultiSample == 1
-      srcColor = texelFetch(rgbaArraySampler, ivec3(gl_FragCoord.xy, i), 0, gl_SampleID);
+      srcColor = texelFetch(rgbaArraySampler, ivec3(gl_FragCoord.xy, i), gl_SampleID);
 #else
       srcColor = texelFetch(rgbaArraySampler, ivec3(gl_FragCoord.xy, i), 0);
 #endif
@@ -69,7 +69,7 @@ void main() {
 
     if (idArraySize > 0) {
 #if doMultiSample == 1
-      primitveId = texelFetch(idArraySampler, ivec3(gl_FragCoord.xy, i), 0, gl_SampleID).r;
+      primitveId = texelFetch(idArraySampler, ivec3(gl_FragCoord.xy, i), gl_SampleID).r;
 #else
       primitveId = texelFetch(idArraySampler, ivec3(gl_FragCoord.xy, i), 0).r;
 #endif

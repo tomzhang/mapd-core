@@ -113,100 +113,12 @@ void QueryRenderer::_clear(bool preserveDimensions) {
 
 void QueryRenderer::_clearGpuResources() {
   _releasePbo();
-
-  // _perGpuData.clear();
-  // _ctx->_clearGpuResources();
 }
 
 void QueryRenderer::_clearAll(bool preserveDimensions) {
   _clear(preserveDimensions);
   _clearGpuResources();
 }
-
-// void QueryRenderer::_updateGpuData(const GpuId& gpuId,
-//                                    RootPerGpuDataMap* qrmPerGpuData,
-//                                    std::unordered_set<GpuId>& unusedGpus,
-//                                    size_t width,
-//                                    size_t height) {
-//   auto myItr = _perGpuData.find(gpuId);
-
-//   if (myItr == _perGpuData.end()) {
-//     auto itr = qrmPerGpuData->find(gpuId);
-//     CHECK(itr != qrmPerGpuData->end());
-
-//     PerGpuData gpuData;
-
-//     gpuData.rootPerGpuData = *itr;
-
-//     // TODO(croot): validate the QueryRenderManager data is complete?
-
-//     (*itr)->makeActiveOnCurrentThread();
-//     (*itr)->resize(width, height);
-
-//     _perGpuData.emplace(gpuId, std::move(gpuData));
-//   } else {
-//     myItr->second.makeActiveOnCurrentThread();
-//     myItr->second.resize(width, height);
-
-//     unusedGpus.erase(gpuId);
-//   }
-// }
-
-// std::unordered_set<GpuId> QueryRenderer::_initUnusedGpus() {
-//   std::unordered_set<GpuId> unusedGpus;
-//   unusedGpus.reserve(_perGpuData.size());
-//   for (const auto& kv : _perGpuData) {
-//     unusedGpus.insert(kv.first);
-//   }
-//   return unusedGpus;
-// }
-
-// void QueryRenderer::_initGpuResources(RootPerGpuDataMap* qrmPerGpuData,
-//                                       const std::vector<GpuId>& gpuIds,
-//                                       std::unordered_set<GpuId>& unusedGpus) {
-//   // make sure size is at least 1x1
-//   size_t width = _ctx->getWidth();
-//   if (width == 0) {
-//     // TODO(croot): expose a default size?
-//     width = 1;
-//   }
-
-//   size_t height = _ctx->getHeight();
-//   if (height == 0) {
-//     // TODO(croot): expose a default size?
-//     height = 1;
-//   }
-
-//   if (_pbo) {
-//     bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != gpuIds[0]));
-//     if (!deletePBO && gpuIds.size() > 1 && _perGpuData.size() == 1) {
-//       auto itr = _perGpuData.find(_pboGpu);
-//       CHECK(itr != _perGpuData.end());
-//       if (itr->second.getCompositorGpuId() != _pboGpu) {
-//         deletePBO = true;
-//       }
-//     }
-
-//     if (deletePBO) {
-//       _releasePbo();
-//     }
-//   }
-
-//   for (auto gpuId : gpuIds) {
-//     _updateGpuData(gpuId, qrmPerGpuData, unusedGpus, width, height);
-//   }
-
-//   // now clean up any unused gpu resources
-//   for (auto gpuId : unusedGpus) {
-//     _perGpuData.erase(gpuId);
-//   }
-
-//   if (!_pbo) {
-//     _createPbo(width, height);
-//   }
-
-//   _ctx->_initGpuResources(_perGpuData, unusedGpus);
-// }
 
 void QueryRenderer::_resizeFramebuffers(int width, int height) {
   auto qrmGpuCache = _ctx->getRootGpuCache();
@@ -460,6 +372,11 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
 
   // now update the data
   _ctx->_updateConfigGpuResources();
+
+  // now update the pbo, if it is active, to ensure it is in alignment
+  // with the used gpus after configuration.. this must be donw
+  // after the gpu resources update above.
+  _updatePbo();
 }
 
 size_t QueryRenderer::getWidth() {
@@ -639,6 +556,27 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
   }
 }
 
+void QueryRenderer::_updatePbo() {
+  if (_pbo) {
+    auto gpuIds = _ctx->getUsedGpus();
+
+    bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != *gpuIds.begin()));
+    if (!deletePBO && gpuIds.size() > 1) {
+      auto rootCache = _ctx->getRootGpuCache();
+      CHECK(rootCache);
+      auto itr = rootCache->perGpuData->find(_pboGpu);
+      CHECK(itr != rootCache->perGpuData->end());
+      if ((*itr)->getCompositorGpuId() != _pboGpu) {
+        deletePBO = true;
+      }
+    }
+
+    if (deletePBO) {
+      _releasePbo();
+    }
+  }
+}
+
 QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
                                                 const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
                                                 QueryRendererContext* ctx,
@@ -731,7 +669,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
         if (usedFramebuffer->getNumSamples() > 1) {
           // need to blit the multisampled fbo into a non-sampled fbo
           auto& blitFramebuffer = (*qrmItr)->getBlitFramebuffer();
-          CHECK(blitFramebuffer);
+          CHECK(blitFramebuffer && blitFramebuffer->getGLRenderer() == usedFramebuffer->getGLRenderer());
           usedFramebuffer->blitToFramebuffer(*blitFramebuffer, 0, 0, _ctx->getWidth(), _ctx->getHeight());
           usedFramebuffer = blitFramebuffer.get();
         }
@@ -741,7 +679,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
         // clock_begin = timer_start();
 
         if (_ctx->doHitTest()) {
-          CHECK(_idPixels && _pbo);
+          CHECK(_idPixels && _pbo && usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
           usedFramebuffer->copyIdBufferToPbo(_pbo);
 
           // time_ms = timer_stop(clock_begin);
@@ -749,6 +687,12 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
           // clock_begin = timer_start();
         }
       } else {
+        auto compId = (*qrmItr)->getCompositorGpuId();
+        if (compId != (*qrmItr)->gpuId) {
+          qrmItr = qrmPerGpuDataPtr->find(compId);
+          CHECK(qrmItr != qrmPerGpuDataPtr->end());
+        }
+
         auto& compositorPtr = (*qrmItr)->getCompositor();
         CHECK(compositorPtr);
 
@@ -769,7 +713,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
         // clock_begin = timer_start();
 
         if (_ctx->doHitTest()) {
-          CHECK(_idPixels && _pbo);
+          CHECK(_idPixels && _pbo && usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
           Renderer* renderer = usedFramebuffer->getRenderer();
           renderer->makeActiveOnCurrentThread();
 
@@ -829,6 +773,12 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
       CHECK(itr != qrmPerGpuDataPtr->end());
 
       if (numGpus > 1) {
+        auto compId = (*itr)->getCompositorGpuId();
+        if (compId != (*itr)->gpuId) {
+          itr = qrmPerGpuDataPtr->find(compId);
+          CHECK(itr != qrmPerGpuDataPtr->end());
+        }
+
         auto& compositorPtr = (*itr)->getCompositor();
         CHECK(compositorPtr);
 
@@ -844,17 +794,13 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
         }
         renderer->makeInactive();
       } else {
-        GLRenderer* renderer;
-
+        auto renderer = (*itr)->getGLRenderer();
         auto framebufferPtr = (*itr)->getBlitFramebuffer().get();
         if (!framebufferPtr) {
           framebufferPtr = (*itr)->getRenderFramebuffer().get();
-          renderer = framebufferPtr->getGLRenderer();
-        } else {
-          renderer = (*itr)->getGLRenderer();
         }
         CHECK(renderer != nullptr);
-        CHECK(framebufferPtr);
+        CHECK(framebufferPtr && framebufferPtr->getGLRenderer() == renderer);
 
         renderer->makeActiveOnCurrentThread();
 
