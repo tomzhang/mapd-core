@@ -106,18 +106,31 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
                               jsonObj,
                               "scale data references only support JSON-embedded data tables currently."));
 
-        DataTable* dataTablePtr = dynamic_cast<DataTable*>(tablePtr.get());
+        auto dataTablePtr = dynamic_cast<DataTable*>(tablePtr.get());
+        std::string columnName = mitr->value.GetString();
+        if (dataTablePtr) {
+          columnPtr = dataTablePtr->getColumn(columnName);
+        } else {
+          auto polyDataTablePtr = dynamic_cast<PolyDataTable*>(tablePtr.get());
 
-        RUNTIME_EX_ASSERT(
-            dataTablePtr != nullptr,
-            RapidJSONUtils::getJsonParseErrorStr(
-                ctx->getUserWidgetIds(),
-                jsonObj,
-                "Unsupported data reference table type. Data reference is not a vertex buffer-based data table."));
+          RUNTIME_EX_ASSERT(
+              polyDataTablePtr != nullptr,
+              RapidJSONUtils::getJsonParseErrorStr(ctx->getUserWidgetIds(),
+                                                   jsonObj,
+                                                   "Unsupported data reference table type. Data reference is not a "
+                                                   "vertex or poly buffer-based data table."));
 
-        columnPtr = dataTablePtr->getColumn(mitr->value.GetString());
+          columnPtr = polyDataTablePtr->getColumn(columnName);
+        }
 
-        TDataColumn<T>* dataColumnPtr = dynamic_cast<TDataColumn<T>*>(columnPtr.get());
+        auto dataColumnPtr = dynamic_cast<TDataColumn<T>*>(columnPtr.get());
+
+        RUNTIME_EX_ASSERT(dataColumnPtr != nullptr,
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              ctx->getUserWidgetIds(),
+                              jsonObj,
+                              "Data column " + columnName + " is of type " + to_string(columnPtr->getColumnType()) +
+                                  " is not compatible with domain/range data of type " + to_string(getType())));
 
         _vectorPtr = dataColumnPtr->getColumnData();
 

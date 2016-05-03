@@ -167,6 +167,7 @@ class PolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDataTableJS
   QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
   std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) final;
   QueryDataType getAttributeType(const std::string& attrName) final;
+  DataColumnShPtr getColumn(const std::string& columnName);
 
   operator std::string() const final;
 

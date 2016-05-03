@@ -317,6 +317,7 @@ class DataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableJSON {
   void _readDataFromFile(const std::string& filename);
   void _readFromCsvFile(const std::string& filename);
 
+  void _initBuffers(BaseQueryDataTableVBO::PerGpuData& perGpuData);
   std::pair<::Rendering::GL::Resources::GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>>
   _createVBOData();
 };

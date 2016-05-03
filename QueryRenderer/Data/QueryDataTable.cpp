@@ -134,7 +134,9 @@ bool SqlQueryDataTable::hasAttribute(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
-  return itr->second.vbo->hasAttribute(attrName);
+
+  // TODO(croot): throw a warning/error if the vbo isn't initialized?
+  return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName) : false);
 }
 
 QueryBufferShPtr SqlQueryDataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
@@ -142,6 +144,10 @@ QueryBufferShPtr SqlQueryDataTable::getAttributeDataBuffer(const GpuId& gpuId, c
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find data VBO for gpu " + std::to_string(gpuId));
+
+  RUNTIME_EX_ASSERT(itr->second.vbo,
+                    "Cannot get the data buffer for " + attrName + " in table " + getTableName() +
+                        ". The table's vbo has not been initialized yet.");
 
   RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName),
                     _printInfo(true) + ": attribute \"" + attrName + "\" does not exist in VBO.");
@@ -162,6 +168,10 @@ QueryDataType SqlQueryDataTable::getAttributeType(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
+
+  RUNTIME_EX_ASSERT(itr->second.vbo,
+                    "Cannot get attribute type for " + attrName + " in table " + getTableName() +
+                        ". The table's vbo has not been initialized yet.");
 
   GLBufferAttrType attrType = itr->second.vbo->getAttributeType(attrName);
   switch (attrType) {
@@ -485,6 +495,20 @@ DataColumnShPtr DataTable::getColumn(const std::string& columnName) {
   return *itr;
 }
 
+void DataTable::_initBuffers(BaseQueryDataTableVBO::PerGpuData& perGpuData) {
+  if (perGpuData.vbo == nullptr) {
+    perGpuData.makeActiveOnCurrentThread();
+
+    auto renderer = perGpuData.getGLRenderer();
+    CHECK(renderer != nullptr);
+
+    std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData = _createVBOData();
+
+    perGpuData.vbo.reset(new QueryVertexBuffer(renderer, vboData.first));
+    perGpuData.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
+  }
+}
+
 std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataTable::_createVBOData() {
   GLBufferLayoutShPtr vboLayoutPtr;
   QueryVertexBufferShPtr vbo;
@@ -626,18 +650,8 @@ QueryBufferShPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     std::string(*this) + ": Cannot get column data vbo for gpu " + std::to_string(gpuId));
 
-  RootPerGpuDataShPtr qrmGpuData;
-  if (itr->second.vbo == nullptr) {
-    qrmGpuData = itr->second.getRootPerGpuData();
-    CHECK(qrmGpuData && qrmGpuData->rendererPtr);
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
-    CHECK(renderer != nullptr);
-
-    std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData = _createVBOData();
-
-    itr->second.vbo.reset(new QueryVertexBuffer(renderer, vboData.first));
-    itr->second.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
-  }
+  _initBuffers(itr->second);
+  CHECK(itr->second.vbo);
 
   RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName),
                     std::string(*this) + " getAttributeDataBuffer(): attribute \"" + attrName + "\" does not exist.");
@@ -651,19 +665,8 @@ std::map<GpuId, QueryBufferShPtr> DataTable::getAttributeDataBuffers(const std::
 
   RootPerGpuDataShPtr qrmGpuData;
   for (auto& itr : _perGpuData) {
-    if (itr.second.vbo == nullptr) {
-      itr.second.makeActiveOnCurrentThread();
-
-      GLRenderer* renderer = dynamic_cast<GLRenderer*>(itr.second.getRootPerGpuData()->rendererPtr.get());
-      CHECK(renderer != nullptr);
-
-      if (vboData.first == nullptr) {
-        vboData = _createVBOData();
-      }
-
-      itr.second.vbo.reset(new QueryVertexBuffer(renderer, vboData.first));
-      itr.second.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
-    }
+    _initBuffers(itr.second);
+    CHECK(itr.second.vbo);
 
     rtn.insert({itr.first, itr.second.vbo});
   }

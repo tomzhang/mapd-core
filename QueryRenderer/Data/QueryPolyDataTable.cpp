@@ -1016,6 +1016,8 @@ QueryDataType PolyDataTable::getAttributeType(const std::string& attrName) {
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
 
+  _initBuffers(itr->second);
+
   GLBufferAttrType attrType;
   if (itr->second.vbo->hasAttribute(attrName)) {
     attrType = itr->second.vbo->getAttributeType(attrName);
@@ -1041,6 +1043,21 @@ QueryDataType PolyDataTable::getAttributeType(const std::string& attrName) {
       THROW_RUNTIME_EX(std::string(*this) + " getColumnType(): Vertex buffer attribute type: " +
                        std::to_string(static_cast<int>(attrType)) + " is not a supported type.");
   }
+}
+
+DataColumnShPtr PolyDataTable::getColumn(const std::string& columnName) {
+  RUNTIME_EX_ASSERT(
+      columnName != xcoordName && columnName != ycoordName,
+      std::string(*this) + " getColumn(): " + columnName +
+          " is embedded in a special column specific to the polygon and is not supported for external use yet.");
+
+  ColumnMap_by_name& nameLookup = _columns.get<DataColumn::ColumnName>();
+
+  ColumnMap_by_name::iterator itr;
+  RUNTIME_EX_ASSERT((itr = nameLookup.find(columnName)) != nameLookup.end(),
+                    std::string(*this) + " getColumn(): column \"" + columnName + "\" does not exist.");
+
+  return *itr;
 }
 
 // template <typename C1, typename C2>
