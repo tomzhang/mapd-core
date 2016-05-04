@@ -38,6 +38,17 @@ PointMark::PointMark(const rapidjson::Value& obj,
 PointMark::~PointMark() {
 }
 
+std::set<BaseRenderProperty*> PointMark::_getUsedProps() {
+  std::set<BaseRenderProperty*> rtn = {&x, &y, &size, &fillColor};  // TODO(croot) add z
+  if (_ctx->doDepthTest()) {
+    rtn.insert(&z);
+  }
+  if (_ctx->doHitTest()) {
+    rtn.insert(&id);
+  }
+  return rtn;
+}
+
 void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   // TODO(croot): move "properties" to a const somewhere
   std::string propertiesProp = "properties";
@@ -51,8 +62,6 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
   const rapidjson::Value& propObj = mitr->value;
 
   if (!_ctx->isJSONCacheUpToDate(_propertiesJsonPath, propObj)) {
-    std::vector<BaseRenderProperty*> usedProps{&x, &y, &size, &fillColor};  // TODO(croot) add z
-
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
 
     RUNTIME_EX_ASSERT(
@@ -112,8 +121,6 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
       } else {
         _zJsonPath = _propertiesJsonPath.Append(zProp.c_str(), zProp.length());
       }
-
-      usedProps.push_back(&z);
     } else {
       // empty the json path for z
       _zJsonPath = rapidjson::Pointer();
@@ -184,24 +191,12 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
                                   // 1 row of data
         }
       }
-
-      usedProps.push_back(&id);
     } else {
       // clear out id path
       _idJsonPath = rapidjson::Pointer();
     }
 
-    // Now update which props are vbo-defined, and which will be uniforms
-    _vboProps.clear();
-    _uniformProps.clear();
-
-    for (const auto& prop : usedProps) {
-      if (prop->hasVboPtr()) {
-        _vboProps.push_back(prop);
-      } else {
-        _uniformProps.push_back(prop);
-      }
-    }
+    _updateProps(_getUsedProps());
   } else {
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
   }
@@ -336,12 +331,17 @@ void PointMark::_updateShader() {
 }
 
 void PointMark::_buildVAOData(const GpuId& gpuId,
+                              ::Rendering::GL::Resources::GLShader* activeShader,
                               VboAttrToShaderAttrMap& attrMap,
                               ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) {
   int cnt = 0;
   int vboSize = 0;
   int itrSize = 0;
   for (auto& itr : _vboProps) {
+    if (!activeShader->hasVertexAttribute(itr->getName())) {
+      continue;
+    }
+
     cnt++;
     itrSize = itr->size(gpuId);
     if (cnt == 1) {

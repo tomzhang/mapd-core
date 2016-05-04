@@ -17,6 +17,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _shaderDirty(true),
       _propsDirty(true),
       _vboProps(),
+      _uboProps(),
       _uniformProps() {
 }
 
@@ -83,11 +84,62 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,
   _initGpuResources(_ctx.get(), initializing);
 }
 
+void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool force) {
+  // Now update which props are vbo-defined, and which will be uniforms
+  size_t sum = _vboProps.size() + _uboProps.size() + _uniformProps.size();
+  CHECK(sum == 0 || usedProps.size() == sum);
+
+  if (force) {
+    _vboProps.clear();
+    _uboProps.clear();
+    _uniformProps.clear();
+
+    for (const auto& prop : usedProps) {
+      if (prop->hasVboPtr()) {
+        _vboProps.insert(prop);
+      } else if (prop->hasUboPtr()) {
+        _uboProps.insert(prop);
+      } else {
+        _uniformProps.insert(prop);
+      }
+    }
+
+    setShaderDirty();
+  } else {
+    for (const auto& prop : usedProps) {
+      if (prop->hasVboPtr()) {
+        if (_vboProps.insert(prop).second) {
+          setShaderDirty();
+          if (!_uboProps.erase(prop)) {
+            _uniformProps.erase(prop);
+          }
+        }
+      } else if (prop->hasUboPtr()) {
+        if (_uboProps.insert(prop).second) {
+          setShaderDirty();
+          if (!_vboProps.erase(prop)) {
+            _uniformProps.erase(prop);
+          }
+        }
+      } else {
+        if (_uniformProps.insert(prop).second) {
+          setShaderDirty();
+          if (!_vboProps.erase(prop)) {
+            _uboProps.erase(prop);
+          }
+        }
+      }
+    }
+  }
+}
+
 void BaseMark::_buildVertexArrayObjectFromProperties() {
   if (!_propsDirty || !_perGpuData.size()) {
     // early out
     return;
   }
+
+  _updateProps(_getUsedProps());
 
   // TODO(croot): make thread safe?
   // GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
@@ -104,19 +156,34 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
     currRenderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
 
     CHECK(currRenderer != nullptr);
-    CHECK(itr.second.shaderPtr != nullptr);
-
-    currRenderer->bindShader(itr.second.shaderPtr);
-
-    // build property map for how vertex buffer attributes will
-    // be bound to shader attributes
-    VboAttrToShaderAttrMap attrMap;
-    ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
-    _buildVAOData(itr.first, attrMap, ibo);
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
-    itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap, ibo);
+    if (itr.second.shaderPtr) {
+      currRenderer->bindShader(itr.second.shaderPtr);
+
+      // build property map for how vertex buffer attributes will
+      // be bound to shader attributes
+      VboAttrToShaderAttrMap attrMap;
+      ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
+      _buildVAOData(itr.first, itr.second.shaderPtr.get(), attrMap, ibo);
+
+      itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap, ibo);
+    } else {
+      itr.second.vaoPtr = nullptr;
+    }
+
+    if (itr.second.strokeShaderPtr) {
+      currRenderer->bindShader(itr.second.strokeShaderPtr);
+
+      VboAttrToShaderAttrMap strokeAttrMap;
+      ::Rendering::GL::Resources::GLIndexBufferShPtr strokeIbo;
+      _buildVAOData(itr.first, itr.second.strokeShaderPtr.get(), strokeAttrMap, strokeIbo);
+
+      itr.second.strokeVaoPtr = rsrcMgr->createVertexArray(strokeAttrMap, strokeIbo);
+    } else {
+      itr.second.strokeVaoPtr = nullptr;
+    }
   }
 
   // if (currRenderer && prevRenderer != currRenderer) {
@@ -146,7 +213,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
   ::Rendering::GL::GLResourceManagerShPtr rsrcMgr;
 
   int numGpus = _perGpuData.size();
-  bool update = (numGpus > 0 && _perGpuData.begin()->second.shaderPtr);
+  bool update = (numGpus > 0 && (_perGpuData.begin()->second.shaderPtr || _perGpuData.begin()->second.strokeShaderPtr));
   bool createdNewGpuRsrc = false;
 
   std::set<GpuId> usedGpuIds;
@@ -161,21 +228,36 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
       PerGpuData gpuData(*qrmItr);
       if (update) {
         auto beginItr = _perGpuData.begin();
-        CHECK(beginItr != _perGpuData.end() && beginItr->second.shaderPtr);
+        CHECK(beginItr != _perGpuData.end());
 
         beginItr->second.makeActiveOnCurrentThread();
-        std::string vertSrc = beginItr->second.shaderPtr->getVertexSource();
-        std::string fragSrc = beginItr->second.shaderPtr->getFragmentSource();
+
+        std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc;
+
+        if (beginItr->second.shaderPtr) {
+          vertSrc = beginItr->second.shaderPtr->getVertexSource();
+          fragSrc = beginItr->second.shaderPtr->getFragmentSource();
+        }
+
+        if (beginItr->second.strokeShaderPtr) {
+          strokeVertSrc = beginItr->second.strokeShaderPtr->getVertexSource();
+          strokeFragSrc = beginItr->second.strokeShaderPtr->getFragmentSource();
+        }
 
         (*qrmItr)->makeActiveOnCurrentThread();
         renderer = (*qrmItr)->getGLRenderer();
         CHECK(renderer);
-
         rsrcMgr = renderer->getResourceManager();
 
-        // TODO(croot): make resource copy constructors which appropriately
-        // deal with different contexts, including contexts on different gpus
-        gpuData.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+        if (beginItr->second.shaderPtr) {
+          // TODO(croot): make resource copy constructors which appropriately
+          // deal with different contexts, including contexts on different gpus
+          gpuData.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+        }
+
+        if (beginItr->second.strokeShaderPtr) {
+          gpuData.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc);
+        }
 
         // NOTE: we need to create the VAO after the properties have
         // been updated.
@@ -199,8 +281,18 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
           CHECK(beginItr != _perGpuData.end() && beginItr->second.shaderPtr);
 
           beginItr->second.makeActiveOnCurrentThread();
-          std::string vertSrc = beginItr->second.shaderPtr->getVertexSource();
-          std::string fragSrc = beginItr->second.shaderPtr->getFragmentSource();
+
+          std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc;
+
+          if (beginItr->second.shaderPtr) {
+            vertSrc = beginItr->second.shaderPtr->getVertexSource();
+            fragSrc = beginItr->second.shaderPtr->getFragmentSource();
+          }
+
+          if (beginItr->second.strokeShaderPtr) {
+            strokeVertSrc = beginItr->second.strokeShaderPtr->getVertexSource();
+            strokeFragSrc = beginItr->second.strokeShaderPtr->getFragmentSource();
+          }
 
           (*qrmItr)->makeActiveOnCurrentThread();
           renderer = (*qrmItr)->getGLRenderer();
@@ -208,9 +300,15 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
 
           rsrcMgr = renderer->getResourceManager();
 
-          // TODO(croot): make resource copy constructors which appropriately
-          // deal with different contexts, including contexts on different gpus
-          gpuData.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+          if (beginItr->second.shaderPtr) {
+            // TODO(croot): make resource copy constructors which appropriately
+            // deal with different contexts, including contexts on different gpus
+            gpuData.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+          }
+
+          if (beginItr->second.strokeShaderPtr) {
+            gpuData.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc);
+          }
 
           // NOTE: we need to create the VAO after the properties have
           // been updated.
@@ -249,14 +347,27 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
 
         rsrcMgr = renderer->getResourceManager();
 
-        CHECK(itr.second.shaderPtr);
-        renderer->bindShader(itr.second.shaderPtr);
+        if (itr.second.shaderPtr) {
+          renderer->bindShader(itr.second.shaderPtr);
 
-        ::Rendering::GL::Resources::VboAttrToShaderAttrMap attrMap;
-        ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
-        _buildVAOData(itr.first, attrMap, ibo);
+          ::Rendering::GL::Resources::VboAttrToShaderAttrMap attrMap;
+          ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
+          _buildVAOData(itr.first, itr.second.shaderPtr.get(), attrMap, ibo);
 
-        itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
+          itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap);
+        } else {
+          itr.second.vaoPtr = nullptr;
+        }
+
+        if (itr.second.strokeShaderPtr) {
+          VboAttrToShaderAttrMap strokeAttrMap;
+          ::Rendering::GL::Resources::GLIndexBufferShPtr strokeIbo;
+          _buildVAOData(itr.first, itr.second.strokeShaderPtr.get(), strokeAttrMap, strokeIbo);
+
+          itr.second.strokeVaoPtr = rsrcMgr->createVertexArray(strokeAttrMap, strokeIbo);
+        } else {
+          itr.second.strokeVaoPtr = nullptr;
+        }
       }
     }
   }

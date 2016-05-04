@@ -246,6 +246,10 @@ void GLRenderer::setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int 
   }
 }
 
+void GLRenderer::setLineWidth(const float lineWidth) {
+  MAPD_CHECK_GL_ERROR(glLineWidth(lineWidth));
+}
+
 void GLRenderer::setMinSampleShading(const float minSampleShading) {
   MAPD_CHECK_GL_ERROR(glMinSampleShading(minSampleShading));
 }

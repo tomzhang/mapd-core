@@ -77,7 +77,6 @@ class GLShader : public GLResource {
   std::string getFragmentSource() const;
 
   bool hasUniformAttribute(const std::string& attrName);
-
   GLint getUniformAttributeGLType(const std::string& attrName);
 
   GLShaderBlockLayoutShPtr getBlockLayout(const std::string& blockName) const;
@@ -128,8 +127,10 @@ class GLShader : public GLResource {
 
   void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
 
+  bool hasUniformBlockAttribute(const std::string& attrName);
   void bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx = -1);
 
+  bool hasVertexAttribute(const std::string& attrName) const;
   GLuint getVertexAttributeLocation(const std::string& attrName) const;
 
  private:

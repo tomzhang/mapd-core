@@ -74,6 +74,7 @@ class GLRenderer : public Renderer {
   void setBlendEquation(GLenum mode, int drawBufferId = -1);
   void setBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha, int drawBufferId = -1);
 
+  void setLineWidth(const float lineWidth);
   void setMinSampleShading(const float minSampleShading);
 
   void bindResource(const Resources::GLResourceShPtr& rsrc);

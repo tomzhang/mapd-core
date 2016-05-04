@@ -1,6 +1,8 @@
 #include "PolyMark.h"
 #include "shaders/polyTemplate_vert.h"
 #include "shaders/polyTemplate_frag.h"
+#include "shaders/lineTemplate_vert.h"
+#include "shaders/lineTemplate_frag.h"
 #include "../Utils/ShaderUtils.h"
 #include "../Data/QueryPolyDataTable.h"
 #include <Rendering/Renderer/GL/GLRenderer.h>
@@ -18,16 +20,34 @@ PolyMark::PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPat
       // z(this, "z", ctx),
 
       fillColor(this, "fillColor", ctx),
+      strokeColor(this, "strokeColor", ctx),
+      strokeWidth(this, "strokeWidth", ctx),
 
       // TODO(croot): let's log a warning and continue onwards if
       // hit testing is asked for, but the input sql data doesn't
       // have an id.
-      id(this, "id", ctx, false) {
+      id(this, "id", ctx, false),
+      _usedProps({&x, &y, &fillColor}),
+      _usedStrokeProps({&x, &y, &strokeColor, &strokeWidth}) {
+  if (_ctx->doHitTest()) {
+    _usedProps.insert(&id);
+    _usedStrokeProps.insert(&id);
+  }
+  // TODO(croot): add z to props when doDepthTest() is true
+
   _initPropertiesFromJSONObj(obj, objPath);
   _updateShader();
 }
 
 PolyMark::~PolyMark() {
+}
+
+std::set<BaseRenderProperty*> PolyMark::_getUsedProps() {
+  std::set<BaseRenderProperty*> rtn = {&x, &y, &fillColor, &strokeColor, &strokeWidth};  // TODO(croot) add z
+  if (_ctx->doHitTest()) {
+    rtn.insert(&id);
+  }
+  return rtn;
 }
 
 void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
@@ -44,8 +64,6 @@ void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rap
   const rapidjson::Value& propObj = mitr->value;
 
   if (!_ctx->isJSONCacheUpToDate(_propertiesJsonPath, propObj)) {
-    std::vector<BaseRenderProperty*> usedProps{&x, &y, &fillColor};  // TODO(croot) add z
-
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
 
     RUNTIME_EX_ASSERT(
@@ -131,6 +149,47 @@ void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rap
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
     }
 
+    // TODO(croot): move "strokeWidth" to a const somewhere
+    std::string strokeWidthProp = "strokeWidth";
+    if ((mitr = propObj.FindMember(strokeWidthProp.c_str())) != propObj.MemberEnd()) {
+      if (!_ctx->isJSONCacheUpToDate(_strokeWidthJsonPath, mitr->value)) {
+        _strokeWidthJsonPath = _propertiesJsonPath.Append(strokeWidthProp.c_str(), strokeWidthProp.length());
+        RUNTIME_EX_ASSERT(
+            mitr->value.IsNumber(),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), mitr->value, "\"" + strokeWidthProp + "\" mark property must be a number."));
+        strokeWidth.initializeFromJSONObj(mitr->value, _strokeWidthJsonPath, _dataPtr);
+      } else {
+        _strokeWidthJsonPath = _propertiesJsonPath.Append(strokeWidthProp.c_str(), strokeWidthProp.length());
+      }
+    } else {
+      // set default strokeWidth to white
+      // TODO(croot): expose strokeWidth default as a static somewhere
+      strokeWidth.initializeValue(0);
+      _strokeWidthJsonPath = rapidjson::Pointer();
+    }
+
+    // TODO(croot): move "strokeColor" to a const somewhere
+    std::string strokeColorProp = "strokeColor";
+    if ((mitr = propObj.FindMember(strokeColorProp.c_str())) != propObj.MemberEnd()) {
+      if (!_ctx->isJSONCacheUpToDate(_strokeColorJsonPath, mitr->value)) {
+        _strokeColorJsonPath = _propertiesJsonPath.Append(strokeColorProp.c_str(), strokeColorProp.length());
+        RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsString()),
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              _ctx->getUserWidgetIds(),
+                              mitr->value,
+                              "\"" + strokeColorProp + "\" mark property must be a scale/data reference or a string."));
+        strokeColor.initializeFromJSONObj(mitr->value, _strokeColorJsonPath, _dataPtr);
+      } else {
+        _strokeColorJsonPath = _propertiesJsonPath.Append(strokeColorProp.c_str(), strokeColorProp.length());
+      }
+    } else {
+      // set default strokeColor to white
+      // TODO(croot): expose strokeColor default as a static somewhere
+      strokeColor.initializeValue({255, 255, 255, 255});
+      _strokeColorJsonPath = rapidjson::Pointer();
+    }
+
     if (_ctx->doHitTest()) {
       // TODO(croot): move "id" to a const somewhere
       std::string idProp = "id";
@@ -158,42 +217,22 @@ void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rap
                                   // 1 row of data
         }
       }
-
-      usedProps.push_back(&id);
     } else {
       // clear out id path
       _idJsonPath = rapidjson::Pointer();
     }
 
-    // Now update which props are vbo-defined, and which will be uniforms
-    _vboProps.clear();
-    _uboProps.clear();
-    _uniformProps.clear();
-
-    for (const auto& prop : usedProps) {
-      if (prop->hasVboPtr()) {
-        _vboProps.push_back(prop);
-      } else if (prop->hasUboPtr()) {
-        _uboProps.push_back(prop);
-      } else {
-        _uniformProps.push_back(prop);
-      }
-    }
+    _updateProps(_getUsedProps());
   } else {
     _propertiesJsonPath = objPath.Append(propertiesProp.c_str(), propertiesProp.length());
   }
 }
 
-void PolyMark::_updateShader() {
-  if (!_shaderDirty || !_perGpuData.size()) {
-    // early out
-    return;
-  }
-
-  std::string vertSrc(PolyTemplate_Vert::source);
-
-  std::vector<BaseRenderProperty*> props = {&x, &y, &fillColor};  // TODO: add z & fillColor
-
+void PolyMark::_buildShaderSrc(std::string& vertSrc,
+                               std::string& fragSrc,
+                               std::vector<BaseRenderProperty*>& props,
+                               const std::string& uniformBlockName,
+                               const std::string& uniformBlockInstanceName) {
   // update all the types first
   for (auto& prop : props) {
     ShaderUtils::setRenderPropertyTypeInShaderSrc(*prop, vertSrc);
@@ -202,6 +241,10 @@ void PolyMark::_updateShader() {
   // TODO(croot): support per vertex colors?
   bool usePerVertColor = false;
   boost::replace_first(vertSrc, "<usePerVertColor>", std::to_string(usePerVertColor));
+
+  // TODO(croot): support per vertex widths?
+  bool usePerVertWidth = false;
+  boost::replace_first(vertSrc, "<usePerVertWidth>", std::to_string(usePerVertWidth));
 
   bool useUniformBuffer = (_uboProps.size() > 0);
   boost::replace_first(vertSrc, "<useUniformBuffer>", std::to_string(useUniformBuffer));
@@ -227,16 +270,16 @@ void PolyMark::_updateShader() {
 
   QueryUniformBufferShPtr ubo;
   if (useUniformBuffer) {
-    // double check that shader block layout that the uniform buffer
-    // uses matches that in the shader
+    // double check the uniform buffer's shader block layout
+    // matches that in the shader
     CHECK(_dataPtr && _dataPtr->getBaseType() == QueryDataTableBaseType::POLY);
-    ubo = (_perGpuData.size() ? _uboProps[0]->getUboPtr(_perGpuData.begin()->first) : nullptr);
+    ubo = (_perGpuData.size() ? (*_uboProps.begin())->getUboPtr(_perGpuData.begin()->first) : nullptr);
     CHECK(ubo);
 
     auto shaderBlockLayout = ubo->getGLUniformBufferPtr()->getBufferLayout();
 
     std::string shaderBlockCode = shaderBlockLayout->buildShaderBlockCode(
-        "PolyData", "polyData", ::Rendering::GL::Resources::StorageQualifier::UNIFORM);
+        uniformBlockName, uniformBlockInstanceName, ::Rendering::GL::Resources::StorageQualifier::UNIFORM);
 
     std::string propName;
     std::string colName;
@@ -248,7 +291,7 @@ void PolyMark::_updateShader() {
       boost::replace_first(shaderBlockCode, colName, propName);
     }
 
-    boost::replace_first(vertSrc, "<polyData>", shaderBlockCode);
+    boost::replace_first(vertSrc, "<" + uniformBlockInstanceName + ">", shaderBlockCode);
   }
 
   // now insert any additional functionality
@@ -291,15 +334,49 @@ void PolyMark::_updateShader() {
           vertSrc, prop->getGLSLFunc() + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
 
       boost::replace_all(vertSrc,
-                         prop->getGLSLFunc() + "(polyData." + prop->getName() + ")",
-                         funcName + "(polyData." + prop->getName() + ")");
+                         prop->getGLSLFunc() + "(" + uniformBlockInstanceName + "." + prop->getName() + ")",
+                         funcName + "(" + uniformBlockInstanceName + "." + prop->getName() + ")");
     }
   }
 
-  // std::string fragSrc = getShaderCodeFromFile(pointFragmentShaderFilename);
-  std::string fragSrc(PolyTemplate_Frag::source);
-
   boost::replace_first(fragSrc, "<usePerVertColor>", std::to_string(usePerVertColor));
+
+  // TODO(croot): Make thread safe?
+}
+
+bool PolyMark::_doFill() {
+  return (fillColor.hasVboPtr() || fillColor.hasUboPtr() || fillColor.getUniformValue().a() > 0);
+}
+
+bool PolyMark::_doStroke() {
+  return ((strokeWidth.hasVboPtr() || strokeWidth.hasUboPtr() || strokeWidth.getUniformValue() > 0) &&
+          (strokeColor.hasVboPtr() || strokeColor.hasUboPtr() || strokeColor.getUniformValue().a() > 0));
+}
+
+void PolyMark::_updateShader() {
+  if (!_shaderDirty || !_perGpuData.size()) {
+    // early out
+    return;
+  }
+
+  std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc;
+  bool doFill = _doFill();
+  if (doFill) {
+    vertSrc = PolyTemplate_Vert::source;
+    fragSrc = PolyTemplate_Frag::source;
+
+    std::vector<BaseRenderProperty*> fillProps = {&x, &y, &fillColor};  // TODO(croot): add z
+    _buildShaderSrc(vertSrc, fragSrc, fillProps, "PolyData", "polyData");
+  }
+
+  bool doStroke = _doStroke();
+  if (doStroke) {
+    strokeVertSrc = LineTemplate_Vert::source;
+    strokeFragSrc = LineTemplate_Frag::source;
+
+    std::vector<BaseRenderProperty*> strokeProps = {&x, &y, &strokeColor, &strokeWidth};  // TODO(croot): add z
+    _buildShaderSrc(strokeVertSrc, strokeFragSrc, strokeProps, "LineData", "lineData");
+  }
 
   // static int CROOTcnt = 0;
   // CROOTcnt++;
@@ -315,7 +392,6 @@ void PolyMark::_updateShader() {
   // query renderers?
 
   // TODO(croot): Make thread safe?
-
   GLRenderer* prevRenderer = GLRenderer::getCurrentThreadRenderer();
   GLRenderer* currRenderer = nullptr;
   RootPerGpuDataShPtr qrmGpuData;
@@ -325,7 +401,14 @@ void PolyMark::_updateShader() {
     currRenderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
-    itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+
+    if (doFill) {
+      itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+    }
+
+    if (doStroke) {
+      itr.second.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc);
+    }
 
     // TODO(croot): should check the shader block layout attached
     // to the uniform buffer with that in the shader when the GLShader
@@ -352,12 +435,17 @@ void PolyMark::_updateShader() {
 }
 
 void PolyMark::_buildVAOData(const GpuId& gpuId,
+                             ::Rendering::GL::Resources::GLShader* activeShader,
                              ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
                              ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) {
   int cnt = 0;
   int vboSize = 0;
   int itrSize = 0;
   for (auto& itr : _vboProps) {
+    if (!activeShader->hasVertexAttribute(itr->getName())) {
+      continue;
+    }
+
     cnt++;
     itrSize = itr->size(gpuId);
     if (cnt == 1) {
@@ -378,45 +466,35 @@ void PolyMark::_buildVAOData(const GpuId& gpuId,
   ibo = polyTable->getGLIndexBuffer(gpuId);
 }
 
-void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) {
-  //   // TODO(croot): create a static invalidKeyAttrName string on the class
-  // static const std::string invalidKeyAttrName = "invalidKey";
-  // if (key.hasVboPtr()) {
-  //   if (activeShader->hasUniformAttribute(invalidKeyAttrName)) {
-  //     GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
-  //     if (type == GL_INT) {
-  //       activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(_invalidKey));
-  //     }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
-  //        // TODO(croot) - do we need to do the glew extension check above or
-  //        // would there be an error at shader compilation if the extension
-  //        // didn't exist?
-
-  //     // TODO(croot) fill this out
-  //     // }
-  //   }
-  // }
-
+void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader,
+                                      const std::set<BaseRenderProperty*>& props) {
   for (auto prop : _vboProps) {
-    const ScaleRefShPtr& scalePtr = prop->getScaleReference();
-    if (scalePtr != nullptr) {
-      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+    if (props.find(prop) != props.end() && activeShader->hasVertexAttribute(prop->getName())) {
+      const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+      if (scalePtr != nullptr) {
+        scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+      }
     }
   }
 
   for (auto prop : _uboProps) {
-    const ScaleRefShPtr& scalePtr = prop->getScaleReference();
-    if (scalePtr != nullptr) {
-      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+    if (props.find(prop) != props.end() && activeShader->hasUniformBlockAttribute(prop->getName())) {
+      const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+      if (scalePtr != nullptr) {
+        scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+      }
     }
   }
 
   for (auto prop : _uniformProps) {
-    const ScaleRefShPtr& scalePtr = prop->getScaleReference();
-    if (scalePtr != nullptr) {
-      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
-    }
+    if (props.find(prop) != props.end() && activeShader->hasUniformAttribute(prop->getName())) {
+      const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+      if (scalePtr != nullptr) {
+        scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+      }
 
-    prop->bindUniformToRenderer(activeShader, prop->getName());
+      prop->bindUniformToRenderer(activeShader, prop->getName());
+    }
   }
 }
 
@@ -428,6 +506,8 @@ void PolyMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx
   // z.initGpuResources(ctx, usedGpus, unusedGpus);
   id.initGpuResources(ctx, usedGpus, unusedGpus);
   fillColor.initGpuResources(ctx, usedGpus, unusedGpus);
+  strokeColor.initGpuResources(ctx, usedGpus, unusedGpus);
+  strokeWidth.initGpuResources(ctx, usedGpus, unusedGpus);
 }
 
 void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
@@ -439,42 +519,86 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
   CHECK(qrmGpuData);
 
   ::Rendering::Renderer* rndr = qrmGpuData->rendererPtr.get();
-  CHECK(itr->second.shaderPtr && rndr == renderer);
-
-  // now bind the shader
-  renderer->bindShader(itr->second.shaderPtr);
-
-  // NOTE: the ibo will be bound with the vao object
-  renderer->bindVertexArray(itr->second.vaoPtr);
-  _bindUniformProperties(itr->second.shaderPtr.get());
+  CHECK(rndr == renderer);
 
   CHECK(_dataPtr);
   QueryPolyDataTableShPtr polyTable = std::dynamic_pointer_cast<BaseQueryPolyDataTable>(_dataPtr);
   CHECK(polyTable);
 
   ::Rendering::GL::Resources::GLUniformBufferShPtr ubo;
-  if (_uboProps.size()) {
-    // the same ubo should be used for all ubo props, so only need to grab
-    // from first one
-    ubo = _uboProps[0]->getUboPtr(gpuId)->getGLUniformBufferPtr();
-  }
 
-  ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr indibo = polyTable->getGLIndirectDrawIndexBuffer(gpuId);
-  CHECK(indibo && (!ubo || indibo->numItems() == ubo->numItems()));
+  if (itr->second.shaderPtr) {
+    CHECK(itr->second.vaoPtr);
 
-  renderer->bindIndirectDrawBuffer(indibo);
+    // now bind the shader
+    renderer->bindShader(itr->second.shaderPtr);
 
-  if (ubo) {
-    renderer->bindUniformBuffer(ubo);
-    for (size_t i = 0; i < indibo->numItems(); ++i) {
-      itr->second.shaderPtr->bindUniformBufferToBlock("PolyData", ubo, i);
-      renderer->drawIndirectIndexBuffers(GL_TRIANGLES, i, 1);
+    // NOTE: the ibo will be bound with the vao object
+    renderer->bindVertexArray(itr->second.vaoPtr);
+    _bindUniformProperties(itr->second.shaderPtr.get(), _usedProps);
+
+    if (_uboProps.size()) {
+      // the same ubo should be used for all ubo props, so only need to grab
+      // from first one
+      ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
     }
-  } else {
-    renderer->drawIndirectIndexBuffers(GL_TRIANGLES);
+
+    ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr indibo = polyTable->getGLIndirectDrawIndexBuffer(gpuId);
+    CHECK(indibo && (!ubo || indibo->numItems() == ubo->numItems()));
+
+    renderer->bindIndirectDrawBuffer(indibo);
+
+    if (ubo) {
+      renderer->bindUniformBuffer(ubo);
+      for (size_t i = 0; i < indibo->numItems(); ++i) {
+        itr->second.shaderPtr->bindUniformBufferToBlock("PolyData", ubo, i);
+        renderer->drawIndirectIndexBuffers(GL_TRIANGLES, i, 1);
+      }
+    } else {
+      renderer->drawIndirectIndexBuffers(GL_TRIANGLES);
+    }
   }
 
   // now draw outlines
+
+  if (itr->second.strokeShaderPtr) {
+    CHECK(itr->second.strokeVaoPtr);
+
+    renderer->setLineWidth(strokeWidth.getUniformValue());
+
+    // now bind the shader
+    renderer->bindShader(itr->second.strokeShaderPtr);
+
+    // NOTE: the ibo will be bound with the vao object
+    renderer->bindVertexArray(itr->second.strokeVaoPtr);
+    _bindUniformProperties(itr->second.strokeShaderPtr.get(), _usedStrokeProps);
+
+    if (!ubo && _uboProps.size()) {
+      // the same ubo should be used for all ubo props, so only need to grab
+      // from first one
+      ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
+
+      renderer->bindUniformBuffer(ubo);
+    }
+
+    ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr indvbo =
+        polyTable->getGLIndirectDrawVertexBuffer(gpuId);
+    CHECK(indvbo && (!ubo || indvbo->numItems() == ubo->numItems()));
+
+    renderer->bindIndirectDrawBuffer(indvbo);
+
+    if (ubo) {
+      for (size_t i = 0; i < indvbo->numItems(); ++i) {
+        itr->second.strokeShaderPtr->bindUniformBufferToBlock("LineData", ubo, i);
+        renderer->drawIndirectVertexBuffers(GL_LINE_LOOP, i, 1);
+      }
+    } else {
+      renderer->drawIndirectVertexBuffers(GL_LINE_LOOP);
+    }
+
+    // reset state
+    renderer->setLineWidth(1.0);
+  }
 }
 
 bool PolyMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {

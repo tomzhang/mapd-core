@@ -35,12 +35,15 @@ class PointMark : public BaseMark {
   RenderProperty<::Rendering::Objects::ColorRGBA> fillColor;
   rapidjson::Pointer _fillColorJsonPath;
 
+  std::set<BaseRenderProperty*> _getUsedProps() final;
   void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   void _updateShader() final;
 
   void _buildVAOData(const GpuId& gpuId,
+                     ::Rendering::GL::Resources::GLShader* activeShader,
                      ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
                      ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) final;
+
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);
 
   void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,

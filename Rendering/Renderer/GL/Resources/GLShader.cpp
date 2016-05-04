@@ -878,6 +878,16 @@ void GLShader::setSamplerTextureImageUnit(const std::string& attrName, GLenum st
   samplerAttr->setTexImgUnit(startTexImageUnit);
 }
 
+bool GLShader::hasUniformBlockAttribute(const std::string& attrName) {
+  for (auto& itr : _uniformBlockAttrs) {
+    if (itr.second->activeAttrs.find(attrName) != itr.second->activeAttrs.end()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void GLShader::bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx) {
   UniformBlockAttrInfo* blockAttr = _validateBlockAttr(blockName, ubo, idx);
   if (idx < 0) {
@@ -886,6 +896,11 @@ void GLShader::bindUniformBufferToBlock(const std::string& blockName, const GLUn
     size_t numBytes = ubo->getNumBytesPerItem();
     blockAttr->bindBuffer(ubo->getId(), idx * numBytes, numBytes);
   }
+}
+
+bool GLShader::hasVertexAttribute(const std::string& attrName) const {
+  auto iter = _vertexAttrs.find(attrName);
+  return (iter != _vertexAttrs.end());
 }
 
 GLuint GLShader::getVertexAttributeLocation(const std::string& attrName) const {

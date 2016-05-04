@@ -62,13 +62,26 @@ class BaseMark {
   struct PerGpuData : BasePerGpuData {
     ::Rendering::GL::Resources::GLShaderShPtr shaderPtr;
     ::Rendering::GL::Resources::GLVertexArrayShPtr vaoPtr;
+    ::Rendering::GL::Resources::GLShaderShPtr strokeShaderPtr;
+    ::Rendering::GL::Resources::GLVertexArrayShPtr strokeVaoPtr;
 
-    PerGpuData() : BasePerGpuData(), shaderPtr(nullptr) {}
+    PerGpuData() : BasePerGpuData() {}
     explicit PerGpuData(const BasePerGpuData& data,
-                        const ::Rendering::GL::Resources::GLShaderShPtr& shaderPtr = nullptr)
-        : BasePerGpuData(data), shaderPtr(shaderPtr) {}
-    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), shaderPtr(data.shaderPtr) {}
-    PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), shaderPtr(std::move(data.shaderPtr)) {}
+                        const ::Rendering::GL::Resources::GLShaderShPtr& shaderPtr = nullptr,
+                        const ::Rendering::GL::Resources::GLShaderShPtr& strokeShaderPtr = nullptr)
+        : BasePerGpuData(data), shaderPtr(shaderPtr), strokeShaderPtr(strokeShaderPtr) {}
+    PerGpuData(const PerGpuData& data)
+        : BasePerGpuData(data),
+          shaderPtr(data.shaderPtr),
+          vaoPtr(data.vaoPtr),
+          strokeShaderPtr(data.strokeShaderPtr),
+          strokeVaoPtr(data.strokeVaoPtr) {}
+    PerGpuData(PerGpuData&& data)
+        : BasePerGpuData(std::move(data)),
+          shaderPtr(std::move(data.shaderPtr)),
+          vaoPtr(std::move(data.vaoPtr)),
+          strokeShaderPtr(std::move(data.strokeShaderPtr)),
+          strokeVaoPtr(std::move(data.strokeVaoPtr)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete all GL resources
@@ -89,15 +102,18 @@ class BaseMark {
   bool _shaderDirty;
   bool _propsDirty;
 
-  std::vector<BaseRenderProperty*> _vboProps;
-  std::vector<BaseRenderProperty*> _uboProps;
-  std::vector<BaseRenderProperty*> _uniformProps;
+  std::set<BaseRenderProperty*> _vboProps;
+  std::set<BaseRenderProperty*> _uboProps;
+  std::set<BaseRenderProperty*> _uniformProps;
 
   void _initFromJSONObj(const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,
                         QueryDataTableBaseType baseType,
                         bool mustUseDataRef,
                         bool initializing);
+
+  virtual std::set<BaseRenderProperty*> _getUsedProps() = 0;
+  void _updateProps(const std::set<BaseRenderProperty*>& usedProps, bool force = false);
 
  private:
   void _buildVertexArrayObjectFromProperties();
@@ -106,9 +122,9 @@ class BaseMark {
   virtual void _updateShader() = 0;
 
   virtual void _buildVAOData(const GpuId& gpuId,
+                             ::Rendering::GL::Resources::GLShader* activeShader,
                              ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
                              ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) = 0;
-  virtual void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader) = 0;
 
   std::set<GpuId> _initUnusedGpus() const;
   void _initGpuResources(const QueryRendererContext* ctx, bool initializing = true);
@@ -118,10 +134,6 @@ class BaseMark {
                                                  const std::set<GpuId>& unusedGpus) = 0;
 
   friend class QueryRendererContext;
-
-  // protected:
-  //     typedef std::unique_ptr<Shader> ShaderPtr;
-  //     static std::unordered_map<int, ShaderPtr> _shaderMap;
 };
 
 }  // namespace QueryRenderer

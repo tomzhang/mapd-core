@@ -202,6 +202,8 @@ class RenderProperty : public BaseRenderProperty {
     _uniformVal = val;
   }
 
+  T getUniformValue() const { return _uniformVal; }
+
   void bindUniformToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                              const std::string& uniformAttrName) const {
     // TODO(croot): deal with numComponents here by using a vector instead?
