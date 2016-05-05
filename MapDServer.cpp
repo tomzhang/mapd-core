@@ -890,6 +890,14 @@ class MapDHandler : virtual public MapDIf {
                              const TSessionId session,
                              const std::string& query_str,
                              const std::string& nonce) {
+    if (!enable_rendering_) {
+      TMapDException ex;
+      ex.error_msg = "Backend rendering is disabled.";
+      LOG(ERROR) << ex.error_msg;
+      throw ex;
+    }
+
+#ifdef HAVE_RENDERING
     _return.total_time_ms = measure<>::execution([&]() {
       _return.nonce = nonce;
       if (!enable_rendering_) {
@@ -910,11 +918,7 @@ class MapDHandler : virtual public MapDIf {
                                               jit_debug_ ? "mapdquery" : "",
                                               0,
                                               0,
-#ifdef HAVE_RENDERING
                                               render_manager_.get());
-#else
-                                              nullptr);
-#endif
 
         auto clock_begin = timer_start();
         auto results = executor->testRenderSimplePolys(root_plan, *session_info_ptr, 1);
@@ -938,6 +942,7 @@ class MapDHandler : virtual public MapDIf {
         throw ex;
       }
     });
+#endif
   }
 
   void create_frontend_view(const TSessionId session,

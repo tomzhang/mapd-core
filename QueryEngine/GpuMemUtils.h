@@ -10,6 +10,7 @@
 #else
 namespace QueryRenderer {
 typedef void QueryRenderManager;
+typedef void QueryDataLayout;
 }  // namespace QueryRenderer
 #endif  // HAVE_RENDERING
 
