@@ -329,6 +329,7 @@ void SqlQueryPolyDataTable::reset() {
   }
 }
 
+#ifdef HAVE_CUDA
 PolyCudaHandles SqlQueryPolyDataTable::getCudaHandlesPreQuery(const GpuId& gpuId) {
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
@@ -358,6 +359,7 @@ PolyCudaHandles SqlQueryPolyDataTable::getCudaHandlesPreQuery(const GpuId& gpuId
 
   return rtn;
 }
+#endif  // HAVE_CUDA
 
 void SqlQueryPolyDataTable::updatePostQuery(const GpuId& gpuId,
                                             const QueryDataLayoutShPtr& vertLayoutPtr,

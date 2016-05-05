@@ -107,7 +107,11 @@ class SqlQueryPolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDat
                     const QueryDataLayoutShPtr& vertLayoutPtr = nullptr,
                     const QueryDataLayoutShPtr& uniformLayoutPtr = nullptr);
   void reset();
+
+#ifdef HAVE_CUDA
   PolyCudaHandles getCudaHandlesPreQuery(const GpuId& gpuId);
+#endif
+
   void updatePostQuery(const GpuId& gpuId,
                        const QueryDataLayoutShPtr& vertLayoutPtr,
                        const QueryDataLayoutShPtr& uniformLayoutPtr);

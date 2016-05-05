@@ -575,6 +575,7 @@ int64_t Executor::getRowidForPixel(const int64_t x,
 ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
                                            const Catalog_Namespace::SessionInfo& session,
                                            const int render_widget_id) {
+#ifdef HAVE_CUDA
   catalog_ = &root_plan->get_catalog();
   // capture the lock acquistion time
   auto clock_begin = timer_start();
@@ -784,6 +785,10 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
   int64_t render_time_ms = timer_stop(clock_begin);
 
   return ResultRows(std::string(png_data.pngDataPtr.get(), png_data.pngSize), queue_time_ms, render_time_ms);
+#else
+  LOG(ERROR) << "Cannot run testRenderSimplePolys() without cuda enabled";
+  return ResultRows(std::string(), 0, 0);
+#endif  // HAVE_CUDA
 }
 
 int32_t Executor::getStringId(const std::string& table_name,
