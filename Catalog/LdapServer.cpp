@@ -12,7 +12,7 @@
 #include "LdapServer.h"
 
 LdapServer::LdapServer() {
-  LOG(INFO) << "No LDAP possible entry point";
+  LOG(INFO) << "No LDAP server defined, will not attempt to authenticate via ldap";
   ldapInUse = false;
 }
 
