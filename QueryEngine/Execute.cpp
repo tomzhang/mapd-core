@@ -625,7 +625,9 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
                 "fillColor" : {
                     "scale" : "color",
                     "field" : "population"
-                }
+                },
+                "strokeColor": "white",
+                "strokeWidth": 5.0
             }
         }
     ]
@@ -634,6 +636,9 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
   // initialize the poly rendering data
 
   // setup the verts - 2 squares and 2 triangles
+  // NOTE: the first 3 verts of each polygon are repeated at the end of
+  // its vertex list in order to get all the adjacent data
+  // need for the custom line-drawing shader to draw a closed line.
   std::vector<double> verts = {-1.0,
                                -0.0,
                                0.0,
@@ -642,6 +647,13 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
                                1.0,
                                -1.0,
                                1.0,
+                               -1.0,
+                               0.0,
+                               0.0,
+                               0.0,
+                               0.0,
+                               1.0,
+
                                0.0,
                                0.0,
                                1.0,
@@ -650,11 +662,31 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
                                1.0,
                                0.0,
                                1.0,
+                               0.0,
+                               0.0,
+                               1.0,
+                               0.0,
+                               1.0,
+                               1.0,
+
                                -1.0,
                                -1.0,
                                -0.0,
                                -1.0,
                                -0.5,
+                               0.0,
+                               -1.0,
+                               -1.0,
+                               -0.0,
+                               -1.0,
+                               -0.5,
+                               0.0,
+
+                               0.5,
+                               -1.0,
+                               1.0,
+                               0.0,
+                               0.0,
                                0.0,
                                0.5,
                                -1.0,
@@ -670,10 +702,10 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> lineDrawData = {
-      ::Rendering::GL::Resources::IndirectDrawVertexData(4),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(4, 4),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(3, 7),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(3, 10)};
+      ::Rendering::GL::Resources::IndirectDrawVertexData(7),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 14),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 20)};
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
@@ -681,9 +713,9 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
   // Third argument is the vertex index/offset of the start vertex for the poly
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> polyDrawData = {
       ::Rendering::GL::Resources::IndirectDrawIndexData(6),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 4),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 8),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 11)};
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 7),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 14),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20)};
 
   // Extra data for rendering / rowids
   std::vector<int64_t> population = {10, 20, 30, 40};
