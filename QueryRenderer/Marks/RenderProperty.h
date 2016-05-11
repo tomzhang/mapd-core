@@ -45,6 +45,7 @@ class BaseRenderProperty {
   void initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
                              const QueryDataTableShPtr& dataPtr);
+
   void initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr);
 
   int size(const GpuId& gpuId) const;
@@ -176,7 +177,7 @@ class RenderProperty : public BaseRenderProperty {
     _outType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
   }
 
-  ~RenderProperty() {
+  virtual ~RenderProperty() {
     if (_scaleConfigPtr) {
       _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
     }
@@ -297,7 +298,7 @@ class RenderProperty : public BaseRenderProperty {
     // }
   }
 
-  void _initValueFromJSONObj(const rapidjson::Value& obj) {
+  virtual void _initValueFromJSONObj(const rapidjson::Value& obj) {
     T val = RapidJSONUtils::getNumValFromJSONObj<T>(obj);
 
     initializeValue(val);
@@ -384,6 +385,23 @@ void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_initValueFromJSONObj(c
 
 template <>
 void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_verifyScale();
+
+class EnumRenderProperty : public RenderProperty<int> {
+ public:
+  EnumRenderProperty(BaseMark* prntMark,
+                     const std::string& name,
+                     const QueryRendererContextShPtr& ctx,
+                     bool useScale = true,
+                     bool flexibleType = true,
+                     std::function<int(const std::string&)> stringConvertFunc = nullptr)
+      : RenderProperty<int>(prntMark, name, ctx, useScale, flexibleType), _stringConvertFunc(stringConvertFunc) {}
+
+  ~EnumRenderProperty() {}
+
+ private:
+  std::function<int(const std::string&)> _stringConvertFunc;
+  void _initValueFromJSONObj(const rapidjson::Value& obj) final;
+};
 
 }  // namespace QueryRendererclass BaseRenderProperty {
 

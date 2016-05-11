@@ -65,7 +65,7 @@ void main() {
   #if usePerVertColor == 1 || useUfillColor
   fColor = getfillColor(fillColor);
   #elif useUniformBuffer == 1
-  fColor = getfillColor(polyData.fillColor);
+  fColor = getfillColor(polyData.<fillColor>);
   #endif
 
   // ids from queries go from 0 to numrows-1, but since we're storing
@@ -75,6 +75,6 @@ void main() {
   #if useUid == 1
   fPrimitiveId = id + 1;
   #elif useUniformBuffer == 1
-  fPrimitiveId = polyData.id + 1;
+  fPrimitiveId = polyData.<id> + 1;
   #endif
 }

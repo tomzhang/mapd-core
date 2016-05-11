@@ -530,6 +530,17 @@ struct PolyData2d {
       rtn = true;
     }
 
+    // repeat the first 3 vertices to fully create the "loop"
+    // since it will be drawn using the GL_LINE_STRIP_ADJACENCY
+    // primitive type
+    int num = lineDrawItem.count;
+    for (int i = 0; i < 3; ++i) {
+      int idx = (idx0 + (i % num));
+      x_coords.push_back(x_coords[idx]);
+      y_coords.push_back(y_coords[idx]);
+    }
+    lineDrawItem.count += 3;
+
     // add an empty coord as a separator
     // coords.push_back(-10000000.0);
     // coords.push_back(-10000000.0);

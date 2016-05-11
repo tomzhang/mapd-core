@@ -35,6 +35,12 @@ class PolyMark : public BaseMark {
   RenderProperty<float> strokeWidth;
   rapidjson::Pointer _strokeWidthJsonPath;
 
+  EnumRenderProperty lineJoin;
+  rapidjson::Pointer _lineJoinJsonPath;
+
+  RenderProperty<float> miterLimit;
+  rapidjson::Pointer _miterLimitJsonPath;
+
   RenderProperty<unsigned int> id;
   rapidjson::Pointer _idJsonPath;
 
@@ -46,8 +52,7 @@ class PolyMark : public BaseMark {
   std::set<BaseRenderProperty*> _getUsedProps() final;
   void _initPropertiesFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
-  void _buildShaderSrc(std::string& vertSrc,
-                       std::string& fragSrc,
+  void _buildShaderSrc(std::vector<std::string>& shaderSrcs,
                        std::vector<BaseRenderProperty*>& props,
                        const std::string& uniformBlockName,
                        const std::string& uniformBlockInstanceName);

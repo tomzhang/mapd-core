@@ -1,6 +1,6 @@
 // VERTEX SHADER
 
-#version 410 core
+#version 450 core
 
 #define inTx <inTxType>
 #define outTx <outTxType>
@@ -8,36 +8,31 @@
 #define inTy <inTyType>
 #define outTy <outTyType>
 
-#define useUid <useUid>
+#define usePerVertId <usePerVertId>
+#if usePerVertId == 1
+in uint id;
+#endif
+
 
 in inTx x;
 in inTy y;
 
-#if useUid == 1
-uniform uint id;
-#endif
-
 #define usePerVertColor <usePerVertColor>
-#define useUstrokeColor <useUstrokeColor>
 #define inTstrokeColor <inTstrokeColorType>
 #define outTstrokeColor <outTstrokeColorType>
 
-#if useUstrokeColor == 1
-uniform inTstrokeColor strokeColor;
-#elif usePerVertColor == 1
+#if usePerVertColor == 1
 in inTstrokeColor strokeColor;
 #endif
 
 #define usePerVertWidth <usePerVertWidth>
-#define useUstrokeWidth <useUstrokeWidth>
 #define inTstrokeWidth <inTstrokeWidthType>
 #define outTstrokeWidth <outTstrokeWidthType>
 
-#if useUstrokeWidth == 1
-uniform inTstrokeWidth strokeWidth;
-#elif usePerVertWidth == 1
+#if usePerVertWidth == 1
 in inTstrokeWidth strokeWidth;
 #endif
+
 
 #define useUniformBuffer <useUniformBuffer>
 #if useUniformBuffer == 1
@@ -52,42 +47,56 @@ outTy gety(in inTy y) {
   return y;
 }
 
+#if usePerVertColor == 1
 outTstrokeColor getstrokeColor(in inTstrokeColor strokeColor) {
   return strokeColor;
 }
+#endif
 
+#if usePerVertWidth == 1
 outTstrokeWidth getstrokeWidth(in inTstrokeWidth strokeWidth)  {
   return strokeWidth;
 }
+#endif
 
-////////////////////////////////////////////////////////////////
-/**
- * Non-interpolated shader outputs.
- */
-flat out uint fPrimitiveId;  // the id of the primitive
+// viewport data
+struct Viewport
+{
+    int x;
+    int y;
+    int width;
+    int height;
+};
+uniform Viewport viewport;
+
+vec2 NDCtoScreen(in outTx x, in outTy y) {
+  return vec2(float(x + 1) * (float(viewport.width) / 2.0) + viewport.x, float(y + 1) * (float(viewport.height) / 2.0) + viewport.y);
+}
+
+#if usePerVertId == 1
+out uint gId;
+#endif
 
 #if usePerVertColor == 1
-out vec4 fColor;
-#else
-flat out vec4 fColor;
+out vec4 gColor;
+#endif
+
+#if usePerVertWidth == 1
+out float gWidth;
 #endif
 
 void main() {
-  gl_Position = vec4(float(getx(x)), float(gety(y)), 0.5, 1.0);
+  gl_Position = vec4(NDCtoScreen(getx(x), gety(y)), 0.5, 1.0);
 
-#if usePerVertColor == 1 || useUstrokeColor
-  fColor = getstrokeColor(strokeColor);
-#elif useUniformBuffer == 1
-  fColor = getstrokeColor(lineData.strokeColor);
+#if usePerVertId
+  gId = id;
 #endif
 
-  // ids from queries go from 0 to numrows-1, but since we're storing
-  // the ids as unsigned ints, and there isn't a way to specify the
-  // clear value for secondary buffers, we need to account for that
-  // offset here
-#if useUid == 1
-  fPrimitiveId = id + 1;
-#elif useUniformBuffer == 1
-  fPrimitiveId = lineData.id + 1;
+#if usePerVertColor
+  gColor = getstrokeColor(strokeColor);
+#endif
+
+#if usePerVertWidth
+  gWidth = getstrokeWidth(strokeWidth);
 #endif
 }

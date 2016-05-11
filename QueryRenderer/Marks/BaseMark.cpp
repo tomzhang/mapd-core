@@ -232,7 +232,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
 
         beginItr->second.makeActiveOnCurrentThread();
 
-        std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc;
+        std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc, strokeGeomSrc;
 
         if (beginItr->second.shaderPtr) {
           vertSrc = beginItr->second.shaderPtr->getVertexSource();
@@ -241,6 +241,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
 
         if (beginItr->second.strokeShaderPtr) {
           strokeVertSrc = beginItr->second.strokeShaderPtr->getVertexSource();
+          strokeGeomSrc = beginItr->second.strokeShaderPtr->getGeometrySource();
           strokeFragSrc = beginItr->second.strokeShaderPtr->getFragmentSource();
         }
 
@@ -256,7 +257,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
         }
 
         if (beginItr->second.strokeShaderPtr) {
-          gpuData.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc);
+          gpuData.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc, strokeGeomSrc);
         }
 
         // NOTE: we need to create the VAO after the properties have
@@ -282,7 +283,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
 
           beginItr->second.makeActiveOnCurrentThread();
 
-          std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc;
+          std::string vertSrc, fragSrc, strokeVertSrc, strokeFragSrc, strokeGeomSrc;
 
           if (beginItr->second.shaderPtr) {
             vertSrc = beginItr->second.shaderPtr->getVertexSource();
@@ -291,6 +292,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
 
           if (beginItr->second.strokeShaderPtr) {
             strokeVertSrc = beginItr->second.strokeShaderPtr->getVertexSource();
+            strokeGeomSrc = beginItr->second.strokeShaderPtr->getGeometrySource();
             strokeFragSrc = beginItr->second.strokeShaderPtr->getFragmentSource();
           }
 
@@ -307,7 +309,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
           }
 
           if (beginItr->second.strokeShaderPtr) {
-            gpuData.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc);
+            gpuData.strokeShaderPtr = rsrcMgr->createShader(strokeVertSrc, strokeFragSrc, strokeGeomSrc);
           }
 
           // NOTE: we need to create the VAO after the properties have

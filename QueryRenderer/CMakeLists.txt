@@ -14,7 +14,7 @@ list(APPEND QUERY_RENDERER_SOURCES Data/BaseQueryDataTable.cpp Data/QueryDataTab
 
 list(APPEND QUERY_RENDERER_SOURCES Interop/QueryBuffer.cpp)
 
-list(APPEND QUERY_RENDERER_SOURCES Marks/BaseMark.cpp Marks/PointMark.cpp Marks/PolyMark.cpp Marks/RenderProperty.cpp Marks/Utils.cpp)
+list(APPEND QUERY_RENDERER_SOURCES Marks/BaseMark.cpp Marks/PointMark.cpp Marks/PolyMark.cpp Marks/RenderProperty.cpp Marks/Utils.cpp Marks/Enums.cpp)
 
 list(APPEND QUERY_RENDERER_SOURCES Rendering/QueryFramebuffer.cpp Rendering/QueryIdMapPboPool.cpp Rendering/QueryIdMapPixelBuffer.cpp Rendering/QueryRenderCompositor.cpp)
 

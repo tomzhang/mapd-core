@@ -75,7 +75,7 @@ const std::string PolyTemplate_Vert::source =
     "  #if usePerVertColor == 1 || useUfillColor\n"
     "  fColor = getfillColor(fillColor);\n"
     "  #elif useUniformBuffer == 1\n"
-    "  fColor = getfillColor(polyData.fillColor);\n"
+    "  fColor = getfillColor(polyData.<fillColor>);\n"
     "  #endif\n"
     "\n"
     "  // ids from queries go from 0 to numrows-1, but since we're storing\n"
@@ -85,7 +85,7 @@ const std::string PolyTemplate_Vert::source =
     "  #if useUid == 1\n"
     "  fPrimitiveId = id + 1;\n"
     "  #elif useUniformBuffer == 1\n"
-    "  fPrimitiveId = polyData.id + 1;\n"
+    "  fPrimitiveId = polyData.<id> + 1;\n"
     "  #endif\n"
     "}\n";
 

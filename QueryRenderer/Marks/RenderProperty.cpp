@@ -433,4 +433,19 @@ void RenderProperty<ColorRGBA, 1>::_verifyScale() {
                         "\" is not an appropriate type for colors.");
 }
 
+void EnumRenderProperty::_initValueFromJSONObj(const rapidjson::Value& obj) {
+  int val = 0;
+  if (obj.IsString()) {
+    RUNTIME_EX_ASSERT(_stringConvertFunc != nullptr, std::string(*this) + ": Enum property does not support strings.");
+
+    val = _stringConvertFunc(obj.GetString());
+
+    RUNTIME_EX_ASSERT(val >= 0, std::string(*this) + ": Enum value " + obj.GetString() + " is not supported.");
+  } else {
+    val = RapidJSONUtils::getNumValFromJSONObj<int>(obj);
+  }
+
+  initializeValue(val);
+}
+
 }  // namespace QueryRenderer

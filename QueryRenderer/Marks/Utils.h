@@ -1,6 +1,7 @@
 #ifndef QUERYRENDERER_MARKS_UTILS_H_
 #define QUERYRENDERER_MARKS_UTILS_H_
 
+#include "Enums.h"
 #include "Types.h"
 #include "../Types.h"
 

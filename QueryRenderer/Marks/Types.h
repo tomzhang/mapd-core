@@ -5,7 +5,6 @@
 
 namespace QueryRenderer {
 
-enum class GeomType { POINTS = 0, POLYS };  // LINES
 class BaseMark;
 typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
 

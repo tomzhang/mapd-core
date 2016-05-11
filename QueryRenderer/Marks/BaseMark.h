@@ -1,6 +1,7 @@
 #ifndef QUERYRENDERER_MARKS_MARK_H_
 #define QUERYRENDERER_MARKS_MARK_H_
 
+#include "Enums.h"
 #include "../Types.h"
 #include "../PerGpuData.h"
 #include "RenderProperty.h"
