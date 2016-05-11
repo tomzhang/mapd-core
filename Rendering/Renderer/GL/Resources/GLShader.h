@@ -74,6 +74,7 @@ class GLShader : public GLResource {
   GLenum getTarget() const final { return GL_SHADER; }
 
   std::string getVertexSource() const;
+  std::string getGeometrySource() const;
   std::string getFragmentSource() const;
 
   bool hasUniformAttribute(const std::string& attrName);
@@ -141,13 +142,14 @@ class GLShader : public GLResource {
   typedef std::unordered_map<std::string, std::unique_ptr<detail::UniformBlockAttrInfo>> UniformBlockAttrMap;
 
   GLuint _vertShaderId;
+  GLuint _geomShaderId;
   GLuint _fragShaderId;
   GLuint _programId;
   UniformAttrMap _uniformAttrs;
   UniformBlockAttrMap _uniformBlockAttrs;
   AttrMap _vertexAttrs;
 
-  void _initResource(const std::string& vertSrc, const std::string& fragSrc);
+  void _initResource(const std::string& vertSrc, const std::string& fragSrc, const std::string& geomSrc = "");
   void _cleanupResource() final;
   void _makeEmpty() final;
   detail::UniformAttrInfo* _validateAttr(const std::string& attrName);

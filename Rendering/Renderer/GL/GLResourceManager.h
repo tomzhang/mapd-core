@@ -24,7 +24,9 @@ class GLResourceManager {
  public:
   ~GLResourceManager();
 
-  Resources::GLShaderShPtr createShader(const std::string& vertexShaderSrc, const std::string& fragmentShaderSrc);
+  Resources::GLShaderShPtr createShader(const std::string& vertexShaderSrc,
+                                        const std::string& fragmentShaderSrc,
+                                        const std::string& geometryShaderSrc = "");
   Resources::GLRenderbufferShPtr createRenderbuffer(int width, int height, GLenum internalFormat, int numSamples = 1);
   Resources::GLTexture2dShPtr createTexture2d(
       size_t width,

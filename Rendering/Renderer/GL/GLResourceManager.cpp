@@ -62,13 +62,14 @@ void GLResourceManager::_cleanupResources() {
 }
 
 GLShaderShPtr GLResourceManager::createShader(const std::string& vertexShaderSrc,
-                                              const std::string& fragmentShaderSrc) {
+                                              const std::string& fragmentShaderSrc,
+                                              const std::string& geometryShaderSrc) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
   GLShaderShPtr rtn(new GLShader(_prntRenderer));
   _addGLResource(rtn);
-  rtn->_initResource(vertexShaderSrc, fragmentShaderSrc);
+  rtn->_initResource(vertexShaderSrc, fragmentShaderSrc, geometryShaderSrc);
 
   return rtn;
 }

@@ -598,14 +598,18 @@ static std::vector<std::string> strsplit(const std::string& s, char delim) {
 }
 
 GLShader::GLShader(const RendererWkPtr& rendererPtr)
-    : GLResource(rendererPtr, GLResourceType::SHADER), _vertShaderId(0), _fragShaderId(0), _programId(0) {
+    : GLResource(rendererPtr, GLResourceType::SHADER),
+      _vertShaderId(0),
+      _geomShaderId(0),
+      _fragShaderId(0),
+      _programId(0) {
 }
 
 GLShader::~GLShader() {
   cleanupResource();
 }
 
-void GLShader::_initResource(const std::string& vertSrc, const std::string& fragSrc) {
+void GLShader::_initResource(const std::string& vertSrc, const std::string& fragSrc, const std::string& geomSrc) {
   std::string errStr;
 
   validateRenderer(__FILE__, __LINE__);
@@ -618,6 +622,14 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
     THROW_RUNTIME_EX("Error compiling vertex shader: " + errStr + ".\n\nVertex shader src:\n\n" + vertSrc);
   }
 
+  if (geomSrc.length()) {
+    MAPD_CHECK_GL_ERROR((_geomShaderId = glCreateShader(GL_GEOMETRY_SHADER)));
+    if (!compileShader(_geomShaderId, geomSrc, errStr)) {
+      _cleanupResource();
+      THROW_RUNTIME_EX("Error compiling geometry shader: " + errStr + ".\n\nGeometry shader src:\n\n" + geomSrc);
+    }
+  }
+
   MAPD_CHECK_GL_ERROR((_fragShaderId = glCreateShader(GL_FRAGMENT_SHADER)));
   if (!compileShader(_fragShaderId, fragSrc, errStr)) {
     _cleanupResource();
@@ -628,6 +640,9 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
   RUNTIME_EX_ASSERT(_programId != 0, "An error occured trying to create a shader program");
 
   MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _vertShaderId));
+  if (_geomShaderId) {
+    MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _geomShaderId));
+  }
   MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _fragShaderId));
   if (!linkProgram(_programId, errStr)) {
     // clean out the shader references
@@ -758,6 +773,10 @@ void GLShader::_cleanupResource() {
     MAPD_CHECK_GL_ERROR(glDeleteShader(_vertShaderId));
   }
 
+  if (_geomShaderId) {
+    MAPD_CHECK_GL_ERROR(glDeleteShader(_geomShaderId));
+  }
+
   if (_fragShaderId) {
     MAPD_CHECK_GL_ERROR(glDeleteShader(_fragShaderId));
   }
@@ -773,6 +792,7 @@ void GLShader::_makeEmpty() {
   _uniformAttrs.clear();
   _vertexAttrs.clear();
   _vertShaderId = 0;
+  _geomShaderId = 0;
   _fragShaderId = 0;
   _programId = 0;
 }
@@ -826,6 +846,14 @@ UniformBlockAttrInfo* GLShader::_validateBlockAttr(const std::string& blockName,
 std::string GLShader::getVertexSource() const {
   validateUsability(__FILE__, __LINE__);
   return getShaderSource(_vertShaderId);
+}
+
+std::string GLShader::getGeometrySource() const {
+  validateUsability(__FILE__, __LINE__);
+  if (_geomShaderId) {
+    return getShaderSource(_geomShaderId);
+  }
+  return "";
 }
 
 std::string GLShader::getFragmentSource() const {
