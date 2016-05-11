@@ -220,6 +220,28 @@ class Executor {
                       const std::string& col_name,
                       const std::string& col_val,
                       const ::QueryRenderer::QueryDataLayout*) const;
+
+  std::vector<double> getShapeVertices(const Catalog_Namespace::SessionInfo& session,
+                                       const std::string& shape_col_group);
+
+  std::vector<unsigned> getShapeIndices(const Catalog_Namespace::SessionInfo& session,
+                                        const std::string& shape_col_group);
+
+  std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> getShapeLineDrawData(
+      const Catalog_Namespace::SessionInfo& session,
+      const std::string& shape_col_group);
+
+  std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> getShapePolyDrawData(
+      const Catalog_Namespace::SessionInfo& session,
+      const std::string& shape_col_group);
+
+  struct PolyRenderDataQueryResult {
+    std::shared_ptr<::QueryRenderer::QueryDataLayout> poly_render_data_layout;
+    std::unique_ptr<char[]> data;
+    const size_t num_data_bytes;
+  };
+
+  PolyRenderDataQueryResult getPolyRenderDataQueryResult(const size_t gpuId);
 #endif  // HAVE_RENDERING
 
   StringDictionary* getStringDictionary(const int dictId,

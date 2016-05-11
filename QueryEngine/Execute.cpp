@@ -572,10 +572,32 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
+namespace {
+
+// Checked json field retrieval.
+const rapidjson::Value& field(const rapidjson::Value& obj, const char field[]) noexcept {
+  CHECK(obj.IsObject());
+  const auto field_it = obj.FindMember(field);
+  CHECK(field_it != obj.MemberEnd());
+  return field_it->value;
+}
+
+const std::string json_str(const rapidjson::Value& obj) noexcept {
+  CHECK(obj.IsString());
+  return obj.GetString();
+}
+
+}  // namespace
+
 ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json,
                                            const Catalog_Namespace::SessionInfo& session,
                                            const int render_widget_id) {
 #ifdef HAVE_CUDA
+  rapidjson::Document render_config;
+  render_config.Parse(render_config_json.c_str());
+  CHECK(!render_config.HasParseError());
+  CHECK(render_config.IsObject());
+
   // capture the lock acquistion time
   auto clock_begin = timer_start();
   std::lock_guard<std::mutex> lock(execute_mutex_);
@@ -588,7 +610,12 @@ ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json
   const int gpuId = 0;
   session.get_catalog().get_dataMgr().cudaMgr_->setContext(gpuId);
 
-  const std::string polyTableName = "polyTable";
+  const auto& data_descs = field(render_config, "data");
+  CHECK(data_descs.IsArray());
+  CHECK_EQ(unsigned(1), data_descs.Size());
+  const auto& data_desc = *(data_descs.Begin());
+  const auto polyTableName = json_str(field(data_desc, "dbTableName"));
+  const auto shape_col_group = json_str(field(data_desc, "shapeColGroup"));
 
   // initialize the poly rendering data
 
@@ -596,117 +623,23 @@ ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json
   // NOTE: the first 3 verts of each polygon are repeated at the end of
   // its vertex list in order to get all the adjacent data
   // need for the custom line-drawing shader to draw a closed line.
-  std::vector<double> verts = {-1.0,
-                               -0.0,
-                               0.0,
-                               -0.0,
-                               0.0,
-                               1.0,
-                               -1.0,
-                               1.0,
-                               -1.0,
-                               0.0,
-                               0.0,
-                               0.0,
-                               0.0,
-                               1.0,
-
-                               0.0,
-                               0.0,
-                               1.0,
-                               0.0,
-                               1.0,
-                               1.0,
-                               0.0,
-                               1.0,
-                               0.0,
-                               0.0,
-                               1.0,
-                               0.0,
-                               1.0,
-                               1.0,
-
-                               -1.0,
-                               -1.0,
-                               -0.0,
-                               -1.0,
-                               -0.5,
-                               0.0,
-                               -1.0,
-                               -1.0,
-                               -0.0,
-                               -1.0,
-                               -0.5,
-                               0.0,
-
-                               0.5,
-                               -1.0,
-                               1.0,
-                               0.0,
-                               0.0,
-                               0.0,
-                               0.5,
-                               -1.0,
-                               1.0,
-                               0.0,
-                               0.0,
-                               0.0};
+  const auto verts = getShapeVertices(session, shape_col_group);
 
   // setup the tri tesselation by index (must be unsigned int)
-  std::vector<unsigned int> indices = {3, 1, 2, 3, 0, 1, 3, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2};
+  const auto indices = getShapeIndices(session, shape_col_group);
 
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> lineDrawData = {
-      ::Rendering::GL::Resources::IndirectDrawVertexData(7),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 14),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 20)};
+  const auto lineDrawData = getShapeLineDrawData(session, shape_col_group);
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
   // Third argument is the vertex index/offset of the start vertex for the poly
-  std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> polyDrawData = {
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 7),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 14),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20)};
+  const auto polyDrawData = getShapePolyDrawData(session, shape_col_group);
 
-  // Extra data for rendering / rowids
-  std::vector<int64_t> population = {10, 20, 30, 40};
-  std::vector<double> unemployment = {100.0, 200.0, 300.0, 400.0};
-  std::vector<uint64_t> rowid = {0, 1, 2, 3};
-
-  CHECK(unemployment.size() == population.size() && unemployment.size() == rowid.size());
-
-  // the rendering/rowid data is put in a special "uniform" buffer. This buffer
-  // has specific byte alignment rules. As long as we're dealing with
-  // basic types here (and not arrays or structs), then the only rule we need
-  // to worry about is the padding/byte alignment. The number of bytes per row must
-  // be a multiple of the alignBytes below.
-  size_t alignBytes = render_manager_->getPolyDataBufferAlignmentBytes(gpuId);
-
-  // NOTE: the number of bytes per query result row should be <= alignBytes
-  CHECK(sizeof(double) + sizeof(int64_t) + sizeof(uint64_t) <= alignBytes);
-  size_t numDataBytes = population.size() * alignBytes;
-
-  // setting the rendering/rowid data. Tightly packed at the front of each row
-  // with extra padding at end to align with alignBytes.
-  std::unique_ptr<char[]> data(new char[numDataBytes]);
-  char* rawData = data.get();
-  std::memset(rawData, 0, numDataBytes);
-  size_t offset;
-  for (size_t idx = 0, i = 0; i < population.size(); ++i, idx += alignBytes) {
-    offset = idx;
-    std::memcpy(rawData + offset, &population[i], sizeof(int64_t));
-    offset += sizeof(int64_t);
-    std::memcpy(rawData + offset, &unemployment[i], sizeof(double));
-    offset += sizeof(double);
-    std::memcpy(rawData + offset, &rowid[i], sizeof(uint64_t));
-    offset += sizeof(uint64_t);
-  }
+  const auto data_query_result = getPolyRenderDataQueryResult(gpuId);
 
   // build a struct specifying the number of bytes needed for each buffer used
   // for poly rendering:
@@ -720,7 +653,7 @@ ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json
        indices.size() * sizeof(unsigned int),
        lineDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
        polyDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawIndexData),
-       numDataBytes});
+       data_query_result.num_data_bytes});
 
   if (!render_manager_->hasPolyTableCache(polyTableName, gpuId)) {
     // setup the layout for the cached vertex buffer.
@@ -745,18 +678,12 @@ ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json
       reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle), &lineDrawData[0], polyByteData.numLineLoopBytes);
   cuMemcpyHtoD(
       reinterpret_cast<CUdeviceptr>(polyData.polyDrawStruct.handle), &polyDrawData[0], polyByteData.numPolyBytes);
-  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.perRowData.handle), rawData, polyByteData.numDataBytes);
-
-  // create the layout for the rendering/rowid data buffer
-  std::shared_ptr<::QueryRenderer::QueryDataLayout> polyRenderDataLayout(
-      new ::QueryRenderer::QueryDataLayout({"population", "unemployment", "rowid"},
-                                           {::QueryRenderer::QueryDataLayout::AttrType::INT64,
-                                            ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE,
-                                            ::QueryRenderer::QueryDataLayout::AttrType::UINT64},
-                                           {{}}));
+  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.perRowData.handle),
+               data_query_result.data.get(),
+               polyByteData.numDataBytes);
 
   // set the buffers as renderable
-  render_manager_->setPolyTableReadyForRender(polyTableName, gpuId, polyRenderDataLayout);
+  render_manager_->setPolyTableReadyForRender(polyTableName, gpuId, data_query_result.poly_render_data_layout);
 
   // set the session, like normal
   set_render_widget(render_manager_, session_id, render_widget_id);
@@ -778,6 +705,138 @@ ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json
   LOG(ERROR) << "Cannot run testRenderSimplePolys() without cuda enabled";
   return ResultRows(std::string(), 0, 0);
 #endif  // HAVE_CUDA
+}
+
+std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionInfo& session,
+                                               const std::string& shape_col_group) {
+  CHECK_EQ(shape_col_group, "foobar");
+  return {-1.0,
+          -0.0,
+          0.0,
+          -0.0,
+          0.0,
+          1.0,
+          -1.0,
+          1.0,
+          -1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          1.0,
+          1.0,
+
+          -1.0,
+          -1.0,
+          -0.0,
+          -1.0,
+          -0.5,
+          0.0,
+          -1.0,
+          -1.0,
+          -0.0,
+          -1.0,
+          -0.5,
+          0.0,
+
+          0.5,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0};
+}
+
+std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::SessionInfo& session,
+                                                const std::string& shape_col_group) {
+  CHECK_EQ(shape_col_group, "foobar");
+  return {3, 1, 2, 3, 0, 1, 3, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2};
+}
+
+std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getShapeLineDrawData(
+    const Catalog_Namespace::SessionInfo& session,
+    const std::string& shape_col_group) {
+  CHECK_EQ(shape_col_group, "foobar");
+  return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{
+      ::Rendering::GL::Resources::IndirectDrawVertexData(7),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 14),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 20)};
+}
+
+std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(
+    const Catalog_Namespace::SessionInfo& session,
+    const std::string& shape_col_group) {
+  CHECK_EQ(shape_col_group, "foobar");
+  return std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>{
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 7),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 14),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20)};
+}
+
+Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataQueryResult(const size_t gpuId) {
+  // Extra data for rendering / rowids
+  std::vector<int64_t> population = {10, 20, 30, 40};
+  std::vector<double> unemployment = {100.0, 200.0, 300.0, 400.0};
+  std::vector<uint64_t> rowid = {0, 1, 2, 3};
+
+  CHECK(unemployment.size() == population.size() && unemployment.size() == rowid.size());
+
+  // the rendering/rowid data is put in a special "uniform" buffer. This buffer
+  // has specific byte alignment rules. As long as we're dealing with
+  // basic types here (and not arrays or structs), then the only rule we need
+  // to worry about is the padding/byte alignment. The number of bytes per row must
+  // be a multiple of the alignBytes below.
+  size_t alignBytes = render_manager_->getPolyDataBufferAlignmentBytes(gpuId);
+
+  // NOTE: the number of bytes per query result row should be <= alignBytes
+  CHECK(sizeof(double) + sizeof(int64_t) + sizeof(uint64_t) <= alignBytes);
+  size_t numDataBytes = population.size() * alignBytes;
+
+  // setting the rendering/rowid data. Tightly packed at the front of each row
+  // with extra padding at end to align with alignBytes.
+  auto rawData = new char[numDataBytes];
+  std::memset(rawData, 0, numDataBytes);
+  size_t offset;
+  for (size_t idx = 0, i = 0; i < population.size(); ++i, idx += alignBytes) {
+    offset = idx;
+    std::memcpy(rawData + offset, &population[i], sizeof(int64_t));
+    offset += sizeof(int64_t);
+    std::memcpy(rawData + offset, &unemployment[i], sizeof(double));
+    offset += sizeof(double);
+    std::memcpy(rawData + offset, &rowid[i], sizeof(uint64_t));
+    offset += sizeof(uint64_t);
+  }
+
+  auto query_data_layout = new ::QueryRenderer::QueryDataLayout({"population", "unemployment", "rowid"},
+                                                                {::QueryRenderer::QueryDataLayout::AttrType::INT64,
+                                                                 ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE,
+                                                                 ::QueryRenderer::QueryDataLayout::AttrType::UINT64},
+                                                                {{}});
+  return {std::shared_ptr<::QueryRenderer::QueryDataLayout>(query_data_layout),
+          std::unique_ptr<char[]>(rawData),
+          numDataBytes};
 }
 
 int32_t Executor::getStringId(const std::string& table_name,
