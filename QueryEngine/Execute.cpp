@@ -11,6 +11,7 @@
 #include "QueryTemplateGenerator.h"
 #include "QueryRewrite.h"
 #include "RuntimeFunctions.h"
+#include "JsonAccessors.h"
 #include "DataMgr/BufferMgr/BufferMgr.h"
 #include "CudaMgr/CudaMgr.h"
 #include "Parser/ParserNode.h"
@@ -572,24 +573,10 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
-namespace {
-
-// Checked json field retrieval.
-const rapidjson::Value& field(const rapidjson::Value& obj, const char field[]) noexcept {
-  CHECK(obj.IsObject());
-  const auto field_it = obj.FindMember(field);
-  CHECK(field_it != obj.MemberEnd());
-  return field_it->value;
-}
-
-const std::string json_str(const rapidjson::Value& obj) noexcept {
-  CHECK(obj.IsString());
-  return obj.GetString();
-}
-
-}  // namespace
-
-ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json,
+ResultRows Executor::testRenderSimplePolys(const int8_t* row_buffer,
+                                           const size_t row_buffer_entry_count,
+                                           const std::vector<TargetMetaInfo>& row_shape,
+                                           const std::string& render_config_json,
                                            const Catalog_Namespace::SessionInfo& session,
                                            const int render_widget_id) {
 #ifdef HAVE_CUDA

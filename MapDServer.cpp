@@ -28,6 +28,7 @@
 #include "Planner/Planner.h"
 #include "QueryEngine/CalciteAdapter.h"
 #include "QueryEngine/Execute.h"
+#include "QueryEngine/JsonAccessors.h"
 #include "QueryEngine/TargetMetaInfo.h"
 #include "Shared/mapd_shared_mutex.h"
 #include "Shared/measure.h"
@@ -958,7 +959,6 @@ class MapDHandler : virtual public MapDIf {
 
   void testRenderSimplePolys(TRenderResult& _return,
                              const TSessionId session,
-                             const std::string& query_str,
                              const std::string& render_type,
                              const std::string& nonce) {
     if (!enable_rendering_) {
@@ -982,6 +982,17 @@ class MapDHandler : virtual public MapDIf {
       auto session_it = get_session_it(session);
       auto session_info_ptr = session_it->second.get();
 
+      rapidjson::Document render_config;
+      render_config.Parse(render_type.c_str());
+      CHECK(!render_config.HasParseError());
+      CHECK(render_config.IsObject());
+      const auto& data_descs = field(render_config, "data");
+      CHECK(data_descs.IsArray());
+      CHECK_EQ(unsigned(1), data_descs.Size());
+      const auto& data_desc = *(data_descs.Begin());
+      const auto query_str = json_str(field(data_desc, "sql"));  // TODO(alex): autogenerate the join query
+      CHECK(!query_str.empty());
+
       try {
         const auto& cat = session_info_ptr->get_catalog();
         auto executor = Executor::getExecutor(cat.get_currentDB().dbId,
@@ -992,7 +1003,7 @@ class MapDHandler : virtual public MapDIf {
                                               render_manager_.get());
 
         auto clock_begin = timer_start();
-        auto results = executor->testRenderSimplePolys(render_type, *session_info_ptr, 1);
+        auto results = executor->testRenderSimplePolys(nullptr, 0, {}, render_type, *session_info_ptr, 1);
         _return.execution_time_ms = timer_stop(clock_begin) - results.getQueueTime() - results.getRenderTime();
         _return.render_time_ms = results.getRenderTime();
 
