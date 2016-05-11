@@ -236,17 +236,21 @@ class Executor {
                       const ::QueryRenderer::QueryDataLayout*) const;
 
   std::vector<double> getShapeVertices(const Catalog_Namespace::SessionInfo& session,
+                                       const std::string& shape_table,
                                        const std::string& shape_col_group);
 
   std::vector<unsigned> getShapeIndices(const Catalog_Namespace::SessionInfo& session,
+                                        const std::string& shape_table,
                                         const std::string& shape_col_group);
 
   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> getShapeLineDrawData(
       const Catalog_Namespace::SessionInfo& session,
+      const std::string& shape_table,
       const std::string& shape_col_group);
 
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> getShapePolyDrawData(
       const Catalog_Namespace::SessionInfo& session,
+      const std::string& shape_table,
       const std::string& shape_col_group);
 
   struct PolyRenderDataQueryResult {

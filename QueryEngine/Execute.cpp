@@ -631,21 +631,21 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // NOTE: the first 3 verts of each polygon are repeated at the end of
   // its vertex list in order to get all the adjacent data
   // need for the custom line-drawing shader to draw a closed line.
-  const auto verts = getShapeVertices(session, shape_col_group);
+  const auto verts = getShapeVertices(session, polyTableName, shape_col_group);
 
   // setup the tri tesselation by index (must be unsigned int)
-  const auto indices = getShapeIndices(session, shape_col_group);
+  const auto indices = getShapeIndices(session, polyTableName, shape_col_group);
 
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  auto lineDrawData = getShapeLineDrawData(session, shape_col_group);
+  auto lineDrawData = getShapeLineDrawData(session, polyTableName, shape_col_group);
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
   // Third argument is the vertex index/offset of the start vertex for the poly
-  auto polyDrawData = getShapePolyDrawData(session, shape_col_group);
+  auto polyDrawData = getShapePolyDrawData(session, polyTableName, shape_col_group);
 
   const auto rowid_idx = get_rowid_idx(row_shape);
 
@@ -731,76 +731,93 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
 #endif  // HAVE_CUDA
 }
 
+namespace {
+
+struct ChunkWithMetaInfo {
+  const std::shared_ptr<Chunk_NS::Chunk> chunk;
+  const ChunkMetadata meta;
+};
+
+// TODO(alex): pass the fragments metadata from Executor::renderPolygons, the
+//             shape columns go together and we don't want lengths to be jagged
+ChunkWithMetaInfo get_poly_shapes_chunk(const Catalog_Namespace::Catalog& cat,
+                                        const std::string& shape_table,
+                                        const std::string& col_name) {
+  const auto td = cat.getMetadataForTable(shape_table);
+  CHECK(td);  // TODO(alex): throw exception instead
+  const auto cd = cat.getMetadataForColumn(td->tableId, col_name);
+  CHECK(cd);  // TODO(alex): throw exception instead
+  const auto table_info = td->fragmenter->getFragmentsForQuery();
+  CHECK_EQ(size_t(1), table_info.fragments.size());  // TODO(alex): throw exception instead
+  const auto& fragment = table_info.fragments.front();
+  ChunkKey chunk_key{cat.get_currentDB().dbId, td->tableId, cd->columnId, fragment.fragmentId};
+  auto chunk_meta_it = fragment.chunkMetadataMap.find(cd->columnId);
+  CHECK(chunk_meta_it != fragment.chunkMetadataMap.end());
+  return {Chunk_NS::Chunk::getChunk(cd,
+                                    &cat.get_dataMgr(),
+                                    chunk_key,
+                                    Data_Namespace::CPU_LEVEL,
+                                    0,
+                                    chunk_meta_it->second.numBytes,
+                                    chunk_meta_it->second.numElements),
+          chunk_meta_it->second};
+}
+
+}  // namespace
+
 std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionInfo& session,
+                                               const std::string& shape_table,
                                                const std::string& shape_col_group) {
-  CHECK_EQ(shape_col_group, "foobar");
-  return {-1.0,
-          -0.0,
-          0.0,
-          -0.0,
-          0.0,
-          1.0,
-          -1.0,
-          1.0,
-          -1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.0,
-          1.0,
-
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0,
-
-          -1.0,
-          -1.0,
-          -0.0,
-          -1.0,
-          -0.5,
-          0.0,
-          -1.0,
-          -1.0,
-          -0.0,
-          -1.0,
-          -0.5,
-          0.0,
-
-          0.5,
-          -1.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0,
-          0.5,
-          -1.0,
-          1.0,
-          0.0,
-          0.0,
-          0.0};
+  const auto& cat = session.get_catalog();
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, shape_table, shape_col_group + "_geo_coords");
+  CHECK(chunk_with_meta.chunk);
+  auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
+  const auto row_count = chunk_with_meta.meta.numElements;
+  std::vector<double> geo_coords;
+  for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
+    ArrayDatum ad;
+    bool is_end;
+    ChunkIter_get_nth(&chunk_iter, row_pos, &ad, &is_end);
+    CHECK(!is_end);
+    CHECK(ad.pointer);
+    const auto num_elems = ad.length / sizeof(double);  // TODO(alex): support float as well
+    const auto double_buff = reinterpret_cast<const double*>(ad.pointer);
+    for (size_t i = 0; i < num_elems; ++i) {
+      geo_coords.push_back(double_buff[i]);
+    }
+  }
+  return geo_coords;
 }
 
 std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::SessionInfo& session,
+                                                const std::string& shape_table,
                                                 const std::string& shape_col_group) {
-  CHECK_EQ(shape_col_group, "foobar");
-  return {3, 1, 2, 3, 0, 1, 3, 1, 2, 3, 0, 1, 0, 1, 2, 0, 1, 2};
+  const auto& cat = session.get_catalog();
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, shape_table, shape_col_group + "_geo_indices");
+  CHECK(chunk_with_meta.chunk);
+  auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
+  const auto row_count = chunk_with_meta.meta.numElements;
+  std::vector<unsigned> geo_indices;
+  for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
+    ArrayDatum ad;
+    bool is_end;
+    ChunkIter_get_nth(&chunk_iter, row_pos, &ad, &is_end);
+    CHECK(!is_end);
+    CHECK(ad.pointer);
+    const auto num_elems = ad.length / sizeof(uint32_t);  // TODO(alex): support other integer sizes as well
+    const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
+    for (size_t i = 0; i < num_elems; ++i) {
+      geo_indices.push_back(ui32_buff[i]);
+    }
+  }
+  return geo_indices;
 }
 
 std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getShapeLineDrawData(
     const Catalog_Namespace::SessionInfo& session,
+    const std::string& shape_table,
     const std::string& shape_col_group) {
-  CHECK_EQ(shape_col_group, "foobar");
+  CHECK_EQ(shape_col_group, "mapd");
   return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{
       ::Rendering::GL::Resources::IndirectDrawVertexData(7, 0, 0),
       ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7, 0),
@@ -810,13 +827,28 @@ std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getSha
 
 std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(
     const Catalog_Namespace::SessionInfo& session,
+    const std::string& shape_table,
     const std::string& shape_col_group) {
-  CHECK_EQ(shape_col_group, "foobar");
-  return std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>{
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 0, 0, 0),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 7, 0),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 14, 0),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20, 0)};
+  const auto& cat = session.get_catalog();
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, shape_table, shape_col_group + "_geo_polydrawinfo");
+  CHECK(chunk_with_meta.chunk);
+  auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
+  const auto row_count = chunk_with_meta.meta.numElements;
+  std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> geo_polydrawinfo;
+  for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
+    ArrayDatum ad;
+    bool is_end;
+    ChunkIter_get_nth(&chunk_iter, row_pos, &ad, &is_end);
+    CHECK(!is_end);
+    CHECK(ad.pointer);
+    const auto num_elems = ad.length / sizeof(uint32_t);  // TODO(alex): support other integer sizes as well
+    CHECK_EQ(size_t(5), num_elems);
+    const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
+    geo_polydrawinfo.push_back(
+        ::Rendering::GL::Resources::IndirectDrawIndexData(ui32_buff[0], ui32_buff[2], ui32_buff[3], 0));
+  }
+  CHECK_EQ(shape_col_group, "mapd");
+  return geo_polydrawinfo;
 }
 
 namespace {
