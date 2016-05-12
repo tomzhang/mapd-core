@@ -572,11 +572,10 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
-ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
+ResultRows Executor::testRenderSimplePolys(const std::string& render_config_json,
                                            const Catalog_Namespace::SessionInfo& session,
                                            const int render_widget_id) {
 #ifdef HAVE_CUDA
-  catalog_ = &root_plan->get_catalog();
   // capture the lock acquistion time
   auto clock_begin = timer_start();
   std::lock_guard<std::mutex> lock(execute_mutex_);
@@ -587,51 +586,9 @@ ResultRows Executor::testRenderSimplePolys(const Planner::RootPlan* root_plan,
   clock_begin = timer_start();
 
   const int gpuId = 0;
-  catalog_->get_dataMgr().cudaMgr_->setContext(gpuId);
+  session.get_catalog().get_dataMgr().cudaMgr_->setContext(gpuId);
 
   const std::string polyTableName = "polyTable";
-  const std::string render_config_json =
-      R"({
-    "width" : 1024,
-    "height" : 1024,
-    "data": [
-        {
-            "name" : "table",
-            "format" : "polys",
-            "sql": "<fill in with a query>",
-            "dbTableName" : "polyTable"
-        }
-    ],
-    "scales" : [
-        {
-            "name" : "color",
-            "type" : "ordinal",
-            "domain" : [10, 20, 30, 40],
-            "range" : ["red", "blue", "green", "yellow"],
-            "default" : "cyan"
-        }
-    ],
-    "marks" : [
-        {
-            "type" : "polys",
-            "from" : {"data" : "table"},
-            "properties" : {
-                "x" : {
-                    "field" : "x"
-                },
-                "y" : {
-                    "field" : "y"
-                },
-                "fillColor" : {
-                    "scale" : "color",
-                    "field" : "population"
-                },
-                "strokeColor": "white",
-                "strokeWidth": 5.0
-            }
-        }
-    ]
-})";
 
   // initialize the poly rendering data
 

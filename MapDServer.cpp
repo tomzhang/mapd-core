@@ -889,6 +889,7 @@ class MapDHandler : virtual public MapDIf {
   void testRenderSimplePolys(TRenderResult& _return,
                              const TSessionId session,
                              const std::string& query_str,
+                             const std::string& render_type,
                              const std::string& nonce) {
     if (!enable_rendering_) {
       TMapDException ex;
@@ -912,8 +913,8 @@ class MapDHandler : virtual public MapDIf {
       auto session_info_ptr = session_it->second.get();
 
       try {
-        auto root_plan = parse_to_render_plan_legacy(query_str, *session_info_ptr);
-        auto executor = Executor::getExecutor(root_plan->get_catalog().get_currentDB().dbId,
+        const auto& cat = session_info_ptr->get_catalog();
+        auto executor = Executor::getExecutor(cat.get_currentDB().dbId,
                                               jit_debug_ ? "/tmp" : "",
                                               jit_debug_ ? "mapdquery" : "",
                                               0,
@@ -921,7 +922,7 @@ class MapDHandler : virtual public MapDIf {
                                               render_manager_.get());
 
         auto clock_begin = timer_start();
-        auto results = executor->testRenderSimplePolys(root_plan, *session_info_ptr, 1);
+        auto results = executor->testRenderSimplePolys(render_type, *session_info_ptr, 1);
         _return.execution_time_ms = timer_stop(clock_begin) - results.getQueueTime() - results.getRenderTime();
         _return.render_time_ms = results.getRenderTime();
 
