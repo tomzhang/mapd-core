@@ -573,8 +573,7 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
-ResultRows Executor::testRenderSimplePolys(const int8_t* row_buffer,
-                                           const size_t row_buffer_entry_count,
+ResultRows Executor::testRenderSimplePolys(const ResultRows& rows,
                                            const std::vector<TargetMetaInfo>& row_shape,
                                            const std::string& render_config_json,
                                            const Catalog_Namespace::SessionInfo& session,
