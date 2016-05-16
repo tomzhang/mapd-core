@@ -212,11 +212,11 @@ class Executor {
                            const int render_widget_id,
                            const int pixelRadius = 0);
 
-  ResultRows testRenderSimplePolys(const ResultRows& rows,
-                                   const std::vector<TargetMetaInfo>& row_shape,
-                                   const std::string& render_config_json,
-                                   const Catalog_Namespace::SessionInfo& session,
-                                   const int render_widget_id);
+  ResultRows renderPolygons(const ResultRows& rows,
+                            const std::vector<TargetMetaInfo>& row_shape,
+                            const std::string& render_config_json,
+                            const Catalog_Namespace::SessionInfo& session,
+                            const int render_widget_id);
 
 #ifdef HAVE_RENDERING
   int32_t getStringId(const std::string& table_name,
@@ -242,9 +242,21 @@ class Executor {
     std::shared_ptr<::QueryRenderer::QueryDataLayout> poly_render_data_layout;
     std::unique_ptr<char[]> data;
     const size_t num_data_bytes;
+    const size_t align_bytes;
   };
 
   PolyRenderDataQueryResult getPolyRenderDataQueryResult(const size_t gpuId);
+
+  PolyRenderDataQueryResult getPolyRenderDataTemplate(const std::vector<TargetMetaInfo>& row_shape,
+                                                      const size_t entry_count,
+                                                      const size_t gpuId);
+
+  void setPolyRenderDataEntry(PolyRenderDataQueryResult& render_data,
+                              const std::vector<TargetValue>& row,
+                              const std::vector<TargetMetaInfo>& row_shape,
+                              const size_t idx,
+                              const size_t align_bytes);
+
 #endif  // HAVE_RENDERING
 
   StringDictionary* getStringDictionary(const int dictId,

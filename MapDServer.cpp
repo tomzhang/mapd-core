@@ -973,77 +973,6 @@ class MapDHandler : virtual public MapDIf {
               << " (ms), Render: " << _return.render_time_ms << " (ms)";
   }
 
-  void testRenderSimplePolys(TRenderResult& _return,
-                             const TSessionId session,
-                             const std::string& render_type,
-                             const std::string& nonce) {
-    if (!enable_rendering_) {
-      TMapDException ex;
-      ex.error_msg = "Backend rendering is disabled.";
-      LOG(ERROR) << ex.error_msg;
-      throw ex;
-    }
-
-#ifdef HAVE_RENDERING
-    _return.total_time_ms = measure<>::execution([&]() {
-      _return.nonce = nonce;
-      if (!enable_rendering_) {
-        TMapDException ex;
-        ex.error_msg = "Backend rendering is disabled.";
-        LOG(ERROR) << ex.error_msg;
-        throw ex;
-      }
-      std::lock_guard<std::mutex> render_lock(render_mutex_);
-      mapd_shared_lock<mapd_shared_mutex> read_lock(sessions_mutex_);
-      auto session_it = get_session_it(session);
-      auto session_info_ptr = session_it->second.get();
-
-      rapidjson::Document render_config;
-      render_config.Parse(render_type.c_str());
-      CHECK(!render_config.HasParseError());
-      CHECK(render_config.IsObject());
-      const auto& data_descs = field(render_config, "data");
-      CHECK(data_descs.IsArray());
-      CHECK_EQ(unsigned(1), data_descs.Size());
-      const auto& data_desc = *(data_descs.Begin());
-      const auto query_str = json_str(field(data_desc, "sql"));  // TODO(alex): autogenerate the join query
-      CHECK(!query_str.empty());
-
-      try {
-        const auto& cat = session_info_ptr->get_catalog();
-        auto executor = Executor::getExecutor(cat.get_currentDB().dbId,
-                                              jit_debug_ ? "/tmp" : "",
-                                              jit_debug_ ? "mapdquery" : "",
-                                              0,
-                                              0,
-                                              render_manager_.get());
-
-        auto clock_begin = timer_start();
-        ResultRows rows({}, {}, nullptr, nullptr, {}, session_info_ptr->get_executor_device_type());
-        auto results = executor->testRenderSimplePolys(rows, {}, render_type, *session_info_ptr, 1);
-        _return.execution_time_ms = timer_stop(clock_begin) - results.getQueueTime() - results.getRenderTime();
-        _return.render_time_ms = results.getRenderTime();
-
-        const auto img_row = results.getNextRow(false, false);
-        CHECK_EQ(size_t(1), img_row.size());
-        const auto& img_tv = img_row.front();
-        const auto scalar_tv = boost::get<ScalarTargetValue>(&img_tv);
-        const auto nullable_sptr = boost::get<NullableString>(scalar_tv);
-        CHECK(nullable_sptr);
-        auto sptr = boost::get<std::string>(nullable_sptr);
-        CHECK(sptr);
-        _return.image = *sptr;
-
-      } catch (std::exception& e) {
-        TMapDException ex;
-        ex.error_msg = std::string("Exception: ") + e.what();
-        LOG(ERROR) << ex.error_msg;
-        throw ex;
-      }
-    });
-#endif
-  }
-
   void create_frontend_view(const TSessionId session,
                             const std::string& view_name,
                             const std::string& view_state,
@@ -1361,7 +1290,7 @@ class MapDHandler : virtual public MapDIf {
       CHECK(plan);
       const auto& targets = plan->get_targetlist();
       auto rendered_results =
-          executor->testRenderSimplePolys(results, getTargetMetaInfo(targets), render_type, session_info, 1);
+          executor->renderPolygons(results, getTargetMetaInfo(targets), render_type, session_info, 1);
       _return.execution_time_ms =
           timer_stop(clock_begin) - rendered_results.getQueueTime() - rendered_results.getRenderTime();
       _return.render_time_ms = rendered_results.getRenderTime();

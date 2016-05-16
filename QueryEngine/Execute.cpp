@@ -590,11 +590,11 @@ size_t get_rowid_idx(const std::vector<TargetMetaInfo>& row_shape) {
 
 }  // namespace
 
-ResultRows Executor::testRenderSimplePolys(const ResultRows& rows,
-                                           const std::vector<TargetMetaInfo>& row_shape,
-                                           const std::string& render_config_json,
-                                           const Catalog_Namespace::SessionInfo& session,
-                                           const int render_widget_id) {
+ResultRows Executor::renderPolygons(const ResultRows& rows,
+                                    const std::vector<TargetMetaInfo>& row_shape,
+                                    const std::string& render_config_json,
+                                    const Catalog_Namespace::SessionInfo& session,
+                                    const int render_widget_id) {
 #ifdef HAVE_CUDA
   rapidjson::Document render_config;
   render_config.Parse(render_config_json.c_str());
@@ -644,6 +644,8 @@ ResultRows Executor::testRenderSimplePolys(const ResultRows& rows,
 
   const auto rowid_idx = get_rowid_idx(row_shape);
 
+  auto data_query_result = getPolyRenderDataTemplate(row_shape, polyDrawData.size(), gpuId);
+
   while (true) {
     const auto crt_row = rows.getNextRow(false, false);
     if (crt_row.empty()) {
@@ -655,9 +657,8 @@ ResultRows Executor::testRenderSimplePolys(const ResultRows& rows,
     CHECK(rowid_ptr);
     lineDrawData[*rowid_ptr].instanceCount = 1;
     polyDrawData[*rowid_ptr].instanceCount = 1;
+    setPolyRenderDataEntry(data_query_result, crt_row, row_shape, *rowid_ptr, data_query_result.align_bytes);
   }
-
-  const auto data_query_result = getPolyRenderDataQueryResult(gpuId);
 
   // build a struct specifying the number of bytes needed for each buffer used
   // for poly rendering:
@@ -854,7 +855,87 @@ Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataQueryResult(const
                                                                 {{}});
   return {std::shared_ptr<::QueryRenderer::QueryDataLayout>(query_data_layout),
           std::unique_ptr<char[]>(rawData),
-          numDataBytes};
+          numDataBytes,
+          alignBytes};
+}
+
+namespace {
+
+size_t get_data_row_size(const std::vector<TargetMetaInfo>& row_shape) {
+  size_t sz = 0;
+  for (const auto& target_meta : row_shape) {
+    const auto& target_ti = target_meta.get_type_info();
+    sz += target_ti.get_size();
+  }
+  return sz;
+}
+
+}  // namespace
+
+// TODO(alex): We can cache this template based on the row shape.
+Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const std::vector<TargetMetaInfo>& row_shape,
+                                                                        const size_t entry_count,
+                                                                        const size_t gpuId) {
+  // the rendering/rowid data is put in a special "uniform" buffer. This buffer
+  // has specific byte alignment rules. As long as we're dealing with
+  // basic types here (and not arrays or structs), then the only rule we need
+  // to worry about is the padding/byte alignment. The number of bytes per row must
+  // be a multiple of the alignBytes below.
+  size_t align_bytes = render_manager_->getPolyDataBufferAlignmentBytes(gpuId);
+
+  const auto row_size = get_data_row_size(row_shape);
+  CHECK_LE(row_size, align_bytes);
+
+  size_t num_data_bytes = entry_count * align_bytes;
+
+  // setting the rendering/rowid data. Tightly packed at the front of each row
+  // with extra padding at end to align with alignBytes.
+  auto raw_data = new char[num_data_bytes];
+  std::memset(raw_data, 0, num_data_bytes);
+
+  std::vector<std::string> attr_names;
+  std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types;
+  for (const auto& target_meta_info : row_shape) {
+    attr_names.push_back(target_meta_info.get_resname());
+    attr_types.push_back(sql_type_to_render_type(target_meta_info.get_type_info()));
+  }
+
+  auto query_data_layout = new ::QueryRenderer::QueryDataLayout(attr_names, attr_types, {{}});
+
+  return {std::shared_ptr<::QueryRenderer::QueryDataLayout>(query_data_layout),
+          std::unique_ptr<char[]>(raw_data),
+          num_data_bytes,
+          align_bytes};
+}
+
+void Executor::setPolyRenderDataEntry(Executor::PolyRenderDataQueryResult& render_data,
+                                      const std::vector<TargetValue>& row,
+                                      const std::vector<TargetMetaInfo>& row_shape,
+                                      const size_t idx,
+                                      const size_t align_bytes) {
+  CHECK_EQ(row.size(), row_shape.size());
+  auto offset = idx * align_bytes;
+  for (size_t col_idx = 0; col_idx < row_shape.size(); ++col_idx) {
+    const auto tv = row[col_idx];
+    const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
+    const auto i64_ptr = boost::get<int64_t>(scalar_tv);
+    if (i64_ptr) {
+      std::memcpy(render_data.data.get() + offset, i64_ptr, sizeof(int64_t));
+      offset += sizeof(int64_t);
+      continue;
+    }
+    const auto float_ptr = boost::get<float>(scalar_tv);
+    if (float_ptr) {
+      const double dval = *float_ptr;  // TODO(alex): remove this conversion
+      std::memcpy(render_data.data.get() + offset, &dval, sizeof(double));
+      offset += sizeof(double);
+      continue;
+    }
+    const auto double_ptr = boost::get<double>(scalar_tv);
+    CHECK(double_ptr);
+    std::memcpy(render_data.data.get() + offset, double_ptr, sizeof(double));
+    offset += sizeof(double);
+  }
 }
 
 int32_t Executor::getStringId(const std::string& table_name,
