@@ -1356,6 +1356,7 @@ class MapDHandler : virtual public MapDIf {
                                      allow_multifrag_,
                                      false);
     if (render_polys) {
+#ifdef HAVE_RENDERING
       const auto plan = root_plan->get_plan();
       CHECK(plan);
       const auto& targets = plan->get_targetlist();
@@ -1375,6 +1376,9 @@ class MapDHandler : virtual public MapDIf {
       CHECK(sptr);
       _return.image = *sptr;
       return;
+#else
+      CHECK(false);
+#endif
     }
     // reduce execution time by the time spent during queue waiting
     _return.execution_time_ms = timer_stop(clock_begin) - results.getQueueTime() - results.getRenderTime();
