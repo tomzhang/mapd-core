@@ -573,6 +573,23 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   return render_manager_->getIdAt(x, y, pixelRadius);
 }
 
+namespace {
+
+size_t get_rowid_idx(const std::vector<TargetMetaInfo>& row_shape) {
+  for (size_t i = 0; i < row_shape.size(); ++i) {
+    const auto& col_info = row_shape[i];
+    if (col_info.get_resname() == "rowid") {
+      const auto& col_ti = col_info.get_type_info();
+      CHECK_EQ(kBIGINT, col_ti.get_type());
+      return i;
+    }
+  }
+  CHECK(false);
+  return 0;
+}
+
+}  // namespace
+
 ResultRows Executor::testRenderSimplePolys(const ResultRows& rows,
                                            const std::vector<TargetMetaInfo>& row_shape,
                                            const std::string& render_config_json,
@@ -617,13 +634,28 @@ ResultRows Executor::testRenderSimplePolys(const ResultRows& rows,
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  const auto lineDrawData = getShapeLineDrawData(session, shape_col_group);
+  auto lineDrawData = getShapeLineDrawData(session, shape_col_group);
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
   // Third argument is the vertex index/offset of the start vertex for the poly
-  const auto polyDrawData = getShapePolyDrawData(session, shape_col_group);
+  auto polyDrawData = getShapePolyDrawData(session, shape_col_group);
+
+  const auto rowid_idx = get_rowid_idx(row_shape);
+
+  while (true) {
+    const auto crt_row = rows.getNextRow(false, false);
+    if (crt_row.empty()) {
+      break;
+    }
+    const auto tv = crt_row[rowid_idx];
+    const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
+    const auto rowid_ptr = boost::get<int64_t>(scalar_tv);
+    CHECK(rowid_ptr);
+    lineDrawData[*rowid_ptr].instanceCount = 1;
+    polyDrawData[*rowid_ptr].instanceCount = 1;
+  }
 
   const auto data_query_result = getPolyRenderDataQueryResult(gpuId);
 
@@ -764,10 +796,10 @@ std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getSha
     const std::string& shape_col_group) {
   CHECK_EQ(shape_col_group, "foobar");
   return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{
-      ::Rendering::GL::Resources::IndirectDrawVertexData(7),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 14),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 20)};
+      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 0, 0),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7, 0),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 14, 0),
+      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 20, 0)};
 }
 
 std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(
@@ -775,10 +807,10 @@ std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShap
     const std::string& shape_col_group) {
   CHECK_EQ(shape_col_group, "foobar");
   return std::vector<::Rendering::GL::Resources::IndirectDrawIndexData>{
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 7),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 14),
-      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20)};
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 0, 0, 0),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(6, 6, 7, 0),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 12, 14, 0),
+      ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20, 0)};
 }
 
 Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataQueryResult(const size_t gpuId) {
