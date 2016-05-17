@@ -245,8 +245,6 @@ class Executor {
     const size_t align_bytes;
   };
 
-  PolyRenderDataQueryResult getPolyRenderDataQueryResult(const size_t gpuId);
-
   PolyRenderDataQueryResult getPolyRenderDataTemplate(const std::vector<TargetMetaInfo>& row_shape,
                                                       const size_t entry_count,
                                                       const size_t gpuId);

@@ -814,51 +814,6 @@ std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShap
       ::Rendering::GL::Resources::IndirectDrawIndexData(3, 15, 20, 0)};
 }
 
-Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataQueryResult(const size_t gpuId) {
-  // Extra data for rendering / rowids
-  std::vector<int64_t> population = {10, 20, 30, 40};
-  std::vector<double> unemployment = {100.0, 200.0, 300.0, 400.0};
-  std::vector<uint64_t> rowid = {0, 1, 2, 3};
-
-  CHECK(unemployment.size() == population.size() && unemployment.size() == rowid.size());
-
-  // the rendering/rowid data is put in a special "uniform" buffer. This buffer
-  // has specific byte alignment rules. As long as we're dealing with
-  // basic types here (and not arrays or structs), then the only rule we need
-  // to worry about is the padding/byte alignment. The number of bytes per row must
-  // be a multiple of the alignBytes below.
-  size_t alignBytes = render_manager_->getPolyDataBufferAlignmentBytes(gpuId);
-
-  // NOTE: the number of bytes per query result row should be <= alignBytes
-  CHECK(sizeof(double) + sizeof(int64_t) + sizeof(uint64_t) <= alignBytes);
-  size_t numDataBytes = population.size() * alignBytes;
-
-  // setting the rendering/rowid data. Tightly packed at the front of each row
-  // with extra padding at end to align with alignBytes.
-  auto rawData = new char[numDataBytes];
-  std::memset(rawData, 0, numDataBytes);
-  size_t offset;
-  for (size_t idx = 0, i = 0; i < population.size(); ++i, idx += alignBytes) {
-    offset = idx;
-    std::memcpy(rawData + offset, &population[i], sizeof(int64_t));
-    offset += sizeof(int64_t);
-    std::memcpy(rawData + offset, &unemployment[i], sizeof(double));
-    offset += sizeof(double);
-    std::memcpy(rawData + offset, &rowid[i], sizeof(uint64_t));
-    offset += sizeof(uint64_t);
-  }
-
-  auto query_data_layout = new ::QueryRenderer::QueryDataLayout({"population", "unemployment", "rowid"},
-                                                                {::QueryRenderer::QueryDataLayout::AttrType::INT64,
-                                                                 ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE,
-                                                                 ::QueryRenderer::QueryDataLayout::AttrType::UINT64},
-                                                                {{}});
-  return {std::shared_ptr<::QueryRenderer::QueryDataLayout>(query_data_layout),
-          std::unique_ptr<char[]>(rawData),
-          numDataBytes,
-          alignBytes};
-}
-
 namespace {
 
 size_t get_data_row_size(const std::vector<TargetMetaInfo>& row_shape) {
