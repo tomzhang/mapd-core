@@ -3084,6 +3084,25 @@ ResultRows Executor::executeResultPlan(const Planner::Result* result_plan,
   if (just_explain) {
     return result_rows;
   }
+
+  const int in_col_count{static_cast<int>(agg_plan->get_targetlist().size())};
+  std::list<InputColDescriptor> pseudo_input_col_descs;
+  for (int pseudo_col = 1; pseudo_col <= in_col_count; ++pseudo_col) {
+    pseudo_input_col_descs.emplace_back(pseudo_col, 0, -1);
+  }
+  const auto order_entries = sort_plan ? sort_plan->get_order_entries() : std::list<Analyzer::OrderEntry>{};
+  const RelAlgExecutionUnit res_ra_unit{{},
+                                        pseudo_input_col_descs,
+                                        result_plan->get_constquals(),
+                                        result_plan->get_quals(),
+                                        JoinType::INVALID,
+                                        {},
+                                        {},
+                                        {nullptr},
+                                        get_agg_target_exprs(result_plan),
+                                        order_entries,
+                                        0};
+
   if (*error_code) {
     return ResultRows({}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU);
   }
@@ -3098,7 +3117,6 @@ ResultRows Executor::executeResultPlan(const Planner::Result* result_plan,
                            0,
                            target_idx);
   }
-  const int in_col_count{static_cast<int>(agg_plan->get_targetlist().size())};
   std::vector<SQLTypeInfo> target_types;
   for (auto in_col : agg_plan->get_targetlist()) {
     target_types.push_back(in_col->get_expr()->get_type_info());
@@ -3118,7 +3136,7 @@ ResultRows Executor::executeResultPlan(const Planner::Result* result_plan,
   }
   std::vector<ColWidths> agg_col_widths;
   for (auto wid : get_col_byte_widths(target_exprs)) {
-    agg_col_widths.push_back({wid, int8_t(compact_byte_width(wid, unsigned(SMALLEST_BYTE_WIDTH_TO_COMPACT)))});
+    agg_col_widths.push_back({wid, int8_t(compact_byte_width(wid, pick_target_compact_width(res_ra_unit, {})))});
   }
   QueryMemoryDescriptor query_mem_desc{this,
                                        allow_multifrag,
@@ -3141,25 +3159,10 @@ ResultRows Executor::executeResultPlan(const Planner::Result* result_plan,
                                        true,
                                        false,
                                        false};
-  std::list<InputColDescriptor> pseudo_input_col_descs;
-  for (int pseudo_col = 1; pseudo_col <= in_col_count; ++pseudo_col) {
-    pseudo_input_col_descs.emplace_back(pseudo_col, 0, -1);
-  }
-  const auto order_entries = sort_plan ? sort_plan->get_order_entries() : std::list<Analyzer::OrderEntry>{};
   auto compilation_result =
       compileWorkUnit(false,
                       {},
-                      {{},
-                       pseudo_input_col_descs,
-                       result_plan->get_constquals(),
-                       result_plan->get_quals(),
-                       JoinType::INVALID,
-                       {},
-                       {},
-                       {nullptr},
-                       get_agg_target_exprs(result_plan),
-                       order_entries,
-                       0},
+                      res_ra_unit,
                       {ExecutorDeviceType::CPU, hoist_literals, opt_level},
                       {false, allow_multifrag, just_explain, allow_loop_joins, g_enable_watchdog},
                       nullptr,
