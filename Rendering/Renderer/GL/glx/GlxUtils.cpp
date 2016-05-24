@@ -45,8 +45,11 @@ void appendFbBufferAttrs(GlxGLRenderer* renderer,
           // if GLEW_MX is enabled.
           RUNTIME_EX_ASSERT(GLXEW_ARB_fbconfig_float, "Error: GlxGLWindow: GLX framebuffer doesn't support floats.");
           attributes.push_back(GLX_RENDER_TYPE);
+#ifdef GLX_RGBA_FLOAT_BIT_ARB
+          attributes.push_back(GLX_RGBA_FLOAT_BIT_ARB);
+#else
           attributes.push_back(GLX_RGBA_FLOAT_BIT);
-          // attributes.push_back(GLX_RGBA_FLOAT_BIT_ARB);
+#endif  // GLX_RGBA_FLOAT_BIT_ARB
           colorSize = (colorConstant == IntConstant::RGBA16F ? 16 : 32);
           break;
         case IntConstant::DEFAULT:
