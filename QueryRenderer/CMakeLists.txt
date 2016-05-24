@@ -1,4 +1,4 @@
-find_package(Boost 1.57 COMPONENTS filesystem system regex REQUIRED)
+find_package(Boost COMPONENTS filesystem system regex REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(PNG REQUIRED)
 find_package(Glog REQUIRED)
