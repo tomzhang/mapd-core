@@ -409,7 +409,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
         return ResultRows(rrows, queue_time_ms, render_time_ms);
       }
 #endif  // HAVE_RENDERING
-#ifdef ENABLE_COMPACTION
+#ifdef DETECT_OVERFLOW
       if (error_code == ERR_OVERFLOW_OR_UNDERFLOW) {
         throw std::runtime_error("Overflow or underflow");
       }
