@@ -639,11 +639,6 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // setup the tri tesselation by index (must be unsigned int)
   const auto indices = getShapeIndices(session, td, shape_col_group);
 
-  // setup the struct for stroke/outline rendering -- 4 items
-  // first argument is number of verts in poly, second argument is the
-  // start vertex index/offset of the poly.
-  auto lineDrawData = getShapeLineDrawData(session, td, shape_col_group);
-
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
@@ -663,7 +658,6 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
     const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
     const auto rowid_ptr = boost::get<int64_t>(scalar_tv);
     CHECK(rowid_ptr);
-    lineDrawData[*rowid_ptr].instanceCount = 1;
     polyDrawData[*rowid_ptr].instanceCount = 1;
     setPolyRenderDataEntry(data_query_result, crt_row, row_shape, *rowid_ptr, data_query_result.align_bytes);
   }
@@ -678,7 +672,7 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   ::QueryRenderer::PolyTableByteData polyByteData(
       {verts.size() * sizeof(double),
        indices.size() * sizeof(unsigned int),
-       lineDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
+       0,
        polyDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawIndexData),
        data_query_result.num_data_bytes});
 
@@ -701,8 +695,6 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // using simple cuda driver calls to push data to buffers
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.verts.handle), &verts[0], polyByteData.numVertBytes);
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.polyIndices.handle), &indices[0], polyByteData.numIndexBytes);
-  cuMemcpyHtoD(
-      reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle), &lineDrawData[0], polyByteData.numLineLoopBytes);
   cuMemcpyHtoD(
       reinterpret_cast<CUdeviceptr>(polyData.polyDrawStruct.handle), &polyDrawData[0], polyByteData.numPolyBytes);
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.perRowData.handle),
