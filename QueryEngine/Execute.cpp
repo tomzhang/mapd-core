@@ -626,26 +626,29 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   const auto shape_col_group = json_str(field(data_desc, "shapeColGroup"));
 
   // initialize the poly rendering data
+  const auto& cat = session.get_catalog();
+  const auto td = cat.getMetadataForTable(polyTableName);
+  CHECK(td);  // TODO(alex): throw exception instead
 
   // setup the verts - 2 squares and 2 triangles
   // NOTE: the first 3 verts of each polygon are repeated at the end of
   // its vertex list in order to get all the adjacent data
   // need for the custom line-drawing shader to draw a closed line.
-  const auto verts = getShapeVertices(session, polyTableName, shape_col_group);
+  const auto verts = getShapeVertices(session, td, shape_col_group);
 
   // setup the tri tesselation by index (must be unsigned int)
-  const auto indices = getShapeIndices(session, polyTableName, shape_col_group);
+  const auto indices = getShapeIndices(session, td, shape_col_group);
 
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  auto lineDrawData = getShapeLineDrawData(session, polyTableName, shape_col_group);
+  auto lineDrawData = getShapeLineDrawData(session, td, shape_col_group);
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
   // Third argument is the vertex index/offset of the start vertex for the poly
-  auto polyDrawData = getShapePolyDrawData(session, polyTableName, shape_col_group);
+  auto polyDrawData = getShapePolyDrawData(session, td, shape_col_group);
 
   const auto rowid_idx = get_rowid_idx(row_shape);
 
@@ -738,13 +741,9 @@ struct ChunkWithMetaInfo {
   const ChunkMetadata meta;
 };
 
-// TODO(alex): pass the fragments metadata from Executor::renderPolygons, the
-//             shape columns go together and we don't want lengths to be jagged
 ChunkWithMetaInfo get_poly_shapes_chunk(const Catalog_Namespace::Catalog& cat,
-                                        const std::string& shape_table,
+                                        const TableDescriptor* td,
                                         const std::string& col_name) {
-  const auto td = cat.getMetadataForTable(shape_table);
-  CHECK(td);  // TODO(alex): throw exception instead
   const auto cd = cat.getMetadataForColumn(td->tableId, col_name);
   CHECK(cd);  // TODO(alex): throw exception instead
   const auto table_info = td->fragmenter->getFragmentsForQuery();
@@ -766,10 +765,10 @@ ChunkWithMetaInfo get_poly_shapes_chunk(const Catalog_Namespace::Catalog& cat,
 }  // namespace
 
 std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionInfo& session,
-                                               const std::string& shape_table,
+                                               const TableDescriptor* td,
                                                const std::string& shape_col_group) {
   const auto& cat = session.get_catalog();
-  const auto chunk_with_meta = get_poly_shapes_chunk(cat, shape_table, shape_col_group + "_geo_coords");
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_coords");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
@@ -790,10 +789,10 @@ std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionI
 }
 
 std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::SessionInfo& session,
-                                                const std::string& shape_table,
+                                                const TableDescriptor* td,
                                                 const std::string& shape_col_group) {
   const auto& cat = session.get_catalog();
-  const auto chunk_with_meta = get_poly_shapes_chunk(cat, shape_table, shape_col_group + "_geo_indices");
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_indices");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
@@ -815,7 +814,7 @@ std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::Session
 
 std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getShapeLineDrawData(
     const Catalog_Namespace::SessionInfo& session,
-    const std::string& shape_table,
+    const TableDescriptor* td,
     const std::string& shape_col_group) {
   CHECK_EQ(shape_col_group, "mapd");
   return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{
@@ -827,10 +826,10 @@ std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getSha
 
 std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(
     const Catalog_Namespace::SessionInfo& session,
-    const std::string& shape_table,
+    const TableDescriptor* td,
     const std::string& shape_col_group) {
   const auto& cat = session.get_catalog();
-  const auto chunk_with_meta = get_poly_shapes_chunk(cat, shape_table, shape_col_group + "_geo_polydrawinfo");
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_polydrawinfo");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
