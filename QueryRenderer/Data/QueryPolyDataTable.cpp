@@ -442,12 +442,12 @@ void SqlQueryPolyDataTableJSON::_initFromJSONObj(const rapidjson::Value& obj,
 
   // TODO(croot) -- should we validate the sql?
 
-  // TODO(croot) - for backwards compatibility, the dbTableName doesn't have to be present
+  // TODO(croot) - for backwards compatibility, the polyTableName doesn't have to be present
   // but should it be required? Or can we somehow extract it from the sql?
-  if ((forceUpdate || !_tableName.length()) && (itr = obj.FindMember("dbTableName")) != obj.MemberEnd()) {
+  if ((forceUpdate || !_tableName.length()) && (itr = obj.FindMember("polyTableName")) != obj.MemberEnd()) {
     RUNTIME_EX_ASSERT(itr->value.IsString(),
                       RapidJSONUtils::getJsonParseErrorStr(
-                          itr->value, "SQL data object \"" + _name + "\" \"dbTableName\" property must be a string"));
+                          itr->value, "SQL data object \"" + _name + "\" \"polyTableName\" property must be a string"));
 
     _tableName = itr->value.GetString();
   }

@@ -622,7 +622,7 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   CHECK(data_descs.IsArray());
   CHECK_EQ(unsigned(1), data_descs.Size());
   const auto& data_desc = *(data_descs.Begin());
-  const auto polyTableName = json_str(field(data_desc, "dbTableName"));
+  const auto polyTableName = json_str(field(data_desc, "polyTableName"));
   const auto shape_col_group = json_str(field(data_desc, "shapeColGroup"));
 
   // initialize the poly rendering data

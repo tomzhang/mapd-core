@@ -272,7 +272,7 @@ class ScaleRef : public BaseScaleRef {
     RUNTIME_EX_ASSERT(
         tableName.length() != 0,
         std::string(*this) + "The sql data table referenced by render property \"" + _getRndrPropName() +
-            "\" is not properly initialized. It is missing a \"dbTableName\" property. Cannot numerically "
+            "\" is not properly initialized. It is missing a \"polyTableName\" property. Cannot numerically "
             "convert a string column");
 
     std::string colName = _getDataColumnName();
