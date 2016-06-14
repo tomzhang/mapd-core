@@ -806,12 +806,26 @@ std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getSha
     const Catalog_Namespace::SessionInfo& session,
     const TableDescriptor* td,
     const std::string& shape_col_group) {
-  CHECK_EQ(shape_col_group, "mapd");
-  return std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{
-      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 0, 0),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(7, 7, 0),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 14, 0),
-      ::Rendering::GL::Resources::IndirectDrawVertexData(6, 20, 0)};
+  const auto& cat = session.get_catalog();
+  const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_linedrawinfo");
+  CHECK(chunk_with_meta.chunk);
+  auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
+  const auto row_count = chunk_with_meta.meta.numElements;
+  std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> geo_linedrawinfo;
+  for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
+    ArrayDatum ad;
+    bool is_end;
+    ChunkIter_get_nth(&chunk_iter, row_pos, &ad, &is_end);
+    CHECK(!is_end);
+    CHECK(ad.pointer);
+    const auto num_elems = ad.length / sizeof(uint32_t);  // TODO(alex): support other integer sizes as well
+    CHECK_EQ(size_t(0), num_elems % 4);
+    const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
+    for (size_t i = 0; i < num_elems; i += 4) {
+      geo_linedrawinfo.push_back(::Rendering::GL::Resources::IndirectDrawVertexData(ui32_buff[i], ui32_buff[i + 2], 0));
+    }
+  }
+  return geo_linedrawinfo;
 }
 
 std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(
@@ -836,7 +850,6 @@ std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShap
     geo_polydrawinfo.push_back(
         ::Rendering::GL::Resources::IndirectDrawIndexData(ui32_buff[0], ui32_buff[2], ui32_buff[3], 0));
   }
-  CHECK_EQ(shape_col_group, "mapd");
   return geo_polydrawinfo;
 }
 
