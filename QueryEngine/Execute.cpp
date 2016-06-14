@@ -591,6 +591,15 @@ size_t get_rowid_idx(const std::vector<TargetMetaInfo>& row_shape) {
   return 0;
 }
 
+bool render_outline(const rapidjson::Value& render_config) {
+  const auto& marks = field(render_config, "marks");
+  CHECK(marks.IsArray());
+  CHECK_EQ(unsigned(1), marks.Size());
+  const auto& mark = *(marks.Begin());
+  const auto& properties = field(mark, "properties");
+  return properties.HasMember("strokeColor");
+}
+
 }  // namespace
 
 ResultRows Executor::renderPolygons(const ResultRows& rows,
@@ -637,6 +646,12 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // setup the tri tesselation by index (must be unsigned int)
   const auto indices = getShapeIndices(session, td, shape_col_group);
 
+  // setup the struct for stroke/outline rendering -- 4 items
+  // first argument is number of verts in poly, second argument is the
+  // start vertex index/offset of the poly.
+  auto lineDrawData = render_outline(render_config) ? getShapeLineDrawData(session, td, shape_col_group)
+                                                    : std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{};
+
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
@@ -670,7 +685,7 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   ::QueryRenderer::PolyTableByteData polyByteData(
       {verts.size() * sizeof(double),
        indices.size() * sizeof(unsigned int),
-       0,
+       lineDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
        polyDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawIndexData),
        data_query_result.num_data_bytes});
 
@@ -693,6 +708,10 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // using simple cuda driver calls to push data to buffers
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.verts.handle), &verts[0], polyByteData.numVertBytes);
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.polyIndices.handle), &indices[0], polyByteData.numIndexBytes);
+  if (!lineDrawData.empty()) {
+    cuMemcpyHtoD(
+        reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle), &lineDrawData[0], polyByteData.numLineLoopBytes);
+  }
   cuMemcpyHtoD(
       reinterpret_cast<CUdeviceptr>(polyData.polyDrawStruct.handle), &polyDrawData[0], polyByteData.numPolyBytes);
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.perRowData.handle),
@@ -822,7 +841,7 @@ std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getSha
     CHECK_EQ(size_t(0), num_elems % 4);
     const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
     for (size_t i = 0; i < num_elems; i += 4) {
-      geo_linedrawinfo.push_back(::Rendering::GL::Resources::IndirectDrawVertexData(ui32_buff[i], ui32_buff[i + 2], 0));
+      geo_linedrawinfo.push_back(::Rendering::GL::Resources::IndirectDrawVertexData(ui32_buff[i], ui32_buff[i + 2], 1));
     }
   }
   return geo_linedrawinfo;
