@@ -8,6 +8,8 @@
 
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
+#include <boost/multi_index_container.hpp>
+
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 
@@ -92,6 +94,20 @@ class BaseMark {
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
+  // for multi-index hash-by-property-name tag
+  struct PropertyName {};
+  typedef boost::multi_index_container<
+      BaseRenderProperty*,
+      boost::multi_index::indexed_by<
+          boost::multi_index::ordered_unique<boost::multi_index::identity<BaseRenderProperty*>>,
+
+          boost::multi_index::hashed_unique<
+              boost::multi_index::tag<PropertyName>,
+              boost::multi_index::const_mem_fun<BaseRenderProperty, std::string, &BaseRenderProperty::getName>>>>
+      PropMap;
+
+  typedef PropMap::index<PropertyName>::type PropMap_by_Name;
+
   PerGpuDataMap _perGpuData;
 
   QueryRendererContextShPtr _ctx;
@@ -103,9 +119,9 @@ class BaseMark {
   bool _shaderDirty;
   bool _propsDirty;
 
-  std::set<BaseRenderProperty*> _vboProps;
-  std::set<BaseRenderProperty*> _uboProps;
-  std::set<BaseRenderProperty*> _uniformProps;
+  PropMap _vboProps;
+  PropMap _uboProps;
+  PropMap _uniformProps;
 
   void _initFromJSONObj(const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,

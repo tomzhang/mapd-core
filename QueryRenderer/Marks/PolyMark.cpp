@@ -614,6 +614,8 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 
   ::Rendering::GL::Resources::GLUniformBufferShPtr ubo;
 
+  PropMap_by_Name& uboPropLookup = _uboProps.get<BaseMark::PropertyName>();
+
   if (itr->second.shaderPtr) {
     CHECK(itr->second.vaoPtr);
 
@@ -624,7 +626,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
     renderer->bindVertexArray(itr->second.vaoPtr);
     _bindUniformProperties(itr->second.shaderPtr.get(), _usedProps);
 
-    if (_uboProps.size()) {
+    if (_uboProps.size() && uboPropLookup.find("fillColor") != uboPropLookup.end()) {
       // the same ubo should be used for all ubo props, so only need to grab
       // from first one
       ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
@@ -649,6 +651,9 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
   // now draw outlines
 
   if (itr->second.strokeShaderPtr) {
+    // reset the ubo to null and re-grab if there are stroke-related props in it
+    ubo = nullptr;
+
     CHECK(itr->second.strokeVaoPtr);
 
     // now bind the shader
@@ -666,7 +671,8 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
     renderer->bindVertexArray(itr->second.strokeVaoPtr);
     _bindUniformProperties(itr->second.strokeShaderPtr.get(), _usedStrokeProps);
 
-    if (!ubo && _uboProps.size()) {
+    if (_uboProps.size() && (uboPropLookup.find("strokeColor") != uboPropLookup.end() ||
+                             uboPropLookup.find("strokeWidth") != uboPropLookup.end())) {
       // the same ubo should be used for all ubo props, so only need to grab
       // from first one
       ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
