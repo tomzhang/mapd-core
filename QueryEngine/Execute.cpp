@@ -649,8 +649,9 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  auto lineDrawData = render_outline(render_config) ? getShapeLineDrawData(session, td, shape_col_group)
-                                                    : std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{};
+  auto lineDrawData = render_outline(render_config)
+                          ? getShapeLineDrawData(session, td, shape_col_group)
+                          : LineDrawData{std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{}, {}};
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
@@ -672,6 +673,15 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
     const auto rowid_ptr = boost::get<int64_t>(scalar_tv);
     CHECK(rowid_ptr);
     polyDrawData[*rowid_ptr].instanceCount = 1;
+    if (!lineDrawData.data.empty()) {
+      CHECK_GE(*rowid_ptr, int64_t(0));
+      CHECK_LT(static_cast<size_t>(*rowid_ptr + 1), lineDrawData.offsets.size());
+      const auto start_idx = lineDrawData.offsets[*rowid_ptr];
+      const auto end_idx = lineDrawData.offsets[*rowid_ptr + 1];
+      for (size_t i = start_idx; i < end_idx; ++i) {
+        lineDrawData.data[i].instanceCount = 1;
+      }
+    }
     setPolyRenderDataEntry(data_query_result, crt_row, row_shape, *rowid_ptr, data_query_result.align_bytes);
   }
 
@@ -685,7 +695,7 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   ::QueryRenderer::PolyTableByteData polyByteData(
       {verts.size() * sizeof(double),
        indices.size() * sizeof(unsigned int),
-       lineDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
+       lineDrawData.data.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
        polyDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawIndexData),
        data_query_result.num_data_bytes});
 
@@ -708,9 +718,10 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // using simple cuda driver calls to push data to buffers
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.verts.handle), &verts[0], polyByteData.numVertBytes);
   cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.polyIndices.handle), &indices[0], polyByteData.numIndexBytes);
-  if (!lineDrawData.empty()) {
-    cuMemcpyHtoD(
-        reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle), &lineDrawData[0], polyByteData.numLineLoopBytes);
+  if (!lineDrawData.data.empty()) {
+    cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle),
+                 &lineDrawData.data[0],
+                 polyByteData.numLineLoopBytes);
   }
   cuMemcpyHtoD(
       reinterpret_cast<CUdeviceptr>(polyData.polyDrawStruct.handle), &polyDrawData[0], polyByteData.numPolyBytes);
@@ -821,16 +832,16 @@ std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::Session
   return geo_indices;
 }
 
-std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getShapeLineDrawData(
-    const Catalog_Namespace::SessionInfo& session,
-    const TableDescriptor* td,
-    const std::string& shape_col_group) {
+Executor::LineDrawData Executor::getShapeLineDrawData(const Catalog_Namespace::SessionInfo& session,
+                                                      const TableDescriptor* td,
+                                                      const std::string& shape_col_group) {
   const auto& cat = session.get_catalog();
   const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_linedrawinfo");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> geo_linedrawinfo;
+  std::vector<size_t> offsets(1);
   for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
     ArrayDatum ad;
     bool is_end;
@@ -841,10 +852,11 @@ std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> Executor::getSha
     CHECK_EQ(size_t(0), num_elems % 4);
     const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
     for (size_t i = 0; i < num_elems; i += 4) {
-      geo_linedrawinfo.push_back(::Rendering::GL::Resources::IndirectDrawVertexData(ui32_buff[i], ui32_buff[i + 2], 1));
+      geo_linedrawinfo.push_back(::Rendering::GL::Resources::IndirectDrawVertexData(ui32_buff[i], ui32_buff[i + 2], 0));
     }
+    offsets.push_back(geo_linedrawinfo.size());
   }
-  return geo_linedrawinfo;
+  return {geo_linedrawinfo, offsets};
 }
 
 std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(

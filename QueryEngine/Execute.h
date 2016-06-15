@@ -249,10 +249,14 @@ class Executor {
                                         const TableDescriptor* td,
                                         const std::string& shape_col_group);
 
-  std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> getShapeLineDrawData(
-      const Catalog_Namespace::SessionInfo& session,
-      const TableDescriptor* td,
-      const std::string& shape_col_group);
+  struct LineDrawData {
+    std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> data;
+    const std::vector<size_t> offsets;
+  };
+
+  LineDrawData getShapeLineDrawData(const Catalog_Namespace::SessionInfo& session,
+                                    const TableDescriptor* td,
+                                    const std::string& shape_col_group);
 
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> getShapePolyDrawData(
       const Catalog_Namespace::SessionInfo& session,
