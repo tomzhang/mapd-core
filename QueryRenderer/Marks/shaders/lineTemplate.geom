@@ -114,8 +114,18 @@ void emitBevelVertexData(
       in vec2 lineNorm,
       bool swap)
 {
+  float ratio;
   vec2 halfPrevLineNorm = halfThickness1 * lineNorm;
-  vec2 fullPrevLineNorm = fullThickness1 * lineNorm;
+  vec2 halfNextLineNorm = halfThickness2 * lineNorm;
+
+  vec2 miterPt1 = pos1 + halfMiter1;
+  vec2 miterPt2 = pos2 + halfMiter2;
+  vec2 cornerPt1a = pos1 + halfPrevLineNorm;
+  vec2 cornerPt1b = pos1 - halfPrevLineNorm;
+  vec2 cornerPt2a = pos2 + halfNextLineNorm;
+  vec2 cornerPt2b = pos2 - halfNextLineNorm;
+
+  fNormDistCoords = vec2(0, 0);
 
 #if usePerVertId == 1
   fId = id1;
@@ -125,27 +135,27 @@ void emitBevelVertexData(
   fColor = color1;
 #endif
 
-  fNormDistCoords = vec2(0, 0);
   fIsCorner = 1;
   fNormDistCoords[0] = halfMiterLength1 / dot(halfPrevLineNorm, miter1);
-  emitVertex(pos1 + halfMiter1, zw1);
+  emitVertex(miterPt1, zw1);
 
   fNormDistCoords[0] = 1.0;
-  emitVertex(pos1 + halfPrevLineNorm, zw1);
+  emitVertex(cornerPt1a, zw1);
 
   // will be 0 the rest of the way out
   fNormDistCoords[0] = 0.0;
   emitVertex(pos1, zw1);
 
+  EndPrimitive();
+
   // will not be a vertex of a corner triangle until we write out
   // the last tri
   fIsCorner = 0;
-  emitVertex(pos1 - halfMiter1 + fullPrevLineNorm, zw1);
-
-  emitVertex(pos1 - halfMiter1, zw1);
-
-  vec2 halfNextLineNorm = halfThickness2 * lineNorm;
-  vec2 fullNextLineNorm = fullThickness2 * lineNorm;
+  emitVertex(cornerPt1a, zw1);
+  emitVertex(cornerPt1b, zw1);
+  emitVertex(cornerPt2a, zw1);
+  emitVertex(cornerPt2b, zw1);
+  EndPrimitive();
 
 #if usePerVertId == 1
   fId = id2;
@@ -155,35 +165,24 @@ void emitBevelVertexData(
   fColor = color2;
 #endif
 
+  fIsCorner = 1;
+  emitVertex(pos2, zw2);
+
   if (swap) {
-    emitVertex(pos2 - halfMiter2, zw2);
-    emitVertex(pos2 - halfMiter2 - fullNextLineNorm, zw2);
-
-    // will be a vertex of a corner triangle the rest of the way out
-    fIsCorner = 1;
-    emitVertex(pos2, zw2);
-
     fNormDistCoords[0] = 1.0;
-    emitVertex(pos2 - halfNextLineNorm, zw2);
+    emitVertex(cornerPt2b, zw2);
 
-    // do this if rounded corners
     fNormDistCoords[0] = halfMiterLength2 / -dot(halfNextLineNorm, miter2);
-    emitVertex(pos2 + halfMiter2, zw2);
+    emitVertex(miterPt2, zw2);
   } else {
-    emitVertex(pos2 - halfMiter2 + fullNextLineNorm, zw2);
-    emitVertex(pos2 - halfMiter2, zw2);
-
-    // will be a vertex of a corner triangle the rest of the way out
-    fIsCorner = 1;
     fNormDistCoords[0] = 1.0;
-    emitVertex(pos2 + halfNextLineNorm, zw2);
-
-    fNormDistCoords[0] = 0.0;
-    emitVertex(pos2, zw2);
+    emitVertex(cornerPt2a, zw2);
 
     fNormDistCoords[0] = halfMiterLength2 / dot(halfNextLineNorm, miter2);
-    emitVertex(pos2 + halfMiter2, zw2);
+    emitVertex(miterPt2, zw2);
   }
+
+  EndPrimitive();
 }
 
 void emitRoundVertexData(
@@ -216,8 +215,20 @@ void emitRoundVertexData(
       in vec2 lineNorm,
       bool swap)
 {
+
+  float ratio;
   vec2 halfPrevLineNorm = halfThickness1 * lineNorm;
-  vec2 fullPrevLineNorm = fullThickness1 * lineNorm;
+  vec2 halfNextLineNorm = halfThickness2 * lineNorm;
+
+  vec2 miterPt1 = pos1 + halfMiter1;
+  vec2 cornerPt1a = pos1 + halfPrevLineNorm;
+  vec2 cornerPt1b = pos1 - halfPrevLineNorm;
+
+  vec2 miterPt2 = pos2 + halfMiter2;
+  vec2 cornerPt2a = pos2 + halfNextLineNorm;
+  vec2 cornerPt2b = pos2 - halfNextLineNorm;
+
+  fNormDistCoords = vec2(0, 0);
 
 #if usePerVertId == 1
   fId = id1;
@@ -229,21 +240,26 @@ void emitRoundVertexData(
 
   fIsCorner = 1;
   fNormDistCoords = halfMiter1 / halfThickness1;
-  emitVertex(pos1 + halfMiter1, zw1);
+  emitVertex(miterPt1, zw1);
 
   fNormDistCoords = lineNorm;
-  emitVertex(pos1 + halfPrevLineNorm, zw1);
+  emitVertex(cornerPt1a, zw1);
 
   // will be 0 the rest of the way out
   fNormDistCoords = vec2(0, 0);
   emitVertex(pos1, zw1);
 
+  EndPrimitive();
+
   // will not be a vertex of a corner triangle until we write out
   // the last tri
   fIsCorner = 0;
-  emitVertex(pos1 - halfMiter1 + fullPrevLineNorm, zw1);
-  emitVertex(pos1 - halfMiter1, zw1);
+  emitVertex(cornerPt1a, zw1);
+  emitVertex(cornerPt1b, zw1);
+  emitVertex(cornerPt2a, zw1);
+  emitVertex(cornerPt2b, zw1);
 
+  EndPrimitive();
 
 #if usePerVertId == 1
   fId = id2;
@@ -253,38 +269,24 @@ void emitRoundVertexData(
   fColor = color2;
 #endif
 
-  vec2 halfNextLineNorm = halfThickness2 * lineNorm;
-  vec2 fullNextLineNorm = fullThickness2 * lineNorm;
+  fIsCorner = 1;
+  emitVertex(pos2, zw2);
 
   if (swap) {
-    emitVertex(pos2 - halfMiter2, zw2);
-    emitVertex(pos2 - halfMiter2 - fullNextLineNorm, zw2);
-
-    // will be a vertex of a corner triangle the rest of the way out
-    fIsCorner = 1;
-    emitVertex(pos2, zw2);
-
     fNormDistCoords = -1 * lineNorm;
-    emitVertex(pos2 - halfNextLineNorm, zw2);
+    emitVertex(cornerPt2b, zw2);
 
-    // do this if rounded corners
     fNormDistCoords = halfMiter2 / halfThickness2;
-    emitVertex(pos2 + halfMiter2, zw2);
+    emitVertex(miterPt2, zw2);
   } else {
-    emitVertex(pos2 - halfMiter2 + fullNextLineNorm, zw2);
-    emitVertex(pos2 - halfMiter2, zw2);
-
-    // will be a vertex of a corner triangle the rest of the way out
-    fIsCorner = 1;
     fNormDistCoords = lineNorm;
-    emitVertex(pos2 + halfNextLineNorm, zw2);
-
-    fNormDistCoords = vec2(0, 0);
-    emitVertex(pos2, zw2);
+    emitVertex(cornerPt2a, zw2);
 
     fNormDistCoords = halfMiter2 / halfThickness2;
-    emitVertex(pos2 + halfMiter2, zw2);
+    emitVertex(miterPt2, zw2);
   }
+
+  EndPrimitive();
 }
 
 void emitMiterVertexData(
@@ -317,9 +319,19 @@ void emitMiterVertexData(
       in vec2 lineNorm,
       bool swap)
 {
-
+  float ratio;
   vec2 halfPrevLineNorm = halfThickness1 * lineNorm;
-  vec2 fullPrevLineNorm = fullThickness1 * lineNorm;
+  vec2 halfNextLineNorm = halfThickness2 * lineNorm;
+
+  vec2 miterPt1 = pos1 + halfMiter1;
+  vec2 cornerPt1a = pos1 + halfPrevLineNorm;
+  vec2 cornerPt1b = pos1 - halfPrevLineNorm;
+
+  vec2 miterPt2 = pos2 + halfMiter2;
+  vec2 cornerPt2a = pos2 + halfNextLineNorm;
+  vec2 cornerPt2b = pos2 - halfNextLineNorm;
+
+  fNormDistCoords = vec2(0, 0);
 
 #if usePerVertId == 1
   fId = id1;
@@ -329,27 +341,34 @@ void emitMiterVertexData(
   fColor = color1;
 #endif
 
-  fNormDistCoords = vec2(0, 0);
   fIsCorner = 1;
   if (miterLimit > 0 && halfMiterLength1 / halfThickness1 > miterLimit) {
     fNormDistCoords[0] = halfMiterLength1 / dot(halfPrevLineNorm, miter1);
   } else {
     fNormDistCoords[0] = 1.0;
   }
-  emitVertex(pos1 + halfMiter1, zw1);
+
+  emitVertex(miterPt1, zw1);
 
   fNormDistCoords[0] = 1.0;
-  emitVertex(pos1 + halfPrevLineNorm, zw1);
+  emitVertex(cornerPt1a, zw1);
 
   // will be 0 the rest of the way out
   fNormDistCoords[0] = 0.0;
   emitVertex(pos1, zw1);
 
+  EndPrimitive();
+
   // will not be a vertex of a corner triangle until we write out
   // the last tri
   fIsCorner = 0;
-  emitVertex(pos1 - halfMiter1 + fullPrevLineNorm, zw1);
-  emitVertex(pos1 - halfMiter1, zw1);
+  emitVertex(cornerPt1a, zw1);
+  emitVertex(cornerPt1b, zw1);
+  emitVertex(cornerPt2a, zw1);
+  emitVertex(cornerPt2b, zw1);
+
+  EndPrimitive();
+
 
 #if usePerVertId == 1
   fId = id2;
@@ -359,45 +378,28 @@ void emitMiterVertexData(
   fColor = color2;
 #endif
 
-  vec2 halfNextLineNorm = halfThickness2 * lineNorm;
-  vec2 fullNextLineNorm = fullThickness2 * lineNorm;
+  fIsCorner = 1;
+  emitVertex(pos2, zw2);
 
   if (swap) {
-    emitVertex(pos2 - halfMiter2, zw2);
-    emitVertex(pos2 - halfMiter2 - fullNextLineNorm, zw2);
-
-    // will be a vertex of a corner triangle the rest of the way out
-    fIsCorner = 1;
-    emitVertex(pos2, zw2);
-
     fNormDistCoords[0] = 1.0;
-    emitVertex(pos2 - halfNextLineNorm, zw2);
+    emitVertex(cornerPt2b, zw2);
 
     if (miterLimit > 0 && halfMiterLength2 / halfThickness2 > miterLimit) {
       fNormDistCoords[0] = halfMiterLength2 / -dot(halfNextLineNorm, miter2);
-    } else {
-      fNormDistCoords[0] = 1.0;
     }
-    emitVertex(pos2 + halfMiter2, zw2);
+    emitVertex(miterPt2, zw2);
   } else {
-    emitVertex(pos2 - halfMiter2 + fullNextLineNorm, zw2);
-    emitVertex(pos2 - halfMiter2, zw2);
-
-    // will be a vertex of a corner triangle the rest of the way out
-    fIsCorner = 1;
     fNormDistCoords[0] = 1.0;
-    emitVertex(pos2 + halfNextLineNorm, zw2);
-
-    fNormDistCoords[0] = 0.0;
-    emitVertex(pos2, zw2);
+    emitVertex(cornerPt2a, zw2);
 
     if (miterLimit > 0 && halfMiterLength2 / halfThickness2 > miterLimit) {
       fNormDistCoords[0] = halfMiterLength2 / dot(halfNextLineNorm, miter2);
-    } else {
-      fNormDistCoords[0] = 1.0;
     }
-    emitVertex(pos2 + halfMiter2, zw2);
+    emitVertex(miterPt2, zw2);
   }
+
+  EndPrimitive();
 }
 
 
@@ -537,7 +539,5 @@ void main()
 #endif
         prevLineNorm, swap);
     }
-
-    EndPrimitive();
   }
 }
