@@ -50,7 +50,7 @@ void RootPerGpuData::makeInactive() const {
   return nullptr;
 }
 
-void RootPerGpuData::resize(size_t width, size_t height) {
+void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) {
   CHECK(msFramebufferPtr);
 
   width = std::max(width, msFramebufferPtr->getWidth());
@@ -61,7 +61,8 @@ void RootPerGpuData::resize(size_t width, size_t height) {
   ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
   bool reset = false;
 
-  if (compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
+  // TODO(croot): only resize the compositor if we're on the same gpu unless specified otherwise?
+  if (resizeCompositor && compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
     ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
     CHECK(renderer);
     if (renderer != prevRenderer) {

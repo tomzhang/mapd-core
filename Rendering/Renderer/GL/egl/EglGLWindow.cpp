@@ -31,12 +31,10 @@ EglGLWindow::~EglGLWindow() {
 size_t EglGLWindow::getGpuId() const {
   RUNTIME_EX_ASSERT(_gpuId >= 0 && _dpyPtr,
                     "The GLWindow has not been initialized yet. Cannot get the Gpu ID associated with it.");
-  return _dpyConnection.second;
+  return _gpuId;
 }
 
 void EglGLWindow::_initEGLDisplay(EglDisplayManager& displayMgr) {
-  std::string displayStr = _settings.getStrSetting(StrSetting::DISPLAY);
-
   int gpuId = _settings.getIntSetting(IntSetting::GPU_ID);
   if (gpuId < 0) {
     gpuId = 0;

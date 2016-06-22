@@ -6,6 +6,7 @@
 #include "MapDEGL.h"
 #include "../../../RenderError.h"
 #include <vector>
+#include <algorithm>
 
 namespace Rendering {
 namespace GL {
@@ -18,7 +19,19 @@ struct EglDeviceInfo {
 
     RUNTIME_EX_ASSERT(eglQueryDevicesEXT, "EGL_EXT_device_enumeration extension is not supported.");
     MAPD_CHECK_EGL_ERROR(eglQueryDevicesEXT(maxDevices, &eglDevices[0], reinterpret_cast<int*>(&numDevices)));
-    // std::cerr << "CROOT - num devices on machine: " << numDevices << std::endl;
+
+    static const PFNEGLQUERYDEVICEATTRIBEXTPROC eglQueryDeviceAttribEXT =
+        (PFNEGLQUERYDEVICEATTRIBEXTPROC)eglGetProcAddress("eglQueryDeviceAttribEXT");
+    RUNTIME_EX_ASSERT(eglQueryDeviceAttribEXT, "EGL_EXT_device_query extension is not supported.");
+
+    std::sort(eglDevices.begin(), eglDevices.begin() + numDevices, [](EGLDeviceEXT a, EGLDeviceEXT b) {
+      EGLAttrib aval, bval;
+
+      eglQueryDeviceAttribEXT(a, EGL_CUDA_DEVICE_NV, &aval);
+      eglQueryDeviceAttribEXT(b, EGL_CUDA_DEVICE_NV, &bval);
+
+      return aval < bval;
+    });
   }
 
   std::vector<EGLDeviceEXT> eglDevices;

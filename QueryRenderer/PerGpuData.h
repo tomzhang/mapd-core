@@ -40,7 +40,7 @@ struct RootPerGpuData {
   ::Rendering::Renderer* getRenderer();
   ::Rendering::GL::GLRenderer* getGLRenderer();
 
-  void resize(size_t width, size_t height);
+  void resize(size_t width, size_t height, bool resizeCompositor = true);
 
   QueryFramebufferUqPtr& getRenderFramebuffer() { return msFramebufferPtr; }
   QueryFramebufferShPtr& getBlitFramebuffer() { return blitFramebufferPtr; }

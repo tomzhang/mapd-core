@@ -94,12 +94,6 @@ class QueryRenderCompositorImpl {
   virtual ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                                 FboRenderBuffer rboType) = 0;
 
-  virtual void addFboTexture2d(::Rendering::GL::Resources::GLTexture2dShPtr& tex, FboColorBuffer texType) = 0;
-  virtual void addFboRenderbuffer(::Rendering::GL::Resources::GLRenderbufferShPtr& rbo, FboRenderBuffer rboType) = 0;
-
-  virtual void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr) {}
-  virtual void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr) {}
-
   void resize(size_t width, size_t height) {
     CHECK(_framebufferPtr);
     _framebufferPtr->resize(width, height);
@@ -161,15 +155,6 @@ class QueryRenderCompositor {
       ::Rendering::GL::GLRenderer* renderer,
       FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER);
 
-  void addQueryFramebuffer(QueryFramebuffer* fbo);
-  void addQueryFramebuffer(const QueryFramebufferShPtr& fbo);
-  void addQueryFramebuffer(const QueryFramebufferUqPtr& fbo);
-
-  void deleteFboTexture2d(::Rendering::GL::Resources::GLTexture2d* texture2dPtr);
-  void deleteFboRenderbuffer(::Rendering::GL::Resources::GLRenderbuffer* renderbufferPtr);
-
-  void cleanupUnusedFbos();
-
  private:
   QueryRenderCompositor(QueryRenderManager* prnt,
                         ::Rendering::RendererShPtr& rendererPtr,
@@ -180,11 +165,6 @@ class QueryRenderCompositor {
                         bool doDepthTest = false);
 
   std::unique_ptr<Impl::QueryRenderCompositorImpl> _implPtr;
-
-  std::unordered_map<::Rendering::GL::Resources::GLTexture2d*, ::Rendering::GL::Resources::GLTexture2dWkPtr>
-      _compositeTextures;
-  std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*, ::Rendering::GL::Resources::GLRenderbufferWkPtr>
-      _compositeRbos;
 
   bool _doHitTest, _doDepthTest;
 

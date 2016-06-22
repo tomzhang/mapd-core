@@ -119,6 +119,15 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                           " are available for rendering.");
   }
 
+#ifdef MAPDGL_EGL
+  if (numSamples > 1 && numGpus > 1) {
+    LOG(WARNING) << "QueryRenderManager: initializing the render manager with " << numGpus
+                 << " gpus and the compositing will be performed using EGLImage objects. EGLImage objects do not "
+                    "support multisampling, so forcing the number of samples from " << numSamples << " to 1.";
+    numSamples = 1;
+  }
+#endif
+
   int defaultWidth = 1024, defaultHeight = 1024;  // TODO(croot): expose as a static somewhere?
 
   // setup the window settings
