@@ -1857,7 +1857,6 @@ int main(int argc, char** argv) {
   bool read_only = false;
   bool allow_loop_joins = false;
   bool enable_legacy_syntax = true;
-  bool enable_fork = true;
   LdapMetadata ldapMetadata;
 #ifdef HAVE_RENDERING
   bool enable_rendering = true;
@@ -1931,9 +1930,8 @@ int main(int argc, char** argv) {
       "disable-legacy-syntax",
       po::bool_switch(&enable_legacy_syntax)->default_value(enable_legacy_syntax)->implicit_value(false),
       "Enable legacy syntax");
-  desc_adv.add_options()("disable-fork",
-                         po::bool_switch(&enable_fork)->default_value(enable_fork)->implicit_value(false),
-                         "Disable forking");
+  // Deprecated on 2016-06-23
+  desc_adv.add_options()("disable-fork", "(Deprecated) Disable forking");
 
   po::positional_options_description positionalOptions;
   positionalOptions.add("data", 1);
@@ -2056,24 +2054,6 @@ int main(int argc, char** argv) {
   }
 #endif  // TIME_LIMITED_BUILD
 
-  if (enable_fork) {
-    while (true) {
-      auto pid = fork();
-      CHECK(pid >= 0);
-      if (pid == 0) {
-        break;
-      }
-      for (auto fd = sysconf(_SC_OPEN_MAX); fd > 0; --fd) {
-        if (fd != pid_fd) {
-          close(fd);
-        }
-      }
-      int status{0};
-      CHECK_NE(-1, waitpid(pid, &status, 0));
-      LOG(ERROR) << "Server exit code: " << status;
-    }
-  }
-
   const auto log_path = boost::filesystem::path(base_path) / "mapd_log";
   (void)boost::filesystem::create_directory(log_path);
   FLAGS_log_dir = log_path.c_str();
@@ -2081,6 +2061,16 @@ int main(int argc, char** argv) {
     FLAGS_logbuflevel = -1;
   // Initialize Google's logging library.
   google::InitGoogleLogging(argv[0]);
+
+  try {
+    if (vm.count("disable-fork")) {
+      LOG(ERROR) << "Option '--disable-fork' is deprecated and will be removed in the future. "
+                    "Please remove from any scripts or config files.";
+    }
+  } catch (boost::program_options::error& e) {
+    std::cerr << "Usage Error: " << e.what() << std::endl;
+    return 1;
+  }
 
   // rudimetary signal handling to try to guarantee the logging gets flushed to files
   // on shutdown
