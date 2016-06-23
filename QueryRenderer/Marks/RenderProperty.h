@@ -338,7 +338,8 @@ class RenderProperty : public BaseRenderProperty {
       case RefEventType::UPDATE:
         _scaleConfigPtr->updateScaleRef(scalePtr);
 
-        if (scalePtr->hasClampChanged() || scalePtr->hasDomainChangedInSize() || scalePtr->hasRangeChangedInSize()) {
+        if (scalePtr->hasPropertiesChanged() || scalePtr->hasDomainChangedInSize() ||
+            scalePtr->hasRangeChangedInSize()) {
           _setShaderDirty();
         }
         break;

@@ -25,9 +25,6 @@ class BaseScale {
  public:
   const static std::vector<std::string> scaleVertexShaderSource;
 
-  // QueryDataType domainType;
-  // QueryDataType rangeType;
-
   BaseScale(const QueryRendererContextShPtr& ctx,
             QueryDataType domainDataType,
             QueryDataType rangeDataType,
@@ -64,8 +61,6 @@ class BaseScale {
 
   std::string getRangeGLSLUniformName() { return "uRanges_" + _name; }
 
-  std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + _name; }
-
   virtual void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                                       const std::string& extraSuffix = "",
                                       bool ignoreDomain = false,
@@ -76,7 +71,7 @@ class BaseScale {
 
   virtual bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
 
-  bool hasClampChanged() { return _clampChanged; }
+  virtual bool hasPropertiesChanged() { return false; }
   bool hasDomainChangedInSize() { return _domainSizeChanged; }
   bool hasDomainValsChanged() { return _domainValsChanged; }
   bool hasDomainDataChanged() { return _domainSizeChanged || _domainValsChanged; }
@@ -89,9 +84,6 @@ class BaseScale {
  protected:
   std::string _name;
   ScaleType _type;
-
-  bool _useClamp;
-  bool _clampChanged;
 
   // TODO(croot): somehow consolidate all the types and use typeid() or the like
   // to handle type-ness.
@@ -109,7 +101,6 @@ class BaseScale {
 
   rapidjson::Pointer _jsonPath;
 
-  bool _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   std::string _printInfo() const;
 
  private:
@@ -125,15 +116,17 @@ class Scale : public BaseScale {
         ScaleType type = ScaleType::UNDEFINED)
       : BaseScale(obj, objPath, ctx, getDataTypeForType<DomainType>(), getDataTypeForType<RangeType>(), name, type),
         _domainPtr("domain", false),
-        _rangePtr("range", true),
-        _defaultVal() {
+        _rangePtr("range", true) {
     _initGLTypes();
-    updateFromJSONObj(obj, objPath);
   }
 
-  ~Scale() {}
+  virtual ~Scale() {}
 
-  std::string getGLSLCode(const std::string& extraSuffix = "", bool ignoreDomain = false, bool ignoreRange = false) {
+  BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
+  BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
+
+ protected:
+  std::string _getGLSLCode(const std::string& extraSuffix, bool ignoreDomain, bool ignoreRange) {
     RUNTIME_EX_ASSERT(_domainPtr.size() > 0 && _rangePtr.size() > 0,
                       std::string(*this) + " getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
 
@@ -157,22 +150,37 @@ class Scale : public BaseScale {
 
     boost::replace_all(shaderCode, "<name>", _name + extraSuffix);
 
-    // TODO(croot): create a derived class per scale type?
-    if (_type == ScaleType::LINEAR) {
-      ss.str("");
-      ss << _useClamp;
-      boost::replace_all(shaderCode, "<useClamp>", ss.str());
-    }
-
     shaderCode += '\n';
 
     return shaderCode;
   }
 
-  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
-                              const std::string& extraSuffix = "",
-                              bool ignoreDomain = false,
-                              bool ignoreRange = false) {
+  bool _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+    bool rtn = false;
+
+    if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
+      RUNTIME_EX_ASSERT(
+          obj.IsObject(),
+          RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "scale items must be objects."));
+
+      _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged);
+      _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged);
+
+      rtn = hasDomainDataChanged() || hasRangeDataChanged();
+    } else if (_jsonPath != objPath) {
+      _domainSizeChanged = _domainValsChanged = _rangeSizeChanged = _rangeValsChanged = true;
+
+      _domainPtr.updateJSONPath(objPath);
+      _rangePtr.updateJSONPath(objPath);
+    }
+
+    return rtn;
+  }
+
+  void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                               const std::string& extraSuffix,
+                               bool ignoreDomain,
+                               bool ignoreRange) {
     if (!ignoreDomain) {
       activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, _domainPtr.getVectorData());
     }
@@ -180,62 +188,17 @@ class Scale : public BaseScale {
     if (!ignoreRange) {
       activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorData());
     }
-
-    // TODO(croot): create a derived class per scale type?
-    if (_type == ScaleType::ORDINAL) {
-      activeShader->setUniformAttribute(getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
-    } else if (_type == ScaleType::QUANTIZE) {
-      double diff = _domainPtr.getDifference(_rangePtr.size());
-      activeShader->setUniformAttribute<double>("quantizeDiff", diff);
-    }
   }
 
-  BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
-  BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
-
-  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-    bool rtn = BaseScale::_initFromJSONObj(obj, objPath);
-
-    if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-      _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged);
-      _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged);
-
-      if (_type == ScaleType::ORDINAL) {
-        _setDefaultFromJSONObj(obj, objPath);
-      }
-
-      rtn = rtn || hasDomainDataChanged() || hasRangeDataChanged();
-    } else if (_jsonPath != objPath) {
-      _domainSizeChanged = _domainValsChanged = _rangeSizeChanged = _rangeValsChanged = true;
-
-      _domainPtr.updateJSONPath(objPath);
-      _rangePtr.updateJSONPath(objPath);
-      _updateDefaultJSONPath(objPath);
-    }
-
-    _jsonPath = objPath;
-
-    return rtn;
+  std::string _printInfo() const {
+    return "<" + std::string(typeid(DomainType).name()) + ", " + std::string(typeid(RangeType).name()) + ">" +
+           BaseScale::_printInfo();
   }
-
-  operator std::string() const final {
-    return "Scale<" + std::string(typeid(DomainType).name()) + ", " + std::string(typeid(RangeType).name()) + ">" +
-           _printInfo();
-  }
-
- private:
-  // std::vector<DomainType> _domain;
-  // std::vector<RangeType> _range;
-
-  // std::shared_ptr<std::vector<DomainType>> _domainPtr;
-  // std::shared_ptr<std::vector<RangeType>> _rangePtr;
 
   ScaleDomainRangeData<DomainType> _domainPtr;
   ScaleDomainRangeData<RangeType> _rangePtr;
 
-  RangeType _defaultVal;
-  rapidjson::Pointer _defaultJsonPath;
-
+ private:
   void _pushDomainItem(const rapidjson::Value& obj);
   void _pushRangeItem(const rapidjson::Value& obj);
 
@@ -243,40 +206,200 @@ class Scale : public BaseScale {
     _domainTypeGL = _domainPtr.getTypeGL();
     _rangeTypeGL = _rangePtr.getTypeGL();
   }
+};
 
-  void _setDefaultFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-    // TODO(croot): make different derived scale classes per scale type
-    // and move this function only into the "OrdinalScale" derived class
-    rapidjson::Value::ConstMemberIterator mitr;
+template <typename DomainType, typename RangeType>
+class LinearScale : public Scale<DomainType, RangeType> {
+ public:
+  LinearScale(const rapidjson::Value& obj,
+              const rapidjson::Pointer& objPath,
+              const QueryRendererContextShPtr& ctx,
+              const std::string& name = "")
+      : Scale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LINEAR), _useClamp(false) {
+    updateFromJSONObj(obj, objPath);
+  }
 
-    // TODO(croot): expose "default" as a constant somewhere;
-    std::string defaultStr = "default";
+  ~LinearScale() {}
 
-    if (!_ctx->isJSONCacheUpToDate(_defaultJsonPath, obj)) {
-      if ((mitr = obj.FindMember(defaultStr.c_str())) != obj.MemberEnd()) {
-        QueryDataType itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value);
+  bool hasPropertiesChanged() final { return hasClampChanged(); }
+  bool hasClampChanged() { return _clampChanged; }
 
+  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              const std::string& extraSuffix = "",
+                              bool ignoreDomain = false,
+                              bool ignoreRange = false) final {
+    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange);
+  }
+
+  std::string getGLSLCode(const std::string& extraSuffix = "",
+                          bool ignoreDomain = false,
+                          bool ignoreRange = false) final {
+    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange);
+
+    std::ostringstream ss;
+    ss << _useClamp;
+    boost::replace_all(shaderCode, "<useClamp>", ss.str());
+
+    return shaderCode;
+  }
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    bool updated = this->_updateFromJSONObj(obj, objPath);
+
+    if (updated) {
+      rapidjson::Value::ConstMemberIterator itr;
+
+      // TODO(croot): move the "clamp" prop name into a const somewhere.
+      std::string clampProp = "clamp";
+
+      bool prevClamp = _useClamp;
+      if ((itr = obj.FindMember("clamp")) != obj.MemberEnd()) {
         RUNTIME_EX_ASSERT(
-            itemType == _rangePtr.dataType,
-            RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
-                                                 mitr->value,
-                                                 "scale \"" + _name + "\" default is not the same type as its range."));
+            itr->value.IsBool(),
+            RapidJSONUtils::getJsonParseErrorStr(
+                this->_ctx->getUserWidgetIds(), obj, "the \"clamp\" property for linear scales must be a boolean."));
 
-        _defaultVal = _rangePtr.getDataValueFromJSONObj(mitr->value);
+        _useClamp = itr->value.GetBool();
       } else {
-        // set an undefined default
-        _defaultVal = RangeType();
+        // TODO(croot): set a const default for _useClamp somewhere
+        _useClamp = false;
+      }
+
+      if (prevClamp != _useClamp) {
+        _clampChanged = true;
+      } else {
+        _clampChanged = false;
       }
     }
 
-    _updateDefaultJSONPath(objPath);
+    this->_jsonPath = objPath;
+
+    return updated;
   }
+
+  operator std::string() const final { return "LinearScale" + this->_printInfo(); }
+
+ private:
+  bool _useClamp;
+  bool _clampChanged;
+};
+
+template <typename DomainType, typename RangeType>
+class OrdinalScale : public Scale<DomainType, RangeType> {
+ public:
+  OrdinalScale(const rapidjson::Value& obj,
+               const rapidjson::Pointer& objPath,
+               const QueryRendererContextShPtr& ctx,
+               const std::string& name = "")
+      : Scale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::ORDINAL), _defaultVal() {
+    updateFromJSONObj(obj, objPath);
+  }
+
+  ~OrdinalScale() {}
+
+  std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + this->_name; }
+
+  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              const std::string& extraSuffix = "",
+                              bool ignoreDomain = false,
+                              bool ignoreRange = false) final {
+    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange);
+    activeShader->setUniformAttribute(this->getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
+  }
+
+  std::string getGLSLCode(const std::string& extraSuffix = "",
+                          bool ignoreDomain = false,
+                          bool ignoreRange = false) final {
+    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange);
+
+    return shaderCode;
+  }
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    bool rtn = this->_updateFromJSONObj(obj, objPath);
+
+    if (rtn) {
+      if (!this->_ctx->isJSONCacheUpToDate(_defaultJsonPath, obj)) {
+        // TODO(croot): expose "default" as a constant somewhere;
+        std::string defaultStr = "default";
+        rapidjson::Value::ConstMemberIterator mitr;
+
+        if ((mitr = obj.FindMember(defaultStr.c_str())) != obj.MemberEnd()) {
+          QueryDataType itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value);
+
+          RUNTIME_EX_ASSERT(itemType == this->_rangePtr.dataType,
+                            RapidJSONUtils::getJsonParseErrorStr(
+                                this->_ctx->getUserWidgetIds(),
+                                mitr->value,
+                                "scale \"" + this->_name + "\" default is not the same type as its range."));
+
+          _defaultVal = this->_rangePtr.getDataValueFromJSONObj(mitr->value);
+        } else {
+          // set an undefined default
+          _defaultVal = RangeType();
+        }
+      }
+    }
+
+    this->_jsonPath = objPath;
+    _updateDefaultJSONPath(objPath);
+
+    return rtn;
+  }
+
+  operator std::string() const final { return "OrdinalScale" + this->_printInfo(); }
+
+ private:
+  RangeType _defaultVal;
+  rapidjson::Pointer _defaultJsonPath;
 
   void _updateDefaultJSONPath(const rapidjson::Pointer& objPath) {
     // TODO(croot): expose "default" as a constant somewhere;
     std::string defaultStr = "default";
     _defaultJsonPath = objPath.Append(defaultStr.c_str(), defaultStr.length());
   }
+};
+
+template <typename DomainType, typename RangeType>
+class QuantizeScale : public Scale<DomainType, RangeType> {
+ public:
+  QuantizeScale(const rapidjson::Value& obj,
+                const rapidjson::Pointer& objPath,
+                const QueryRendererContextShPtr& ctx,
+                const std::string& name = "")
+      : Scale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::QUANTIZE) {
+    updateFromJSONObj(obj, objPath);
+  }
+
+  ~QuantizeScale() {}
+
+  // bool hasPropertiesChanged() final { return hasClampChanged(); }
+
+  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              const std::string& extraSuffix = "",
+                              bool ignoreDomain = false,
+                              bool ignoreRange = false) final {
+    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange);
+
+    double diff = this->_domainPtr.getDifference(this->_rangePtr.size());
+    activeShader->setUniformAttribute<double>("quantizeDiff", diff);
+  }
+
+  std::string getGLSLCode(const std::string& extraSuffix = "",
+                          bool ignoreDomain = false,
+                          bool ignoreRange = false) final {
+    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange);
+    return shaderCode;
+  }
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    bool rtn = this->_updateFromJSONObj(obj, objPath);
+    this->_jsonPath = objPath;
+
+    return rtn;
+  }
+
+  operator std::string() const final { return "QuantizeScale" + this->_printInfo(); }
 };
 
 }  // namespace QueryRenderer

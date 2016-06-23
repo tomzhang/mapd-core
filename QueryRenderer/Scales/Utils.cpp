@@ -168,6 +168,25 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, cons
   return rangeType;
 }
 
+template <typename DomainType, typename RangeType>
+ScaleShPtr createScalePtr(const rapidjson::Value& obj,
+                          const rapidjson::Pointer& objPath,
+                          const QueryRendererContextShPtr& ctx,
+                          const std::string& scaleName,
+                          ScaleType scaleType) {
+  switch (scaleType) {
+    case ScaleType::LINEAR:
+      return ScaleShPtr(new LinearScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
+    case ScaleType::ORDINAL:
+      return ScaleShPtr(new OrdinalScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
+    case ScaleType::QUANTIZE:
+      return ScaleShPtr(new QuantizeScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
+    default:
+      THROW_RUNTIME_EX(
+          RapidJSONUtils::getJsonParseErrorStr(obj, "Scale type " + to_string(scaleType) + " is unsupported."));
+  }
+}
+
 ScaleShPtr createScale(const rapidjson::Value& obj,
                        const rapidjson::Pointer& objPath,
                        const QueryRendererContextShPtr& ctx,
@@ -194,10 +213,11 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
   QueryDataType domainType = getScaleDomainDataTypeFromJSONObj(obj, ctx);
   QueryDataType rangeType = getScaleRangeDataTypeFromJSONObj(obj, ctx);
 
-  // TODO(croot): make scale classes per scale and put this in the quantize scale class
+  // TODO(croot): put this in the quantize scale class? It's easier to do here, so keeping for
+  // now.
   if (scaleType == ScaleType::QUANTIZE) {
     RUNTIME_EX_ASSERT(
-        domainType == QueryDataType::UINT || domainType == QueryDataType::INT || domainType != QueryDataType::FLOAT ||
+        domainType == QueryDataType::UINT || domainType == QueryDataType::INT || domainType == QueryDataType::FLOAT ||
             domainType == QueryDataType::DOUBLE,
         RapidJSONUtils::getJsonParseErrorStr(
             obj, "Domain type " + to_string(domainType) + " is not a supported domain for a quantize scale."));
@@ -207,15 +227,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::UINT:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return ScaleShPtr(new Scale<unsigned int, unsigned int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<unsigned int, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return ScaleShPtr(new Scale<unsigned int, int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<unsigned int, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return ScaleShPtr(new Scale<unsigned int, float>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<unsigned int, float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return ScaleShPtr(new Scale<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return ScaleShPtr(new Scale<unsigned int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<unsigned int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -223,15 +243,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::INT:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return ScaleShPtr(new Scale<int, unsigned int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<int, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return ScaleShPtr(new Scale<int, int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<int, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return ScaleShPtr(new Scale<int, float>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<int, float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return ScaleShPtr(new Scale<int, double>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return ScaleShPtr(new Scale<int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -239,15 +259,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::FLOAT:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return ScaleShPtr(new Scale<float, unsigned int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<float, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return ScaleShPtr(new Scale<float, int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<float, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return ScaleShPtr(new Scale<float, float>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<float, float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return ScaleShPtr(new Scale<float, double>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<float, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return ScaleShPtr(new Scale<float, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<float, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -255,15 +275,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::DOUBLE:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return ScaleShPtr(new Scale<double, unsigned int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<double, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return ScaleShPtr(new Scale<double, int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<double, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return ScaleShPtr(new Scale<double, float>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<double, float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return ScaleShPtr(new Scale<double, double>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<double, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return ScaleShPtr(new Scale<double, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<double, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -271,15 +291,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::COLOR:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return ScaleShPtr(new Scale<ColorRGBA, unsigned int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<ColorRGBA, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return ScaleShPtr(new Scale<ColorRGBA, int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<ColorRGBA, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return ScaleShPtr(new Scale<ColorRGBA, float>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<ColorRGBA, float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return ScaleShPtr(new Scale<ColorRGBA, double>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<ColorRGBA, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return ScaleShPtr(new Scale<ColorRGBA, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<ColorRGBA, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -287,15 +307,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::STRING:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return ScaleShPtr(new Scale<std::string, unsigned int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<std::string, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return ScaleShPtr(new Scale<std::string, int>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<std::string, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return ScaleShPtr(new Scale<std::string, float>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<std::string, float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return ScaleShPtr(new Scale<std::string, double>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<std::string, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return ScaleShPtr(new Scale<std::string, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType));
+          return createScalePtr<std::string, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));

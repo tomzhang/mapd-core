@@ -19,7 +19,6 @@ BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
                      ScaleType type)
     : _name(name),
       _type(type),
-      _useClamp(false),
       _domainDataType(domainDataType),
       _domainTypeGL(nullptr),
       _rangeDataType(rangeDataType),
@@ -35,76 +34,9 @@ BaseScale::BaseScale(const rapidjson::Value& obj,
                      const std::string& name,
                      ScaleType type)
     : BaseScale(ctx, domainDataType, rangeDataType, name, type) {
-  _initFromJSONObj(obj, objPath);
 }
 
 BaseScale::~BaseScale() {
-}
-
-bool BaseScale::_initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  bool rtn = false;
-  if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    RUNTIME_EX_ASSERT(
-        obj.IsObject(),
-        RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "scale items must be objects."));
-
-    if (!_name.length()) {
-      _name = getScaleNameFromJSONObj(obj);
-    }
-
-    if (_type == ScaleType::UNDEFINED) {
-      _type = getScaleTypeFromJSONObj(obj);
-    }
-
-    // TODO(croot): create a separate derived class per scale?
-    // once we do this, there's no need to do any updates to the BaseScale class
-    // since it would only handle _name & _type & if either of those ever
-    // change, a new object is built. Therefore the _initFromJSONObj() call in
-    // the derived class's updateFromJSONObj() can be removed and this _initFromJSONObj()
-    // method can be made private.
-    // Also, by doing this, the _jsonPath property can be fullty managed
-    // by the derived class, so this base class can provide a "_setJsonPath()"
-    // method or something.
-    rapidjson::Value::ConstMemberIterator itr;
-    if (_type == ScaleType::LINEAR) {
-      // TODO(croot): move the "clamp" prop name into a const somewhere.
-      std::string clampProp = "clamp";
-
-      bool prevClamp = _useClamp;
-      if ((itr = obj.FindMember("clamp")) != obj.MemberEnd()) {
-        RUNTIME_EX_ASSERT(
-            itr->value.IsBool(),
-            RapidJSONUtils::getJsonParseErrorStr(
-                _ctx->getUserWidgetIds(), obj, "the \"clamp\" property for linear scales must be a boolean."));
-
-        _useClamp = itr->value.GetBool();
-      } else {
-        // TODO(croot): set a const default for _useClamp somewhere
-        _useClamp = false;
-      }
-
-      if (prevClamp != _useClamp) {
-        _clampChanged = true;
-      } else {
-        _clampChanged = false;
-      }
-    } else if (_type == ScaleType::QUANTIZE) {
-      if ((itr = obj.FindMember("domain")) != obj.MemberEnd() && itr->value.IsArray()) {
-        // NOTE: not doing any validation that "domain" is an array as that is
-        // being done at a later point. Just checking that the domain size here is always
-        // 2.
-        RUNTIME_EX_ASSERT(itr->value.Size() == 2,
-                          RapidJSONUtils::getJsonParseErrorStr(
-                              _ctx->getUserWidgetIds(),
-                              obj,
-                              "the \"domain\" property for quantize scales must always be a length 2 array."));
-      }
-    }
-
-    rtn = true;
-  }
-
-  return rtn;
 }
 
 const ::Rendering::GL::TypeGLShPtr& BaseScale::getDomainTypeGL() {
@@ -141,7 +73,7 @@ std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
 }
 
 std::string BaseScale::_printInfo() const {
-  return "(name: " + _name + ", type: " + to_string(_type) + ") " + to_string(_ctx->getUserWidgetIds());
+  return "(name: " + _name + ") " + to_string(_ctx->getUserWidgetIds());
 }
 
 }  // namespace QueryRenderer
