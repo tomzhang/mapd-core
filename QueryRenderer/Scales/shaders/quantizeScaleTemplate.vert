@@ -9,9 +9,7 @@ uniform rangeType_<name> uRanges_<name>[numRanges_<name>];
 
 rangeType_<name> getQuantizeScale_<name>(in domainType_<name> category) {
     double diff = double(category - uDomains_<name>[0]);
-    int idx = int(max(min(trunc(diff / double(quantizeDiff)), double(numRanges_<name>-1), double(0))));
+    int idx = int(max(min(trunc(diff / quantizeDiff), double(numRanges_<name>-1), double(0))));
 
-    rangeType_<name> val = uRanges_<name>[idx];
-
-    return val;
+    return uRanges_<name>[idx];
 }
