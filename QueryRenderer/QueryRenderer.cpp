@@ -133,21 +133,28 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
   // libraries (i.e. GLX) as it will work there too.
 
   // get the iterator to the compositor gpu first
-  auto qrmItr = qrmPerGpuDataPtr->begin();
-  qrmItr = qrmPerGpuDataPtr->find((*qrmItr)->getCompositorGpuId());
-  CHECK(qrmItr != qrmPerGpuDataPtr->end());
+  if (qrmPerGpuDataPtr->size() > 1) {
+    auto qrmItr = qrmPerGpuDataPtr->begin();
+    qrmItr = qrmPerGpuDataPtr->find((*qrmItr)->getCompositorGpuId());
+    CHECK(qrmItr != qrmPerGpuDataPtr->end());
 
-  // resize the non-compositor gpu framebuffers first
-  for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
-    if (gpuDataItr->gpuId != (*qrmItr)->gpuId) {
+    // resize the non-compositor gpu framebuffers first
+    for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
+      if (gpuDataItr->gpuId != (*qrmItr)->gpuId) {
+        gpuDataItr->makeActiveOnCurrentThread();
+        gpuDataItr->resize(width, height, false);
+      }
+    }
+
+    // now resize the compositor gpu framebuffers
+    (*qrmItr)->makeActiveOnCurrentThread();
+    (*qrmItr)->resize(width, height, true);
+  } else {
+    for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
       gpuDataItr->makeActiveOnCurrentThread();
-      gpuDataItr->resize(width, height, false);
+      gpuDataItr->resize(width, height);
     }
   }
-
-  // now resize the compositor gpu framebuffers
-  (*qrmItr)->makeActiveOnCurrentThread();
-  (*qrmItr)->resize(width, height, true);
 }
 
 void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdate) {
