@@ -147,11 +147,67 @@ void UniformSamplerAttr::setTexImgUnit(GLint texImgUnit) {
 
   for (int i = 0; i < size; ++i) {
     // TODO(croot): use glBindTextures​(GLuint first​, GLsizei count​, const GLuint *textures​) instead as
-    // descrived here: https://www.opengl.org/wiki/Sampler_(GLSL)#Multibind_and_textures
+    // described here: https://www.opengl.org/wiki/Sampler_(GLSL)#Multibind_and_textures
     MAPD_CHECK_GL_ERROR(glUniform1i(location, texImgUnit + i - GL_TEXTURE0));
   }
 
   startTexImgUnit = texImgUnit;
+}
+
+UniformImageLoadStoreAttr::UniformImageLoadStoreAttr(GLint t,
+                                                     GLint s,
+                                                     GLuint l,
+                                                     GLenum format,
+                                                     GLenum access,
+                                                     bool isMultisampled,
+                                                     GLint startImgUnit)
+    : UniformAttrInfo(t, s, l),
+      format(format),
+      access(access),
+      isMultisampled(isMultisampled),
+      startImgUnit(startImgUnit) {
+}
+
+void UniformImageLoadStoreAttr::setAttr(const void* data) {
+  setAttr(data, false, 0);
+}
+
+void UniformImageLoadStoreAttr::setAttr(const void* data, bool layered, int layerIdx) {
+  // TODO(croot): throw an warning for 2 samplers bound to the same texture unit?
+  RUNTIME_EX_ASSERT(startImgUnit >= 0,
+                    "Uniform image load store has not been properly initialized with an image unit.");
+
+  const GLuint* textureIds = static_cast<const GLuint*>(data);
+  for (int i = 0; i < size; ++i) {
+    // TODO(croot): should I always set the binding point?
+    // i.e. glUniform1i(location, startImgUnit + i);
+    // or will doing that once always keep it set for the shader?
+
+    // TODO(croot): support mipmaps
+    MAPD_CHECK_GL_ERROR(glBindImageTexture(startImgUnit + i, textureIds[i], 0, layered, layerIdx, access, format));
+  }
+}
+
+void UniformImageLoadStoreAttr::setImgUnit(GLint imgUnit) {
+  GLint maxImgUnits;
+  // TODO(croot): check the max number of image units in the shader stage?
+  // i.e. glGetIntegerv(GL_MAX_VERTEX_IMAGE_UNIFORMS, ...)
+  // See: https://www.opengl.org/wiki/Image_Load_Store#Images_in_the_context
+
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_IMAGE_UNITS, &maxImgUnits));
+
+  RUNTIME_EX_ASSERT(imgUnit >= 0 && imgUnit + size <= maxImgUnits,
+                    "Invalid start image unit set for uniform image load store attr. Start image unit: " +
+                        std::to_string(imgUnit) + " + number of image load stores in attr: " + std::to_string(size) +
+                        " is not in the image unit range: [0, " + std::to_string(maxImgUnits) + "]");
+
+  for (int i = 0; i < size; ++i) {
+    // TODO(croot): use glBindTextures​(GLuint first​, GLsizei count​, const GLuint *textures​) instead as
+    // described here: https://www.opengl.org/wiki/Sampler_(GLSL)#Multibind_and_textures
+    MAPD_CHECK_GL_ERROR(glUniform1i(location, imgUnit + i));
+  }
+
+  startImgUnit = imgUnit;
 }
 
 UniformBlockAttrInfo::UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
@@ -394,6 +450,7 @@ using detail::Uniform2dAttr;
 using detail::Uniform3dAttr;
 using detail::Uniform4dAttr;
 using detail::UniformSamplerAttr;
+using detail::UniformImageLoadStoreAttr;
 using detail::UniformBlockAttrInfo;
 
 static GLint compileShader(const GLuint& shaderId, const std::string& shaderSrc, std::string& errStr) {
@@ -502,16 +559,22 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
       break;
 
     // case GL_SAMPLER_1D:
+    // case GL_IMAGE_1D:
     // case GL_SAMPLER_1D_ARRAY:
+    // case GL_IMAGE_1D_ARRAY:
 
     // case GL_SAMPLER_1D_SHADOW:
     // case GL_SAMPLER_1D_ARRAY_SHADOW:
 
     // case GL_INT_SAMPLER_1D:
+    // case GL_INT_IMAGE_1D:
     // case GL_INT_SAMPLER_1D_ARRAY:
+    // case GL_INT_IMAGE_1D_ARRAY:
 
     // case GL_UNSIGNED_INT_SAMPLER_1D:
+    // case GL_UNSIGNED_INT_IMAGE_1D:
     // case GL_UNSIGNED_INT_SAMPLER_1D_ARRAY:
+    // case GL_UNSIGNED_INT_IMAGE_1D_ARRAY:
 
     // TODO(croot): for samplers, the texture image unit can be set according to
     // https://www.opengl.org/wiki/Sampler_(GLSL)#Version_4.20_binding
@@ -519,57 +582,110 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     // but I can't determine how to find out what that binding is with any
     // of the opengl program introspection methods. So, I may need to do
     // a scan of the shader source myself to determine that.
+
+    // TODO(croot): for image load store attrs, the format, access type, and
+    // the image unit can be set according to
+    // https://www.opengl.org/wiki/Image_Load_Store#Images_in_the_context
+    // i.e. layout(r32ui, binding=0) uniform coherent image2D image;
+    // but I can't determine how to find out what the format, access type,
+    // or binding is with any of the opengl program introspection methods.
+    // So, I may need to do a scan of the shader source myself to determine that.
+    //
+    // One possible way to do that is pass in the line from the shader
+    // src that defines this attr and do the scan internally for the
+    // attr types that require it.
+
     case GL_SAMPLER_2D:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
       break;
+    // case GL_IMAGE_2D:
+    //   break;
     case GL_SAMPLER_2D_ARRAY:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
       break;
+    // case GL_IMAGE_2D_ARRAY:
+    //   break;
     case GL_SAMPLER_2D_MULTISAMPLE:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
       break;
+    // case GL_IMAGE_2D_MULTISAMPLE:
+    //   break;
     case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
       break;
+    // case GL_IMAGE_2D_MULTISAMPLE_ARRAY:
+    //   break;
 
     // case GL_SAMPLER_2D_SHADOW:
     // case GL_SAMPLER_2D_ARRAY_SHADOW:
 
     // case GL_INT_SAMPLER_2D:
+    // case GL_INT_IMAGE_2D:
+    // case GL_INT_IMAGE_2D_ARRAY:
     // case GL_INT_SAMPLER_2D_ARRAY:
     // case GL_INT_SAMPLER_2D_MULTISAMPLE:
+    // case GL_INT_IMAGE_2D_MULTISAMPLE:
     // case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+    // case GL_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
 
     case GL_UNSIGNED_INT_SAMPLER_2D:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
       break;
+    case GL_UNSIGNED_INT_IMAGE_2D:
+      // TODO(croot): need to un-hardcode the GL_RG32UI/GL_READ_WRITE/multisample/binding attrs
+      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32UI, GL_READ_WRITE, false, 0);
+      break;
     case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
+      break;
+    case GL_UNSIGNED_INT_IMAGE_2D_ARRAY:
+      // TODO(croot): need to un-hardcode the GL_RG32UI/GL_READ_WRITE/multisample/binding attrs
+      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32UI, GL_READ_WRITE, false, 0);
       break;
     case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
       break;
+    case GL_UNSIGNED_INT_IMAGE_2D_MULTISAMPLE:
+      break;
     case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
       break;
+    case GL_UNSIGNED_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
+      break;
 
     // case GL_SAMPLER_3D:
+    // case GL_IMAGE_3D:
     // case GL_INT_SAMPLER_3D:
+    // case GL_INT_IMAGE_3D:
     // case GL_UNSIGNED_INT_SAMPLER_3D:
+    // case GL_UNSIGNED_INT_IMAGE_3D:
 
     // case GL_SAMPLER_CUBE:
+    // case GL_IMAGE_CUBE:
     // case GL_SAMPLER_CUBE_SHADOW:
     // case GL_INT_SAMPLER_CUBE:
+    // case GL_INT_IMAGE_CUBE:
     // case GL_UNSIGNED_INT_SAMPLER_CUBE:
+    // case GL_UNSIGNED_INT_IMAGE_CUBE:
 
     // case GL_SAMPLER_BUFFER:
     // case GL_INT_SAMPLER_BUFFER:
     // case GL_UNSIGNED_INT_SAMPLER_BUFFER:
 
     // case GL_SAMPLER_2D_RECT:
+    // case GL_IMAGE_2D_RECT:
     // case GL_SAMPLER_2D_RECT_SHADOW:
     // case GL_INT_SAMPLER_2D_RECT:
+    // case GL_INT_IMAGE_2D_RECT:
     // case GL_UNSIGNED_INT_SAMPLER_2D_RECT:
+    // case GL_UNSIGNED_INT_IMAGE_2D_RECT:
+
+    // case GL_IMAGE_BUFFER:
+    // case GL_INT_IMAGE_BUFFER:
+    // case GL_UNSIGNED_INT_IMAGE_BUFFER:
+    // case GL_IMAGE_CUBE_MAP_ARRAY:
+    // case GL_INT_IMAGE_CUBE_MAP_ARRAY:
+    // case GL_UNSIGNED_INT_IMAGE_CUBE_MAP_ARRAY:
 
     default:
       THROW_RUNTIME_EX("createUniformAttrPtr(): GL type " + std::to_string(type) + " is not yet a supported type.");
@@ -647,7 +763,8 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
   if (!linkProgram(_programId, errStr)) {
     // clean out the shader references
     _cleanupResource();
-    THROW_RUNTIME_EX("Error linking the shader: " + errStr);
+    THROW_RUNTIME_EX("Error linking the shader: " + errStr + "\n\nVertex Shader Src:\n" + vertSrc +
+                     "\n\nFragment shader src:\n" + fragSrc);
   }
 
   GLint numAttrs;
@@ -817,6 +934,15 @@ UniformSamplerAttr* GLShader::_validateSamplerAttr(const std::string& attrName) 
   return samplerAttr;
 }
 
+UniformImageLoadStoreAttr* GLShader::_validateImageLoadStoreAttr(const std::string& attrName) {
+  UniformAttrInfo* info = _validateAttr(attrName);
+  UniformImageLoadStoreAttr* imgAttr = dynamic_cast<UniformImageLoadStoreAttr*>(info);
+
+  RUNTIME_EX_ASSERT(imgAttr != nullptr, "Uniform attribute: " + attrName + " is not an image load store attribute.");
+
+  return imgAttr;
+}
+
 UniformBlockAttrInfo* GLShader::_validateBlockAttr(const std::string& blockName,
                                                    const GLUniformBufferShPtr& ubo,
                                                    size_t idx) {
@@ -904,6 +1030,57 @@ void GLShader::setSamplerAttribute(const std::string& attrName, const GLResource
 void GLShader::setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit) {
   UniformSamplerAttr* samplerAttr = _validateSamplerAttr(attrName);
   samplerAttr->setTexImgUnit(startTexImageUnit);
+}
+
+void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const GLResourceShPtr& rsrc, int layerIdx) {
+  UniformImageLoadStoreAttr* imgAttr = _validateImageLoadStoreAttr(attrName);
+
+  // TODO(croot): validate compatability between the texture/texture array/texture cube/texture rect
+  // object's internal format and num samples
+  switch (rsrc->getResourceType()) {
+    case GLResourceType::TEXTURE_2D_ARRAY: {
+      auto tex2dArrayRsrc = std::dynamic_pointer_cast<GLTexture2dArray>(rsrc);
+      CHECK(tex2dArrayRsrc);
+      RUNTIME_EX_ASSERT(imgAttr->format == tex2dArrayRsrc->getInternalFormat(),
+                        "Attr mismatch. Image load store attr \"" + attrName + "\" expects a " +
+                            std::to_string(imgAttr->format) + " formatted image but the image rsrc has a " +
+                            std::to_string(tex2dArrayRsrc->getInternalFormat()) + " format.");
+
+      GLuint id = rsrc->getId();
+      imgAttr->setAttr((void*)(&id), true, layerIdx);
+    } break;
+    default:
+      THROW_RUNTIME_EX("Attr mismatch. Invalid resource type: " + to_string(rsrc->getResourceType()));
+  }
+}
+
+void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const std::vector<GLTexture2dShPtr>& rsrcs) {
+  UniformImageLoadStoreAttr* imgAttr = _validateImageLoadStoreAttr(attrName);
+
+  // TODO(croot): validate compatability between the texture/texture array/texture cube/texture rect
+  // object's internal format and num samples
+
+  RUNTIME_EX_ASSERT(imgAttr->size == static_cast<int>(rsrcs.size()),
+                    "Array sizes do not match. Cannot set an array of image load store attributes. The \"" + attrName +
+                        "\" shader attribute is size " + std::to_string(imgAttr->size) +
+                        " and the size of the vector of textures is size " + std::to_string(rsrcs.size()));
+
+  std::vector<GLuint> ids;
+  for (auto& texPtr : rsrcs) {
+    RUNTIME_EX_ASSERT(imgAttr->format == texPtr->getInternalFormat(),
+                      "Attr mismatch. Image load store attr \"" + attrName + "\" expects a " +
+                          std::to_string(imgAttr->format) + " formatted image but the image rsrc has a " +
+                          std::to_string(texPtr->getInternalFormat()) + " format.");
+
+    ids.push_back(texPtr->getId());
+  }
+
+  imgAttr->setAttr((void*)(&ids[0]), false, 0);
+}
+
+void GLShader::setImageLoadStoreImageUnit(const std::string& attrName, int startImgUnit) {
+  UniformImageLoadStoreAttr* imgAttr = _validateImageLoadStoreAttr(attrName);
+  imgAttr->setImgUnit(startImgUnit);
 }
 
 bool GLShader::hasUniformBlockAttribute(const std::string& attrName) {

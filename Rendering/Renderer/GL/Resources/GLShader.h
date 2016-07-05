@@ -41,6 +41,25 @@ struct UniformSamplerAttr : UniformAttrInfo {
   GLint startTexImgUnit;
 };
 
+struct UniformImageLoadStoreAttr : UniformAttrInfo {
+  UniformImageLoadStoreAttr(GLint t,
+                            GLint s,
+                            GLuint l,
+                            GLenum format,
+                            GLenum access = GL_READ_ONLY,
+                            bool isMultisampled = false,
+                            GLint startImgUnit = -1);
+
+  void setAttr(const void* data) final;
+  void setAttr(const void* data, bool layered, int layerIdx);
+  void setImgUnit(GLint imgUnit);
+
+  GLenum format;
+  GLenum access;
+  bool isMultisampled;
+  GLint startImgUnit;
+};
+
 struct UniformBlockAttrInfo {
   std::string blockName;
   GLint blockIndex;
@@ -125,8 +144,15 @@ class GLShader : public GLResource {
   }
 
   void setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc);
-
   void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
+
+  // TODO(croot): support mip-maps
+  void setImageLoadStoreAttribute(const std::string& attrName, const GLResourceShPtr& rsrc, int layerIdx = 0);
+  void setImageLoadStoreAttribute(const std::string& attrName, const std::vector<GLTexture2dShPtr>& rsrcs);
+  // TODO(croot): match this api with the setSamplerTextureImageUnit??
+  // That function uses a GLenum (i.e. GL_TEXTURE0, etc.) to create the
+  // image unit. Should we do the same here?
+  void setImageLoadStoreImageUnit(const std::string& attrName, int startImgUnit);
 
   bool hasUniformBlockAttribute(const std::string& attrName);
   void bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx = -1);
@@ -154,6 +180,7 @@ class GLShader : public GLResource {
   void _makeEmpty() final;
   detail::UniformAttrInfo* _validateAttr(const std::string& attrName);
   detail::UniformSamplerAttr* _validateSamplerAttr(const std::string& attrName);
+  detail::UniformImageLoadStoreAttr* _validateImageLoadStoreAttr(const std::string& attrName);
   detail::UniformBlockAttrInfo* _validateBlockAttr(const std::string& blockName,
                                                    const GLUniformBufferShPtr& ubo,
                                                    size_t idx);
