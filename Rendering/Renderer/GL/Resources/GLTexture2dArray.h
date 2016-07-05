@@ -34,6 +34,13 @@ class GLTexture2dArray : public GLResource {
   void resize(size_t width, size_t height);
   void resize(size_t width, size_t height, size_t depth);
 
+  void copyPixelsFromPixelBuffer(const GLPixelBuffer2dShPtr& pbo,
+                                 int arrayIdx = -1,
+                                 int startx = 0,
+                                 int starty = 0,
+                                 int width = -1,
+                                 int height = -1);
+
   /**
    * Update the pixel contents of the texture array
    * to the internally referenced textures.

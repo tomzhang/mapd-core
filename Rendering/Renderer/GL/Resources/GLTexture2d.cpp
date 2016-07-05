@@ -1,5 +1,6 @@
 #include "GLTexture2d.h"
 #include "../MapDGL.h"
+#include "GLPixelBuffer2d.h"
 
 namespace Rendering {
 namespace GL {
@@ -190,6 +191,54 @@ void GLTexture2d::resize(size_t width, size_t height) {
     resizeTexture2d(
         _target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples, &_sampleProps);
   }
+}
+
+void GLTexture2d::copyPixelsFromPixelBuffer(const GLPixelBuffer2dShPtr& pbo,
+                                            int startx,
+                                            int starty,
+                                            int width,
+                                            int height) {
+  RUNTIME_EX_ASSERT(_numSamples == 1, "Cannot copy pixels from a pixel buffer to a multi-sampled 2d texture");
+
+  RUNTIME_EX_ASSERT(pbo->getPixelFormat() == _pixelFormat && pbo->getPixelType() == _pixelType,
+                    "Cannot copy contents of the pixel buffer to the texture. The pixel formats/types do not match - "
+                    "pixel buffer: format: " +
+                        std::to_string(pbo->getPixelFormat()) + ", type: " + std::to_string(pbo->getPixelType()) +
+                        ", texture: format: " + std::to_string(_pixelFormat) + ", type: " + std::to_string(_pixelType));
+
+  size_t widthToUse = (width < 0 ? pbo->getWidth() : static_cast<size_t>(width));
+  size_t heightToUse = (height < 0 ? pbo->getHeight() : static_cast<size_t>(height));
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  RUNTIME_EX_ASSERT(static_cast<size_t>(startx) < myWidth && startx + widthToUse <= myWidth &&
+                        static_cast<size_t>(starty) < myHeight && starty + heightToUse <= myHeight,
+                    "The copy area: " + std::to_string(widthToUse) + "x" + std::to_string(heightToUse) +
+                        " starting at [" + std::to_string(startx) + ", " + std::to_string(starty) +
+                        "] extends beyond the bounds of the GLTexture2D: " + std::to_string(myWidth) + "x" +
+                        std::to_string(myHeight) + ".");
+
+  // NOTE: Renderer needs to be properly activated before calling this function
+  GLRenderer* glRenderer = getGLRenderer();
+
+  glRenderer->bindReadPixelBuffer(pbo);
+
+  CHECK(_target == GL_TEXTURE_2D);
+  GLint currTex;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTex));
+  MAPD_CHECK_GL_ERROR(glBindTexture(_target, _textureId));
+
+  // TODO(croot): support mipmaps
+  // TODO(croot): support byte offset into pbo data?
+  MAPD_CHECK_GL_ERROR(
+      glTexSubImage2D(_target, 0, startx, starty, widthToUse, heightToUse, _pixelFormat, _pixelType, nullptr));
+
+  if (currTex != static_cast<GLint>(_textureId)) {
+    // now reset the context bound state back
+    MAPD_CHECK_GL_ERROR(glBindTexture(_target, currTex));
+  }
+
+  glRenderer->bindReadPixelBuffer(nullptr);
 }
 
 }  // namespace Resources

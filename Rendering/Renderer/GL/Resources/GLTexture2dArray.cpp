@@ -1,5 +1,6 @@
 #include "GLTexture2dArray.h"
 #include "../MapDGL.h"
+#include "GLPixelBuffer2d.h"
 
 namespace Rendering {
 namespace GL {
@@ -208,6 +209,81 @@ void GLTexture2dArray::resize(size_t width, size_t height, size_t depth) {
   }
 
   _rebuild(width, height, depth);
+}
+
+void GLTexture2dArray::copyPixelsFromPixelBuffer(const GLPixelBuffer2dShPtr& pbo,
+                                                 int arrayIdx,
+                                                 int startx,
+                                                 int starty,
+                                                 int width,
+                                                 int height) {
+  // TODO(croot): check that the pixel format/type of the pbo is compatible with
+  // the internal format of the GLTexture2dArray
+
+  RUNTIME_EX_ASSERT(arrayIdx < static_cast<int>(_depth),
+                    "Invalid index " + std::to_string(arrayIdx) + ". The texture array only has " +
+                        std::to_string(_depth) + " textures.");
+
+  RUNTIME_EX_ASSERT(_numSamples == 1, "Cannot copy pixels from a pixel buffer to a multi-sampled 2d texture array");
+
+  size_t widthToUse = (width < 0 ? pbo->getWidth() : static_cast<size_t>(width));
+  size_t heightToUse = (height < 0 ? pbo->getHeight() : static_cast<size_t>(height));
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  RUNTIME_EX_ASSERT(startx < static_cast<int>(myWidth) && startx + widthToUse <= myWidth &&
+                        starty < static_cast<int>(myHeight) && starty + heightToUse <= myHeight,
+                    "The copy area: " + std::to_string(widthToUse) + "x" + std::to_string(heightToUse) +
+                        " starting at [" + std::to_string(startx) + ", " + std::to_string(starty) +
+                        "] extends beyond the bounds of the textures in the GLTexture2dArray: " +
+                        std::to_string(myWidth) + "x" + std::to_string(myHeight) + ".");
+
+  // NOTE: Renderer needs to be properly activated before calling this function
+  GLRenderer* glRenderer = getGLRenderer();
+
+  glRenderer->bindReadPixelBuffer(pbo);
+
+  CHECK(_target == GL_TEXTURE_2D_ARRAY);
+  GLint currTex;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY, &currTex));
+  MAPD_CHECK_GL_ERROR(glBindTexture(_target, _textureArrayId));
+
+  // TODO(croot): support mipmaps
+  // TODO(croot): support byte offset into pbo data?
+  if (arrayIdx < 0) {
+    for (int i = 0; i < static_cast<int>(_depth); ++i) {
+      MAPD_CHECK_GL_ERROR(glTexSubImage3D(_target,
+                                          0,
+                                          startx,
+                                          starty,
+                                          i,
+                                          widthToUse,
+                                          heightToUse,
+                                          1,
+                                          pbo->getPixelFormat(),
+                                          pbo->getPixelType(),
+                                          nullptr));
+    }
+  } else {
+    MAPD_CHECK_GL_ERROR(glTexSubImage3D(_target,
+                                        0,
+                                        startx,
+                                        starty,
+                                        arrayIdx,
+                                        widthToUse,
+                                        heightToUse,
+                                        1,
+                                        pbo->getPixelFormat(),
+                                        pbo->getPixelType(),
+                                        nullptr));
+  }
+
+  if (currTex != static_cast<GLint>(_textureArrayId)) {
+    // now reset the context bound state back
+    MAPD_CHECK_GL_ERROR(glBindTexture(_target, currTex));
+  }
+
+  glRenderer->bindReadPixelBuffer(nullptr);
 }
 
 void GLTexture2dArray::updateFromTextures() {

@@ -49,6 +49,11 @@ class GLTexture2d : public GLResource {
   GLTexture2dSampleProps getSamplingProps() const { return _sampleProps; }
 
   void resize(size_t width, size_t height);
+  void copyPixelsFromPixelBuffer(const GLPixelBuffer2dShPtr& pbo,
+                                 int startx = 0,
+                                 int starty = 0,
+                                 int width = -1,
+                                 int height = -1);
 
  private:
   explicit GLTexture2d(const RendererWkPtr& rendererPtr,
