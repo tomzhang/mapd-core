@@ -79,6 +79,7 @@ class GLRenderer : public Renderer {
 
   void bindResource(const Resources::GLResourceShPtr& rsrc);
   void bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc);
+  void bindTexture2dArray(const Resources::GLTexture2dArrayShPtr& texArrayRsrc);
   void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
   void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fboRsrc);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
@@ -92,6 +93,9 @@ class GLRenderer : public Renderer {
 
   Resources::GLTexture2dShPtr getBoundTexture2d() const;
   bool hasBoundTexture2d() const;
+
+  Resources::GLTexture2dArrayShPtr getBoundTexture2dArray() const;
+  bool hasBoundTexture2dArray() const;
 
   Resources::GLVertexBufferShPtr getBoundVertexBuffer() const;
   bool hasBoundVertexBuffer() const;
@@ -145,6 +149,17 @@ class GLRenderer : public Renderer {
                                 GLvoid* data);
 
   void getBoundTexture2dPixels(size_t width, size_t height, GLenum format, GLenum type, GLvoid* data);
+
+  // TODO(croot): get the pixels from a specific layer in a texture2d array?
+  // Not sure how to do this without first getting all the data in the texture
+  // array and then returning a subset of that data. This could be costly depending
+  // on the size of the texture array.
+  void getBoundTexture2dArrayPixels(size_t width,
+                                    size_t height,
+                                    size_t depth,
+                                    GLenum format,
+                                    GLenum type,
+                                    GLvoid* data);
 
   static GLRenderer* getCurrentThreadRenderer();
   static Window* getCurrentThreadWindow();

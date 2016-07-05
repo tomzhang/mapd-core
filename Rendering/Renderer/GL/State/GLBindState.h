@@ -13,6 +13,7 @@ namespace State {
 class GLBindState {
  public:
   Resources::GLTexture2dWkPtr boundTex2d;
+  Resources::GLTexture2dArrayWkPtr boundTex2dArray;
   Resources::GLVertexBufferWkPtr boundVbo;
   Resources::GLFramebufferWkPtr boundReadFbo;
   Resources::GLFramebufferWkPtr boundDrawFbo;
@@ -30,6 +31,7 @@ class GLBindState {
   void bindResource(const Resources::GLResourceShPtr& rsrc);
 
   void bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc);
+  void bindTexture2dArray(const Resources::GLTexture2dArrayShPtr& texArrayRsrc);
   void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
   void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fbRsrc);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
@@ -43,6 +45,9 @@ class GLBindState {
 
   Resources::GLTexture2dShPtr getBoundTexture2d() const;
   bool hasBoundTexture2d() const;
+
+  Resources::GLTexture2dArrayShPtr getBoundTexture2dArray() const;
+  bool hasBoundTexture2dArray() const;
 
   Resources::GLVertexBufferShPtr getBoundVertexBuffer() const;
   bool hasBoundVertexBuffer() const;

@@ -15,6 +15,7 @@ using Objects::ColorRGBA;
 using Resources::GLResourceType;
 using Resources::GLResourceShPtr;
 using Resources::GLTexture2dShPtr;
+using Resources::GLTexture2dArrayShPtr;
 using Resources::FboBind;
 using Resources::GLFramebufferShPtr;
 using Resources::GLShaderShPtr;
@@ -262,6 +263,10 @@ void GLRenderer::bindTexture2d(const GLTexture2dShPtr& texRsrc) {
   _bindState.bindTexture2d(texRsrc);
 }
 
+void GLRenderer::bindTexture2dArray(const Resources::GLTexture2dArrayShPtr& texArrayRsrc) {
+  _bindState.bindTexture2dArray(texArrayRsrc);
+}
+
 void GLRenderer::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc) {
   _bindState.bindVertexBuffer(vboRsrc);
 }
@@ -308,6 +313,14 @@ Resources::GLTexture2dShPtr GLRenderer::getBoundTexture2d() const {
 
 bool GLRenderer::hasBoundTexture2d() const {
   return _bindState.hasBoundTexture2d();
+}
+
+Resources::GLTexture2dArrayShPtr GLRenderer::getBoundTexture2dArray() const {
+  return _bindState.getBoundTexture2dArray();
+}
+
+bool GLRenderer::hasBoundTexture2dArray() const {
+  return _bindState.hasBoundTexture2dArray();
 }
 
 Resources::GLVertexBufferShPtr GLRenderer::getBoundVertexBuffer() const {
@@ -505,6 +518,38 @@ void GLRenderer::getBoundTexture2dPixels(size_t width, size_t height, GLenum for
                     "the bound texture: (" +
                         std::to_string(width) + "x" + std::to_string(height) + " != " + std::to_string(texWidth) + "x" +
                         std::to_string(texHeight) + ")");
+
+  // TODO(croot): expose mipmap level
+
+  // TODO(croot): check the format & type passed as arguments vs format/type of the texture?
+  // I think a check like that could be useful, but would that limit usage somehow?
+  MAPD_CHECK_GL_ERROR(glGetTexImage(target, 0, format, type, data));
+}
+
+void GLRenderer::getBoundTexture2dArrayPixels(size_t width,
+                                              size_t height,
+                                              size_t depth,
+                                              GLenum format,
+                                              GLenum type,
+                                              GLvoid* data) {
+  GLTexture2dArrayShPtr boundTexArray = _bindState.getBoundTexture2dArray();
+  RUNTIME_EX_ASSERT(boundTexArray != nullptr,
+                    "Cannot get pixels from bound 2D texture array. There isn't a 2D texture array currently bound.");
+
+  GLenum target = boundTexArray->getTarget();
+  RUNTIME_EX_ASSERT(target == GL_TEXTURE_2D_ARRAY,
+                    "Cannot get pixels of bound 2D texture array. It is multi-sampled. Can only get pixels of a  "
+                    "non multi-sampled texture array.");
+
+  size_t texWidth = boundTexArray->getWidth();
+  size_t texHeight = boundTexArray->getHeight();
+  size_t texDepth = boundTexArray->getDepth();
+  RUNTIME_EX_ASSERT(
+      width == texWidth && height == texHeight && depth == texDepth,
+      "Cannot get pixels of bound 2D texture array. Resolution of output data does not match the resolution of "
+      "the bound texture: (" +
+          std::to_string(width) + "x" + std::to_string(height) + "x" + std::to_string(depth) + " != " +
+          std::to_string(texWidth) + "x" + std::to_string(texHeight) + "x" + std::to_string(texDepth) + ")");
 
   // TODO(croot): expose mipmap level
 

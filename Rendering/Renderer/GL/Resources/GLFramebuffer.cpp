@@ -487,8 +487,8 @@ void GLFramebuffer::copyPixelsToBoundPixelBuffer(GLenum attachment,
   validateUsability(__FILE__, __LINE__);
 
   GLRenderer* renderer = getGLRenderer();
-  GLPixelBuffer2dShPtr pbo = renderer->getBoundReadPixelBuffer();
-  RUNTIME_EX_ASSERT(pbo != nullptr, "No bound read pixel buffer. Cannot read pixels.");
+  GLPixelBuffer2dShPtr pbo = renderer->getBoundWritePixelBuffer();
+  RUNTIME_EX_ASSERT(pbo != nullptr, "No bound write pixel buffer. Cannot copy pixels to pixel buffer.");
 
   // size_t myWidth = getWidth();
   // size_t myHeight = getHeight();
@@ -535,9 +535,9 @@ void GLFramebuffer::copyPixelsToPixelBuffer(GLenum attachment,
   GLRenderer* renderer = getGLRenderer();
   GLPixelBuffer2dShPtr currPbo = renderer->getBoundReadPixelBuffer();
 
-  renderer->bindReadPixelBuffer(pbo);
+  renderer->bindWritePixelBuffer(pbo);
   copyPixelsToBoundPixelBuffer(attachment, startx, starty, width, height, offsetBytes, format, type);
-  renderer->bindReadPixelBuffer(currPbo);
+  renderer->bindWritePixelBuffer(currPbo);
 }
 
 void GLFramebuffer::resize(size_t width, size_t height) {

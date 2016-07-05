@@ -1,6 +1,7 @@
 #include "GLBindState.h"
 #include "../MapDGL.h"
 #include "../Resources/GLTexture2d.h"
+#include "../Resources/GLTexture2dArray.h"
 #include "../Resources/GLVertexBuffer.h"
 #include "../Resources/GLResource.h"
 #include "../Resources/GLFramebuffer.h"
@@ -74,6 +75,42 @@ void GLBindState::bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc) {
     MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D, texId));
 
     boundTex2d = texRsrc;
+  }
+}
+
+void GLBindState::bindTexture2dArray(const Resources::GLTexture2dArrayShPtr& texArrayRsrc) {
+  // TODO(croot): Currently binding a Texture2dArray will handle both multi-sampled
+  // and non-multi-sampled textures. But do we want to separate the two? Is
+  // there ever a case where we'd want to bind a non multi-sampled and a mult-
+  // sampled texture array at the same time?
+
+  GLuint texId = 0;
+  GLuint multiSampleTexId = 0;
+
+  if (texArrayRsrc) {
+    switch (texArrayRsrc->getTarget()) {
+      case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
+        multiSampleTexId = texArrayRsrc->getId();
+        break;
+      case GL_TEXTURE_2D_ARRAY:
+        texId = texArrayRsrc->getId();
+        break;
+      default:
+        CHECK(false);
+    }
+  }
+
+  bool bind = (boundTex2dArray.owner_before(texArrayRsrc) || texArrayRsrc.owner_before(boundTex2dArray));
+
+  if (bind) {
+    if (texArrayRsrc) {
+      texArrayRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
+    }
+
+    MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_MULTISAMPLE_ARRAY, multiSampleTexId));
+    MAPD_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, texId));
+
+    boundTex2dArray = texArrayRsrc;
   }
 }
 
@@ -206,7 +243,7 @@ void GLBindState::bindReadPixelBuffer(const Resources::GLPixelBuffer2dShPtr& pbo
                         "Cannot bind pbo resource for reading. It was not initialized with READ/COPY access type.");
     }
 
-    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo));
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo));
 
     boundReadPbo = pboRsrc;
   }
@@ -224,10 +261,10 @@ void GLBindState::bindWritePixelBuffer(const Resources::GLPixelBuffer2dShPtr& pb
       BufferAccessType accessType = pboRsrc->getAccessType();
       RUNTIME_EX_ASSERT(accessType == BufferAccessType::WRITE || accessType == BufferAccessType::READ_AND_WRITE ||
                             accessType == BufferAccessType::COPY,
-                        "Cannot bind pbo resource for reading. It was not initialized with WRITE/COPY access type.");
+                        "Cannot bind pbo resource for writing to. It was not initialized with WRITE/COPY access type.");
     }
 
-    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo));
+    MAPD_CHECK_GL_ERROR(glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo));
 
     boundWritePbo = pboRsrc;
   }
@@ -287,6 +324,14 @@ Resources::GLTexture2dShPtr GLBindState::getBoundTexture2d() const {
 
 bool GLBindState::hasBoundTexture2d() const {
   return boundTex2d.lock() != nullptr;
+}
+
+Resources::GLTexture2dArrayShPtr GLBindState::getBoundTexture2dArray() const {
+  return boundTex2dArray.lock();
+}
+
+bool GLBindState::hasBoundTexture2dArray() const {
+  return boundTex2dArray.lock() != nullptr;
 }
 
 Resources::GLVertexBufferShPtr GLBindState::getBoundVertexBuffer() const {
