@@ -140,6 +140,16 @@ class GLResourceManager {
       Resources::BufferAccessType accessType = Resources::BufferAccessType::READ,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
 
+  Resources::GLPixelBuffer2dShPtr createPixelBuffer2d(
+      size_t width,
+      size_t height,
+      // GLenum internalFormat,
+      GLenum pixelFormat,
+      GLenum pixelType,
+      GLvoid* data,
+      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ,
+      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
+
   Resources::GLUniformBufferShPtr createUniformBuffer(
       Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);

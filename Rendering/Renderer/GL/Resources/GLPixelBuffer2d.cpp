@@ -49,6 +49,19 @@ GLPixelBuffer2d::GLPixelBuffer2d(const RendererWkPtr& rendererPtr,
   resize(width, height);
 }
 
+GLPixelBuffer2d::GLPixelBuffer2d(const RendererWkPtr& rendererPtr,
+                                 size_t width,
+                                 size_t height,
+                                 // GLenum internalFormat,
+                                 GLenum pixelFormat,
+                                 GLenum pixelType,
+                                 GLvoid* data,
+                                 BufferAccessType accessType,
+                                 BufferAccessFreq accessFreq)
+    : GLPixelBuffer2d(rendererPtr, width, height, pixelFormat, pixelType, accessType, accessFreq) {
+  bufferData(data, width * height * pixelTypeSize(pixelType));
+}
+
 GLPixelBuffer2d::~GLPixelBuffer2d() {
   cleanupResource();
 }

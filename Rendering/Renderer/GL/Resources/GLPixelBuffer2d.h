@@ -13,6 +13,8 @@ class GLPixelBuffer2d : public GLBaseBuffer {
 
   size_t getWidth() const { return _width; }
   size_t getHeight() const { return _height; }
+  GLenum getPixelFormat() const { return _pixelFormat; }
+  GLenum getPixelType() const { return _pixelType; }
 
   void resize(size_t width, size_t height);
 
@@ -25,6 +27,15 @@ class GLPixelBuffer2d : public GLBaseBuffer {
                            // GLenum internalFormat,
                            GLenum pixelFormat,
                            GLenum pixelType,
+                           BufferAccessType accessType = BufferAccessType::READ,
+                           BufferAccessFreq accessFreq = BufferAccessFreq::DYNAMIC);
+
+  explicit GLPixelBuffer2d(const RendererWkPtr& rendererPtr,
+                           size_t width,
+                           size_t height,
+                           GLenum pixelFormat,
+                           GLenum pixelType,
+                           GLvoid* data,
                            BufferAccessType accessType = BufferAccessType::READ,
                            BufferAccessFreq accessFreq = BufferAccessFreq::DYNAMIC);
 

@@ -328,6 +328,31 @@ GLPixelBuffer2dShPtr GLResourceManager::createPixelBuffer2d(size_t width,
   return rtn;
 }
 
+GLPixelBuffer2dShPtr GLResourceManager::createPixelBuffer2d(size_t width,
+                                                            size_t height,
+                                                            // GLenum internalFormat,
+                                                            GLenum pixelFormat,
+                                                            GLenum pixelType,
+                                                            GLvoid* data,
+                                                            Resources::BufferAccessType accessType,
+                                                            Resources::BufferAccessFreq accessFreq) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLPixelBuffer2dShPtr rtn(new GLPixelBuffer2d(_prntRenderer,
+                                               width,
+                                               height,
+                                               // internalFormat,
+                                               pixelFormat,
+                                               pixelType,
+                                               data,
+                                               accessType,
+                                               accessFreq));
+  _addGLResource(rtn);
+
+  return rtn;
+}
+
 GLUniformBufferShPtr GLResourceManager::createUniformBuffer(Resources::BufferAccessType accessType,
                                                             Resources::BufferAccessFreq accessFreq) {
   CHECK(!_prntRenderer.expired());
