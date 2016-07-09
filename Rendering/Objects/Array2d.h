@@ -298,6 +298,14 @@ class Array2d {
     return rtn;
   }
 
+  void resetToDefault(T* newDefaultVal = nullptr) {
+    if (newDefaultVal) {
+      defaultVal = *newDefaultVal;
+    }
+
+    std::fill(data.begin(), data.end(), defaultVal);
+  }
+
  private:
   T defaultVal;
   size_t width;
