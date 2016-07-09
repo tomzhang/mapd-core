@@ -16,7 +16,7 @@ class GLPixelBuffer2d : public GLBaseBuffer {
   GLenum getPixelFormat() const { return _pixelFormat; }
   GLenum getPixelType() const { return _pixelType; }
 
-  void resize(size_t width, size_t height);
+  void resize(size_t width, size_t height, GLvoid* data = nullptr);
 
   void readPixels(size_t width, size_t height, GLenum dataType, GLvoid* data);
 
