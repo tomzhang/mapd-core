@@ -28,13 +28,13 @@ struct AttrInfo {
 
 struct UniformAttrInfo : AttrInfo {
   UniformAttrInfo(GLint t, GLint s, GLuint l) : AttrInfo(t, s, l) {}
-  virtual void setAttr(const void* data) = 0;
+  virtual void setAttr(const void* data, GLint dataSize) = 0;
 };
 
 struct UniformSamplerAttr : UniformAttrInfo {
   UniformSamplerAttr(GLint t, GLint s, GLuint l, GLenum target, GLint startTxImgUnit = -1);
 
-  void setAttr(const void* data);
+  void setAttr(const void* data, GLint dataSize) final;
   void setTexImgUnit(GLint texImgUnit);
 
   GLenum target;
@@ -50,9 +50,9 @@ struct UniformImageLoadStoreAttr : UniformAttrInfo {
                             bool isMultisampled = false,
                             GLint startImgUnit = -1);
 
-  void setAttr(const void* data) final;
-  void setAttr(const void* data, bool layered, int layerIdx);
-  void setImgUnit(GLint imgUnit);
+  void setAttr(const void* data, GLint attrSize) final;
+  void setAttr(const void* data, GLint attrSize, bool layered, int layerIdx);
+  void setImgUnit(GLint imgUnit, GLint attrSize);
 
   GLenum format;
   GLenum access;
@@ -81,6 +81,24 @@ struct UniformBlockAttrInfo {
 
   // void addActiveAttr(const std::string& attrName, GLint type, GLint size, GLuint location, GLuint idx);
   void addActiveAttr(const std::string& attrName, GLint type, GLint size, GLuint idx);
+};
+
+struct UniformSubroutineAttrInfo : UniformAttrInfo {
+  UniformSubroutineAttrInfo(const std::string& subroutineName,
+                            GLint sz,
+                            GLuint loc,
+                            GLint index,
+                            GLenum shaderStage,
+                            std::unordered_map<std::string, GLuint> compatibleSubroutines);
+
+  void setAttr(const void* data, GLint attrSize) final;
+  GLuint getCompatibleSubroutineIndex(const std::string& compatibleSubroutine);
+
+  std::string subroutineName;
+  GLuint index;
+  GLenum shaderStage;
+
+  std::unordered_map<std::string, GLuint> compatibleSubroutines;
 };
 
 }  // namespace detail
@@ -114,20 +132,21 @@ class GLShader : public GLResource {
                           "\" is not the appropriate size. It is size 1 but should be " + std::to_string(attrSz) + ".");
 
     // TODO(croot): check type mismatch?
-    info->setAttr((void*)&attrValue);
+    info->setAttr((void*)&attrValue, 1);
   }
 
   template <typename T>
-  void setUniformAttribute(const std::string& attrName, const std::vector<T>& attrValue) {
+  void setUniformAttribute(const std::string& attrName, const std::vector<T>& attrValue, bool checkFullSize = true) {
     detail::UniformAttrInfo* info = _validateAttr(attrName);
 
     GLuint attrSz = info->size;
-    RUNTIME_EX_ASSERT(attrSz == attrValue.size(),
+
+    RUNTIME_EX_ASSERT((checkFullSize && attrSz == attrValue.size()) || (!checkFullSize && attrValue.size() < attrSz),
                       "Uniform attribute: " + attrName + " is not the appropriate size. It is size " +
                           std::to_string(attrValue.size()) + " but should be " + std::to_string(attrSz) + ".");
 
     // TODO(croot): check type mismatch?re2
-    info->setAttr((void*)(&attrValue[0]));
+    info->setAttr((void*)(&attrValue[0]), attrValue.size());
   }
 
   template <typename T, size_t N>
@@ -140,7 +159,7 @@ class GLShader : public GLResource {
                           std::to_string(N) + " but should be " + std::to_string(attrSz) + ".");
 
     // TODO(croot): check type mismatch?
-    info->setAttr((void*)(&attrValue[0]));
+    info->setAttr((void*)(&attrValue[0]), N);
   }
 
   void setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc);
@@ -154,6 +173,9 @@ class GLShader : public GLResource {
   // image unit. Should we do the same here?
   void setImageLoadStoreImageUnit(const std::string& attrName, int startImgUnit);
 
+  void setSubroutine(const std::string& subroutineAttrName, const std::string& compatibleSubroutineName);
+  void setSubroutines(const std::unordered_map<std::string, std::string>& subroutineVals);
+
   bool hasUniformBlockAttribute(const std::string& attrName);
   void bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx = -1);
 
@@ -166,6 +188,7 @@ class GLShader : public GLResource {
   typedef std::unordered_map<std::string, std::unique_ptr<detail::AttrInfo>> AttrMap;
   typedef std::unordered_map<std::string, std::unique_ptr<detail::UniformAttrInfo>> UniformAttrMap;
   typedef std::unordered_map<std::string, std::unique_ptr<detail::UniformBlockAttrInfo>> UniformBlockAttrMap;
+  typedef std::unordered_map<std::string, std::unique_ptr<detail::UniformSubroutineAttrInfo>> UniformSubroutineAttrMap;
 
   GLuint _vertShaderId;
   GLuint _geomShaderId;
@@ -173,6 +196,7 @@ class GLShader : public GLResource {
   GLuint _programId;
   UniformAttrMap _uniformAttrs;
   UniformBlockAttrMap _uniformBlockAttrs;
+  UniformSubroutineAttrMap _uniformSubroutineAttrs;
   AttrMap _vertexAttrs;
 
   void _initResource(const std::string& vertSrc, const std::string& fragSrc, const std::string& geomSrc = "");
@@ -184,6 +208,8 @@ class GLShader : public GLResource {
   detail::UniformBlockAttrInfo* _validateBlockAttr(const std::string& blockName,
                                                    const GLUniformBufferShPtr& ubo,
                                                    size_t idx);
+  detail::UniformSubroutineAttrInfo* _validateSubroutineAttr(const std::string& attrName);
+  std::unordered_map<GLenum, std::vector<GLuint>> _activeSubroutines;
 
   friend class ::Rendering::GL::GLResourceManager;
 };

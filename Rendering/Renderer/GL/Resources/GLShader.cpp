@@ -14,105 +14,129 @@ namespace detail {
 
 struct Uniform1uiAttr : UniformAttrInfo {
   Uniform1uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform1uiv(location, size, static_cast<const GLuint*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform1uiv(location, attrSize, static_cast<const GLuint*>(data)));
   }
 };
 
 struct Uniform2uiAttr : UniformAttrInfo {
   Uniform2uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform2uiv(location, size, static_cast<const GLuint*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform2uiv(location, attrSize, static_cast<const GLuint*>(data)));
   }
 };
 
 struct Uniform3uiAttr : UniformAttrInfo {
   Uniform3uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform3uiv(location, size, static_cast<const GLuint*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform3uiv(location, attrSize, static_cast<const GLuint*>(data)));
   }
 };
 
 struct Uniform4uiAttr : UniformAttrInfo {
   Uniform4uiAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform4uiv(location, size, static_cast<const GLuint*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform4uiv(location, attrSize, static_cast<const GLuint*>(data)));
   }
 };
 
 struct Uniform1iAttr : UniformAttrInfo {
   Uniform1iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform1iv(location, size, static_cast<const GLint*>(data))); }
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform1iv(location, attrSize, static_cast<const GLint*>(data)));
+  }
 };
 
 struct Uniform2iAttr : UniformAttrInfo {
   Uniform2iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform2iv(location, size, static_cast<const GLint*>(data))); }
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform2iv(location, attrSize, static_cast<const GLint*>(data)));
+  }
 };
 
 struct Uniform3iAttr : UniformAttrInfo {
   Uniform3iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform3iv(location, size, static_cast<const GLint*>(data))); }
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform3iv(location, attrSize, static_cast<const GLint*>(data)));
+  }
 };
 
 struct Uniform4iAttr : UniformAttrInfo {
   Uniform4iAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) { MAPD_CHECK_GL_ERROR(glUniform4iv(location, size, static_cast<const GLint*>(data))); }
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform4iv(location, attrSize, static_cast<const GLint*>(data)));
+  }
 };
 
 struct Uniform1fAttr : UniformAttrInfo {
   Uniform1fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform1fv(location, size, static_cast<const GLfloat*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform1fv(location, attrSize, static_cast<const GLfloat*>(data)));
   }
 };
 
 struct Uniform2fAttr : UniformAttrInfo {
   Uniform2fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform2fv(location, size, static_cast<const GLfloat*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform2fv(location, attrSize, static_cast<const GLfloat*>(data)));
   }
 };
 
 struct Uniform3fAttr : UniformAttrInfo {
   Uniform3fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform3fv(location, size, static_cast<const GLfloat*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform3fv(location, attrSize, static_cast<const GLfloat*>(data)));
   }
 };
 
 struct Uniform4fAttr : UniformAttrInfo {
   Uniform4fAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform4fv(location, size, static_cast<const GLfloat*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform4fv(location, attrSize, static_cast<const GLfloat*>(data)));
   }
 };
 
 struct Uniform1dAttr : UniformAttrInfo {
   Uniform1dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform1dv(location, size, static_cast<const GLdouble*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform1dv(location, attrSize, static_cast<const GLdouble*>(data)));
   }
 };
 
 struct Uniform2dAttr : UniformAttrInfo {
   Uniform2dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform2dv(location, size, static_cast<const GLdouble*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform2dv(location, attrSize, static_cast<const GLdouble*>(data)));
   }
 };
 
 struct Uniform3dAttr : UniformAttrInfo {
   Uniform3dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform3dv(location, size, static_cast<const GLdouble*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform3dv(location, attrSize, static_cast<const GLdouble*>(data)));
   }
 };
 
 struct Uniform4dAttr : UniformAttrInfo {
   Uniform4dAttr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
-  void setAttr(const void* data) {
-    MAPD_CHECK_GL_ERROR(glUniform4dv(location, size, static_cast<const GLdouble*>(data)));
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size);
+    MAPD_CHECK_GL_ERROR(glUniform4dv(location, attrSize, static_cast<const GLdouble*>(data)));
   }
 };
 
@@ -120,13 +144,15 @@ UniformSamplerAttr::UniformSamplerAttr(GLint t, GLint s, GLuint l, GLenum target
     : UniformAttrInfo(t, s, l), target(target), startTexImgUnit(startTxImgUnit) {
 }
 
-void UniformSamplerAttr::setAttr(const void* data) {
+void UniformSamplerAttr::setAttr(const void* data, GLint attrSize) {
+  CHECK(attrSize <= size);
+
   // TODO(croot): throw an warning for 2 samplers bound to the same texture unit?
   RUNTIME_EX_ASSERT(startTexImgUnit >= GL_TEXTURE0,
                     "Uniform sampler2d has not been properly initialized with a texture image unit.");
 
   const GLuint* textureIds = static_cast<const GLuint*>(data);
-  for (int i = 0; i < size; ++i) {
+  for (int i = 0; i < attrSize; ++i) {
     // TODO(croot): should I always set the binding point?
     // i.e. glUniform1i(location, startTexImgUnit + i);
     // or will doing that once always keep it set for the shader?
@@ -168,17 +194,19 @@ UniformImageLoadStoreAttr::UniformImageLoadStoreAttr(GLint t,
       startImgUnit(startImgUnit) {
 }
 
-void UniformImageLoadStoreAttr::setAttr(const void* data) {
-  setAttr(data, false, 0);
+void UniformImageLoadStoreAttr::setAttr(const void* data, GLint attrSize) {
+  setAttr(data, attrSize, false, 0);
 }
 
-void UniformImageLoadStoreAttr::setAttr(const void* data, bool layered, int layerIdx) {
+void UniformImageLoadStoreAttr::setAttr(const void* data, GLint attrSize, bool layered, int layerIdx) {
+  CHECK(attrSize <= size);
+
   // TODO(croot): throw an warning for 2 samplers bound to the same texture unit?
   RUNTIME_EX_ASSERT(startImgUnit >= 0,
                     "Uniform image load store has not been properly initialized with an image unit.");
 
   const GLuint* textureIds = static_cast<const GLuint*>(data);
-  for (int i = 0; i < size; ++i) {
+  for (int i = 0; i < attrSize; ++i) {
     // TODO(croot): should I always set the binding point?
     // i.e. glUniform1i(location, startImgUnit + i);
     // or will doing that once always keep it set for the shader?
@@ -188,11 +216,13 @@ void UniformImageLoadStoreAttr::setAttr(const void* data, bool layered, int laye
   }
 }
 
-void UniformImageLoadStoreAttr::setImgUnit(GLint imgUnit) {
+void UniformImageLoadStoreAttr::setImgUnit(GLint imgUnit, GLint attrSize) {
   GLint maxImgUnits;
   // TODO(croot): check the max number of image units in the shader stage?
   // i.e. glGetIntegerv(GL_MAX_VERTEX_IMAGE_UNIFORMS, ...)
   // See: https://www.opengl.org/wiki/Image_Load_Store#Images_in_the_context
+
+  CHECK(attrSize < size);
 
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_IMAGE_UNITS, &maxImgUnits));
 
@@ -201,7 +231,7 @@ void UniformImageLoadStoreAttr::setImgUnit(GLint imgUnit) {
                         std::to_string(imgUnit) + " + number of image load stores in attr: " + std::to_string(size) +
                         " is not in the image unit range: [0, " + std::to_string(maxImgUnits) + "]");
 
-  for (int i = 0; i < size; ++i) {
+  for (int i = 0; i < attrSize; ++i) {
     // TODO(croot): use glBindTextures​(GLuint first​, GLsizei count​, const GLuint *textures​) instead as
     // described here: https://www.opengl.org/wiki/Sampler_(GLSL)#Multibind_and_textures
     MAPD_CHECK_GL_ERROR(glUniform1i(location, imgUnit + i));
@@ -429,6 +459,54 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
   }
 }
 
+static GLenum getSubroutineType(GLenum stage) {
+  switch (stage) {
+    case GL_VERTEX_SHADER:
+      return GL_VERTEX_SUBROUTINE;
+    case GL_FRAGMENT_SHADER:
+      return GL_FRAGMENT_SUBROUTINE;
+    case GL_GEOMETRY_SHADER:
+      return GL_GEOMETRY_SUBROUTINE;
+    default:
+      THROW_RUNTIME_EX("Subroutines are not currently supported in shader stage " + std::to_string(stage));
+  }
+}
+
+UniformSubroutineAttrInfo::UniformSubroutineAttrInfo(const std::string& subroutineName,
+                                                     GLint sz,
+                                                     GLuint loc,
+                                                     GLint index,
+                                                     GLenum shaderStage,
+                                                     std::unordered_map<std::string, GLuint> compatibleSubroutines)
+    : UniformAttrInfo(getSubroutineType(shaderStage), sz, loc),
+      subroutineName(subroutineName),
+      index(index),
+      shaderStage(shaderStage),
+      compatibleSubroutines(compatibleSubroutines) {
+}
+
+void UniformSubroutineAttrInfo::setAttr(const void* data, GLint attrSize) {
+  THROW_RUNTIME_EX("UniformSubroutineAttrInfo::setAttr() is not implemented yet.");
+}
+
+GLuint UniformSubroutineAttrInfo::getCompatibleSubroutineIndex(const std::string& compatibleSubroutine) {
+  auto itr = compatibleSubroutines.find(compatibleSubroutine);
+  RUNTIME_EX_ASSERT(itr != compatibleSubroutines.end(),
+                    "The GLSL function/subroutine \"" + compatibleSubroutine +
+                        "\" is not compatible with the uniform subroutine attr \"" + subroutineName + "\".");
+
+  // TODO(croot): As indicated here:
+  // https://www.opengl.org/wiki/Shader_Subroutine#Runtime_selection
+  // The subroutine selection is not actually part of the program but a
+  // context state attribute -- given that, should we move this to
+  // GLBindState somewhere? That's not as logical given the
+  // "shader" object here, but it would ensure things are in
+  // sync in that way, particularly if there's ever a case where
+  // the state is saved/restored.
+  // MAPD_CHECK_GL_ERROR(glUniformSubroutinesuiv(shaderStage, size, &(itr->second)));
+  return itr->second;
+}
+
 }  // namespace detail
 
 using detail::AttrInfo;
@@ -452,6 +530,7 @@ using detail::Uniform4dAttr;
 using detail::UniformSamplerAttr;
 using detail::UniformImageLoadStoreAttr;
 using detail::UniformBlockAttrInfo;
+using detail::UniformSubroutineAttrInfo;
 
 static GLint compileShader(const GLuint& shaderId, const std::string& shaderSrc, std::string& errStr) {
   GLint compiled;
@@ -882,6 +961,62 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
         std::make_pair(std::string(attrName), std::unique_ptr<AttrInfo>(new AttrInfo(attrType, attrSz, attrLoc))));
   }
 
+  std::vector<GLenum> supportedStages = {GL_VERTEX_SHADER, GL_FRAGMENT_SHADER};
+  if (geomSrc.size() > 0) {
+    supportedStages.push_back(GL_GEOMETRY_SHADER);
+  }
+
+  GLint numSubroutines, numCompatibleSubroutines;
+  std::unordered_map<GLenum, std::vector<GLuint>>::iterator itr;
+  for (auto stage : supportedStages) {
+    MAPD_CHECK_GL_ERROR(glGetProgramStageiv(_programId, stage, GL_ACTIVE_SUBROUTINE_UNIFORMS, &numSubroutines));
+
+    if (numSubroutines > 0) {
+      itr = _activeSubroutines.emplace(std::make_pair(GLenum(stage), std::vector<GLuint>(numSubroutines))).first;
+    }
+
+    for (int i = 0; i < numSubroutines; ++i) {
+      MAPD_CHECK_GL_ERROR(glGetActiveSubroutineUniformiv(
+          _programId, stage, i, GL_NUM_COMPATIBLE_SUBROUTINES, &numCompatibleSubroutines));
+      MAPD_CHECK_GL_ERROR(glGetActiveSubroutineUniformiv(_programId, stage, i, GL_UNIFORM_SIZE, &attrSz));
+
+      MAPD_CHECK_GL_ERROR(glGetActiveSubroutineUniformName(_programId, stage, i, 512, NULL, attrName));
+      std::string attrNameStr(attrName);
+
+      attrLoc = MAPD_CHECK_GL_ERROR(glGetSubroutineUniformLocation(_programId, stage, attrName));
+
+      std::vector<GLint> compatibleSubroutinesIdxs(numCompatibleSubroutines);
+      std::unordered_map<std::string, GLuint> compatibleSubroutines;
+
+      RUNTIME_EX_ASSERT(
+          numCompatibleSubroutines > 0,
+          "Invalid subroutine attribute \"" + attrNameStr + "\". It does not have any compatible subroutines.");
+
+      MAPD_CHECK_GL_ERROR(glGetActiveSubroutineUniformiv(
+          _programId, stage, i, GL_COMPATIBLE_SUBROUTINES, &compatibleSubroutinesIdxs[0]));
+
+      for (int j = 0; j < numCompatibleSubroutines; ++j) {
+        MAPD_CHECK_GL_ERROR(
+            glGetActiveSubroutineName(_programId, stage, compatibleSubroutinesIdxs[j], 512, NULL, attrName));
+        std::string subroutineName(attrName);
+        compatibleSubroutines.emplace(subroutineName, compatibleSubroutinesIdxs[j]);
+        if (j == 0) {
+          itr->second[attrLoc] = compatibleSubroutinesIdxs[j];
+        }
+      }
+
+      _uniformSubroutineAttrs.emplace(attrNameStr,
+                                      std::unique_ptr<UniformSubroutineAttrInfo>(new UniformSubroutineAttrInfo(
+                                          attrName, attrSz, attrLoc, i, stage, compatibleSubroutines)));
+    }
+
+    // MAPD_CHECK_GL_ERROR(glGetProgramStageiv(_programId, stage, GL_ACTIVE_SUBROUTINES, &numSubroutines));
+
+    // for (int i = 0; i < numSubroutines; ++i) {
+    //   index = MAPD_CHECK_GL_ERROR(glGetSubroutineIndex(_programId, stage, ));
+    // }
+  }
+
   setUsable();
 }
 
@@ -969,6 +1104,19 @@ UniformBlockAttrInfo* GLShader::_validateBlockAttr(const std::string& blockName,
   return itr->second.get();
 }
 
+UniformSubroutineAttrInfo* GLShader::_validateSubroutineAttr(const std::string& attrName) {
+  validateUsability(__FILE__, __LINE__);
+
+  auto itr = _uniformSubroutineAttrs.find(attrName);
+
+  // TODO(croot): check if bound
+  RUNTIME_EX_ASSERT(
+      itr != _uniformSubroutineAttrs.end(),
+      "Uniform subroutine \"" + attrName + "\" is not defined in the shader, or does not have compatible subroutines.");
+
+  return itr->second.get();
+}
+
 std::string GLShader::getVertexSource() const {
   validateUsability(__FILE__, __LINE__);
   return getShaderSource(_vertShaderId);
@@ -1016,11 +1164,17 @@ void GLShader::setSamplerAttribute(const std::string& attrName, const GLResource
     case GLResourceType::TEXTURE_2D:
     case GLResourceType::TEXTURE_2D_ARRAY: {
       UniformSamplerAttr* samplerAttr = _validateSamplerAttr(attrName);
+
+      RUNTIME_EX_ASSERT(samplerAttr->size == 1,
+                        "The sampler attribute \"" + attrName + "\" is an array of size " +
+                            std::to_string(samplerAttr->size) +
+                            " and must be set using a vector, not a single texture resource");
+
       RUNTIME_EX_ASSERT(samplerAttr->target == rsrc->getTarget(),
                         "Attr mismatch. Sampler expects a " + std::to_string(samplerAttr->target) +
                             " but the texture is a " + std::to_string(rsrc->getTarget()));
       GLuint id = rsrc->getId();
-      samplerAttr->setAttr((void*)(&id));
+      samplerAttr->setAttr((void*)(&id), 1);
     } break;
     default:
       THROW_RUNTIME_EX("Attr mismatch. Invalid resource type: " + to_string(rsrc->getResourceType()));
@@ -1041,13 +1195,19 @@ void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const GLR
     case GLResourceType::TEXTURE_2D_ARRAY: {
       auto tex2dArrayRsrc = std::dynamic_pointer_cast<GLTexture2dArray>(rsrc);
       CHECK(tex2dArrayRsrc);
+
+      RUNTIME_EX_ASSERT(imgAttr->size == 1,
+                        "The image load store attribute \"" + attrName + "\" is an array of size " +
+                            std::to_string(imgAttr->size) +
+                            " and must be set using a vector, not a single texture resource");
+
       RUNTIME_EX_ASSERT(imgAttr->format == tex2dArrayRsrc->getInternalFormat(),
                         "Attr mismatch. Image load store attr \"" + attrName + "\" expects a " +
                             std::to_string(imgAttr->format) + " formatted image but the image rsrc has a " +
                             std::to_string(tex2dArrayRsrc->getInternalFormat()) + " format.");
 
       GLuint id = rsrc->getId();
-      imgAttr->setAttr((void*)(&id), true, layerIdx);
+      imgAttr->setAttr((void*)(&id), 1, true, layerIdx);
     } break;
     default:
       THROW_RUNTIME_EX("Attr mismatch. Invalid resource type: " + to_string(rsrc->getResourceType()));
@@ -1075,12 +1235,93 @@ void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const std
     ids.push_back(texPtr->getId());
   }
 
-  imgAttr->setAttr((void*)(&ids[0]), false, 0);
+  imgAttr->setAttr((void*)(&ids[0]), rsrcs.size(), false, 0);
 }
 
 void GLShader::setImageLoadStoreImageUnit(const std::string& attrName, int startImgUnit) {
   UniformImageLoadStoreAttr* imgAttr = _validateImageLoadStoreAttr(attrName);
-  imgAttr->setImgUnit(startImgUnit);
+  imgAttr->setImgUnit(startImgUnit, imgAttr->size);
+}
+
+void GLShader::setSubroutine(const std::string& subroutineAttrName, const std::string& compatibleSubroutineName) {
+  auto renderer = getGLRenderer();
+  auto boundShader = renderer->getBoundShader();
+  RUNTIME_EX_ASSERT(boundShader != nullptr && boundShader.get() == this,
+                    "Cannot set subroutine uniforms for shader. The shader must be bound to the renderer first.");
+
+  UniformSubroutineAttrInfo* subAttr = _validateSubroutineAttr(subroutineAttrName);
+  RUNTIME_EX_ASSERT(subAttr->size == 1,
+                    "Subroutine array sizes do not match. Cannot set an array of  subroutine attributes. The \"" +
+                        subroutineAttrName + "\" shader attribute is size " + std::to_string(subAttr->size) +
+                        " and trying to set a subroutine for only 1.");
+
+  auto shaderStage = subAttr->shaderStage;
+  auto attrLoc = subAttr->location;
+  auto subIdx = subAttr->getCompatibleSubroutineIndex(compatibleSubroutineName);
+
+  auto itr = _activeSubroutines.find(shaderStage);
+  CHECK(itr != _activeSubroutines.end() && itr->second.size() > attrLoc);
+  itr->second[attrLoc] = subIdx;
+
+  // TODO(croot): As indicated here:
+  // https://www.opengl.org/wiki/Shader_Subroutine#Runtime_selection
+  // The subroutine selection is not actually part of the program but a
+  // context state attribute -- given that, should we move this to
+  // GLBindState somewhere? That's not as logical given the
+  // "shader" object here, but it would ensure things are in
+  // sync in that way, particularly if there's ever a case where
+  // the state is saved/restored.
+
+  MAPD_CHECK_GL_ERROR(glUniformSubroutinesuiv(shaderStage, itr->second.size(), &(itr->second[0])));
+}
+
+void GLShader::setSubroutines(const std::unordered_map<std::string, std::string>& subroutineVals) {
+  auto renderer = getGLRenderer();
+  auto boundShader = renderer->getBoundShader();
+  RUNTIME_EX_ASSERT(boundShader != nullptr && boundShader.get() == this,
+                    "Cannot set subroutine uniforms for shader. The shader must be bound to the renderer first.");
+
+  UniformSubroutineAttrInfo* subAttr;
+
+  size_t cnt = 0;
+  for (auto itr : _activeSubroutines) {
+    cnt += itr.second.size();
+  }
+
+  RUNTIME_EX_ASSERT(subroutineVals.size() == cnt,
+                    "setSubroutines() requires all subroutine uniform attributes to be set for the entire shader "
+                    "program. The user only supplied " +
+                        std::to_string(subroutineVals.size()) + " subroutines to set but there are " +
+                        std::to_string(cnt) + " uniform subroutines to set in the shader.");
+
+  for (auto itr : subroutineVals) {
+    subAttr = _validateSubroutineAttr(itr.first);
+    RUNTIME_EX_ASSERT(subAttr->size == 1,
+                      "Subroutine array sizes do not match. Cannot set an array of  subroutine attributes. The \"" +
+                          itr.first + "\" shader attribute is size " + std::to_string(subAttr->size) +
+                          " and trying to set a subroutine for only 1.");
+
+    auto shaderStage = subAttr->shaderStage;
+    auto attrLoc = subAttr->location;
+    auto subIdx = subAttr->getCompatibleSubroutineIndex(itr.second);
+
+    auto subitr = _activeSubroutines.find(shaderStage);
+    CHECK(subitr != _activeSubroutines.end() && subitr->second.size() > attrLoc);
+    subitr->second[attrLoc] = subIdx;
+  }
+
+  // TODO(croot): As indicated here:
+  // https://www.opengl.org/wiki/Shader_Subroutine#Runtime_selection
+  // The subroutine selection is not actually part of the program but a
+  // context state attribute -- given that, should we move this to
+  // GLBindState somewhere? That's not as logical given the
+  // "shader" object here, but it would ensure things are in
+  // sync in that way, particularly if there's ever a case where
+  // the state is saved/restored.
+
+  for (auto itr : _activeSubroutines) {
+    MAPD_CHECK_GL_ERROR(glUniformSubroutinesuiv(itr.first, itr.second.size(), &(itr.second[0])));
+  }
 }
 
 bool GLShader::hasUniformBlockAttribute(const std::string& attrName) {
