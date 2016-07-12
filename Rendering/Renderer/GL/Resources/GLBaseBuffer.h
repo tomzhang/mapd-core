@@ -34,6 +34,7 @@ class GLBaseBuffer : public GLResource {
   }
 
   virtual void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0);
+  virtual void getBufferData(void* data, size_t dataSzBytes, size_t byteOffset = 0);
 
  protected:
   explicit GLBaseBuffer(const RendererWkPtr& rendererPtr,

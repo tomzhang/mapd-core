@@ -99,6 +99,29 @@ void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarge
   setUsable();
 }
 
+void GLBaseBuffer::getBufferData(void* data, size_t dataSzBytes, size_t byteOffset) {
+  RUNTIME_EX_ASSERT(dataSzBytes <= _numBytes,
+                    "Asking to retrive " + std::to_string(dataSzBytes) +
+                        " of data from a buffer, but the buffer only has " + std::to_string(_numBytes) +
+                        " of data available.");
+
+  validateRenderer(__FILE__, __LINE__);
+
+  GLint currArrayBuf;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(_target), &currArrayBuf));
+
+  bool bind = (currArrayBuf != static_cast<GLint>(_bufferId));
+  if (bind) {
+    MAPD_CHECK_GL_ERROR(glBindBuffer(_target, _bufferId));
+  }
+
+  MAPD_CHECK_GL_ERROR(glGetBufferSubData(_target, byteOffset, dataSzBytes, data));
+
+  if (bind) {
+    MAPD_CHECK_GL_ERROR(glBindBuffer(_target, currArrayBuf));
+  }
+}
+
 GLenum GLBaseBuffer::_getBufferBinding(GLenum target) {
   typedef std::unordered_map<GLenum, GLenum> BufferBindingMap;
   static const BufferBindingMap bufferBindings = {{GL_ARRAY_BUFFER, GL_ARRAY_BUFFER_BINDING},

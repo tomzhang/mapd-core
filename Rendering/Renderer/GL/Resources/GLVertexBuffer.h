@@ -34,6 +34,8 @@ class GLVertexBuffer : public GLBaseBuffer {
 
   void bufferData(void* data, size_t numItems, size_t numBytesPerItem);
 
+  void debugPrintData(void* data, size_t idx);
+
  private:
   explicit GLVertexBuffer(const RendererWkPtr& rendererPtr,
                           BufferAccessType accessType = BufferAccessType::READ_AND_WRITE,
