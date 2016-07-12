@@ -30,8 +30,9 @@ PointMark::PointMark(const rapidjson::Value& obj,
       // hit testing is asked for, but the input sql data doesn't
       // have an id.
       id(this, "id", ctx, false),
-      fillColor(this, "fillColor", ctx) {
+      fillColor(this, "fillColor", ctx, true, true, true) {
   _initPropertiesFromJSONObj(obj, objPath);
+  _jsonPath = objPath;
   _updateShader();
 }
 
@@ -283,8 +284,9 @@ void PointMark::_updateShader() {
     }
   }
 
-  // std::string fragSrc = getShaderCodeFromFile(pointFragmentShaderFilename);
   std::string fragSrc(PointTemplate_Frag::source);
+
+  BaseMark::_updateShader(vertSrc, fragSrc);
 
   // static int CROOTcnt = 0;
   // CROOTcnt++;
@@ -430,15 +432,17 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   // TODO(croot): render state stack -- push/pop
   renderer->enable(GL_PROGRAM_POINT_SIZE);
 
-  // Because we're doing a "discard" in the point shader,
-  // we can benefit from turning on GL_SAMPLE_SHADING so
-  // that all multi-samples are evaluated in the shader.
-  // TODO(croot): evaluating the frag shader for every
-  // sample can be constly, so look into only doing so
-  // if points can be small, i.e. < 3 pixels wide. That's
-  // where we get the most benefit from GL_SAMPLE_SHADING.
-  renderer->enable(GL_SAMPLE_SHADING);
-  renderer->setMinSampleShading(1.0);
+  if (!hasAccumulator()) {
+    // Because we're doing a "discard" in the point shader,
+    // we can benefit from turning on GL_SAMPLE_SHADING so
+    // that all multi-samples are evaluated in the shader.
+    // TODO(croot): evaluating the frag shader for every
+    // sample can be constly, so look into only doing so
+    // if points can be small, i.e. < 3 pixels wide. That's
+    // where we get the most benefit from GL_SAMPLE_SHADING.
+    renderer->enable(GL_SAMPLE_SHADING);
+    renderer->setMinSampleShading(1.0);
+  }
 
   // now draw points
   renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());

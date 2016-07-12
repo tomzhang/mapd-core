@@ -12,7 +12,8 @@ QueryIdMapPixelBuffer::QueryIdMapPixelBuffer(::Rendering::GL::GLRenderer* render
 void QueryIdMapPixelBuffer::_init(::Rendering::GL::GLRenderer* renderer, size_t width, size_t height) {
   ::Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
-  _pbo = rsrcMgr->createPixelBuffer2d(width, height, GL_RED_INTEGER, GL_UNSIGNED_INT);
+  _pbo = rsrcMgr->createPixelBuffer2d(
+      width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE);
 }
 
 size_t QueryIdMapPixelBuffer::getWidth() const {

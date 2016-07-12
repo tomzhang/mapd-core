@@ -26,10 +26,12 @@ class BaseRenderProperty {
                      const std::string& name,
                      const QueryRendererContextShPtr& ctx,
                      bool useScale = true,
-                     bool flexibleType = true)
+                     bool flexibleType = true,
+                     bool allowsAccumulatorScale = false)
       : _prntMark(prntMark),
         _name(name),
         _useScale(useScale),
+        _allowsAccumulatorScale(allowsAccumulatorScale),
         _vboAttrName(""),
         _perGpuData(),
         _vboInitType(VboInitType::UNDEFINED),
@@ -98,6 +100,7 @@ class BaseRenderProperty {
   BaseMark* _prntMark;
   std::string _name;
   bool _useScale;
+  bool _allowsAccumulatorScale;
 
   std::string _vboAttrName;
 
@@ -152,7 +155,11 @@ class BaseRenderProperty {
   virtual void _initTypeFromBuffer() = 0;
   virtual void _verifyScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
+  virtual void _updateScalePtr(const ScaleShPtr& scalePtr);
 
+  void _setAccumulatorFromScale(const ScaleShPtr& scalePtr);
+  void _clearAccumulatorFromScale(const ScaleShPtr& scalePtr);
+  void _unsubscribeFromRefEvent(const ScaleShPtr& scalePtr);
   void _setShaderDirty();
   void _setPropsDirty();
 
@@ -162,6 +169,8 @@ class BaseRenderProperty {
   std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
   std::set<GpuId> _initUnusedGpus(const std::set<GpuId>& usedGpus);
   void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
+
+  friend class BaseScaleRef;
 };
 
 template <typename T, int numComponents = 1>
@@ -171,17 +180,14 @@ class RenderProperty : public BaseRenderProperty {
                  const std::string& name,
                  const QueryRendererContextShPtr& ctx,
                  bool useScale = true,
-                 bool flexibleType = true)
-      : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset() {
+                 bool flexibleType = true,
+                 bool allowsAccumulatorScale = false)
+      : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType, allowsAccumulatorScale), _mult(), _offset() {
     _inType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
     _outType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
   }
 
-  virtual ~RenderProperty() {
-    if (_scaleConfigPtr) {
-      _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
-    }
-  }
+  virtual ~RenderProperty() {}
 
   void initializeValue(const T& val) {
     // TODO: this is a public function.. should I protect from already existing data?
@@ -249,14 +255,12 @@ class RenderProperty : public BaseRenderProperty {
   }
 
   void _updateScalePtr(const ScaleShPtr& scalePtr) {
+    RUNTIME_EX_ASSERT(_allowsAccumulatorScale || !scalePtr->hasAccumulator(),
+                      std::string(*this) + " The scale \"" + scalePtr->getName() +
+                          "\" is an accumulator scale but this mark property doesn't accept accumulator scales.");
+
     if (!_scaleConfigPtr) {
       _setShaderDirty();
-    } else {
-      ScaleShPtr prevPtr = _scaleConfigPtr->getScalePtr();
-      if (!prevPtr || scalePtr.get() != prevPtr.get()) {
-        _setShaderDirty();
-        _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
-      }
     }
 
     if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
@@ -272,6 +276,8 @@ class RenderProperty : public BaseRenderProperty {
                        scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
                        _inType->glslType() + "\" are not supported to work together");
     }
+
+    BaseRenderProperty::_updateScalePtr(scalePtr);
 
     // setup callbacks for scale updates
     _scaleRefSubscriptionCB = std::bind(
@@ -335,18 +341,25 @@ class RenderProperty : public BaseRenderProperty {
 
   void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) {
     switch (refEventType) {
-      case RefEventType::UPDATE:
+      case RefEventType::UPDATE: {
+        bool accumulatorChanged = scalePtr->hasAccumulatorTypeChanged() || scalePtr->hasNumAccumulatorTexturesChanged();
+        RUNTIME_EX_ASSERT(!accumulatorChanged || _allowsAccumulatorScale || !scalePtr->hasAccumulator(),
+                          std::string(*this) + ": scale \"" + scalePtr->getName() +
+                              "\" has been updated into an accumulator scale, but this property doesn't allow for "
+                              "accumulator scales.");
+
         _scaleConfigPtr->updateScaleRef(scalePtr);
 
-        if (scalePtr->hasPropertiesChanged() || scalePtr->hasDomainChangedInSize() ||
+        if (accumulatorChanged || scalePtr->hasPropertiesChanged() || scalePtr->hasDomainChangedInSize() ||
             scalePtr->hasRangeChangedInSize()) {
           _setShaderDirty();
         }
-        break;
+      } break;
       case RefEventType::REPLACE:
         _updateScalePtr(scalePtr);
         break;
       case RefEventType::REMOVE:
+        _clearAccumulatorFromScale(scalePtr);
         break;
       default:
         THROW_RUNTIME_EX(std::string(*this) + ": Ref event type: " + std::to_string(static_cast<int>(refEventType)) +
@@ -365,7 +378,8 @@ RenderProperty<::Rendering::Objects::ColorRGBA, 1>::RenderProperty(
     // TODO(croot): perhaps remove flexibleType? it ultimately is saying
     // whether or not we can use a scale, right, which we have defined
     // with useScale?
-    bool flexibleType);
+    bool flexibleType,
+    bool allowsAccumulatorScale);
 
 template <>
 void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::initializeValue(const ::Rendering::Objects::ColorRGBA& val);

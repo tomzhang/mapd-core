@@ -2,6 +2,7 @@
 #include "Rendering/QueryFramebuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
 #include "Rendering/QueryIdMapPboPool.h"
+#include "Rendering/QueryAccumTxPool.h"
 
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
@@ -57,6 +58,10 @@ void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) 
   height = std::max(height, msFramebufferPtr->getHeight());
   msFramebufferPtr->resize(width, height);
 
+  if (accumTxPoolPtr) {
+    accumTxPoolPtr->resize(width, height);
+  }
+
   ::Rendering::GL::GLRenderer* prevRenderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
   ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
   bool reset = false;
@@ -103,6 +108,16 @@ QueryIdMapPixelBufferShPtr RootPerGpuData::getInactiveIdMapPbo(size_t width, siz
 void RootPerGpuData::setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
   CHECK(pboPoolPtr);
   pboPoolPtr->setIdMapPboInactive(pbo);
+}
+
+QueryAccumTxPoolUqPtr& RootPerGpuData::getAccumTxPool() {
+  if (!accumTxPoolPtr) {
+    auto glRenderer = std::dynamic_pointer_cast<::Rendering::GL::GLRenderer>(rendererPtr);
+    CHECK(glRenderer);
+    accumTxPoolPtr.reset(new QueryAccumTxPool(glRenderer, compositorPtr));
+  }
+
+  return accumTxPoolPtr;
 }
 
 void BasePerGpuData::makeActiveOnCurrentThread() const {
@@ -156,6 +171,11 @@ QueryFramebufferShPtr& BasePerGpuData::getBlitFramebuffer() {
   return qrmGpuDataShPtr->getBlitFramebuffer();
 }
 
+bool BasePerGpuData::hasCompositor() const {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  return (qrmGpuDataShPtr != nullptr && qrmGpuDataShPtr->hasCompositor());
+}
+
 std::shared_ptr<QueryRenderCompositor>& BasePerGpuData::getCompositor() {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
@@ -180,6 +200,17 @@ void BasePerGpuData::setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
   if (qrmGpuDataShPtr) {
     qrmGpuDataShPtr->setIdMapPboInactive(pbo);
   }
+}
+
+bool BasePerGpuData::hasAccumTxPool() const {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  return (qrmGpuDataShPtr != nullptr && qrmGpuDataShPtr->hasAccumTxPool());
+}
+
+QueryAccumTxPoolUqPtr& BasePerGpuData::getAccumTxPool() {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  CHECK(qrmGpuDataShPtr);
+  return qrmGpuDataShPtr->getAccumTxPool();
 }
 
 }  // namespace QueryRenderer

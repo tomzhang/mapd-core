@@ -6,6 +6,15 @@ namespace QueryRenderer {
 
 using ::Rendering::Objects::ColorRGBA;
 
+BaseScaleRef::BaseScaleRef(const QueryRendererContextShPtr& ctx,
+                           const ScaleShPtr& scalePtr,
+                           BaseRenderProperty* rndrProp)
+    : _ctx(ctx), _scalePtr(scalePtr), _rndrPropPtr(rndrProp) {
+  // if we get to this point, that means the scale is going to be used by a mark.
+  // So we'll initialize any gpu resources the scale may use now.
+  _initScalePtr();
+}
+
 std::string BaseScaleRef::getName() const {
   _verifyScalePointer();
   return _scalePtr->getName();
@@ -58,6 +67,28 @@ std::string BaseScaleRef::_getRndrPropName() {
   return _rndrPropPtr->getName();
 }
 
+void BaseScaleRef::_initScalePtr() {
+  // doing this here because we only need to initialize
+  // the gpu resources for a scale when it is being used
+  // by a mark and it is guaranteed to be used by a mark
+  // when a scale ref is created/updated, so we can
+  // initialize the gpu resources here.
+  _scalePtr->_initGpuResources(_ctx.get(), true);
+
+  if (_scalePtr->hasAccumulator()) {
+    _rndrPropPtr->_setAccumulatorFromScale(_scalePtr);
+  } else {
+    _rndrPropPtr->_clearAccumulatorFromScale(_scalePtr);
+  }
+}
+
+void BaseScaleRef::_deleteScalePtr() {
+  _rndrPropPtr->_unsubscribeFromRefEvent(_scalePtr);
+  _rndrPropPtr->_clearAccumulatorFromScale(_scalePtr);
+  _rndrPropPtr->_setShaderDirty();
+  _scalePtr = nullptr;
+}
+
 std::string BaseScaleRef::_printInfo() const {
   std::string rtn = to_string(_ctx->getUserWidgetIds());
   if (_scalePtr) {
@@ -72,10 +103,10 @@ std::string BaseScaleRef::_printInfo() const {
 
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
                             ScaleDomainRangeData<ColorRGBA>* srcData) {
-  std::vector<ColorRGBA>& srcVec = srcData->getVectorData();
+  std::vector<ColorRGBA>& srcVec = srcData->getVectorDataRef();
 
   destData.reset(new ScaleDomainRangeData<ColorRGBA>(srcData->getName(), srcVec.size(), srcData->useString()));
-  std::vector<ColorRGBA>& destVec = destData->getVectorData();
+  std::vector<ColorRGBA>& destVec = destData->getVectorDataRef();
   for (size_t i = 0; i < srcVec.size(); ++i) {
     destVec[i] = srcVec[i];
   }

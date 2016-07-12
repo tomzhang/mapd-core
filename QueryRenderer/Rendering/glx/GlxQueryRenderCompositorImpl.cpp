@@ -1,11 +1,13 @@
 #include "../../PngData.h"
 #include "../../QueryRenderManager.h"
 #include "../../QueryRendererContext.h"
+#include "../../Scales/Scale.h"
 #include <Rendering/Renderer/GL/glx/GlxGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "GlxQueryRenderCompositorImpl.h"
 #include "shaders/compositor_vert.h"
 #include "shaders/compositor_frag.h"
+#include "shaders/accumulator_frag.h"
 #include <Rendering/RenderError.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
@@ -39,6 +41,9 @@ using ::Rendering::GL::Resources::GLTexture2dSampleProps;
 #undef glxewGetContext
 #define glxewGetContext _renderer->glxewGetContext
 #endif
+
+const int GlxQueryRenderCompositorImpl::maxAccumColors =
+    static_cast<int>(BaseScale::convertNumAccumTexturesToNumAccumVals(BaseScale::maxAccumTextures));
 
 GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                                            ::Rendering::RendererShPtr& rendererPtr,
@@ -82,6 +87,7 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
   std::string fragSrc(Compositor_frag::source);
   bool doMultiSample = (getNumSamples() > 1);
   boost::replace_first(fragSrc, "<doMultiSample>", std::to_string(doMultiSample));
+  boost::replace_first(fragSrc, "<maxAccumColors>", std::to_string(maxAccumColors));
 
   _shader = rsrcMgr->createShader(Compositor_vert::source, fragSrc);
   _renderer->bindShader(_shader);
@@ -126,6 +132,21 @@ void GlxQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
     CHECK(doHitTest());
     _idTextureArray->resize(width, height);
   }
+
+  // TODO(croot): do depth
+
+  if (_accumulationCpTextureArray) {
+    _accumulationCpTextureArray->resize(width, height);
+  }
+
+  if (_accumulationTextureArray) {
+    _accumulationTextureArray->resize(width, height);
+  }
+
+  if (_clearPboPtr) {
+    ::Rendering::Objects::Array2d<unsigned int> clearData(width, height, 0);
+    _clearPboPtr->resize(width, height, clearData.getDataPtr());
+  }
 }
 
 GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
@@ -167,19 +188,349 @@ GLRenderbufferShPtr GlxQueryRenderCompositorImpl::createFboRenderbuffer(::Render
   return rbo;
 }
 
+void GlxQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t height, size_t depth) {
+  GLResourceManagerShPtr rsrcMgr = nullptr;
+  CHECK(!_rendererPtr.expired());
+
+  GLRenderer* currRenderer;
+  bool resetRenderer = false;
+
+  if (!_accumulationCpTextureArray) {
+    CHECK(!_accumulationTextureArray && !_accumulatorShader && !_clearPboPtr);
+
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != _renderer))) {
+      _renderer->makeActiveOnCurrentThread();
+    }
+    rsrcMgr = _renderer->getResourceManager();
+
+    _accumulationCpTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI);
+    _accumulationTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI);
+    _accumulatorShader = rsrcMgr->createShader(Compositor_vert::source, Accumulator_frag::source);
+    ::Rendering::Objects::Array2d<unsigned int> clearData(width, height, 0);
+    _clearPboPtr = rsrcMgr->createPixelBuffer2d(width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, clearData.getDataPtr());
+  } else if (depth > _accumulationCpTextureArray->getDepth()) {
+    _renderer->makeActiveOnCurrentThread();
+    _accumulationCpTextureArray->resize(depth);
+  }
+
+  CHECK(_accumulationCpTextureArray && _accumulationTextureArray && _accumulatorShader && _clearPboPtr &&
+        _accumulationCpTextureArray->getWidth() == _accumulationTextureArray->getWidth() &&
+        _accumulationCpTextureArray->getHeight() == _accumulationTextureArray->getHeight() &&
+        _accumulationCpTextureArray->getDepth() == _accumulationTextureArray->getDepth());
+
+  if (depth > _accumulationTextureArray->getDepth()) {
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != _renderer))) {
+      _renderer->makeActiveOnCurrentThread();
+    }
+    _accumulationTextureArray->resize(depth);
+  }
+
+  if (resetRenderer) {
+    currRenderer->makeActiveOnCurrentThread();
+  }
+}
+
+void GlxQueryRenderCompositorImpl::_cleanupAccumResources() {
+  GLRenderer* currRenderer;
+  bool resetRenderer = false;
+
+  // TODO(croot): should we cleanup any expired weak ptrs?
+  int maxSize = -1;
+  for (int i = _registeredAccumTxts.size() - 1; i >= 0; --i) {
+    if (_registeredAccumTxts[i].size() > 0) {
+      maxSize = i;
+      break;
+    }
+  }
+
+  maxSize++;
+
+  if (maxSize == 0) {
+    CHECK(!_rendererPtr.expired());
+
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != _renderer))) {
+      _renderer->makeActiveOnCurrentThread();
+    }
+
+    _accumulationCpTextureArray = nullptr;
+    _accumulationTextureArray = nullptr;
+    _accumulatorShader = nullptr;
+    _clearPboPtr = nullptr;
+  } else if (maxSize < static_cast<int>(_registeredAccumTxts.size())) {
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != _renderer))) {
+      _renderer->makeActiveOnCurrentThread();
+    }
+
+    _accumulationCpTextureArray->resize(maxSize);
+    _accumulationTextureArray->resize(maxSize);
+
+    _registeredAccumTxts.resize(maxSize);
+  }
+
+  if (resetRenderer) {
+    currRenderer->makeActiveOnCurrentThread();
+  }
+}
+
+void GlxQueryRenderCompositorImpl::registerAccumulatorTexture(GLTexture2dShPtr& tex,
+                                                              size_t accumIdx,
+                                                              size_t numTexturesInArray) {
+  // TODO(croot): make thread safe?
+
+  CHECK(accumIdx < numTexturesInArray);
+
+  _initAccumResources(getWidth(), getHeight(), numTexturesInArray);
+
+  if (numTexturesInArray > _registeredAccumTxts.size()) {
+    _registeredAccumTxts.resize(numTexturesInArray);
+  }
+
+  // TODO(croot): should we be careful and check to see if the tex has already been added?
+  _registeredAccumTxts[accumIdx].emplace(tex.get(), tex);
+}
+
+void GlxQueryRenderCompositorImpl::unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                                                size_t accumIdx) {
+  // TODO(croot): if the tex is not found at the accumIdx, should we indicate where it
+  // can be found?
+
+  // TODO(croot): make thread safe?
+
+  CHECK(accumIdx < _registeredAccumTxts.size());
+
+  auto& map = _registeredAccumTxts[accumIdx];
+  auto itr = map.find(tex.get());
+  CHECK(itr != map.end());
+
+  map.erase(itr);
+
+  _cleanupAccumResources();
+}
+
+void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
+                                                     QueryFramebufferUqPtr& framebufferPtr,
+                                                     size_t width,
+                                                     size_t height,
+                                                     bool doHitTest,
+                                                     bool doDepthTest,
+                                                     int gpuCnt,
+                                                     ScaleShPtr& accumulatorScalePtr,
+                                                     int accumulatorCnt) {
+  GLXContext myGlxCtx = _renderer->getGLXContext();
+  X11DisplayShPtr myDisplayPtr = _renderer->getXDisplayPtr();
+
+  GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>(renderer);
+  CHECK(glxRenderer != nullptr);
+
+  GLXContext glxCtx = glxRenderer->getGLXContext();
+  X11DisplayShPtr displayPtr = glxRenderer->getXDisplayPtr();
+
+  CHECK(displayPtr == myDisplayPtr);
+
+  // TODO(croot): do we need to do a flush/finish before copying?
+  // or will the copy take care of that for us?
+
+  if (accumulatorScalePtr) {
+    CHECK(_accumulationCpTextureArray->getDepth() == _accumulationTextureArray->getDepth());
+
+    auto& textures = accumulatorScalePtr->getAccumulatorTextureArrayRef(renderer->getGpuId());
+    CHECK(textures.size() <= _accumulationCpTextureArray->getDepth());
+
+    for (int i = 0; i < static_cast<int>(textures.size()); ++i) {
+      auto txWidth = textures[i]->getWidth();
+      auto txHeight = textures[i]->getHeight();
+      CHECK(txWidth <= _accumulationCpTextureArray->getWidth() &&
+            txHeight <= _accumulationCpTextureArray->getHeight() && txWidth <= _accumulationTextureArray->getWidth() &&
+            txHeight <= _accumulationTextureArray->getHeight() && width <= txWidth && height <= txHeight);
+      glXCopyImageSubDataNV(displayPtr.get(),
+                            glxCtx,
+                            textures[i]->getId(),
+                            textures[i]->getTarget(),
+                            0,
+                            0,
+                            0,
+                            0,
+                            myGlxCtx,
+                            _accumulationCpTextureArray->getId(),
+                            _accumulationCpTextureArray->getTarget(),
+                            0,
+                            0,
+                            0,
+                            i,
+                            width,
+                            height,
+                            1);
+    }
+
+    // TODO(croot): this extra pass here could be a bottleneck.
+    // Decided to do it this way because otherwise we'd have to create
+    // a texture array for each accumulator texture per gpu, which
+    // could be a memory hog depending on how many gpus and how
+    // many accumulator textures.
+    _renderer->makeActiveOnCurrentThread();
+
+    // clear out the accumulation texture the first time
+    if (accumulatorCnt == 0 && gpuCnt == 0) {
+      _accumulationTextureArray->copyPixelsFromPixelBuffer(_clearPboPtr);
+    }
+
+    _framebufferPtr->bindToRenderer(_renderer);
+    _renderer->bindShader(_accumulatorShader);
+    _accumulatorShader->setSamplerTextureImageUnit("accumulatorSampler", GL_TEXTURE0);
+    _accumulatorShader->setSamplerAttribute("accumulatorSampler", _accumulationCpTextureArray);
+    _accumulatorShader->setImageLoadStoreAttribute("inTxPixelCounter", _accumulationTextureArray);
+    _accumulatorShader->setUniformAttribute("numAccumTextures", textures.size());
+    _renderer->bindVertexArray(_vao);
+
+    // we're doing the blending manually in the shader, so disable any blending here
+    _renderer->disable(GL_BLEND);
+
+    // no multisampling, so force-disable any sample shading
+    _renderer->disable(GL_SAMPLE_SHADING);
+
+    _renderer->setViewport(0, 0, width, height);
+
+    _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
+  } else {
+    auto rgbaTex = framebufferPtr->getGLTexture2d(FboColorBuffer::COLOR_BUFFER);
+    CHECK(rgbaTex);
+
+    auto rgbaItr = _rgbaTextures.find(rgbaTex.get());
+    CHECK(rgbaItr != _rgbaTextures.end());
+
+    glXCopyImageSubDataNV(displayPtr.get(),
+                          glxCtx,
+                          rgbaTex->getId(),
+                          rgbaTex->getTarget(),
+                          0,
+                          0,
+                          0,
+                          0,
+                          myGlxCtx,
+                          _rgbaTextureArray->getId(),
+                          _rgbaTextureArray->getTarget(),
+                          0,
+                          0,
+                          0,
+                          gpuCnt,
+                          width,
+                          height,
+                          1);
+  }
+
+  if (doHitTest) {
+    auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
+    CHECK(idTex);
+
+    auto idItr = _idTextures.find(idTex.get());
+    CHECK(idItr != _idTextures.end());
+
+    glXCopyImageSubDataNV(displayPtr.get(),
+                          glxCtx,
+                          idTex->getId(),
+                          idTex->getTarget(),
+                          0,
+                          0,
+                          0,
+                          0,
+                          myGlxCtx,
+                          _idTextureArray->getId(),
+                          _idTextureArray->getTarget(),
+                          0,
+                          0,
+                          0,
+                          gpuCnt,
+                          width,
+                          height,
+                          1);
+  }
+
+  // if (doDepthTest) {
+  //   depthRbo = itr->second.framebufferPtr->getRenderbuffer(FboRenderBuffer::DEPTH_BUFFER);
+  // }
+}
+
+void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpus,
+                                                  bool doHitTest,
+                                                  bool doDepthTest,
+                                                  int passCnt,
+                                                  ScaleShPtr& accumulatorScalePtr) {
+  _renderer->makeActiveOnCurrentThread();
+
+  _framebufferPtr->bindToRenderer(_renderer);
+  _renderer->bindShader(_shader);
+  _renderer->bindVertexArray(_vao);
+
+  // we're doing the blending manually in the shader, so disable any blending here
+  _renderer->disable(GL_BLEND);
+
+  // When multi-sampling, we want to read from all the samples too,
+  // so enable sample shading to enforce that.
+  _renderer->enable(GL_SAMPLE_SHADING);
+  _renderer->setMinSampleShading(1.0);
+
+  _renderer->setViewport(0, 0, getWidth(), getHeight());
+
+  if (passCnt == 0) {
+    _renderer->setClearColor(0, 0, 0, 0);
+    _renderer->clearAll();
+  }
+
+  _shader->setSamplerAttribute("rgbaArraySampler", _rgbaTextureArray);
+  _shader->setUniformAttribute("rgbaArraySize", usedGpus.size());
+
+  if (doHitTest) {
+    _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
+    _shader->setUniformAttribute("idArraySize", usedGpus.size());
+  } else {
+    _shader->setUniformAttribute("idArraySize", 0);
+  }
+
+  if (accumulatorScalePtr) {
+    std::string accumulator;
+    switch (accumulatorScalePtr->getAccumulatorType()) {
+      case BaseScale::AccumulatorType::MIN:
+        accumulator = "getMinColor";
+        break;
+      case BaseScale::AccumulatorType::MAX:
+        accumulator = "getMaxColor";
+        break;
+      case BaseScale::AccumulatorType::BLEND:
+        accumulator = "getBlendColor";
+        break;
+      default:
+        THROW_RUNTIME_EX("Accumulator type " +
+                         std::to_string(static_cast<int>(accumulatorScalePtr->getAccumulatorType())) +
+                         " is not currently supported in the composite.");
+    }
+
+    _shader->setSubroutines({{"Compositor", "compositeAccumulator"}, {"Accumulator", accumulator}});
+
+    accumulatorScalePtr->bindAccumulatorColors(_shader, "inColors", false);
+    _shader->setUniformAttribute("numAccumColors", accumulatorScalePtr->getNumAccumulatorValues());
+
+    _shader->setImageLoadStoreAttribute("inTxPixelCounter", _accumulationTextureArray);
+  } else {
+    _shader->setSubroutine("Compositor", "compositeColor");
+  }
+
+  _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
+
+  // TODO(croot): push/pop a state?
+  _renderer->disable(GL_SAMPLE_SHADING);
+}
+
 void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
   QueryRendererContext* ctx = queryRenderer->getContext();
 
   auto qrmPerGpuDataPtr = ctx->getRootGpuCache()->perGpuData;
 
-  GLXContext myGlxCtx = _renderer->getGLXContext();
-  X11DisplayShPtr myDisplayPtr = _renderer->getXDisplayPtr();
-
   bool doHitTest = ctx->doHitTest();
   // bool doDepthTest = ctx->doDepthTest();
-
-  size_t width = ctx->getWidth();
-  size_t height = ctx->getHeight();
 
   GLTexture2dShPtr rgbaTex, idTex;
   GLRenderbufferShPtr depthRbo;
@@ -203,122 +554,28 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   //   CHECK(_rbos.size() == _)
   // }
 
-  for (auto gpuId : usedGpus) {
-    QueryRenderer::renderGpu(gpuId, qrmPerGpuDataPtr, ctx, 0, 0, 0, 0);
-  }
-
-  int cnt = 0;
-  for (auto gpuId : usedGpus) {
-    auto itr = qrmPerGpuDataPtr->find(gpuId);
-    CHECK(itr != qrmPerGpuDataPtr->end());
-
-    GlxGLRenderer* glxRenderer = dynamic_cast<GlxGLRenderer*>((*itr)->getGLRenderer());
-    CHECK(glxRenderer != nullptr);
-
-    GLXContext glxCtx = glxRenderer->getGLXContext();
-    X11DisplayShPtr displayPtr = glxRenderer->getXDisplayPtr();
-
-    CHECK(displayPtr == myDisplayPtr);
-
-    // TODO(croot): do we need to do a flush/finish before copying?
-    // or will the copy take care of that for us?
-
-    auto& framebufferPtr = (*itr)->getRenderFramebuffer();
-    CHECK(framebufferPtr);
-
-    rgbaTex = framebufferPtr->getGLTexture2d(FboColorBuffer::COLOR_BUFFER);
-    CHECK(rgbaTex);
-
-    auto rgbaItr = _rgbaTextures.find(rgbaTex.get());
-    CHECK(rgbaItr != _rgbaTextures.end());
-
-    glXCopyImageSubDataNV(displayPtr.get(),
-                          glxCtx,
-                          rgbaTex->getId(),
-                          rgbaTex->getTarget(),
-                          0,
-                          0,
-                          0,
-                          0,
-                          myGlxCtx,
-                          _rgbaTextureArray->getId(),
-                          _rgbaTextureArray->getTarget(),
-                          0,
-                          0,
-                          0,
-                          cnt,
-                          width,
-                          height,
-                          1);
-
-    if (doHitTest) {
-      idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
-      CHECK(idTex);
-
-      auto idItr = _idTextures.find(idTex.get());
-      CHECK(idItr != _idTextures.end());
-
-      glXCopyImageSubDataNV(displayPtr.get(),
-                            glxCtx,
-                            idTex->getId(),
-                            idTex->getTarget(),
-                            0,
-                            0,
-                            0,
-                            0,
-                            myGlxCtx,
-                            _idTextureArray->getId(),
-                            _idTextureArray->getTarget(),
-                            0,
-                            0,
-                            0,
-                            cnt,
-                            width,
-                            height,
-                            1);
-    }
-
-    // if (doDepthTest) {
-    //   depthRbo = itr->second.framebufferPtr->getRenderbuffer(FboRenderBuffer::DEPTH_BUFFER);
-    // }
-
-    ++cnt;
-  }
-
-  // now do the composite pass
-  // TODO(croo): add a concept of a "pass" to render
-  _renderer->makeActiveOnCurrentThread();
-
-  _framebufferPtr->bindToRenderer(_renderer);
-  _renderer->bindShader(_shader);
-  _renderer->bindVertexArray(_vao);
-
-  // we're doing the blending manually in the shader, so disable any blending here
-  _renderer->disable(GL_BLEND);
-
-  // When multi-sampling, we want to read from all the samples too,
-  // so enable sample shading to enforce that.
-  _renderer->enable(GL_SAMPLE_SHADING);
-  _renderer->setMinSampleShading(1.0);
-
-  _renderer->setViewport(0, 0, getWidth(), getHeight());
-  _renderer->setClearColor(0, 0, 0, 0);
-  _renderer->clearAll();
-
-  _shader->setSamplerAttribute("rgbaArraySampler", _rgbaTextureArray);
-  _shader->setUniformAttribute("rgbaArraySize", usedGpus.size());
-
-  if (doHitTest) {
-    _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
-    _shader->setUniformAttribute("idArraySize", usedGpus.size());
-  } else {
-    _shader->setUniformAttribute("idArraySize", 0);
-  }
-
-  _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
-
-  // TODO(croot): push/pop a state?
-  _renderer->disable(GL_SAMPLE_SHADING);
+  QueryRenderer::renderPasses(qrmPerGpuDataPtr,
+                              ctx,
+                              usedGpus,
+                              true,
+                              std::bind(&GlxQueryRenderCompositorImpl::_postPassPerGpuCB,
+                                        this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2,
+                                        std::placeholders::_3,
+                                        std::placeholders::_4,
+                                        std::placeholders::_5,
+                                        std::placeholders::_6,
+                                        std::placeholders::_7,
+                                        std::placeholders::_8,
+                                        std::placeholders::_9),
+                              std::bind(&GlxQueryRenderCompositorImpl::_compositePass,
+                                        this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2,
+                                        std::placeholders::_3,
+                                        std::placeholders::_4,
+                                        std::placeholders::_5));
 }
 
 }  // namespace GLX

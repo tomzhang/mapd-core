@@ -18,9 +18,9 @@ namespace QueryRenderer {
 
 class BaseScaleRef {
  public:
-  BaseScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp)
-      : _ctx(ctx), _scalePtr(scalePtr), _rndrPropPtr(rndrProp) {}
-  virtual ~BaseScaleRef() {}
+  BaseScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp);
+
+  virtual ~BaseScaleRef() { _deleteScalePtr(); }
 
   std::string getName() const;
   const std::string& getNameRef();
@@ -50,6 +50,8 @@ class BaseScaleRef {
   const QueryDataTableShPtr& _getDataTablePtr();
   std::string _getDataColumnName();
   std::string _getRndrPropName();
+  void _initScalePtr();
+  void _deleteScalePtr();
 
   QueryRendererContextShPtr _ctx;
   ScaleShPtr _scalePtr;
@@ -60,10 +62,10 @@ class BaseScaleRef {
 
 template <class T, class TT>
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
-  std::vector<TT>& srcVec = srcData->getVectorData();
+  std::vector<TT>& srcVec = srcData->getVectorDataRef();
 
   destData.reset(new ScaleDomainRangeData<T>(srcData->getName(), srcVec.size(), srcData->useString()));
-  std::vector<T>& destVec = destData->getVectorData();
+  std::vector<T>& destVec = destData->getVectorDataRef();
   for (size_t i = 0; i < srcVec.size(); ++i) {
     destVec[i] = static_cast<T>(srcVec[i]);
   }
@@ -136,10 +138,15 @@ class ScaleRef : public BaseScaleRef {
 
   void updateScaleRef(const ScaleShPtr& scalePtr) {
     if (scalePtr != _scalePtr) {
+      _deleteScalePtr();
       _scalePtr = scalePtr;
     }
 
     _updateDomainRange(_scalePtr->hasDomainDataChanged(), _scalePtr->hasRangeDataChanged());
+
+    // if we get to this point, that means the scale is going to be used by a mark.
+    // So we'll initialize any gpu resources the scale may use now.
+    _initScalePtr();
   }
 
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, const std::string& extraSuffix = "") {
@@ -150,12 +157,12 @@ class ScaleRef : public BaseScaleRef {
 
     if (coerceDomain) {
       activeShader->setUniformAttribute(_scalePtr->getDomainGLSLUniformName() + extraSuffix,
-                                        _coercedDomainData->getVectorData());
+                                        _coercedDomainData->getVectorDataRef());
     }
 
     if (coerceRange) {
       activeShader->setUniformAttribute(_scalePtr->getRangeGLSLUniformName() + extraSuffix,
-                                        _coercedRangeData->getVectorData());
+                                        _coercedRangeData->getVectorDataRef());
     }
 
     _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix, coerceDomain, coerceRange);
@@ -284,11 +291,11 @@ class ScaleRef : public BaseScaleRef {
     QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getQueryDataLayout();
     CHECK(queryDataLayoutPtr != nullptr);
 
-    std::vector<std::string>& vec = domainData->getVectorData();
+    std::vector<std::string>& vec = domainData->getVectorDataRef();
     _coercedDomainData.reset(
         new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
 
-    std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorData();
+    std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorDataRef();
     for (size_t i = 0; i < vec.size(); ++i) {
       // get data from the executor
       coercedVec[i] =
@@ -316,8 +323,8 @@ class ScaleRef : public BaseScaleRef {
     // be equal. You can have more domains than ranges and vice-versa. So we need
     // to sort by the smaller of the two and leave the hanging items alone.
 
-    std::vector<DomainType>& domainVec = _coercedDomainData->getVectorData();
-    std::vector<RangeType>& rangeVec = _coercedRangeData->getVectorData();
+    std::vector<DomainType>& domainVec = _coercedDomainData->getVectorDataRef();
+    std::vector<RangeType>& rangeVec = _coercedRangeData->getVectorDataRef();
 
     int numItems = std::min(domainVec.size(), rangeVec.size());
     std::vector<std::pair<DomainType, RangeType>> sortVec(numItems);

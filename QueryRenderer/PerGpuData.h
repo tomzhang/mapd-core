@@ -30,6 +30,7 @@ struct RootPerGpuData {
   QueryFramebufferShPtr blitFramebufferPtr;
   QueryRenderCompositorShPtr compositorPtr;
   QueryIdMapPboPoolUqPtr pboPoolPtr;
+  QueryAccumTxPoolUqPtr accumTxPoolPtr;
 
   RootPerGpuData(GpuId gpuId);
   ~RootPerGpuData();
@@ -44,14 +45,16 @@ struct RootPerGpuData {
 
   QueryFramebufferUqPtr& getRenderFramebuffer() { return msFramebufferPtr; }
   QueryFramebufferShPtr& getBlitFramebuffer() { return blitFramebufferPtr; }
+  bool hasCompositor() const { return compositorPtr != nullptr; }
   QueryRenderCompositorShPtr& getCompositor() { return compositorPtr; }
   GpuId getCompositorGpuId();
 
   QueryIdMapPboPoolUqPtr& getIdMapPboPool() { return pboPoolPtr; }
-
   QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height);
-
   void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo);
+
+  bool hasAccumTxPool() const { return accumTxPoolPtr != nullptr; }
+  QueryAccumTxPoolUqPtr& getAccumTxPool();
 };
 
 struct inorder {};
@@ -96,11 +99,15 @@ struct BasePerGpuData {
 
   QueryFramebufferUqPtr& getRenderFramebuffer();
   QueryFramebufferShPtr& getBlitFramebuffer();
+  bool hasCompositor() const;
   std::shared_ptr<QueryRenderCompositor>& getCompositor();
   GpuId getCompositorGpuId();
 
   QueryIdMapPixelBufferShPtr getInactiveIdMapPbo(size_t width, size_t height);
   void setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo);
+
+  bool hasAccumTxPool() const;
+  QueryAccumTxPoolUqPtr& getAccumTxPool();
 };
 
 }  // namespace QueryRenderer

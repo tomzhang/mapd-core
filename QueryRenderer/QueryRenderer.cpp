@@ -11,6 +11,8 @@
 #include <Rendering/Window.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
+#include <Rendering/Renderer/GL/Resources/GLTexture2dArray.h>
+
 #include <png.h>
 #include <vector>
 #include <thread>
@@ -146,7 +148,8 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
       }
     }
 
-    // now resize the compositor gpu framebuffers
+    // now resize the compositor gpu framebuffers, make sure to resize
+    // the scale accumulation textures before the compositor too.
     (*qrmItr)->makeActiveOnCurrentThread();
     (*qrmItr)->resize(width, height, true);
   } else {
@@ -341,6 +344,7 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
       for (const auto& unvisitedName : unvisitedNames) {
         scalePtr = _ctx->getScale(unvisitedName);
         _ctx->_scaleConfigMap.erase(unvisitedName);
+        _ctx->_accumulatorScales.erase(unvisitedName);
         scaleEvents[static_cast<size_t>(RefEventType::REMOVE)].push_back(scalePtr);
       }
 
@@ -389,6 +393,26 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
     for (size_t i = 0; i < scaleEvents.size(); ++i) {
       for (auto scalePtr : scaleEvents[i]) {
         _ctx->_fireRefEvent(static_cast<RefEventType>(i), scalePtr);
+      }
+    }
+
+    // validate the render order after all updates
+    std::unordered_set<std::string> visitedAccumulators;
+    std::string activeAccumulator, currAccumulator;
+
+    for (size_t i = 0; i < _ctx->_geomConfigs.size(); ++i) {
+      if (_ctx->_geomConfigs[i]->hasAccumulator()) {
+        currAccumulator = _ctx->_geomConfigs[i]->getAccumulatorScaleName();
+        if (activeAccumulator != currAccumulator) {
+          activeAccumulator = currAccumulator;
+          auto rtnPair = visitedAccumulators.insert(currAccumulator);
+          RUNTIME_EX_ASSERT(rtnPair.second,
+                            "Invalid render order. All geometry layers that use accumulator scales must be rendered "
+                            "one after the other. There are at least 2 layers using the accumulator scale \"" +
+                                currAccumulator + "\" that are separated by layers not using this accumulator.");
+        }
+      } else {
+        activeAccumulator = "";
       }
     }
 
@@ -602,6 +626,133 @@ void QueryRenderer::_updatePbo() {
   }
 }
 
+void QueryRenderer::renderPasses(
+    const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
+    QueryRendererContext* ctx,
+    const std::set<GpuId>& usedGpus,
+    bool clearFboEveryPass,
+    std::function<
+        void(::Rendering::GL::GLRenderer*, QueryFramebufferUqPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
+        perPassGpuCB,
+    std::function<void(const std::set<GpuId>&, bool, bool, int, ScaleShPtr&)> passCompleteCB) {
+  std::string activeAccumulator, currAccumulator;
+  ScaleShPtr scalePtr, prevScalePtr;
+  int accumulatorCnt = 0;
+  int passCnt = 0;
+  int gpuCnt = 0;
+  auto width = ctx->getWidth();
+  auto height = ctx->getHeight();
+  auto doHitTest = ctx->doHitTest();
+  auto doDepthTest = ctx->doDepthTest();
+
+  for (size_t i = 0; i < ctx->_geomConfigs.size(); ++i) {
+    currAccumulator = ctx->_geomConfigs[i]->getAccumulatorScaleName();
+    if (activeAccumulator.size()) {
+      if (activeAccumulator != currAccumulator) {
+        // finish the accumulation by running the blending pass
+        // accumulationPassCompleteCB(scalePtr);
+        passCompleteCB(usedGpus, doHitTest, doDepthTest, passCnt++, scalePtr);
+        prevScalePtr = scalePtr;
+        scalePtr = ctx->getScale(currAccumulator);
+        CHECK(scalePtr);
+        accumulatorCnt = 0;
+      } else {
+        accumulatorCnt++;
+      }
+    } else if (currAccumulator.size()) {
+      prevScalePtr = nullptr;
+      scalePtr = ctx->getScale(currAccumulator);
+      CHECK(scalePtr);
+    } else {
+      scalePtr = prevScalePtr = nullptr;
+      accumulatorCnt = 0;
+    }
+    activeAccumulator = currAccumulator;
+
+    gpuCnt = 0;
+    for (auto gpuId : usedGpus) {
+      auto itr = qrmPerGpuData->find(gpuId);
+      CHECK(itr != qrmPerGpuData->end());
+      (*itr)->makeActiveOnCurrentThread();
+
+      if (prevScalePtr) {
+        prevScalePtr->accumulationPostRender(gpuId);
+      }
+
+      if (accumulatorCnt == 0 && scalePtr) {
+        scalePtr->accumulationPreRender(gpuId);
+      }
+
+      GLRenderer* renderer = (*itr)->getGLRenderer();
+      CHECK(renderer != nullptr);
+
+      auto& framebufferPtr = (*itr)->getRenderFramebuffer();
+
+      RUNTIME_EX_ASSERT(framebufferPtr != nullptr,
+                        "QueryRenderer " + to_string(ctx->getUserWidgetIds()) +
+                            ": The framebuffer is not initialized for gpu " + std::to_string(gpuId) +
+                            ". Cannot render.");
+
+      // need to set the hit test / depth test before the bindToRenderer()
+      // TODO(croot): may want to change this API
+
+      if (i == 0) {
+        framebufferPtr->setHitTest(ctx->doHitTest());
+        framebufferPtr->setDepthTest(ctx->doDepthTest());
+
+        // TODO(croot): enable a push/pop state stack for the renderer state...
+        renderer->enable(GL_BLEND);
+        renderer->setBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        renderer->setBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+        renderer->setViewport(0, 0, ctx->_width, ctx->_height);
+        renderer->setClearColor(0, 0, 0, 0);
+      }
+
+      framebufferPtr->bindToRenderer(renderer);
+
+      if (i == 0 || clearFboEveryPass) {
+        renderer->clearAll();
+      }
+
+      // TODO(croot): only draw geom on this gpu if the geom is configured to use
+      // this gpu
+      ctx->_geomConfigs[i]->draw(renderer, gpuId);
+
+      perPassGpuCB(renderer, framebufferPtr, width, height, doHitTest, doDepthTest, gpuCnt++, scalePtr, accumulatorCnt);
+      // postGpuCallback(gpuId, passCnt, activeAccumulator.size());
+    }
+
+    if (!scalePtr) {
+      passCompleteCB(usedGpus, doHitTest, doDepthTest, passCnt++, scalePtr);
+    }
+
+    // NOTE: We're not swapping buffers because we're using pbuffers
+    // qrmGpuData->windowPtr->swapBuffers();
+
+    // CROOT testing code
+    // int width = ctx->getWidth();
+    // int height = ctx->getHeight();
+    // std::shared_ptr<unsigned char> pixelsPtr;
+    // pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
+
+    // PngData pngData(width, height, pixelsPtr);
+    // pngData.writeToFile("render_" + std::to_string(gpuId) + ".png");
+  }
+
+  if (scalePtr) {
+    // finish the accumulation by running the blending pass
+    // accumulationPassCompleteCB(scalePtr)
+    passCompleteCB(usedGpus, doHitTest, doDepthTest, passCnt++, scalePtr);
+
+    for (auto gpuId : usedGpus) {
+      auto itr = qrmPerGpuData->find(gpuId);
+      (*itr)->makeActiveOnCurrentThread();
+      scalePtr->accumulationPostRender(gpuId);
+    }
+  }
+}
+
 QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
                                                 const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
                                                 QueryRendererContext* ctx,
@@ -611,7 +762,9 @@ QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
                                                 int a) {
   // TODO(croot): make thread safe?
 
+  ScaleShPtr scalePtr;
   auto itr = qrmPerGpuData->find(gpuId);
+
   CHECK(itr != qrmPerGpuData->end());
 
   (*itr)->makeActiveOnCurrentThread();
@@ -634,20 +787,46 @@ QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
   // TODO(croot): enable a push/pop state stack for the renderer state...
   renderer->enable(GL_BLEND);
   renderer->setBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO));
-  // MAPD_CHECK_GL_ERROR(glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE));
   renderer->setBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   renderer->setViewport(0, 0, ctx->_width, ctx->_height);
   if (r >= 0 && g >= 0 && b >= 0 && a >= 0) {
-    renderer->setClearColor(r, b, g, a);
+    renderer->setClearColor(r, g, b, a);
     renderer->clearAll();
   }
 
+  std::string activeAccumulator, currAccumulator;
+
   for (size_t i = 0; i < ctx->_geomConfigs.size(); ++i) {
+    currAccumulator = ctx->_geomConfigs[i]->getAccumulatorScaleName();
+    if (activeAccumulator != currAccumulator) {
+      if (activeAccumulator.size()) {
+        // finish the accumulation by running the blending pass
+        auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
+        scalePtr->renderAccumulation(renderer, gpuId, idTex);
+        scalePtr->accumulationPostRender(gpuId);
+      }
+
+      if (currAccumulator.size() > 0) {
+        scalePtr = ctx->getScale(currAccumulator);
+        scalePtr->accumulationPreRender(gpuId);
+      } else {
+        scalePtr = nullptr;
+      }
+    }
+    activeAccumulator = currAccumulator;
+
     // TODO(croot): only draw geom on this gpu if the geom is configured to use
     // this gpu
     ctx->_geomConfigs[i]->draw(renderer, gpuId);
+  }
+
+  if (activeAccumulator.size()) {
+    // finish the accumulation by running the blending pass
+    scalePtr = ctx->getScale(activeAccumulator);
+    auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
+    scalePtr->renderAccumulation(renderer, gpuId, idTex);
+    scalePtr->accumulationPostRender(gpuId);
   }
 
   // NOTE: We're not swapping buffers because we're using pbuffers
@@ -837,6 +1016,11 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     } else if (width > 0 && height > 0) {
       pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
       std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
+
+      if (_ctx->doHitTest()) {
+        // clear out the id buffer
+        _idPixels->resetToDefault();
+      }
     }
 
     // time_ms = timer_stop(clock_begin);

@@ -33,9 +33,14 @@ class BaseMark {
   void setShaderDirty() { _shaderDirty = true; }
   void setPropsDirty() { _propsDirty = true; }
 
-  // virtual void _pushDomainItem(const rapidjson::Value& item) = 0;
+  bool hasAccumulator() const { return (_activeAccumulatorScaleName.size() > 0); }
+  std::string getAccumulatorScaleName() const { return _activeAccumulatorScaleName; }
 
-  // virtual std::pair<std::string, std::string> buildShaderSource() = 0;
+  // set/clear accumulator should only be called by render property
+  // TODO(croot): make these functions private and make render properties friends?
+  void setAccumulatorScale(const std::string& accumulatorScaleName);
+  void clearAccumulatorScale() { _activeAccumulatorScaleName = ""; }
+
   virtual void draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) = 0;
 
   void setInvalidKey(const int64_t invalidKey) { _invalidKey = invalidKey; }
@@ -131,6 +136,7 @@ class BaseMark {
 
   virtual std::set<BaseRenderProperty*> _getUsedProps() = 0;
   void _updateProps(const std::set<BaseRenderProperty*>& usedProps, bool force = false);
+  void _updateShader(std::string& vertSrc, std::string& fragSrc);
 
  private:
   void _buildVertexArrayObjectFromProperties();
@@ -149,6 +155,8 @@ class BaseMark {
   virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
                                                  const std::set<GpuId>& usedGpus,
                                                  const std::set<GpuId>& unusedGpus) = 0;
+
+  std::string _activeAccumulatorScaleName;
 
   friend class QueryRendererContext;
 };

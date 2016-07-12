@@ -188,7 +188,8 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
     return double((*_vectorPtr)[sz - 1] - (*_vectorPtr)[0]) / divisor;
   }
 
-  std::vector<T>& getVectorData() { return *_vectorPtr; }
+  std::vector<T>& getVectorDataRef() { return *_vectorPtr; }
+  std::vector<T> getVectorData() { return *_vectorPtr; }
 
   QueryDataType getType() const final { return dataType; }
 

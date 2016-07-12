@@ -94,6 +94,13 @@ class QueryRenderCompositorImpl {
   virtual ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                                 FboRenderBuffer rboType) = 0;
 
+  virtual void registerAccumulatorTexture(::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                          size_t accumIdx,
+                                          size_t numTexturesInArray) = 0;
+
+  virtual void unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                            size_t accumIdx) = 0;
+
   void resize(size_t width, size_t height) {
     CHECK(_framebufferPtr);
     _framebufferPtr->resize(width, height);
@@ -154,6 +161,12 @@ class QueryRenderCompositor {
   ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(
       ::Rendering::GL::GLRenderer* renderer,
       FboRenderBuffer rboType = FboRenderBuffer::DEPTH_BUFFER);
+
+  void registerAccumulatorTexture(::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                  size_t accumIdx,
+                                  size_t numTexturesInArray);
+
+  void unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex, size_t accumIdx);
 
  private:
   QueryRenderCompositor(QueryRenderManager* prnt,

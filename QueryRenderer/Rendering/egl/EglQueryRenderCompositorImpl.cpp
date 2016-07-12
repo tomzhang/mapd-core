@@ -1,5 +1,6 @@
 #include "../../QueryRenderer.h"
 #include "../../QueryRendererContext.h"
+#include "../../Scales/Scale.h"
 #include <Rendering/Renderer/GL/egl/EglGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "EglQueryRenderCompositorImpl.h"
@@ -101,8 +102,16 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
     THROW_RUNTIME_EX("Depth buffer has yet to be implemented for EGL compositor");
   }
 
-  std::vector<GpuId> gpusMarkedForDeletion;
   int i;
+
+  // resize the accum textures and rebuild the EglImage objects for them
+  CHECK(_accumTexPtrArrayMap.size() == _accumEglImgPtrArrayMap.size());
+  for (i = 0; i < static_cast<int>(_accumTexPtrArrayMap.size()); ++i) {
+    _accumTexPtrArrayMap[i]->resize(width, height);
+    _accumEglImgPtrArrayMap[i].reset(
+        new EglImage(eglRenderer->getEGLDisplayPtr(), eglRenderer->getEGLContext(), _accumTexPtrArrayMap[i]->getId()));
+  }
+
   ::Rendering::GL::Resources::GLTexture2dShPtr texPtr;
   ::Rendering::GL::Resources::GLRenderbufferShPtr rboPtr;
 
@@ -151,6 +160,21 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
       rbos.erase(rbos.begin() + i);
     }
 
+    if (!glRenderer) {
+      for (auto& map : itr.second.registeredAccumTxts) {
+        for (auto mapItr : map) {
+          auto shptr = mapItr.second.lock();
+          if (shptr) {
+            glRenderer = shptr->getGLRenderer();
+            break;
+          }
+        }
+        if (glRenderer) {
+          break;
+        }
+      }
+    }
+
     if (glRenderer) {
       glRenderer->makeActiveOnCurrentThread();
 
@@ -177,6 +201,18 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
 
         glRenderer->bindRenderbuffer(rboPtr);
         MAPD_CHECK_GL_ERROR(glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, _depthEglImgPtr->img));
+      }
+
+      CHECK(itr.second.registeredAccumTxts.size() <= _accumTexPtrArrayMap.size());
+
+      for (i = 0; i < static_cast<int>(itr.second.registeredAccumTxts.size()); ++i) {
+        auto& map = itr.second.registeredAccumTxts[i];
+        for (auto mapItr : map) {
+          auto shptr = mapItr.second.lock();
+          CHECK(shptr);
+          glRenderer->bindTexture2d(shptr);
+          MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(shptr->getTarget(), _accumEglImgPtrArrayMap[i]->img));
+        }
       }
     }
   }
@@ -228,22 +264,198 @@ GLRenderbufferShPtr EglQueryRenderCompositorImpl::createFboRenderbuffer(::Render
   return rbo;
 }
 
+void EglQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t height, size_t depth) {
+  GLRenderer* currRenderer;
+  bool resetRenderer = false;
+
+  if (depth > _accumTexPtrArrayMap.size()) {
+    CHECK(_framebufferPtr);
+    auto myRenderer = _framebufferPtr->getGLRenderer();
+    CHECK(myRenderer);
+
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != myRenderer))) {
+      myRenderer->makeActiveOnCurrentThread();
+    }
+
+    auto myRsrcMgr = myRenderer->getResourceManager();
+
+    auto eglRenderer = dynamic_cast<EglGLRenderer*>(myRenderer);
+    CHECK(eglRenderer);
+    auto eglDisplayPtr = eglRenderer->getEGLDisplayPtr();
+    auto eglContextPtr = eglRenderer->getEGLContext();
+
+    auto diff = depth - _accumTexPtrArrayMap.size();
+    for (size_t i = 0; i < diff; ++i) {
+      _accumTexPtrArrayMap.push_back(
+          myRsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT));
+      _accumEglImgPtrArrayMap.emplace_back(
+          new EglImage(eglDisplayPtr, eglContextPtr, _accumTexPtrArrayMap.back()->getId()));
+    }
+  }
+
+  CHECK(_accumTexPtrArrayMap.size() == _accumEglImgPtrArrayMap.size());
+
+  if (resetRenderer) {
+    currRenderer->makeActiveOnCurrentThread();
+  }
+}
+
+void EglQueryRenderCompositorImpl::_cleanupAccumResources() {
+  GLRenderer* currRenderer;
+  bool resetRenderer = false;
+
+  CHECK(_accumTexPtrArrayMap.size() == _accumEglImgPtrArrayMap.size());
+
+  // TODO(croot): should we cleanup any expired weak ptrs?
+  int maxSize = -1;
+  size_t sz;
+  for (auto gpuItr : _consumedRsrcs) {
+    for (int i = gpuItr.second.registeredAccumTxts.size() - 1; i > maxSize; --i) {
+      sz = gpuItr.second.registeredAccumTxts[i].size();
+      if (sz > 0) {
+        maxSize = i;
+        break;
+      }
+    }
+  }
+
+  maxSize++;
+
+  if (maxSize == 0) {
+    CHECK(_framebufferPtr);
+    auto myRenderer = _framebufferPtr->getGLRenderer();
+    CHECK(myRenderer);
+
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != myRenderer))) {
+      myRenderer->makeActiveOnCurrentThread();
+    }
+
+    _accumTexPtrArrayMap.clear();
+    _accumEglImgPtrArrayMap.clear();
+  } else if (maxSize < static_cast<int>(_accumTexPtrArrayMap.size())) {
+    CHECK(_framebufferPtr);
+    auto myRenderer = _framebufferPtr->getGLRenderer();
+    CHECK(myRenderer);
+
+    currRenderer = GLRenderer::getCurrentThreadRenderer();
+    if ((resetRenderer = (currRenderer != myRenderer))) {
+      myRenderer->makeActiveOnCurrentThread();
+    }
+
+    _accumTexPtrArrayMap.resize(maxSize);
+    _accumEglImgPtrArrayMap.resize(maxSize);
+
+    for (auto gpuItr : _consumedRsrcs) {
+      gpuItr.second.registeredAccumTxts.resize(maxSize);
+    }
+  }
+
+  if (resetRenderer) {
+    currRenderer->makeActiveOnCurrentThread();
+  }
+}
+
+void EglQueryRenderCompositorImpl::registerAccumulatorTexture(::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                                              size_t accumIdx,
+                                                              size_t numTexturesInArray) {
+  // TODO(croot): make thread safe?
+
+  CHECK(accumIdx < numTexturesInArray);
+
+  _initAccumResources(getWidth(), getHeight(), numTexturesInArray);
+
+  auto renderer = tex->getGLRenderer();
+  auto gpuId = renderer->getGpuId();
+  auto& rsrcStorage = _consumedRsrcs.emplace(gpuId, GLResourceStorage{}).first->second;
+
+  if (numTexturesInArray > rsrcStorage.registeredAccumTxts.size()) {
+    rsrcStorage.registeredAccumTxts.resize(numTexturesInArray);
+  }
+
+  // TODO(croot): should we be careful and check to see if the tex has already been added?
+  renderer->bindTexture2d(tex);
+  MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _accumEglImgPtrArrayMap[accumIdx]->img));
+
+  rsrcStorage.registeredAccumTxts[accumIdx].emplace(tex.get(), tex);
+}
+
+void EglQueryRenderCompositorImpl::unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                                                size_t accumIdx) {
+  auto gpuId = tex->getGLRenderer()->getGpuId();
+  auto gpuItr = _consumedRsrcs.find(gpuId);
+  CHECK(gpuItr != _consumedRsrcs.end());
+
+  // TODO(croot): if the tex is not found at the accumIdx, should we indicate where it
+  // can be found?
+
+  // TODO(croot): make thread safe?
+
+  CHECK(accumIdx < gpuItr->second.registeredAccumTxts.size());
+  auto& map = gpuItr->second.registeredAccumTxts[accumIdx];
+
+  auto itr = map.find(tex.get());
+  CHECK(itr != map.end());
+
+  map.erase(itr);
+
+  _cleanupAccumResources();
+}
+
+void EglQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
+                                                     QueryFramebufferUqPtr& framebufferPtr,
+                                                     size_t width,
+                                                     size_t height,
+                                                     bool doHitTest,
+                                                     bool doDepthTest,
+                                                     int passCnt,
+                                                     ScaleShPtr& accumulatorScalePtr,
+                                                     int accumulatorCnt) {
+}
+
+void EglQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpus,
+                                                  bool doHitTest,
+                                                  bool doDepthTest,
+                                                  int passCnt,
+                                                  ScaleShPtr& accumulatorScalePtr) {
+  if (accumulatorScalePtr) {
+    CHECK(_framebufferPtr);
+    auto myRenderer = _framebufferPtr->getGLRenderer();
+    CHECK(myRenderer);
+    myRenderer->makeActiveOnCurrentThread();
+
+    accumulatorScalePtr->renderAccumulation(
+        myRenderer, myRenderer->getGpuId(), _framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER));
+  }
+}
+
 void EglQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) {
   auto ctx = queryRenderer->getContext();
   auto qrmPerGpuDataPtr = ctx->getRootGpuCache()->perGpuData;
 
-  for (auto gpuId : usedGpus) {
-    QueryRenderer::renderGpu(gpuId, qrmPerGpuDataPtr, ctx);
-  }
-
-  int cnt = 0;
-  for (auto itr = usedGpus.begin(); itr != usedGpus.end(); ++itr, ++cnt) {
-    if (cnt == 0) {
-      QueryRenderer::renderGpu(*itr, qrmPerGpuDataPtr, ctx, 0, 0, 0, 0);
-    } else {
-      QueryRenderer::renderGpu(*itr, qrmPerGpuDataPtr, ctx);
-    }
-  }
+  QueryRenderer::renderPasses(qrmPerGpuDataPtr,
+                              ctx,
+                              usedGpus,
+                              false,
+                              std::bind(&EglQueryRenderCompositorImpl::_postPassPerGpuCB,
+                                        this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2,
+                                        std::placeholders::_3,
+                                        std::placeholders::_4,
+                                        std::placeholders::_5,
+                                        std::placeholders::_6,
+                                        std::placeholders::_7,
+                                        std::placeholders::_8,
+                                        std::placeholders::_9),
+                              std::bind(&EglQueryRenderCompositorImpl::_compositePass,
+                                        this,
+                                        std::placeholders::_1,
+                                        std::placeholders::_2,
+                                        std::placeholders::_3,
+                                        std::placeholders::_4,
+                                        std::placeholders::_5));
 }
 
 }  // namespace EGL

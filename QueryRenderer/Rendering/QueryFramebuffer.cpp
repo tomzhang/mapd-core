@@ -380,10 +380,10 @@ void QueryFramebuffer::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
   CHECK(myWidth > 0 && myHeight > 0);
 
   GLRenderer* renderer = _fbo->getGLRenderer();
-  renderer->bindReadPixelBuffer(pbo->getPixelBuffer2d());
+  renderer->bindWritePixelBuffer(pbo->getPixelBuffer2d());
   _fbo->copyPixelsToBoundPixelBuffer(
       GL_COLOR_ATTACHMENT1, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT);
-  renderer->bindReadPixelBuffer(nullptr);
+  renderer->bindWritePixelBuffer(nullptr);
 }
 
 GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rsrcMgr,

@@ -1,5 +1,7 @@
 #include "BaseMark.h"
 #include <Rendering/Renderer/GL/GLResourceManager.h>
+#include "../Scales/Utils.h"
+#include "../Utils/ShaderUtils.h"
 
 namespace QueryRenderer {
 
@@ -18,7 +20,8 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _propsDirty(true),
       _vboProps(),
       _uboProps(),
-      _uniformProps() {
+      _uniformProps(),
+      _activeAccumulatorScaleName("") {
 }
 
 BaseMark::BaseMark(GeomType geomType,
@@ -32,6 +35,15 @@ BaseMark::BaseMark(GeomType geomType,
 }
 
 BaseMark::~BaseMark() {
+}
+
+void BaseMark::setAccumulatorScale(const std::string& accumulatorScaleName) {
+  RUNTIME_EX_ASSERT(
+      !_activeAccumulatorScaleName.size() || _activeAccumulatorScaleName == accumulatorScaleName,
+      std::string(*this) + ": An accumulator scale named: \"" + _activeAccumulatorScaleName +
+          "\" is already set active on the mark. Only one accumulator scale per mark is currently supported.");
+
+  _activeAccumulatorScaleName = accumulatorScaleName;
 }
 
 void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,
@@ -130,6 +142,23 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
         }
       }
     }
+  }
+}
+
+void BaseMark::_updateShader(std::string& vertSrc, std::string& fragSrc) {
+  if (hasAccumulator()) {
+    const std::string colorFuncName = "getFragColor";
+    auto funcRange = ShaderUtils::getGLSLFunctionBounds(fragSrc, colorFuncName);
+
+    RUNTIME_EX_ASSERT(!funcRange.empty(),
+                      std::string(*this) + ": Cannot find a properly defined \"" + colorFuncName +
+                          "\" function in the fragment shader.");
+
+    auto scalePtr = _ctx->getScale(getAccumulatorScaleName());
+
+    std::string accumSrc = scalePtr->getAccumulator1stPassFragSrc();
+
+    boost::replace_range(fragSrc, funcRange, accumSrc);
   }
 }
 

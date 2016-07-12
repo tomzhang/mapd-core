@@ -90,11 +90,6 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       // need to clear out the _scaleJsonPath
       _scaleJsonPath = rapidjson::Pointer();
 
-      if (_scaleConfigPtr) {
-        _prntMark->setShaderDirty();
-        _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
-      }
-
       _scaleConfigPtr = nullptr;
     }
 
@@ -108,10 +103,6 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     _dataPtr = nullptr;
     _vboAttrName = "";
 
-    if (_scaleConfigPtr) {
-      _prntMark->setShaderDirty();
-      _ctx->unsubscribeFromRefEvent(RefEventType::ALL, _scaleConfigPtr->getScalePtr(), _scaleRefSubscriptionCB);
-    }
     _scaleConfigPtr = nullptr;
 
     _initValueFromJSONObj(obj);
@@ -360,13 +351,47 @@ void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferShPtr>& b
   }
 }
 
+void BaseRenderProperty::_setAccumulatorFromScale(const ScaleShPtr& scalePtr) {
+  if (scalePtr && scalePtr->hasAccumulator()) {
+    // TODO(croot): what if there are two accumulator scales in the
+    // same mark properties?
+    RUNTIME_EX_ASSERT(
+        !_prntMark->hasAccumulator() || scalePtr->getName() == _prntMark->getAccumulatorScaleName(),
+        std::string(*_prntMark) +
+            " has more that one accumulator scale attached to it. There can only be one accumulator scale per mark.");
+    _prntMark->setAccumulatorScale(scalePtr->getName());
+  }
+}
+
+void BaseRenderProperty::_clearAccumulatorFromScale(const ScaleShPtr& scalePtr) {
+  if (_prntMark && scalePtr && scalePtr->getName() == _prntMark->getAccumulatorScaleName()) {
+    // TODO(croot): what if there are two accumulator scales in the
+    // same mark properties?
+    _prntMark->clearAccumulatorScale();
+  }
+}
+
+void BaseRenderProperty::_unsubscribeFromRefEvent(const ScaleShPtr& scalePtr) {
+  if (scalePtr) {
+    _ctx->unsubscribeFromRefEvent(RefEventType::ALL, scalePtr, _scaleRefSubscriptionCB);
+  }
+}
+
+void BaseRenderProperty::_updateScalePtr(const ScaleShPtr& scalePtr) {
+  _setAccumulatorFromScale(scalePtr);
+}
+
 template <>
 RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
                                              const std::string& name,
                                              const QueryRendererContextShPtr& ctx,
                                              bool useScale,
-                                             bool flexibleType)
-    : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType), _mult(), _offset(), _uniformVal() {
+                                             bool flexibleType,
+                                             bool allowsAccumulatorScale)
+    : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType, allowsAccumulatorScale),
+      _mult(),
+      _offset(),
+      _uniformVal() {
   _inType.reset(new ::Rendering::GL::TypeGL<float, 4>());
   _outType.reset(new ::Rendering::GL::TypeGL<float, 4>());
 }

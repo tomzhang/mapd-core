@@ -5,6 +5,7 @@
 #include "Rendering/Types.h"
 #include "Interop/Types.h"
 #include "Marks/Types.h"
+#include "Scales/Types.h"
 #include "Data/Types.h"
 #include "RootCache.h"
 
@@ -65,6 +66,16 @@ class QueryRenderer {
   unsigned int getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
 
   QueryRendererContext* getContext() { return _ctx.get(); }
+
+  static void renderPasses(
+      const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
+      QueryRendererContext* ctx,
+      const std::set<GpuId>& usedGpus,
+      bool clearFboEveryPass,
+      std::function<
+          void(::Rendering::GL::GLRenderer*, QueryFramebufferUqPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
+          perPassGpuCB,
+      std::function<void(const std::set<GpuId>&, bool, bool, int, ScaleShPtr&)> passCompleteCB);
 
   static QueryFramebufferUqPtr& renderGpu(GpuId gpuId,
                                           const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,

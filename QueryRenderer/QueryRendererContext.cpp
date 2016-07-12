@@ -90,9 +90,9 @@ void QueryRendererContext::_updateConfigGpuResources() {
     dataItr.second->_initGpuResources(qrmGpuCache);
   }
 
-  // for (auto scaleItr : _scaleConfigMap) {
-  //   scaleItr.second->_initGpuResources(qrPerGpuData, unusedGpus);
-  // }
+  for (auto scaleItr : _scaleConfigMap) {
+    scaleItr.second->_initGpuResources(this, false);
+  }
 
   for (auto geomItr : _geomConfigs) {
     geomItr->_initGpuResources(this, false);
@@ -230,6 +230,14 @@ std::set<GpuId> QueryRendererContext::getUsedGpus() const {
   }
 
   return rtn;
+}
+
+void QueryRendererContext::addAccumulatorScale(const std::string& scaleName) {
+  _accumulatorScales.insert(scaleName);
+}
+
+void QueryRendererContext::removeAccumulatorScale(const std::string& scaleName) {
+  _accumulatorScales.erase(scaleName);
 }
 
 void QueryRendererContext::_fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj) {

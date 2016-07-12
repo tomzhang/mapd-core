@@ -44,6 +44,7 @@ PolyMark::PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPat
   // TODO(croot): add z to props when doDepthTest() is true
 
   _initPropertiesFromJSONObj(obj, objPath);
+  _jsonPath = objPath;
   _updateShader();
 }
 

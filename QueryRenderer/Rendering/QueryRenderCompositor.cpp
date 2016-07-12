@@ -129,4 +129,17 @@ void QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width
   return rtn;
 }
 
+void QueryRenderCompositor::registerAccumulatorTexture(::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                                       size_t accumIdx,
+                                                       size_t numTexturesInArray) {
+  CHECK(_implPtr);
+  return _implPtr->registerAccumulatorTexture(tex, accumIdx, numTexturesInArray);
+}
+
+void QueryRenderCompositor::unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                                         size_t accumIdx) {
+  CHECK(_implPtr);
+  return _implPtr->unregisterAccumulatorTexture(tex, accumIdx);
+}
+
 }  // namespace QueryRenderer

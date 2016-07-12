@@ -34,8 +34,8 @@ class QueryRendererContext {
 
   ~QueryRendererContext();
 
-  size_t getWidth() { return _width; }
-  size_t getHeight() { return _height; }
+  size_t getWidth() const { return _width; }
+  size_t getHeight() const { return _height; }
 
   int getUserId() const { return _userWidget.userId; }
   int getWidgetId() const { return _userWidget.widgetId; }
@@ -82,6 +82,9 @@ class QueryRendererContext {
 
   std::set<GpuId> getUsedGpus() const;
 
+  void addAccumulatorScale(const std::string& scaleName);
+  void removeAccumulatorScale(const std::string& scaleName);
+
   friend class QueryRenderer;
 
  private:
@@ -105,6 +108,8 @@ class QueryRendererContext {
   DataTableMap _dataTableMap;
   ScaleConfigMap _scaleConfigMap;
   GeomConfigVector _geomConfigs;
+
+  std::unordered_set<std::string> _accumulatorScales;
 
   const Executor* executor_;
 

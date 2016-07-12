@@ -15,6 +15,9 @@ typedef std::shared_ptr<QueryIdMapPixelBuffer> QueryIdMapPixelBufferShPtr;
 class QueryIdMapPboPool;
 typedef std::unique_ptr<QueryIdMapPboPool> QueryIdMapPboPoolUqPtr;
 
+class QueryAccumTxPool;
+typedef std::unique_ptr<QueryAccumTxPool> QueryAccumTxPoolUqPtr;
+
 class QueryRenderCompositor;
 typedef std::shared_ptr<QueryRenderCompositor> QueryRenderCompositorShPtr;
 

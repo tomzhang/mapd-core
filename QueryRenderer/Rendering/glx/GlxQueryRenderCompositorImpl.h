@@ -8,6 +8,7 @@
 #include <GL/glxew.h>
 
 #include "../QueryRenderCompositor.h"
+#include "../../Scales/Types.h"
 #include <Rendering/Renderer/GL/glx/Types.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <memory>
@@ -27,9 +28,17 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLRenderbufferShPtr createFboRenderbuffer(::Rendering::GL::GLRenderer* renderer,
                                                                         FboRenderBuffer rboType) final;
 
+  void registerAccumulatorTexture(::Rendering::GL::Resources::GLTexture2dShPtr& tex,
+                                  size_t accumIdx,
+                                  size_t numTexturesInArray) final;
+
+  void unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex, size_t accumIdx) final;
+
   void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) final;
 
  private:
+  static const int maxAccumColors;
+
   GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                ::Rendering::RendererShPtr& rendererPtr,
                                size_t width,
@@ -38,8 +47,26 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
                                bool doHitTest = false,
                                bool doDepthTest = false);
 
+  void _initAccumResources(size_t width, size_t height, size_t depth);
+  void _cleanupAccumResources();
   void _initResources(QueryRenderManager* queryRenderer);
   void _resizeImpl(size_t width, size_t height) final;
+
+  void _postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
+                         QueryFramebufferUqPtr& framebufferPtr,
+                         size_t width,
+                         size_t height,
+                         bool doHitTest,
+                         bool doDepthTest,
+                         int passCnt,
+                         ScaleShPtr& accumulatorScalePtr,
+                         int accumulatorCnt);
+
+  void _compositePass(const std::set<GpuId>& usedGpus,
+                      bool doHitTest,
+                      bool doDepthTest,
+                      int passCnt,
+                      ScaleShPtr& accumulatorScalePtr);
 
   ::Rendering::RendererWkPtr _rendererPtr;
   ::Rendering::GL::GLX::GlxGLRenderer* _renderer;
@@ -48,14 +75,14 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLVertexArrayShPtr _vao;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _rgbaTextureArray;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _idTextureArray;
-  // ::Rendering::GL::Resources::GLTexture2dArrayShPtr _depthTextureArray;
 
-  // std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
-  //                    std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _rgbaTextures;
-  // std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
-  //                    std::pair<::Rendering::GL::Resources::GLTexture2dWkPtr, int>> _idTextures;
-  // std::unordered_map<::Rendering::GL::Resources::GLRenderbuffer*,
-  //                    std::pair<::Rendering::GL::Resources::GLRenderbufferWkPtr, int>> _rbos;
+  ::Rendering::GL::Resources::GLPixelBuffer2dShPtr _clearPboPtr;
+  ::Rendering::GL::Resources::GLShaderShPtr _accumulatorShader;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _accumulationCpTextureArray;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _accumulationTextureArray;
+
+  std::vector<std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
+                                 ::Rendering::GL::Resources::GLTexture2dWkPtr>> _registeredAccumTxts;
 
   std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _rgbaTextures;
   std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _idTextures;
