@@ -27,10 +27,8 @@ namespace QueryRenderer {
 class BaseScale {
  public:
   static const size_t maxAccumTextures;
-  static size_t convertNumAccumValsToNumAccumTextures(size_t numAccumVals);
-  static size_t convertNumAccumTexturesToNumAccumVals(size_t numAccumTxts);
-
-  enum class AccumulatorType { MIN = 0, MAX, BLEND, UNDEFINED };
+  static size_t convertNumAccumValsToNumAccumTextures(size_t numAccumVals, AccumulatorType accumType);
+  static size_t convertNumAccumTexturesToNumAccumVals(size_t numAccumTxts, AccumulatorType accumType);
 
   const static std::vector<std::string> scaleVertexShaderSource;
 
@@ -39,7 +37,8 @@ class BaseScale {
             QueryDataType rangeDataType,
             const std::string& name = "",
             ScaleType type = ScaleType::UNDEFINED,
-            bool allowsAccumulator = false);
+            bool allowsAccumulator = false,
+            uint8_t accumTypeMask = static_cast<uint8_t>(AccumulatorType::ALL));
   BaseScale(const rapidjson::Value& obj,
             const rapidjson::Pointer& objPath,
             const QueryRendererContextShPtr& ctx,
@@ -47,7 +46,8 @@ class BaseScale {
             QueryDataType rangeDataType,
             const std::string& name = "",
             ScaleType type = ScaleType::UNDEFINED,
-            bool allowsAccumulator = false);
+            bool allowsAccumulator = false,
+            uint8_t accumTypeMask = static_cast<uint8_t>(AccumulatorType::ALL));
 
   virtual ~BaseScale();
 
@@ -57,7 +57,9 @@ class BaseScale {
   AccumulatorType getAccumulatorType() const { return _accumType; }
   bool hasAccumulator() const { return _accumType != AccumulatorType::UNDEFINED; }
   int getNumAccumulatorValues() const { return _numAccumulatorVals; }
-  size_t getNumAccumulatorTextures() const { return convertNumAccumValsToNumAccumTextures(_numAccumulatorVals); }
+  size_t getNumAccumulatorTextures() const {
+    return convertNumAccumValsToNumAccumTextures(_numAccumulatorVals, _accumType);
+  }
 
   QueryDataType getDomainDataType() { return _domainDataType; }
   QueryDataType getRangeDataType() { return _rangeDataType; }
@@ -71,7 +73,8 @@ class BaseScale {
 
   virtual std::string getGLSLCode(const std::string& extraSuffix = "",
                                   bool ignoreDomain = false,
-                                  bool ignoreRange = false) = 0;
+                                  bool ignoreRange = false,
+                                  bool ignoreAccum = false) = 0;
 
   std::string getDomainGLSLUniformName() { return "uDomains_" + _name; }
 
@@ -80,7 +83,8 @@ class BaseScale {
   virtual void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                                       const std::string& extraSuffix = "",
                                       bool ignoreDomain = false,
-                                      bool ignoreRange = false) = 0;
+                                      bool ignoreRange = false,
+                                      bool ignoreAccum = false) = 0;
 
   virtual BaseScaleDomainRangeData* getDomainData() = 0;
   virtual BaseScaleDomainRangeData* getRangeData() = 0;
@@ -103,7 +107,7 @@ class BaseScale {
   void accumulationPostRender(const GpuId& gpuId);
   void renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
                           const GpuId& gpuId,
-                          const ::Rendering::GL::Resources::GLTexture2dShPtr& idTex);
+                          ::Rendering::GL::Resources::GLTexture2dArray* compTxArrayPtr = nullptr);
 
   const std::vector<::Rendering::GL::Resources::GLTexture2dShPtr>& getAccumulatorTextureArrayRef(const GpuId& gpuId);
 
@@ -137,7 +141,7 @@ class BaseScale {
 
   bool _updateAccumulatorFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   void _setNumAccumulatorVals(int numAccumulatorVals);
-  void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader);
+  void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, bool ignoreAccum);
 
   bool hasNumAccumulatorValsChanged() const { return _numAccumulatorValsChanged; }
 
@@ -145,7 +149,6 @@ class BaseScale {
   struct PerGpuData : BasePerGpuData {
     std::vector<::Rendering::GL::Resources::GLTexture2dShPtr> accumulatorTexPtrArray;
 
-    // TODO(croot): can these all be cached somehow?
     ::Rendering::GL::Resources::GLShaderShPtr accumulator2ndPassShaderPtr;
     ::Rendering::GL::Resources::GLVertexBufferShPtr rectvbo;
     ::Rendering::GL::Resources::GLVertexArrayShPtr vao;
@@ -156,11 +159,7 @@ class BaseScale {
                         const ::Rendering::GL::Resources::GLShaderShPtr& accumulator2ndPassShaderPtr = nullptr,
                         const ::Rendering::GL::Resources::GLVertexBufferShPtr& rectvbo = nullptr,
                         const ::Rendering::GL::Resources::GLVertexArrayShPtr& vao = nullptr)
-        : BasePerGpuData(data),
-          // clearPboPtr(clearPboPtr),
-          accumulator2ndPassShaderPtr(accumulator2ndPassShaderPtr),
-          rectvbo(rectvbo),
-          vao(vao) {}
+        : BasePerGpuData(data), accumulator2ndPassShaderPtr(accumulator2ndPassShaderPtr), rectvbo(rectvbo), vao(vao) {}
 
     ~PerGpuData() {
       // need to make active to properly delete gpu resources
@@ -172,10 +171,16 @@ class BaseScale {
   PerGpuDataMap _perGpuData;
   AccumulatorType _accumType;
   bool _accumTypeChanged;
+  int16_t _accumTypeMask;
 
   int _numAccumulatorVals;
   bool _numAccumulatorValsChanged;
   bool _numAccumulatorTxtsChanged;
+
+  uint32_t _minDensity;
+  bool _findMinDensity;
+  uint32_t _maxDensity;
+  bool _findMaxDensity;
 
   // using this bool to determine whether the gpu resources for an accumulator
   // scale were just built in the current render configuration update.
@@ -207,7 +212,8 @@ class Scale : public BaseScale {
         const QueryRendererContextShPtr& ctx,
         const std::string& name = "",
         ScaleType type = ScaleType::UNDEFINED,
-        bool allowsAccumulator = false)
+        bool allowsAccumulator = false,
+        uint8_t accumTypeMask = static_cast<uint8_t>(AccumulatorType::ALL))
       : BaseScale(obj,
                   objPath,
                   ctx,
@@ -215,7 +221,8 @@ class Scale : public BaseScale {
                   getDataTypeForType<RangeType>(),
                   name,
                   type,
-                  allowsAccumulator),
+                  allowsAccumulator,
+                  accumTypeMask),
         _domainPtr("domain", false),
         _rangePtr("range", true) {
     _initGLTypes();
@@ -227,7 +234,7 @@ class Scale : public BaseScale {
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
  protected:
-  std::string _getGLSLCode(const std::string& extraSuffix, bool ignoreDomain, bool ignoreRange) {
+  std::string _getGLSLCode(const std::string& extraSuffix, bool ignoreDomain, bool ignoreRange, bool ignoreAccum) {
     RUNTIME_EX_ASSERT(_domainPtr.size() > 0 && _rangePtr.size() > 0,
                       std::string(*this) + " getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
 
@@ -251,7 +258,8 @@ class Scale : public BaseScale {
 
     boost::replace_all(shaderCode, "<name>", _name + extraSuffix);
 
-    boost::replace_all(shaderCode, "<doAccum>", std::to_string(hasAccumulator()));
+    bool hasAccum = (ignoreAccum ? false : hasAccumulator());
+    boost::replace_all(shaderCode, "<doAccum>", std::to_string(hasAccum));
 
     shaderCode += '\n';
 
@@ -274,6 +282,16 @@ class Scale : public BaseScale {
       if (_allowsAccumulator) {
         bool accumUpdated = _updateAccumulatorFromJSONObj(obj, objPath);
         rtn = rtn || accumUpdated;
+
+        QueryDataType dtype = getDomainDataType();
+        RUNTIME_EX_ASSERT(
+            getAccumulatorType() != AccumulatorType::DENSITY || dtype == QueryDataType::FLOAT ||
+                dtype == QueryDataType::DOUBLE,
+            RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                                 obj,
+                                                 "density accumulator scales must have floats/doubles as its domain "
+                                                 "values which are used as percentages of the final accumulation "
+                                                 "counts."));
       }
     } else if (_jsonPath != objPath) {
       _domainSizeChanged = _domainValsChanged = _rangeSizeChanged = _rangeValsChanged = true;
@@ -288,7 +306,8 @@ class Scale : public BaseScale {
   void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                                const std::string& extraSuffix,
                                bool ignoreDomain,
-                               bool ignoreRange) {
+                               bool ignoreRange,
+                               bool ignoreAccum) {
     if (!ignoreDomain) {
       activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, _domainPtr.getVectorDataRef());
     }
@@ -297,7 +316,7 @@ class Scale : public BaseScale {
       activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorDataRef());
     }
 
-    BaseScale::_bindUniformsToRenderer(activeShader);
+    BaseScale::_bindUniformsToRenderer(activeShader, ignoreAccum);
   }
 
   std::string _printInfo() const {
@@ -325,7 +344,14 @@ class LinearScale : public Scale<DomainType, RangeType> {
               const rapidjson::Pointer& objPath,
               const QueryRendererContextShPtr& ctx,
               const std::string& name = "")
-      : Scale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LINEAR), _useClamp(false) {
+      : Scale<DomainType, RangeType>(obj,
+                                     objPath,
+                                     ctx,
+                                     name,
+                                     ScaleType::LINEAR,
+                                     true,
+                                     static_cast<uint8_t>(AccumulatorType::DENSITY)),
+        _useClamp(false) {
     updateFromJSONObj(obj, objPath);
   }
 
@@ -337,14 +363,20 @@ class LinearScale : public Scale<DomainType, RangeType> {
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                               const std::string& extraSuffix = "",
                               bool ignoreDomain = false,
-                              bool ignoreRange = false) final {
-    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange);
+                              bool ignoreRange = false,
+                              bool ignoreAccum = false) final {
+    if (!ignoreAccum && this->hasAccumulator()) {
+      ignoreDomain = true;
+      ignoreRange = true;
+    }
+    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
   }
 
   std::string getGLSLCode(const std::string& extraSuffix = "",
                           bool ignoreDomain = false,
-                          bool ignoreRange = false) final {
-    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange);
+                          bool ignoreRange = false,
+                          bool ignoreAccum = false) final {
+    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
 
     std::ostringstream ss;
     ss << _useClamp;
@@ -382,6 +414,10 @@ class LinearScale : public Scale<DomainType, RangeType> {
       }
     }
 
+    if (this->hasAccumulator()) {
+      this->_setNumAccumulatorVals(this->_rangePtr.size());
+    }
+
     this->_jsonPath = objPath;
 
     return updated;
@@ -392,6 +428,17 @@ class LinearScale : public Scale<DomainType, RangeType> {
  private:
   bool _useClamp;
   bool _clampChanged;
+
+  void bindAccumulatorColors(::Rendering::GL::Resources::GLShaderShPtr& shaderPtr,
+                             const std::string& attrName,
+                             bool checkFullSize = true) final {
+    RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
+                      "Colors are currently the only supported accumulation range types.");
+
+    auto& data = this->_rangePtr.getVectorDataRef();
+    CHECK(static_cast<int>(data.size()) == this->getNumAccumulatorValues());
+    shaderPtr->setUniformAttribute(attrName, data, checkFullSize);
+  }
 };
 
 template <typename DomainType, typename RangeType>
@@ -401,7 +448,16 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
                const rapidjson::Pointer& objPath,
                const QueryRendererContextShPtr& ctx,
                const std::string& name = "")
-      : Scale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::ORDINAL, true), _defaultVal() {
+      : Scale<DomainType, RangeType>(
+            obj,
+            objPath,
+            ctx,
+            name,
+            ScaleType::ORDINAL,
+            true,
+            (static_cast<uint8_t>(AccumulatorType::MIN) | static_cast<uint8_t>(AccumulatorType::MAX) |
+             static_cast<uint8_t>(AccumulatorType::BLEND))),
+        _defaultVal() {
     updateFromJSONObj(obj, objPath);
   }
 
@@ -412,19 +468,21 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                               const std::string& extraSuffix = "",
                               bool ignoreDomain = false,
-                              bool ignoreRange = false) final {
-    if (this->hasAccumulator()) {
-      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, true);
+                              bool ignoreRange = false,
+                              bool ignoreAccum = false) final {
+    if (!ignoreAccum && this->hasAccumulator()) {
+      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, true, ignoreAccum);
     } else {
-      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange);
+      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
       activeShader->setUniformAttribute(this->getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
     }
   }
 
   std::string getGLSLCode(const std::string& extraSuffix = "",
                           bool ignoreDomain = false,
-                          bool ignoreRange = false) final {
-    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange);
+                          bool ignoreRange = false,
+                          bool ignoreAccum = false) final {
+    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
 
     return shaderCode;
   }
@@ -509,8 +567,13 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                               const std::string& extraSuffix = "",
                               bool ignoreDomain = false,
-                              bool ignoreRange = false) final {
-    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange);
+                              bool ignoreRange = false,
+                              bool ignoreAccum = false) final {
+    if (!ignoreAccum && this->hasAccumulator()) {
+      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, true, ignoreAccum);
+    } else {
+      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+    }
 
     double diff = this->_domainPtr.getDifference(this->_rangePtr.size());
     activeShader->setUniformAttribute<double>("quantizeDiff", diff);
@@ -518,8 +581,9 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
 
   std::string getGLSLCode(const std::string& extraSuffix = "",
                           bool ignoreDomain = false,
-                          bool ignoreRange = false) final {
-    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange);
+                          bool ignoreRange = false,
+                          bool ignoreAccum = false) final {
+    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
     return shaderCode;
   }
 
@@ -535,6 +599,18 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
   }
 
   operator std::string() const final { return "QuantizeScale" + this->_printInfo(); }
+
+ private:
+  void bindAccumulatorColors(::Rendering::GL::Resources::GLShaderShPtr& shaderPtr,
+                             const std::string& attrName,
+                             bool checkFullSize = true) final {
+    RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
+                      "Colors are currently the only supported accumulation range types.");
+
+    auto& data = this->_rangePtr.getVectorDataRef();
+    CHECK(static_cast<int>(data.size()) == this->getNumAccumulatorValues());
+    shaderPtr->setUniformAttribute(attrName, data, checkFullSize);
+  }
 };
 
 }  // namespace QueryRenderer

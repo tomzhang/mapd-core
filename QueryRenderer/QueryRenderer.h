@@ -75,7 +75,7 @@ class QueryRenderer {
       std::function<
           void(::Rendering::GL::GLRenderer*, QueryFramebufferUqPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
           perPassGpuCB,
-      std::function<void(const std::set<GpuId>&, bool, bool, int, ScaleShPtr&)> passCompleteCB);
+      std::function<void(const std::set<GpuId>&, size_t, size_t, bool, bool, int, ScaleShPtr&)> passCompleteCB);
 
   static QueryFramebufferUqPtr& renderGpu(GpuId gpuId,
                                           const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,

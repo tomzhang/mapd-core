@@ -152,8 +152,9 @@ class ScaleRef : public BaseScaleRef {
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, const std::string& extraSuffix = "") {
     _verifyScalePointer();
 
-    bool coerceDomain = (_coercedDomainData != nullptr);
-    bool coerceRange = (_coercedRangeData != nullptr);
+    auto accumType = _scalePtr->getAccumulatorType();
+    bool coerceDomain = (accumType != AccumulatorType::DENSITY && _coercedDomainData != nullptr);
+    bool coerceRange = (accumType == AccumulatorType::UNDEFINED && _coercedRangeData != nullptr);
 
     if (coerceDomain) {
       activeShader->setUniformAttribute(_scalePtr->getDomainGLSLUniformName() + extraSuffix,

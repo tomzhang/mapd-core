@@ -46,6 +46,8 @@ class QueryFramebuffer {
   ~QueryFramebuffer();
 
   void resize(int width, int height);
+
+  std::pair<std::vector<GLenum>, std::vector<GLenum>> getEnabledDisabledAttachments() const;
   void bindToRenderer(
       ::Rendering::GL::GLRenderer* renderer,
       ::Rendering::GL::Resources::FboBind bindType = ::Rendering::GL::Resources::FboBind::READ_AND_DRAW);

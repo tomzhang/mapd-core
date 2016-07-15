@@ -82,6 +82,8 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
                          int accumulatorCnt);
 
   void _compositePass(const std::set<GpuId>& usedGpus,
+                      size_t width,
+                      size_t height,
                       bool doHitTest,
                       bool doDepthTest,
                       int passCnt,

@@ -42,8 +42,8 @@ using ::Rendering::GL::Resources::GLTexture2dSampleProps;
 #define glxewGetContext _renderer->glxewGetContext
 #endif
 
-const int GlxQueryRenderCompositorImpl::maxAccumColors =
-    static_cast<int>(BaseScale::convertNumAccumTexturesToNumAccumVals(BaseScale::maxAccumTextures));
+const int GlxQueryRenderCompositorImpl::maxAccumColors = static_cast<int>(
+    BaseScale::convertNumAccumTexturesToNumAccumVals(BaseScale::maxAccumTextures, AccumulatorType::BLEND));
 
 GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                                            ::Rendering::RendererShPtr& rendererPtr,
@@ -455,30 +455,65 @@ void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
 }
 
 void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpus,
+                                                  size_t width,
+                                                  size_t height,
                                                   bool doHitTest,
                                                   bool doDepthTest,
                                                   int passCnt,
                                                   ScaleShPtr& accumulatorScalePtr) {
   _renderer->makeActiveOnCurrentThread();
 
+  // auto fbo = _framebufferPtr->getGLFramebuffer();
+  // _renderer->bindFramebuffer(::Rendering::GL::Resources::FboBind::READ_AND_DRAW, fbo);
+
+  _framebufferPtr->setHitTest(accumulatorScalePtr ? false : doHitTest);
+  _framebufferPtr->setDepthTest(doDepthTest);
   _framebufferPtr->bindToRenderer(_renderer);
+
+  _renderer->setViewport(0, 0, width, height);
+  if (passCnt == 0) {
+    _renderer->setClearColor(0, 0, 0, 0);
+    _renderer->clearAll();
+  }
+
+  if (accumulatorScalePtr) {
+    // NOTE: the blend equations should have been set in QueryRenderer
+    _renderer->enable(GL_BLEND);
+    _renderer->setBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    _renderer->setBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    accumulatorScalePtr->renderAccumulation(_renderer, _renderer->getGpuId(), _accumulationTextureArray.get());
+
+    if (!doHitTest) {
+      // can just return at this point
+      // TODO(croot): this may need to change at some point if
+      // other things need to be rendered with an accumulation
+      // Depth? Alternate rendering styles (i.e. stroking?)
+      return;
+    }
+
+    _framebufferPtr->setHitTest(doHitTest);
+    _framebufferPtr->setDepthTest(doDepthTest);
+    _framebufferPtr->bindToRenderer(_renderer);
+
+    // auto fbo = _framebufferPtr->getGLFramebuffer();
+    // fbo->disableAttachment(GL_COLOR_ATTACHMENT0);  // disable color buffer
+    // fbo->enableAttachment(GL_COLOR_ATTACHMENT1);   // but enable id buffer
+    // fbo->activateEnabledAttachmentsForDrawing();
+  }
+
   _renderer->bindShader(_shader);
   _renderer->bindVertexArray(_vao);
 
   // we're doing the blending manually in the shader, so disable any blending here
-  _renderer->disable(GL_BLEND);
+  // TODO(croot): but what about multiple passes? Is this going to work then?
+  // I think this will be a bug!!!!
+  // _renderer->disable(GL_BLEND);
 
   // When multi-sampling, we want to read from all the samples too,
   // so enable sample shading to enforce that.
   _renderer->enable(GL_SAMPLE_SHADING);
   _renderer->setMinSampleShading(1.0);
-
-  _renderer->setViewport(0, 0, getWidth(), getHeight());
-
-  if (passCnt == 0) {
-    _renderer->setClearColor(0, 0, 0, 0);
-    _renderer->clearAll();
-  }
 
   _shader->setSamplerAttribute("rgbaArraySampler", _rgbaTextureArray);
   _shader->setUniformAttribute("rgbaArraySize", usedGpus.size());
@@ -490,34 +525,35 @@ void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
     _shader->setUniformAttribute("idArraySize", 0);
   }
 
-  if (accumulatorScalePtr) {
-    std::string accumulator;
-    switch (accumulatorScalePtr->getAccumulatorType()) {
-      case BaseScale::AccumulatorType::MIN:
-        accumulator = "getMinColor";
-        break;
-      case BaseScale::AccumulatorType::MAX:
-        accumulator = "getMaxColor";
-        break;
-      case BaseScale::AccumulatorType::BLEND:
-        accumulator = "getBlendColor";
-        break;
-      default:
-        THROW_RUNTIME_EX("Accumulator type " +
-                         std::to_string(static_cast<int>(accumulatorScalePtr->getAccumulatorType())) +
-                         " is not currently supported in the composite.");
-    }
+  // if (accumulatorScalePtr) {
+  //   // std::string accumulator;
+  //   // switch (accumulatorScalePtr->getAccumulatorType()) {
+  //   //   case AccumulatorType::MIN:
+  //   //     accumulator = "getMinColor";
+  //   //     break;
+  //   //   case AccumulatorType::MAX:
+  //   //     accumulator = "getMaxColor";
+  //   //     break;
+  //   //   case AccumulatorType::BLEND:
+  //   //     accumulator = "getBlendColor";
+  //   //     break;
+  //   //   default:
+  //   //     THROW_RUNTIME_EX("Accumulator type " +
+  //   //                      std::to_string(static_cast<int>(accumulatorScalePtr->getAccumulatorType())) +
+  //   //                      " is not currently supported in the composite.");
+  //   // }
 
-    _shader->setSubroutines({{"Compositor", "compositeAccumulator"}, {"Accumulator", accumulator}});
+  //   // _shader->setSubroutines({{"Compositor", "compositeAccumulator"}, {"Accumulator", accumulator}});
+  //   // accumulatorScalePtr->bindAccumulatorColors(_shader, "inColors", false);
+  //   // _shader->setUniformAttribute("numAccumColors", accumulatorScalePtr->getNumAccumulatorValues());
 
-    accumulatorScalePtr->bindAccumulatorColors(_shader, "inColors", false);
-    _shader->setUniformAttribute("numAccumColors", accumulatorScalePtr->getNumAccumulatorValues());
+  //   // _shader->setImageLoadStoreAttribute("inTxPixelCounter", _accumulationTextureArray);
+  //   accumulatorScalePtr->renderAccumulation(_renderer, _renderer->getGpuId(), _accumulationTextureArray.get());
+  // } else {
+  //   _shader->setSubroutine("Compositor", "compositeColor");
+  // }
 
-    _shader->setImageLoadStoreAttribute("inTxPixelCounter", _accumulationTextureArray);
-  } else {
-    _shader->setSubroutine("Compositor", "compositeColor");
-  }
-
+  _shader->setSubroutine("Compositor", (accumulatorScalePtr ? "compositeAccumulatorIds" : "compositeColor"));
   _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
 
   // TODO(croot): push/pop a state?
@@ -575,7 +611,9 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
                                         std::placeholders::_2,
                                         std::placeholders::_3,
                                         std::placeholders::_4,
-                                        std::placeholders::_5));
+                                        std::placeholders::_5,
+                                        std::placeholders::_6,
+                                        std::placeholders::_7));
 }
 
 }  // namespace GLX

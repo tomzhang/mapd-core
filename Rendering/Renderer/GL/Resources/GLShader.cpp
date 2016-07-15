@@ -222,7 +222,7 @@ void UniformImageLoadStoreAttr::setImgUnit(GLint imgUnit, GLint attrSize) {
   // i.e. glGetIntegerv(GL_MAX_VERTEX_IMAGE_UNIFORMS, ...)
   // See: https://www.opengl.org/wiki/Image_Load_Store#Images_in_the_context
 
-  CHECK(attrSize < size);
+  CHECK(attrSize <= size);
 
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_IMAGE_UNITS, &maxImgUnits));
 
@@ -1159,7 +1159,7 @@ GLShaderBlockLayoutShPtr GLShader::getBlockLayout(const std::string& blockName) 
   return itr->second->blockLayoutPtr;
 }
 
-void GLShader::setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc) {
+void GLShader::setSamplerAttribute(const std::string& attrName, const GLResource* rsrc) {
   switch (rsrc->getResourceType()) {
     case GLResourceType::TEXTURE_2D:
     case GLResourceType::TEXTURE_2D_ARRAY: {
@@ -1181,19 +1181,23 @@ void GLShader::setSamplerAttribute(const std::string& attrName, const GLResource
   }
 }
 
+void GLShader::setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc) {
+  setSamplerAttribute(attrName, rsrc.get());
+}
+
 void GLShader::setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit) {
   UniformSamplerAttr* samplerAttr = _validateSamplerAttr(attrName);
   samplerAttr->setTexImgUnit(startTexImageUnit);
 }
 
-void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const GLResourceShPtr& rsrc, int layerIdx) {
+void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const GLResource* rsrc, int layerIdx) {
   UniformImageLoadStoreAttr* imgAttr = _validateImageLoadStoreAttr(attrName);
 
   // TODO(croot): validate compatability between the texture/texture array/texture cube/texture rect
   // object's internal format and num samples
   switch (rsrc->getResourceType()) {
     case GLResourceType::TEXTURE_2D_ARRAY: {
-      auto tex2dArrayRsrc = std::dynamic_pointer_cast<GLTexture2dArray>(rsrc);
+      auto tex2dArrayRsrc = dynamic_cast<const GLTexture2dArray*>(rsrc);
       CHECK(tex2dArrayRsrc);
 
       RUNTIME_EX_ASSERT(imgAttr->size == 1,
@@ -1209,9 +1213,30 @@ void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const GLR
       GLuint id = rsrc->getId();
       imgAttr->setAttr((void*)(&id), 1, true, layerIdx);
     } break;
+    case GLResourceType::TEXTURE_2D: {
+      auto tex2dRsrc = dynamic_cast<const GLTexture2d*>(rsrc);
+      CHECK(tex2dRsrc);
+
+      RUNTIME_EX_ASSERT(imgAttr->size == 1,
+                        "The image load store attribute \"" + attrName + "\" is an array of size " +
+                            std::to_string(imgAttr->size) +
+                            " and must be set using a vector, not a single texture resource");
+
+      RUNTIME_EX_ASSERT(imgAttr->format == tex2dRsrc->getInternalFormat(),
+                        "Attr mismatch. Image load store attr \"" + attrName + "\" expects a " +
+                            std::to_string(imgAttr->format) + " formatted image but the image rsrc has a " +
+                            std::to_string(tex2dRsrc->getInternalFormat()) + " format.");
+
+      GLuint id = rsrc->getId();
+      imgAttr->setAttr((void*)(&id), 1, false, layerIdx);
+    } break;
     default:
       THROW_RUNTIME_EX("Attr mismatch. Invalid resource type: " + to_string(rsrc->getResourceType()));
   }
+}
+
+void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const GLResourceShPtr& rsrc, int layerIdx) {
+  setImageLoadStoreAttribute(attrName, rsrc.get(), layerIdx);
 }
 
 void GLShader::setImageLoadStoreAttribute(const std::string& attrName, const std::vector<GLTexture2dShPtr>& rsrcs) {

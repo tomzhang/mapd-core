@@ -342,7 +342,7 @@ class RenderProperty : public BaseRenderProperty {
   void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) {
     switch (refEventType) {
       case RefEventType::UPDATE: {
-        bool accumulatorChanged = scalePtr->hasAccumulatorTypeChanged() || scalePtr->hasNumAccumulatorTexturesChanged();
+        bool accumulatorChanged = scalePtr->hasNumAccumulatorTexturesChanged();
         RUNTIME_EX_ASSERT(!accumulatorChanged || _allowsAccumulatorScale || !scalePtr->hasAccumulator(),
                           std::string(*this) + ": scale \"" + scalePtr->getName() +
                               "\" has been updated into an accumulator scale, but this property doesn't allow for "

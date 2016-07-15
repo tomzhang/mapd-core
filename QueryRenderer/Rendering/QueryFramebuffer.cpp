@@ -209,27 +209,48 @@ GLuint QueryFramebuffer::getId(FboRenderBuffer buffer) {
   return 0;
 }
 
+std::pair<std::vector<GLenum>, std::vector<GLenum>> QueryFramebuffer::getEnabledDisabledAttachments() const {
+  std::vector<GLenum> enableAttachments = {};
+  std::vector<GLenum> disableAttachments = {};
+
+  if (_doHitTest) {
+    enableAttachments.push_back(GL_COLOR_ATTACHMENT1);
+  } else if (_defaultDoHitTest) {
+    disableAttachments.push_back(GL_COLOR_ATTACHMENT1);
+  }
+
+  if (_doDepthTest) {
+    enableAttachments.push_back(GL_DEPTH_ATTACHMENT);
+  } else if (_defaultDoDepthTest) {
+    disableAttachments.push_back(GL_DEPTH_ATTACHMENT);
+  }
+
+  return {std::move(enableAttachments), std::move(disableAttachments)};
+}
+
 void QueryFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
   renderer->bindFramebuffer(bindType, _fbo);
 
   if (bindType == FboBind::DRAW || bindType == FboBind::READ_AND_DRAW) {
-    std::vector<GLenum> enableAttachments = {};
-    std::vector<GLenum> disableAttachments = {};
+    // std::vector<GLenum> enableAttachments = {};
+    // std::vector<GLenum> disableAttachments = {};
 
-    if (_doHitTest) {
-      enableAttachments.push_back(GL_COLOR_ATTACHMENT1);
-    } else if (_defaultDoHitTest) {
-      disableAttachments.push_back(GL_COLOR_ATTACHMENT1);
-    }
+    // if (_doHitTest) {
+    //   enableAttachments.push_back(GL_COLOR_ATTACHMENT1);
+    // } else if (_defaultDoHitTest) {
+    //   disableAttachments.push_back(GL_COLOR_ATTACHMENT1);
+    // }
 
-    if (_doDepthTest) {
-      enableAttachments.push_back(GL_DEPTH_ATTACHMENT);
-    } else if (_defaultDoDepthTest) {
-      disableAttachments.push_back(GL_DEPTH_ATTACHMENT);
-    }
+    // if (_doDepthTest) {
+    //   enableAttachments.push_back(GL_DEPTH_ATTACHMENT);
+    // } else if (_defaultDoDepthTest) {
+    //   disableAttachments.push_back(GL_DEPTH_ATTACHMENT);
+    // }
 
-    _fbo->enableAttachments(enableAttachments);
-    _fbo->disableAttachments(disableAttachments);
+    auto attachments = getEnabledDisabledAttachments();
+
+    _fbo->enableAttachments(attachments.first);
+    _fbo->disableAttachments(attachments.second);
 
     _fbo->activateEnabledAttachmentsForDrawing();
   }

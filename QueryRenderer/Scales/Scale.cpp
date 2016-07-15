@@ -1,5 +1,6 @@
 #include "Scale.h"
 #include "Utils.h"
+#include "../Utils/ShaderUtils.h"
 #include "shaders/linearScaleTemplate_vert.h"
 #include "shaders/ordinalScaleTemplate_vert.h"
 #include "shaders/quantizeScaleTemplate_vert.h"
@@ -11,6 +12,8 @@
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 #include <Rendering/Renderer/GL/Resources/GLTexture2dArray.h>
 
+#include <Shared/measure.h>
+
 namespace QueryRenderer {
 
 const std::vector<std::string> BaseScale::scaleVertexShaderSource = {
@@ -20,11 +23,16 @@ const std::vector<std::string> BaseScale::scaleVertexShaderSource = {
 };
 
 const size_t BaseScale::maxAccumTextures = 30;
-size_t BaseScale::convertNumAccumValsToNumAccumTextures(size_t numAccumVals) {
+size_t BaseScale::convertNumAccumValsToNumAccumTextures(size_t numAccumVals, AccumulatorType accumType) {
+  if (accumType == AccumulatorType::DENSITY) {
+    return 1;
+  }
   return (numAccumVals + 1) / 2;
 }
 
-size_t BaseScale::convertNumAccumTexturesToNumAccumVals(size_t numAccumTxts) {
+size_t BaseScale::convertNumAccumTexturesToNumAccumVals(size_t numAccumTxts, AccumulatorType accumType) {
+  RUNTIME_EX_ASSERT(accumType != AccumulatorType::DENSITY,
+                    "Cannot determine the number of accumulator values from a density accumulator type.");
   return numAccumTxts * 2;
 }
 
@@ -33,7 +41,8 @@ BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
                      QueryDataType rangeDataType,
                      const std::string& name,
                      ScaleType type,
-                     bool allowsAccumulator)
+                     bool allowsAccumulator,
+                     uint8_t accumTypeMask)
     : _name(name),
       _type(type),
       _domainDataType(domainDataType),
@@ -44,9 +53,14 @@ BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
       _allowsAccumulator(allowsAccumulator),
       _accumType(AccumulatorType::UNDEFINED),
       _accumTypeChanged(false),
+      _accumTypeMask(accumTypeMask),
       _numAccumulatorVals(0),
       _numAccumulatorValsChanged(false),
       _numAccumulatorTxtsChanged(false),
+      _minDensity(0),
+      _findMinDensity(false),
+      _maxDensity(0),
+      _findMaxDensity(false),
       _justBuilt(false) {
 }
 
@@ -57,8 +71,9 @@ BaseScale::BaseScale(const rapidjson::Value& obj,
                      QueryDataType rangeDataType,
                      const std::string& name,
                      ScaleType type,
-                     bool allowsAccumulator)
-    : BaseScale(ctx, domainDataType, rangeDataType, name, type, allowsAccumulator) {
+                     bool allowsAccumulator,
+                     uint8_t accumTypeMask)
+    : BaseScale(ctx, domainDataType, rangeDataType, name, type, allowsAccumulator, accumTypeMask) {
 }
 
 BaseScale::~BaseScale() {
@@ -137,15 +152,20 @@ void BaseScale::accumulationPostRender(const GpuId& gpuId) {
 
 void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
                                    const GpuId& gpuId,
-                                   const ::Rendering::GL::Resources::GLTexture2dShPtr& idTex) {
+                                   ::Rendering::GL::Resources::GLTexture2dArray* compTxArrayPtr) {
   CHECK(hasAccumulator());
 
   auto itr = _perGpuData.find(gpuId);
   CHECK(itr != _perGpuData.end());
 
   // unneccesary checks?
+  // TODO(croot): should I pass the fbo as an argument
   auto fbo = glRenderer->getBoundFramebuffer(::Rendering::GL::Resources::FboBind::READ_AND_DRAW);
   CHECK(fbo != nullptr);
+
+  // there will be no multisampling for rendering based on
+  // accumulation textures
+  glRenderer->disable(GL_MULTISAMPLE);
 
   // the 2nd pass of the accumulation, when using 1 gpu, does not
   // do anything with the ids, or in other words GL_COLOR_ATTACHMENT1 of
@@ -162,18 +182,91 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   fbo->disableAttachment(GL_COLOR_ATTACHMENT1);
   fbo->activateEnabledAttachmentsForDrawing();
 
+  ::Rendering::GL::Resources::GLTexture2dShPtr extentTx;
+  if (_accumType == AccumulatorType::DENSITY && (_findMinDensity || _findMaxDensity)) {
+    auto& accumPool = itr->second.getAccumTxPool();
+
+    // there should only be 1 accumulation texture when the accumulation
+    // type is DENSITY
+    CHECK(itr->second.accumulatorTexPtrArray.size() == 1);
+
+    if (compTxArrayPtr) {
+      extentTx = accumPool->getInactiveExtentsTx(compTxArrayPtr);
+    } else {
+      extentTx = accumPool->getInactiveExtentsTx(itr->second.accumulatorTexPtrArray[0]);
+    }
+  }
+
   glRenderer->setClearColor(0, 0, 0, 0);
   glRenderer->clearAll();
-
   glRenderer->bindShader(itr->second.accumulator2ndPassShaderPtr);
 
   itr->second.accumulator2ndPassShaderPtr->setImageLoadStoreAttribute("inTxPixelCounter",
                                                                       itr->second.accumulatorTexPtrArray);
 
+  if (compTxArrayPtr) {
+    // match the binding unit from the shader
+    itr->second.accumulator2ndPassShaderPtr->setImageLoadStoreImageUnit("inTxArrayPixelCounter",
+                                                                        itr->second.accumulatorTexPtrArray.size());
+    itr->second.accumulator2ndPassShaderPtr->setImageLoadStoreAttribute("inTxArrayPixelCounter", compTxArrayPtr);
+  }
+
+  std::unordered_map<std::string, std::string> subroutines(
+      {{"getAccumulatedColor", ""},
+       {"getAccumulatedCnt", (compTxArrayPtr != nullptr ? "getTxArrayAccumulatedCnt" : "getTxAccumulatedCnt")},
+       {"getMinDensity", "getUniformMinDensity"},
+       {"getMaxDensity", "getUniformMaxDensity"}});
+
+  if (_findMinDensity || _findMaxDensity) {
+    CHECK(extentTx);
+    itr->second.accumulator2ndPassShaderPtr->setSamplerTextureImageUnit("densityExtents", GL_TEXTURE0);
+    itr->second.accumulator2ndPassShaderPtr->setSamplerAttribute("densityExtents", extentTx);
+
+    if (_findMinDensity) {
+      subroutines["getMinDensity"] = "getTextureMinDensity";
+    }
+
+    if (_findMaxDensity) {
+      subroutines["getMaxDensity"] = "getTextureMaxDensity";
+    }
+  }
+
+  std::string accumFunc;
+  switch (_accumType) {
+    case AccumulatorType::MIN:
+      accumFunc = "getMinAccumulatedColor";
+      break;
+    case AccumulatorType::MAX:
+      accumFunc = "getMaxAccumulatedColor";
+      break;
+    case AccumulatorType::BLEND:
+      accumFunc = "getBlendAccumulatedColor";
+      break;
+    case AccumulatorType::DENSITY:
+      accumFunc = "getDensityAccumulatedColor";
+      bindUniformsToRenderer(
+          itr->second.accumulator2ndPassShaderPtr.get(), "_" + to_string(_accumType), false, false, true);
+      break;
+    default:
+      THROW_RUNTIME_EX("Accumulator type " + to_string(_accumType) + " is currently unsupported for rendering");
+  }
+  subroutines["getAccumulatedColor"] = accumFunc;
+  itr->second.accumulator2ndPassShaderPtr->setSubroutines(subroutines);
+  itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<uint32_t>("minDensity", _minDensity);
+  itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<uint32_t>("maxDensity", _maxDensity);
+
   bindAccumulatorColors(itr->second.accumulator2ndPassShaderPtr, "inColors");
 
   glRenderer->bindVertexArray(itr->second.vao);
   glRenderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
+
+  // restore state/multi-sampling
+  glRenderer->enable(GL_MULTISAMPLE);
+
+  if (extentTx) {
+    auto& accumTxPool = itr->second.getAccumTxPool();
+    accumTxPool->setExtentsTxInactive(extentTx);
+  }
 }
 
 const std::vector<::Rendering::GL::Resources::GLTexture2dShPtr>& BaseScale::getAccumulatorTextureArrayRef(
@@ -225,12 +318,78 @@ bool BaseScale::_updateAccumulatorFromJSONObj(const rapidjson::Value& obj, const
       type = AccumulatorType::MAX;
     } else if (accumTypeStr == "BLEND") {
       type = AccumulatorType::BLEND;
+    } else if (accumTypeStr == "DENSITY") {
+      type = AccumulatorType::DENSITY;
+
+      static const std::string densityMin = "minDensityCnt";
+      static const std::string densityMax = "maxDensityCnt";
+
+      RUNTIME_EX_ASSERT(
+          (mitr = obj.FindMember(densityMax.c_str())) != obj.MemberEnd(),
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(),
+              obj,
+              "A \"" + densityMax + "\" attribute is missing which is required for density-based accumulations"));
+
+      itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value, true);
+      RUNTIME_EX_ASSERT(
+          itemType == QueryDataType::UINT || itemType == QueryDataType::INT || itemType == QueryDataType::STRING,
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(), obj, "Density max must be an integer or the string \"max\"."));
+
+      if (mitr->value.IsString()) {
+        RUNTIME_EX_ASSERT(std::string(mitr->value.GetString()) == "max",
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              _ctx->getUserWidgetIds(), obj, "Density max must be an integer or the string \"max\"."));
+        _findMaxDensity = true;
+      } else if (mitr->value.IsInt()) {
+        RUNTIME_EX_ASSERT(
+            mitr->value.GetInt() >= 0,
+            RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "Density max must be an integer > 0."));
+
+        _maxDensity = static_cast<uint32_t>(mitr->value.GetInt());
+      } else {
+        _maxDensity = static_cast<uint32_t>(mitr->value.GetUint());
+      }
+
+      if ((mitr = obj.FindMember(densityMin.c_str())) != obj.MemberEnd()) {
+        itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value, true);
+        RUNTIME_EX_ASSERT(
+            itemType == QueryDataType::UINT || itemType == QueryDataType::INT || itemType == QueryDataType::STRING,
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), obj, "Density min must be an integer or the string \"min\"."));
+
+        if (mitr->value.IsString()) {
+          RUNTIME_EX_ASSERT(
+              std::string(mitr->value.GetString()) == "min",
+              RapidJSONUtils::getJsonParseErrorStr(
+                  _ctx->getUserWidgetIds(), obj, "Density min must be an integer or the string \"min\"."));
+          _findMinDensity = true;
+        } else if (mitr->value.IsInt()) {
+          RUNTIME_EX_ASSERT(mitr->value.GetInt() >= 0,
+                            RapidJSONUtils::getJsonParseErrorStr(
+                                _ctx->getUserWidgetIds(), obj, "Density min must be an integer > 0."));
+
+          _minDensity = static_cast<uint32_t>(mitr->value.GetInt());
+        } else {
+          _minDensity = static_cast<uint32_t>(mitr->value.GetUint());
+        }
+      } else {
+        _minDensity = 0;
+      }
     } else {
       THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
           _ctx->getUserWidgetIds(),
           mitr->value,
           "scale \"" + _name + "\" accumulator \"" + accumTypeStr + "\" is not a supported accumulation type."));
     }
+
+    RUNTIME_EX_ASSERT(
+        (_accumTypeMask & static_cast<uint8_t>(type)) > 0,
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(),
+            obj,
+            "Scale of type " + to_string(_type) + " does not support an accumulator of type " + to_string(type) + "."));
   } else {
     // set an undefined default
     type = AccumulatorType::UNDEFINED;
@@ -257,12 +416,12 @@ void BaseScale::_setNumAccumulatorVals(int numAccumulatorVals) {
     _numAccumulatorValsChanged = true;
     auto prevNumTxts = getNumAccumulatorTextures();
 
-    RUNTIME_EX_ASSERT(convertNumAccumValsToNumAccumTextures(numAccumulatorVals) <= maxAccumTextures,
+    RUNTIME_EX_ASSERT(convertNumAccumValsToNumAccumTextures(numAccumulatorVals, _accumType) <= maxAccumTextures,
                       std::string(*this) +
                           " There are too many accumulator values to do a render-based accumation as it requires too "
                           "many textures. There are " +
                           std::to_string(numAccumulatorVals) + " values requested for accumulation requiring " +
-                          std::to_string(convertNumAccumValsToNumAccumTextures(numAccumulatorVals)) +
+                          std::to_string(convertNumAccumValsToNumAccumTextures(numAccumulatorVals, _accumType)) +
                           " but there's a limit of " + std::to_string(maxAccumTextures) + " textures");
 
     _numAccumulatorVals = numAccumulatorVals;
@@ -275,12 +434,33 @@ void BaseScale::_setNumAccumulatorVals(int numAccumulatorVals) {
   }
 }
 
-void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader) {
-  if (hasAccumulator()) {
+void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, bool ignoreAccum) {
+  if (!ignoreAccum && hasAccumulator()) {
     auto gpuId = activeShader->getGLRenderer()->getGpuId();
     auto itr = this->_perGpuData.find(gpuId);
     CHECK(itr != this->_perGpuData.end());
     activeShader->setImageLoadStoreAttribute("inTxPixelCounter", itr->second.accumulatorTexPtrArray);
+
+    std::string accumFunc;
+    switch (getAccumulatorType()) {
+      case AccumulatorType::MIN:
+      case AccumulatorType::MAX:
+      case AccumulatorType::BLEND:
+        accumFunc = "minMaxBlendAccumulate";
+        break;
+      case AccumulatorType::DENSITY:
+        accumFunc = "densityAccumulate";
+        break;
+      default:
+        THROW_RUNTIME_EX("Accumulator type " + to_string(getAccumulatorType()) +
+                         " is not currently supported for mark rendering.");
+        break;
+    }
+
+    // TODO(croot): what if the mark uses subroutines? It's more efficient to
+    // set all the subroutines at once. May want to consider passing in a map
+    // to insert the subroutines to set
+    activeShader->setSubroutine("accumulate", accumFunc);
   }
 }
 
@@ -291,10 +471,14 @@ void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* ac
   std::string fragSrc = AccumulatorScale_2ndPass_frag::source;
 
   boost::replace_all(fragSrc, "<name>", _name);
-  boost::replace_all(fragSrc, "<accumType>", std::to_string(static_cast<int>(_accumType)));
   boost::replace_all(fragSrc, "<numAccumColors>", std::to_string(_numAccumulatorVals));
-
   boost::replace_all(fragSrc, "<numAccumTextures>", std::to_string(numTextures));
+
+  std::string suffix = "_" + to_string(AccumulatorType::DENSITY);
+  auto funcRange = ShaderUtils::getGLSLFunctionBounds(fragSrc, "getDensityColor");
+  std::string scaleCode = getGLSLCode(suffix, false, false, true);
+  boost::replace_range(fragSrc, funcRange, scaleCode);
+  boost::replace_all(fragSrc, "getDensityColor(pct)", getScaleGLSLFuncName(suffix) + "(pct)");
 
   return rsrcMgr->createShader(vertSrc, fragSrc);
 }
@@ -346,6 +530,7 @@ void BaseScale::_initGpuResources(QueryRendererContext* ctx, bool initializing) 
   } else if (!_justBuilt && (hasNumAccumulatorValsChanged() || hasAccumulatorTypeChanged())) {
     for (auto& gpuItr : _perGpuData) {
       gpuItr.second.makeActiveOnCurrentThread();
+
       rsrcMgr = gpuItr.second.getGLRenderer()->getResourceManager();
       gpuItr.second.accumulator2ndPassShaderPtr = _buildAccumulatorShader(rsrcMgr, textureArraySize);
     }

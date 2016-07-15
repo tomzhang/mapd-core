@@ -162,10 +162,12 @@ class GLShader : public GLResource {
     info->setAttr((void*)(&attrValue[0]), N);
   }
 
+  void setSamplerAttribute(const std::string& attrName, const GLResource* rsrc);
   void setSamplerAttribute(const std::string& attrName, const GLResourceShPtr& rsrc);
   void setSamplerTextureImageUnit(const std::string& attrName, GLenum startTexImageUnit);
 
   // TODO(croot): support mip-maps
+  void setImageLoadStoreAttribute(const std::string& attrName, const GLResource* rsrc, int layerIdx = 0);
   void setImageLoadStoreAttribute(const std::string& attrName, const GLResourceShPtr& rsrc, int layerIdx = 0);
   void setImageLoadStoreAttribute(const std::string& attrName, const std::vector<GLTexture2dShPtr>& rsrcs);
   // TODO(croot): match this api with the setSamplerTextureImageUnit??

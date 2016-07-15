@@ -29,6 +29,11 @@ class QueryAccumTxPool {
   void setAccumTxInactive(::Rendering::GL::Resources::GLTexture2dShPtr& tx);
   void setAccumTxInactive(const std::vector<::Rendering::GL::Resources::GLTexture2dShPtr>& txs);
 
+  ::Rendering::GL::Resources::GLTexture2dShPtr getInactiveExtentsTx(::Rendering::GL::Resources::GLTexture2dShPtr& tx);
+  ::Rendering::GL::Resources::GLTexture2dShPtr getInactiveExtentsTx(
+      ::Rendering::GL::Resources::GLTexture2dArray* txArray);
+  void setExtentsTxInactive(::Rendering::GL::Resources::GLTexture2dShPtr& tx);
+
   void resize(size_t width, size_t height);
 
  private:
@@ -39,23 +44,41 @@ class QueryAccumTxPool {
                  size_t numTextures);
   void _initialize(size_t width, size_t height, size_t numTextures);
   void _cleanupUnusedTxs();
+  void _runExtentsPass(::Rendering::GL::GLRendererShPtr& renderer,
+                       ::Rendering::GL::Resources::GLTexture2dShPtr& extentTx,
+                       ::Rendering::GL::Resources::GLTexture2d* tx,
+                       ::Rendering::GL::Resources::GLTexture2dArray* txArray);
+  ::Rendering::GL::Resources::GLTexture2dShPtr _getInactiveExtentsTxInternal(
+      ::Rendering::GL::Resources::GLTexture2d* tx,
+      ::Rendering::GL::Resources::GLTexture2dArray* txArray);
 
-  struct AccumTxContainer {
+  struct TxContainer {
     ::Rendering::GL::Resources::GLTexture2dShPtr tx;
     std::chrono::milliseconds lastUsedTime;
 
+    TxContainer(const ::Rendering::GL::Resources::GLTexture2dShPtr& tx) : tx(tx) { lastUsedTime = getCurrentTimeMS(); }
+    virtual ~TxContainer() {}
+  };
+
+  struct AccumTxContainer : public TxContainer {
     // textures needs to stay aligned with the
     // compositor's copies. This alignment is
     // done with this index, which is provided after
     // the texture is registered with the compositor
     size_t accumTxIdx;
 
-    AccumTxContainer(const ::Rendering::GL::Resources::GLTexture2dShPtr& tx, size_t idx) : tx(tx), accumTxIdx(idx) {
+    AccumTxContainer(const ::Rendering::GL::Resources::GLTexture2dShPtr& tx, size_t idx)
+        : TxContainer(tx), accumTxIdx(idx) {
       lastUsedTime = getCurrentTimeMS();
     }
   };
 
   static bool containerCmp(const AccumTxContainer* a, const AccumTxContainer* b);
+
+  // TODO(croot): make the extents texture a 1D texture
+  ::Rendering::GL::Resources::GLPixelBuffer2dShPtr clearExtentsPboPtr;
+  ::Rendering::GL::Resources::GLTexture2dShPtr extentsTexturePtr;
+  ::Rendering::GL::Resources::GLShaderShPtr extentsShaderPtr;
 
   ::Rendering::GL::Resources::GLPixelBuffer2dShPtr clearPboPtr;
   ::Rendering::GL::Resources::GLVertexBufferShPtr rectvbo;
@@ -63,24 +86,26 @@ class QueryAccumTxPool {
 
   struct ChangeLastUsedTime {
     ChangeLastUsedTime() : new_time(getCurrentTimeMS()) {}
-    void operator()(AccumTxContainer& container) { container.lastUsedTime = new_time; }
+    void operator()(std::shared_ptr<TxContainer>& container) { container->lastUsedTime = new_time; }
 
    private:
     std::chrono::milliseconds new_time;
   };
 
   typedef ::boost::multi_index_container<
-      AccumTxContainer,
+      std::shared_ptr<TxContainer>,
       ::boost::multi_index::indexed_by<::boost::multi_index::hashed_unique<
-          ::boost::multi_index::
-              member<AccumTxContainer, ::Rendering::GL::Resources::GLTexture2dShPtr, &AccumTxContainer::tx>>>>
-      AccumTxMap;
+          ::boost::multi_index::member<TxContainer, ::Rendering::GL::Resources::GLTexture2dShPtr, &TxContainer::tx>>>>
+      TxMap;
 
   ::Rendering::GL::GLRendererWkPtr _rendererPtr;
   QueryRenderCompositorShPtr _compositorPtr;
-  AccumTxMap _accumTxMap;
+  TxMap _accumTxMap;
   std::multiset<const AccumTxContainer*, std::function<bool(const AccumTxContainer*, const AccumTxContainer*)>>
       _inactiveAccumTxQueue;
+
+  TxMap _extentTxMap;
+  std::list<::Rendering::GL::Resources::GLTexture2dShPtr> _inactiveExtentTxQueue;
   std::mutex _poolMtx;
 };
 

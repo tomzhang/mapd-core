@@ -415,6 +415,8 @@ void EglQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
 }
 
 void EglQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpus,
+                                                  size_t width,
+                                                  size_t height,
                                                   bool doHitTest,
                                                   bool doDepthTest,
                                                   int passCnt,
@@ -425,8 +427,7 @@ void EglQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
     CHECK(myRenderer);
     myRenderer->makeActiveOnCurrentThread();
 
-    accumulatorScalePtr->renderAccumulation(
-        myRenderer, myRenderer->getGpuId(), _framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER));
+    accumulatorScalePtr->renderAccumulation(myRenderer, myRenderer->getGpuId());
   }
 }
 
@@ -455,7 +456,9 @@ void EglQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
                                         std::placeholders::_2,
                                         std::placeholders::_3,
                                         std::placeholders::_4,
-                                        std::placeholders::_5));
+                                        std::placeholders::_5,
+                                        std::placeholders::_6,
+                                        std::placeholders::_7));
 }
 
 }  // namespace EGL

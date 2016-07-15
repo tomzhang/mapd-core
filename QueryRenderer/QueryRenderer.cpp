@@ -634,7 +634,7 @@ void QueryRenderer::renderPasses(
     std::function<
         void(::Rendering::GL::GLRenderer*, QueryFramebufferUqPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
         perPassGpuCB,
-    std::function<void(const std::set<GpuId>&, bool, bool, int, ScaleShPtr&)> passCompleteCB) {
+    std::function<void(const std::set<GpuId>&, size_t, size_t, bool, bool, int, ScaleShPtr&)> passCompleteCB) {
   std::string activeAccumulator, currAccumulator;
   ScaleShPtr scalePtr, prevScalePtr;
   int accumulatorCnt = 0;
@@ -651,9 +651,25 @@ void QueryRenderer::renderPasses(
       if (activeAccumulator != currAccumulator) {
         // finish the accumulation by running the blending pass
         // accumulationPassCompleteCB(scalePtr);
-        passCompleteCB(usedGpus, doHitTest, doDepthTest, passCnt++, scalePtr);
+        passCompleteCB(usedGpus, width, height, doHitTest, doDepthTest, passCnt++, scalePtr);
         prevScalePtr = scalePtr;
         scalePtr = ctx->getScale(currAccumulator);
+
+        if (!clearFboEveryPass) {
+          // means we're doing an egl composite, or in other words
+          // we're sharing framebuffers/textures across contexts
+          // so we're not running clear all except on first pass
+          // But that also means all textures need to be initialized
+          // and marked as "shared" before any rendering. The
+          // accumulationPreRender() call does this, so we need
+          // to do that first.
+          for (auto gpuId : usedGpus) {
+            auto itr = qrmPerGpuData->find(gpuId);
+            (*itr)->makeActiveOnCurrentThread();
+            scalePtr->accumulationPreRender(gpuId);
+          }
+        }
+
         CHECK(scalePtr);
         accumulatorCnt = 0;
       } else {
@@ -663,6 +679,14 @@ void QueryRenderer::renderPasses(
       prevScalePtr = nullptr;
       scalePtr = ctx->getScale(currAccumulator);
       CHECK(scalePtr);
+
+      if (!clearFboEveryPass) {
+        for (auto gpuId : usedGpus) {
+          auto itr = qrmPerGpuData->find(gpuId);
+          (*itr)->makeActiveOnCurrentThread();
+          scalePtr->accumulationPreRender(gpuId);
+        }
+      }
     } else {
       scalePtr = prevScalePtr = nullptr;
       accumulatorCnt = 0;
@@ -679,7 +703,7 @@ void QueryRenderer::renderPasses(
         prevScalePtr->accumulationPostRender(gpuId);
       }
 
-      if (accumulatorCnt == 0 && scalePtr) {
+      if (clearFboEveryPass && accumulatorCnt == 0 && scalePtr) {
         scalePtr->accumulationPreRender(gpuId);
       }
 
@@ -711,7 +735,7 @@ void QueryRenderer::renderPasses(
 
       framebufferPtr->bindToRenderer(renderer);
 
-      if (i == 0 || clearFboEveryPass) {
+      if (clearFboEveryPass || (i == 0 && gpuCnt == 0)) {
         renderer->clearAll();
       }
 
@@ -724,7 +748,7 @@ void QueryRenderer::renderPasses(
     }
 
     if (!scalePtr) {
-      passCompleteCB(usedGpus, doHitTest, doDepthTest, passCnt++, scalePtr);
+      passCompleteCB(usedGpus, width, height, doHitTest, doDepthTest, passCnt++, scalePtr);
     }
 
     // NOTE: We're not swapping buffers because we're using pbuffers
@@ -743,7 +767,7 @@ void QueryRenderer::renderPasses(
   if (scalePtr) {
     // finish the accumulation by running the blending pass
     // accumulationPassCompleteCB(scalePtr)
-    passCompleteCB(usedGpus, doHitTest, doDepthTest, passCnt++, scalePtr);
+    passCompleteCB(usedGpus, width, height, doHitTest, doDepthTest, passCnt++, scalePtr);
 
     for (auto gpuId : usedGpus) {
       auto itr = qrmPerGpuData->find(gpuId);
@@ -803,7 +827,7 @@ QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
       if (activeAccumulator.size()) {
         // finish the accumulation by running the blending pass
         auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
-        scalePtr->renderAccumulation(renderer, gpuId, idTex);
+        scalePtr->renderAccumulation(renderer, gpuId);
         scalePtr->accumulationPostRender(gpuId);
       }
 
@@ -825,7 +849,7 @@ QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
     // finish the accumulation by running the blending pass
     scalePtr = ctx->getScale(activeAccumulator);
     auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
-    scalePtr->renderAccumulation(renderer, gpuId, idTex);
+    scalePtr->renderAccumulation(renderer, gpuId);
     scalePtr->accumulationPostRender(gpuId);
   }
 

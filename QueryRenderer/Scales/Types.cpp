@@ -19,4 +19,25 @@ std::string to_string(ScaleType scaleType) {
   return "";
 }
 
+std::string to_string(AccumulatorType accumType) {
+  switch (accumType) {
+    case AccumulatorType::MIN:
+      return "MIN";
+    case AccumulatorType::MAX:
+      return "MAX";
+    case AccumulatorType::BLEND:
+      return "BLEND";
+    case AccumulatorType::DENSITY:
+      return "DENSITY";
+    case AccumulatorType::UNDEFINED:
+      return "UNDEFINED";
+    case AccumulatorType::ALL:
+      return "ALL";
+    default:
+      return "<scale type " + std::to_string(static_cast<int>(accumType)) + ">";
+  }
+
+  return "";
+}
+
 }  // namespace QueryRenderer

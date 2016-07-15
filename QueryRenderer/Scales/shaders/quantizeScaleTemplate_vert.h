@@ -18,12 +18,23 @@ const std::string QuantizeScaleTemplate_vert::source =
     "uniform domainType_<name> uDomains_<name>[2];\n"
     "uniform rangeType_<name> uRanges_<name>[numRanges_<name>];\n"
     "\n"
+    "#define doAccum_QuantizeScale_<name> <doAccum>\n"
+    "\n"
+    "#if doAccum_QuantizeScale_<name> == 1\n"
+    "flat out int accumIdx;   // the ordinal domain index for accumulations\n"
+    "#endif\n"
+    "\n"
     "rangeType_<name> getQuantizeScale_<name>(in domainType_<name> category) {\n"
     "    double diff = double(category - uDomains_<name>[0]);\n"
     "    int idx = int(max(min(trunc(diff / quantizeDiff), double(numRanges_<name>-1)), "
     "double(0)));\n"
     "\n"
+    "    #if doAccum_QuantizeScale_<name> == 1\n"
+    "    accumIdx = idx;\n"
+    "    return vec4(0,0,0,0);\n"
+    "    #else\n"
     "    return uRanges_<name>[idx];\n"
+    "    #endif\n"
     "}\n";
 }  // namespace QueryRenderer
 
