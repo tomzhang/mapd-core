@@ -192,7 +192,6 @@ class MapDHandler : virtual public MapDIf {
         allow_loop_joins_(allow_loop_joins),
 #ifdef HAVE_CALCITE
         enable_rendering_(enable_rendering),
-        calcite_(calcite_port, base_data_path_),
         legacy_syntax_(legacy_syntax) {
 #else
         enable_rendering_(enable_rendering) {
@@ -214,12 +213,14 @@ class MapDHandler : virtual public MapDIf {
     const auto data_path = boost::filesystem::path(base_data_path_) / "mapd_data";
     data_mgr_.reset(
         new Data_Namespace::DataMgr(data_path.string(), cpu_buffer_mem_bytes, !cpu_mode_only_, num_gpus, start_gpu));
-
+#ifdef HAVE_CALCITE
+    calcite_.reset(new Calcite(calcite_port, base_data_path_));
+#endif  // HAVE_CALCITE
 #ifdef HAVE_RENDERING
-    // TODO(croot): remove the cpu_mode_only_ rendering restriction
-    // when cpu-mode with hardware accelerated rendering
-    // or cpu-mode with software rendering is supported.
-    if (enable_rendering_ && !cpu_mode_only_) {
+        // TODO(croot): remove the cpu_mode_only_ rendering restriction
+        // when cpu-mode with hardware accelerated rendering
+        // or cpu-mode with software rendering is supported.
+        if (enable_rendering_ && !cpu_mode_only_) {
       try {
 #ifdef MAPDGL_EGL
         int numSamples = 4;
@@ -247,7 +248,14 @@ class MapDHandler : virtual public MapDIf {
     }
 #endif  // HAVE_RENDERING
 
-    sys_cat_.reset(new Catalog_Namespace::SysCatalog(base_data_path_, data_mgr_, ldapMetadata));
+    sys_cat_.reset(new Catalog_Namespace::SysCatalog(base_data_path_,
+                                                     data_mgr_,
+                                                     ldapMetadata
+#ifdef HAVE_CALCITE
+                                                     ,
+                                                     calcite_
+#endif  // HAVE_CALCITE
+                                                     ));
     import_path_ = boost::filesystem::path(base_data_path_) / "mapd_import";
   }
 
@@ -303,7 +311,14 @@ class MapDHandler : virtual public MapDIf {
     }
     auto cat_it = cat_map_.find(dbname);
     if (cat_it == cat_map_.end()) {
-      Catalog_Namespace::Catalog* cat = new Catalog_Namespace::Catalog(base_data_path_, db_meta, data_mgr_);
+      Catalog_Namespace::Catalog* cat = new Catalog_Namespace::Catalog(base_data_path_,
+                                                                       db_meta,
+                                                                       data_mgr_
+#ifdef HAVE_CALCITE
+                                                                       ,
+                                                                       calcite_
+#endif  // HAVE_CALCITE
+                                                                       );
       cat_map_[dbname].reset(cat);
       sessions_[session].reset(
           new Catalog_Namespace::SessionInfo(cat_map_[dbname], user_meta, executor_device_type_, session));
@@ -1690,7 +1705,7 @@ class MapDHandler : virtual public MapDIf {
           return;
         }
 #endif  // HAVE_RAVM
-        LOG(ERROR) << "passing query to legacy processor";
+        LOG(INFO) << "passing query to legacy processor";
       } catch (std::exception& e) {
         TMapDException ex;
         ex.error_msg = std::string("Exception: ") + e.what();
@@ -1760,11 +1775,11 @@ class MapDHandler : virtual public MapDIf {
     // if this is a calcite select or explain select run in calcite
     if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
       const std::string actual_query{pw.is_select_explain ? pw.actual_query : query_str};
-      const auto query_ra = calcite_.process(session_info.get_currentUser().userName,
-                                             session_info.get_currentUser().passwd,
-                                             cat.get_currentDB().dbName,
-                                             legacy_syntax_ ? pg_shim(actual_query) : actual_query,
-                                             legacy_syntax_);
+      const auto query_ra = calcite_->process(session_info.get_currentUser().userName,
+                                              session_info.get_currentUser().passwd,
+                                              cat.get_currentDB().dbName,
+                                              legacy_syntax_ ? pg_shim(actual_query) : actual_query,
+                                              legacy_syntax_);
       auto root_plan = translate_query(query_ra, cat);
       CHECK(root_plan);
       if (pw.is_select_explain) {
@@ -1780,11 +1795,11 @@ class MapDHandler : virtual public MapDIf {
     const std::string actual_query{pw.is_select_explain ? pw.actual_query : query_str};
     auto& cat = session_info.get_catalog();
     if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
-      return calcite_.process(session_info.get_currentUser().userName,
-                              session_info.get_currentUser().passwd,
-                              cat.get_currentDB().dbName,
-                              legacy_syntax_ ? pg_shim(actual_query) : actual_query,
-                              legacy_syntax_);
+      return calcite_->process(session_info.get_currentUser().userName,
+                               session_info.get_currentUser().passwd,
+                               cat.get_currentDB().dbName,
+                               legacy_syntax_ ? pg_shim(actual_query) : actual_query,
+                               legacy_syntax_);
     }
     return "";
   }
@@ -1819,7 +1834,7 @@ class MapDHandler : virtual public MapDIf {
   std::unique_ptr<::QueryRenderer::QueryRenderManager> render_manager_;
 #endif
 #ifdef HAVE_CALCITE
-  Calcite calcite_;
+  std::shared_ptr<Calcite> calcite_;
   const bool legacy_syntax_;
 #endif  // HAVE_CALCITE
 };
