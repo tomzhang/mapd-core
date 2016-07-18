@@ -221,10 +221,10 @@ class MapDHandler : virtual public MapDIf {
 #endif  // HAVE_RAVM
 #endif  // HAVE_CALCITE
 #ifdef HAVE_RENDERING
-        // TODO(croot): remove the cpu_mode_only_ rendering restriction
-        // when cpu-mode with hardware accelerated rendering
-        // or cpu-mode with software rendering is supported.
-        if (enable_rendering_ && !cpu_mode_only_) {
+    // TODO(croot): remove the cpu_mode_only_ rendering restriction
+    // when cpu-mode with hardware accelerated rendering
+    // or cpu-mode with software rendering is supported.
+    if (enable_rendering_ && !cpu_mode_only_) {
       try {
 #ifdef MAPDGL_EGL
         int numSamples = 4;
