@@ -57,10 +57,13 @@ BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
       _numAccumulatorVals(0),
       _numAccumulatorValsChanged(false),
       _numAccumulatorTxtsChanged(false),
+      _numMinStdDev(0),
       _minDensity(0),
       _findMinDensity(false),
+      _numMaxStdDev(0),
       _maxDensity(0),
       _findMaxDensity(false),
+      _findStdDev(false),
       _justBuilt(false) {
 }
 
@@ -183,7 +186,7 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   fbo->activateEnabledAttachmentsForDrawing();
 
   ::Rendering::GL::Resources::GLTexture2dShPtr extentTx;
-  if (_accumType == AccumulatorType::DENSITY && (_findMinDensity || _findMaxDensity)) {
+  if (_accumType == AccumulatorType::DENSITY && (_findMinDensity || _findMaxDensity || _findStdDev)) {
     auto& accumPool = itr->second.getAccumTxPool();
 
     // there should only be 1 accumulation texture when the accumulation
@@ -191,9 +194,9 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
     CHECK(itr->second.accumulatorTexPtrArray.size() == 1);
 
     if (compTxArrayPtr) {
-      extentTx = accumPool->getInactiveExtentsTx(compTxArrayPtr);
+      extentTx = accumPool->getInactiveExtentsTx(compTxArrayPtr, _findStdDev);
     } else {
-      extentTx = accumPool->getInactiveExtentsTx(itr->second.accumulatorTexPtrArray[0]);
+      extentTx = accumPool->getInactiveExtentsTx(itr->second.accumulatorTexPtrArray[0], _findStdDev);
     }
   }
 
@@ -215,19 +218,33 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
       {{"getAccumulatedColor", ""},
        {"getAccumulatedCnt", (compTxArrayPtr != nullptr ? "getTxArrayAccumulatedCnt" : "getTxAccumulatedCnt")},
        {"getMinDensity", "getUniformMinDensity"},
-       {"getMaxDensity", "getUniformMaxDensity"}});
+       {"getMaxDensity", "getUniformMaxDensity"},
+       {"calcMeanStdDev", "getEmptyMeanStdDev"}});
 
-  if (_findMinDensity || _findMaxDensity) {
+  if (_findMinDensity || _findMaxDensity || _findStdDev) {
     CHECK(extentTx);
     itr->second.accumulator2ndPassShaderPtr->setSamplerTextureImageUnit("densityExtents", GL_TEXTURE0);
     itr->second.accumulator2ndPassShaderPtr->setSamplerAttribute("densityExtents", extentTx);
 
     if (_findMinDensity) {
-      subroutines["getMinDensity"] = "getTextureMinDensity";
+      if (_numMinStdDev > 0) {
+        subroutines["getMinDensity"] = "getStdDevMinDensity";
+      } else {
+        subroutines["getMinDensity"] = "getTextureMinDensity";
+      }
     }
 
     if (_findMaxDensity) {
-      subroutines["getMaxDensity"] = "getTextureMaxDensity";
+      if (_numMaxStdDev > 0) {
+        subroutines["getMaxDensity"] = "getStdDevMaxDensity";
+
+      } else {
+        subroutines["getMaxDensity"] = "getTextureMaxDensity";
+      }
+    }
+
+    if (_findStdDev) {
+      subroutines["calcMeanStdDev"] = "getTextureMeanStdDev";
     }
   }
 
@@ -254,6 +271,8 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   itr->second.accumulator2ndPassShaderPtr->setSubroutines(subroutines);
   itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<uint32_t>("minDensity", _minDensity);
   itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<uint32_t>("maxDensity", _maxDensity);
+  itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<float>("minStdDev", static_cast<float>(_numMinStdDev));
+  itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<float>("maxStdDev", static_cast<float>(_numMaxStdDev));
 
   bindAccumulatorColors(itr->second.accumulator2ndPassShaderPtr, "inColors");
 
@@ -321,6 +340,10 @@ bool BaseScale::_updateAccumulatorFromJSONObj(const rapidjson::Value& obj, const
     } else if (accumTypeStr == "DENSITY") {
       type = AccumulatorType::DENSITY;
 
+      _findStdDev = false;
+      _numMinStdDev = 0;
+      _numMaxStdDev = 0;
+
       static const std::string densityMin = "minDensityCnt";
       static const std::string densityMax = "maxDensityCnt";
 
@@ -338,9 +361,27 @@ bool BaseScale::_updateAccumulatorFromJSONObj(const rapidjson::Value& obj, const
               _ctx->getUserWidgetIds(), obj, "Density max must be an integer or the string \"max\"."));
 
       if (mitr->value.IsString()) {
-        RUNTIME_EX_ASSERT(std::string(mitr->value.GetString()) == "max",
-                          RapidJSONUtils::getJsonParseErrorStr(
-                              _ctx->getUserWidgetIds(), obj, "Density max must be an integer or the string \"max\"."));
+        std::string val = std::string(mitr->value.GetString());
+        RUNTIME_EX_ASSERT(
+            val == "max" || (_findStdDev = (val == "1stStdDev")) || (_findStdDev = (val == "2ndStdDev")),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(),
+                obj,
+                "Density max must be an integer or the string \"max\", \"1stStdDev\", or \"2ndStdDev\"."));
+
+        if (_findStdDev) {
+          switch (val[0]) {
+            case '1':
+              _numMaxStdDev = 1;
+              break;
+            case '2':
+              _numMaxStdDev = 2;
+              break;
+            default:
+              THROW_RUNTIME_EX(std::string(*this) + ": stddev string: " + val + " is unsupported.");
+          }
+        }
+
         _findMaxDensity = true;
       } else if (mitr->value.IsInt()) {
         RUNTIME_EX_ASSERT(
@@ -360,11 +401,29 @@ bool BaseScale::_updateAccumulatorFromJSONObj(const rapidjson::Value& obj, const
                 _ctx->getUserWidgetIds(), obj, "Density min must be an integer or the string \"min\"."));
 
         if (mitr->value.IsString()) {
+          bool useStdDev = false;
+          std::string val = std::string(mitr->value.GetString());
           RUNTIME_EX_ASSERT(
-              std::string(mitr->value.GetString()) == "min",
+              val == "min" || (useStdDev = (val == "-1stStdDev")) || (useStdDev = (val == "-2ndStdDev")),
               RapidJSONUtils::getJsonParseErrorStr(
-                  _ctx->getUserWidgetIds(), obj, "Density min must be an integer or the string \"min\"."));
+                  _ctx->getUserWidgetIds(),
+                  obj,
+                  "Density min must be an integer or the string \"min\", \"-1stStdDev\", or \"-2ndStdDev\"."));
           _findMinDensity = true;
+
+          if (useStdDev) {
+            switch (val[1]) {
+              case '1':
+                _numMinStdDev = 1;
+                break;
+              case '2':
+                _numMinStdDev = 2;
+                break;
+              default:
+                THROW_RUNTIME_EX(std::string(*this) + ": stddev string: " + val + " is unsupported.");
+            }
+          }
+          _findStdDev = (_findStdDev || useStdDev);
         } else if (mitr->value.IsInt()) {
           RUNTIME_EX_ASSERT(mitr->value.GetInt() >= 0,
                             RapidJSONUtils::getJsonParseErrorStr(

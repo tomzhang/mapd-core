@@ -29,9 +29,11 @@ class QueryAccumTxPool {
   void setAccumTxInactive(::Rendering::GL::Resources::GLTexture2dShPtr& tx);
   void setAccumTxInactive(const std::vector<::Rendering::GL::Resources::GLTexture2dShPtr>& txs);
 
-  ::Rendering::GL::Resources::GLTexture2dShPtr getInactiveExtentsTx(::Rendering::GL::Resources::GLTexture2dShPtr& tx);
+  ::Rendering::GL::Resources::GLTexture2dShPtr getInactiveExtentsTx(::Rendering::GL::Resources::GLTexture2dShPtr& tx,
+                                                                    bool calcStdDev = false);
   ::Rendering::GL::Resources::GLTexture2dShPtr getInactiveExtentsTx(
-      ::Rendering::GL::Resources::GLTexture2dArray* txArray);
+      ::Rendering::GL::Resources::GLTexture2dArray* txArray,
+      bool calcStdDev = false);
   void setExtentsTxInactive(::Rendering::GL::Resources::GLTexture2dShPtr& tx);
 
   void resize(size_t width, size_t height);
@@ -47,10 +49,12 @@ class QueryAccumTxPool {
   void _runExtentsPass(::Rendering::GL::GLRendererShPtr& renderer,
                        ::Rendering::GL::Resources::GLTexture2dShPtr& extentTx,
                        ::Rendering::GL::Resources::GLTexture2d* tx,
-                       ::Rendering::GL::Resources::GLTexture2dArray* txArray);
+                       ::Rendering::GL::Resources::GLTexture2dArray* txArray,
+                       bool calcStdDev);
   ::Rendering::GL::Resources::GLTexture2dShPtr _getInactiveExtentsTxInternal(
       ::Rendering::GL::Resources::GLTexture2d* tx,
-      ::Rendering::GL::Resources::GLTexture2dArray* txArray);
+      ::Rendering::GL::Resources::GLTexture2dArray* txArray,
+      bool calcStdDev);
 
   struct TxContainer {
     ::Rendering::GL::Resources::GLTexture2dShPtr tx;
@@ -79,6 +83,7 @@ class QueryAccumTxPool {
   ::Rendering::GL::Resources::GLPixelBuffer2dShPtr clearExtentsPboPtr;
   ::Rendering::GL::Resources::GLTexture2dShPtr extentsTexturePtr;
   ::Rendering::GL::Resources::GLShaderShPtr extentsShaderPtr;
+  ::Rendering::GL::Resources::GLShaderShPtr stdDevShaderPtr;
 
   ::Rendering::GL::Resources::GLPixelBuffer2dShPtr clearPboPtr;
   ::Rendering::GL::Resources::GLVertexBufferShPtr rectvbo;

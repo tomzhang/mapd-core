@@ -2,6 +2,7 @@
 #include "QueryRenderCompositor.h"
 #include "shaders/accumulator_passThru_vert.h"
 #include "shaders/accumulatorTx_findExtents_frag.h"
+#include "shaders/accumulatorTx_findStdDev_frag.h"
 
 #include <Rendering/RenderError.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
@@ -9,9 +10,6 @@
 #include <Rendering/Objects/Array2d.h>
 
 #include <limits>
-
-#include <Shared/measure.h>
-#include <iostream>
 
 namespace QueryRenderer {
 
@@ -255,7 +253,8 @@ void QueryAccumTxPool::setAccumTxInactive(const std::vector<GLTexture2dShPtr>& t
 void QueryAccumTxPool::_runExtentsPass(GLRendererShPtr& renderer,
                                        GLTexture2dShPtr& extentTx,
                                        ::Rendering::GL::Resources::GLTexture2d* tx,
-                                       ::Rendering::GL::Resources::GLTexture2dArray* txArray) {
+                                       ::Rendering::GL::Resources::GLTexture2dArray* txArray,
+                                       bool calcStdDev) {
   // auto clock_begin = timer_start();
 
   CHECK(clearExtentsPboPtr && extentsShaderPtr);
@@ -290,19 +289,47 @@ void QueryAccumTxPool::_runExtentsPass(GLRendererShPtr& renderer,
   renderer->bindVertexArray(vao);
   renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
 
-  // std::vector<unsigned int> extents({0, 0});
+  if (calcStdDev) {
+    CHECK(stdDevShaderPtr);
+    renderer->bindShader(stdDevShaderPtr);
+    stdDevShaderPtr->setImageLoadStoreAttribute("inExtents", extentTx);
+
+    if (tx) {
+      stdDevShaderPtr->setSamplerTextureImageUnit("inTxPixelCounter", GL_TEXTURE0);
+      stdDevShaderPtr->setSamplerAttribute("inTxPixelCounter", tx);
+      stdDevShaderPtr->setSubroutine("getAccumulatedCnt", "getTxAccumulatedCnt");
+    } else if (txArray) {
+      stdDevShaderPtr->setSamplerTextureImageUnit("inTxArrayPixelCounter", GL_TEXTURE1);
+      stdDevShaderPtr->setSamplerAttribute("inTxArrayPixelCounter", txArray);
+      stdDevShaderPtr->setSubroutine("getAccumulatedCnt", "getTxArrayAccumulatedCnt");
+    }
+
+    // TODO(croot): binding the vao here should still work as it has the
+    // same vbo bindings as the accumulator2ndPassShader, but
+    // this subverts the vao creation API, which implies a binding with
+    // a specific shader, or does it?
+    renderer->bindVertexArray(vao);
+    renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);
+  }
 
   // auto extents_time_ms = timer_stop(clock_begin);
 
-  // renderer->bindTexture2d(rtn);
-  // renderer->getBoundTexture2dPixels(2, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &extents[0]);
-  // std::cerr << "CROOT - the extents - min: " << extents[0] << ", " << extents[1] << " - time: " << extents_time_ms
+  // std::vector<unsigned int> extents({0, 0, 0, 0, 0});
+
+  // renderer->bindTexture2d(extentTx);
+  // renderer->getBoundTexture2dPixels(5, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &extents[0]);
+
+  // std::cerr << "CROOT - the extents - min: " << extents[0] << ", max: " << extents[1] << ", allCnt: " << extents[2]
+  //           << ", numAccumPixels: " << extents[3] << ", mean: " << (double(extents[2]) / double(extents[3]))
+  //           << ", stdDev cnt: " << extents[4] << ", variance: " << (double(extents[4]) / double(extents[3]))
+  //           << ", std dev: " << std::sqrt(double(extents[4]) / double(extents[3])) << " - time: " << extents_time_ms
   //           << " ms" << std::endl;
 }
 
 ::Rendering::GL::Resources::GLTexture2dShPtr QueryAccumTxPool::_getInactiveExtentsTxInternal(
     ::Rendering::GL::Resources::GLTexture2d* tx,
-    ::Rendering::GL::Resources::GLTexture2dArray* txArray) {
+    ::Rendering::GL::Resources::GLTexture2dArray* txArray,
+    bool calcStdDev) {
   // NOTE: the pool mutex must be locked before calling this function
   GLRendererShPtr renderer = _rendererPtr.lock();
   CHECK(renderer);
@@ -314,10 +341,15 @@ void QueryAccumTxPool::_runExtentsPass(GLRendererShPtr& renderer,
     auto rsrcMgr = renderer->getResourceManager();
 
     static std::vector<uint32_t> initExtents(
-        {std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::min()});
+        {std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::min(), 0, 0, 0, 0});
 
-    clearExtentsPboPtr = rsrcMgr->createPixelBuffer2d(2, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &initExtents[0]);
+    clearExtentsPboPtr = rsrcMgr->createPixelBuffer2d(5, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &initExtents[0]);
     extentsShaderPtr = rsrcMgr->createShader(Accumulator_PassThru_vert::source, AccumulatorTx_FindExtents_frag::source);
+  }
+
+  if (calcStdDev && !stdDevShaderPtr) {
+    auto rsrcMgr = renderer->getResourceManager();
+    stdDevShaderPtr = rsrcMgr->createShader(Accumulator_PassThru_vert::source, AccumulatorTx_FindStdDev_frag::source);
   }
 
   if (!rectvbo) {
@@ -335,32 +367,34 @@ void QueryAccumTxPool::_runExtentsPass(GLRendererShPtr& renderer,
 
   if (_inactiveExtentTxQueue.size() == 0) {
     auto rsrcMgr = renderer->getResourceManager();
-    rtn = rsrcMgr->createTexture2d(2, 1, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, 1);
+    rtn = rsrcMgr->createTexture2d(5, 1, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, 1);
     _extentTxMap.emplace(new TxContainer(rtn));
   } else {
     rtn = _inactiveExtentTxQueue.front();
     _inactiveExtentTxQueue.pop_front();
   }
 
-  _runExtentsPass(renderer, rtn, tx, txArray);
+  _runExtentsPass(renderer, rtn, tx, txArray, calcStdDev);
 
   return rtn;
 }
 
 ::Rendering::GL::Resources::GLTexture2dShPtr QueryAccumTxPool::getInactiveExtentsTx(
-    ::Rendering::GL::Resources::GLTexture2dShPtr& tx) {
+    ::Rendering::GL::Resources::GLTexture2dShPtr& tx,
+    bool calcStdDev) {
   std::lock_guard<std::mutex> pool_lock(_poolMtx);
 
   CHECK(_accumTxMap.find(tx) != _accumTxMap.end());
 
-  return _getInactiveExtentsTxInternal(tx.get(), nullptr);
+  return _getInactiveExtentsTxInternal(tx.get(), nullptr, calcStdDev);
 }
 
 ::Rendering::GL::Resources::GLTexture2dShPtr QueryAccumTxPool::getInactiveExtentsTx(
-    ::Rendering::GL::Resources::GLTexture2dArray* txArray) {
+    ::Rendering::GL::Resources::GLTexture2dArray* txArray,
+    bool calcStdDev) {
   std::lock_guard<std::mutex> pool_lock(_poolMtx);
 
-  return _getInactiveExtentsTxInternal(nullptr, txArray);
+  return _getInactiveExtentsTxInternal(nullptr, txArray, calcStdDev);
 }
 
 void QueryAccumTxPool::setExtentsTxInactive(::Rendering::GL::Resources::GLTexture2dShPtr& tx) {

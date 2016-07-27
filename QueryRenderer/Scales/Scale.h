@@ -177,10 +177,14 @@ class BaseScale {
   bool _numAccumulatorValsChanged;
   bool _numAccumulatorTxtsChanged;
 
+  uint8_t _numMinStdDev;
   uint32_t _minDensity;
   bool _findMinDensity;
+
+  uint8_t _numMaxStdDev;
   uint32_t _maxDensity;
   bool _findMaxDensity;
+  bool _findStdDev;
 
   // using this bool to determine whether the gpu resources for an accumulator
   // scale were just built in the current render configuration update.

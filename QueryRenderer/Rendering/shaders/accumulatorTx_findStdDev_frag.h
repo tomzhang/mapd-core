@@ -1,14 +1,14 @@
-#ifndef ACCUMULATORTX_FINDEXTENTS_H_
-#define ACCUMULATORTX_FINDEXTENTS_H_
+#ifndef ACCUMULATORTX_FINDSTDDEV_H_
+#define ACCUMULATORTX_FINDSTDDEV_H_
 
 #include <string>
 
 namespace QueryRenderer {
-struct AccumulatorTx_FindExtents_frag {
+struct AccumulatorTx_FindStdDev_frag {
   static const std::string source;
 };
 
-const std::string AccumulatorTx_FindExtents_frag::source =
+const std::string AccumulatorTx_FindStdDev_frag::source =
     "// FRAGMENT SHADER\n"
     "#version 450 core\n"
     "\n"
@@ -34,10 +34,18 @@ const std::string AccumulatorTx_FindExtents_frag::source =
     "void main() {\n"
     "    uint cnt = getAccumulatedCnt();\n"
     "    if (cnt > 0) {\n"
-    "        imageAtomicMin(inExtents, ivec2(0, 0), cnt);\n"
-    "        imageAtomicMax(inExtents, ivec2(1, 0), cnt);\n"
-    "        imageAtomicAdd(inExtents, ivec2(2, 0), cnt);\n"
-    "        imageAtomicAdd(inExtents, ivec2(3, 0), 1);\n"
+    // NOTE: float conversions can be much faster than doubles, so there's a tradeoff between speed and accuracy here
+    "        float mean = float(imageLoad(inExtents, ivec2(2, 0)).r) / float(imageLoad(inExtents, ivec2(3, 0)).r);\n"
+    // "        double mean = double(imageLoad(inExtents, ivec2(2, 0)).r) / double(imageLoad(inExtents, ivec2(3,
+    // 0)).r);\n"
+
+    // NOTE: the following code rounds the double off. I'm hoping the error introduced will be reasonable enough to
+    // calculate
+    // the std dev in density accumulations. The use case suggests it doesn't have to be exact.
+    "        float sqrDiff = pow(float(cnt) - mean, 2.0);\n"
+    // "        double sqrDiff = pow(double(cnt) - mean, 2.0);\n"
+    "        uint roundSqrDiff = uint(round(sqrDiff));\n"
+    "        imageAtomicAdd(inExtents, ivec2(4, 0), roundSqrDiff);\n"
     "    }\n"
     "\n"
     "    color = vec4(0,0,0,0);\n"
@@ -45,4 +53,4 @@ const std::string AccumulatorTx_FindExtents_frag::source =
 
 }  // namespace QueryRenderer
 
-#endif  // ACCUMULATORTX_FINDEXTENTS_H_
+#endif  // ACCUMULATORTX_FINDSTDDEV_H_
