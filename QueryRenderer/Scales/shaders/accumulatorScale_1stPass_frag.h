@@ -27,7 +27,7 @@ const std::string AccumulatorScale_1stPass_frag::source =
     "\n"
     "subroutine(AccumulatorFunc) void densityAccumulate() {\n"
     "    // NOTE: accumIdx should always be 0 in the density case\n"
-    "    imageAtomicAdd(inTxPixelCounter[accumIdx], ivec2(gl_FragCoord.xy), 1);\n"
+    "    imageAtomicAdd(inTxPixelCounter[0], ivec2(gl_FragCoord.xy), 1);\n"
     "}\n"
     "\n"
     "vec4 getFragColor() {\n"

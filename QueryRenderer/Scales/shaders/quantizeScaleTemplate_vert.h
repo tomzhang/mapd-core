@@ -24,6 +24,13 @@ const std::string QuantizeScaleTemplate_vert::source =
     "flat out int accumIdx;   // the ordinal domain index for accumulations\n"
     "#endif\n"
     "\n"
+    // TODO(croot): right now, if the quantize scale is a density
+    // accumulation, we still find the index via the following math
+    // unnecessarily. The better approach is to make a subroutine
+    // or an additional #if/#else ... but that will take a little
+    // bit of work. Right now (as of 07/15/16) I'm changing
+    // accumulatorScale_1stPass_frag.h to automatically set the
+    // accumulator texture index to 0 rather than using 'accumTx'
     "rangeType_<name> getQuantizeScale_<name>(in domainType_<name> category) {\n"
     "    double diff = double(category - uDomains_<name>[0]);\n"
     "    int idx = int(max(min(trunc(diff / quantizeDiff), double(numRanges_<name>-1)), "
