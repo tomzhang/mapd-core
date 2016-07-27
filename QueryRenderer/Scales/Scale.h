@@ -404,7 +404,9 @@ class LinearScale : public Scale<DomainType, RangeType> {
         _useClamp = itr->value.GetBool();
       } else {
         // TODO(croot): set a const default for _useClamp somewhere
-        _useClamp = false;
+        // Clamping by default makes sense for DENSITY accumulation.
+        // TODO(croot): should that be a default for other types?
+        _useClamp = (this->getAccumulatorType() == AccumulatorType::DENSITY ? true : false);
       }
 
       if (prevClamp != _useClamp) {
