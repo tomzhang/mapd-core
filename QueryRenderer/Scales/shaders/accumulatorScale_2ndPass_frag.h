@@ -189,7 +189,11 @@ const std::string AccumulatorScale_2ndPass_frag::source =
     "    calcMeanStdDev(mean, stddev);\n"
     "    uint myMinDensity = getMinDensity(mean, stddev);\n"
     "    uint myMaxDensity = getMaxDensity(mean, stddev);\n"
-    "    domainType_<name>_DENSITY pct = domainType_<name>_DENSITY(totalCnt - myMinDensity) / \n"
+    // NOTE: had to convert totalCnt and myMinDensity to floats/doubles before the first subtraction
+    // to care for the case when totalCnt < myMinDensity (if we cast after the subtraction, we'd get a huge number).
+    // However, there's no need to do that in the myMaxDensity-myMinDensity case as max should always be >= min.
+    "    domainType_<name>_DENSITY pct = (domainType_<name>_DENSITY(totalCnt) - "
+    "domainType_<name>_DENSITY(myMinDensity)) / \n"
     "domainType_<name>_DENSITY(myMaxDensity - myMinDensity);\n"
     "    return getDensityColor(pct);\n"
     "}\n"
