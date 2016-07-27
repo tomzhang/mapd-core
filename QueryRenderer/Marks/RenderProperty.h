@@ -255,9 +255,12 @@ class RenderProperty : public BaseRenderProperty {
   }
 
   void _updateScalePtr(const ScaleShPtr& scalePtr) {
-    RUNTIME_EX_ASSERT(_allowsAccumulatorScale || !scalePtr->hasAccumulator(),
+    bool scaleAccumulation = scalePtr->hasAccumulator();
+    RUNTIME_EX_ASSERT(_allowsAccumulatorScale || !scaleAccumulation,
                       std::string(*this) + " The scale \"" + scalePtr->getName() +
                           "\" is an accumulator scale but this mark property doesn't accept accumulator scales.");
+
+    bool scaleDensityAccumulation = (scaleAccumulation && scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
 
     if (!_scaleConfigPtr) {
       _setShaderDirty();
@@ -272,9 +275,19 @@ class RenderProperty : public BaseRenderProperty {
     } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
       _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
     } else {
-      THROW_RUNTIME_EX(std::string(*this) + ": Scale domain with shader type \"" +
-                       scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
-                       _inType->glslType() + "\" are not supported to work together");
+      RUNTIME_EX_ASSERT(scaleDensityAccumulation,
+                        std::string(*this) + ": Scale domain with shader type \"" +
+                            scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
+                            _inType->glslType() + "\" are not supported to work together.");
+
+      switch (scalePtr->getDomainDataType()) {
+        case QueryDataType::DOUBLE:
+          _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
+          break;
+        default:
+          THROW_RUNTIME_EX(std::string(*this) + ": Unsupported density accumulator scale with domain of type " +
+                           to_string(scalePtr->getDomainDataType()));
+      }
     }
 
     BaseRenderProperty::_updateScalePtr(scalePtr);

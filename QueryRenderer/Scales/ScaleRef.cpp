@@ -101,6 +101,16 @@ std::string BaseScaleRef::_printInfo() const {
   return rtn;
 }
 
+AccumulatorType BaseScaleRef::getAccumulatorType() const {
+  _verifyScalePointer();
+  return _scalePtr->getAccumulatorType();
+}
+
+bool BaseScaleRef::hasAccumulator() const {
+  _verifyScalePointer();
+  return _scalePtr->hasAccumulator();
+}
+
 void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
                             ScaleDomainRangeData<ColorRGBA>* srcData) {
   std::vector<ColorRGBA>& srcVec = srcData->getVectorDataRef();

@@ -10,6 +10,8 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/regex.hpp>
 
+// #include <fstream>
+
 namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
@@ -295,6 +297,10 @@ void PointMark::_updateShader() {
   //   shadersrcstream.open("shadersource.vert");
   //   shadersrcstream << vertSrc;
   //   shadersrcstream.close();
+
+  //   shadersrcstream.open("shadersource.frag");
+  //   shadersrcstream << fragSrc;
+  //   shadersrcstream.close();
   // }
 
   // now build the shader object
@@ -393,11 +399,15 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
 
   for (auto prop : _uniformProps) {
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+    bool hasDensityAccumulator = false;
     if (scalePtr != nullptr) {
       scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+      hasDensityAccumulator = (scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
     }
 
-    prop->bindUniformToRenderer(activeShader, prop->getName());
+    if (!hasDensityAccumulator || activeShader->hasUniformAttribute(prop->getName())) {
+      prop->bindUniformToRenderer(activeShader, prop->getName());
+    }
   }
 }
 

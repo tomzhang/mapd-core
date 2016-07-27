@@ -40,6 +40,9 @@ class BaseScaleRef {
 
   ScaleShPtr getScalePtr() { return _scalePtr; }
 
+  AccumulatorType getAccumulatorType() const;
+  bool hasAccumulator() const;
+
   virtual operator std::string() const = 0;
 
  protected:

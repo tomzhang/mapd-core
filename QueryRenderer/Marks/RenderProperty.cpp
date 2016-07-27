@@ -25,6 +25,8 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     std::string valueProp = "value";
     std::string scaleProp = "scale";
 
+    bool hasData = false;
+
     if ((mitr = obj.FindMember(fieldProp.c_str())) != obj.MemberEnd()) {
       // need to clear out the value path
       _valueJsonPath = rapidjson::Pointer();
@@ -46,6 +48,8 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       }
 
       _fieldJsonPath = objPath.Append(fieldProp.c_str(), fieldProp.length());
+
+      hasData = true;
     } else if ((mitr = obj.FindMember(valueProp.c_str())) != obj.MemberEnd()) {
       // need to clear out the field path
       _fieldJsonPath = rapidjson::Pointer();
@@ -56,14 +60,9 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
         _initValueFromJSONObj(mitr->value);
       }
       _valueJsonPath = objPath.Append(valueProp.c_str(), valueProp.length());
+
+      hasData = true;
     } else {
-      // need some value source, either by "field" or by "value"
-      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
-          _ctx->getUserWidgetIds(),
-          obj,
-          "invalid mark property object. Must contain a data reference via a \"field\" property "
-          "or "
-          "a \"value\" property."));
     }
 
     if ((mitr = obj.FindMember(scaleProp.c_str())) != obj.MemberEnd()) {
@@ -79,6 +78,15 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 
       _scaleJsonPath = objPath.Append(scaleProp.c_str(), scaleProp.length());
     } else {
+      // need some value source, either by "field" or by "value" if there's no scale reference
+      RUNTIME_EX_ASSERT(hasData,
+                        RapidJSONUtils::getJsonParseErrorStr(
+                            _ctx->getUserWidgetIds(),
+                            obj,
+                            "invalid mark property object. Must contain a data reference via a \"field\" property "
+                            "or "
+                            "a \"value\" property."));
+
       // TODO(croot): If a scale was used previously but now it's not, we need to
       // indicate that a shader rebuild is needed. Two possible approaches:
       // 1) have a local pointer that points back to the mark that encapsulates
@@ -204,8 +212,9 @@ std::string BaseRenderProperty::getInGLSLType() const {
                     std::string(*this) + " getInGLSLType(): input type for \"" + _name + "\" is uninitialized.");
 
   if (_scaleConfigPtr != nullptr) {
+    auto scalePtr = _scaleConfigPtr->getScalePtr();
     std::string glslType = _scaleConfigPtr->getDomainTypeGL()->glslType();
-    RUNTIME_EX_ASSERT(glslType == _inType->glslType(),
+    RUNTIME_EX_ASSERT(glslType == _inType->glslType() || scalePtr->getAccumulatorType() == AccumulatorType::DENSITY,
                       std::string(*this) + " getInGLSLType(): the domain type for scale \"" +
                           _scaleConfigPtr->getNameRef() + "\" does not match the type for mark property \"" + _name +
                           "\"");
