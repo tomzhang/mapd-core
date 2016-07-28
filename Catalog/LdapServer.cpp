@@ -31,7 +31,6 @@ bool LdapServer::inUse() {
 }
 
 bool LdapServer::authenticate_user(const std::string& userName, const std::string& passwd) {
-#ifdef HAVE_LDAP
   LDAP* ldp;
   int rc, version;
   berval creds;
@@ -64,8 +63,4 @@ bool LdapServer::authenticate_user(const std::string& userName, const std::strin
   LOG(INFO) << " User " << userName << " successfully logged in with LDAP authentication";
   ldap_unbind_ext_s(ldp, NULL, NULL);
   return true;
-#else
-  CHECK(false);
-  return false;
-#endif
 }
