@@ -26,6 +26,7 @@
 #include "Catalog/Catalog.h"
 #include "Fragmenter/InsertOrderFragmenter.h"
 #include "Import/Importer.h"
+#include "Licensing/AWSMarketplace.h"
 #include "Parser/parser.h"
 #include "Parser/ParserWrapper.h"
 #include "Parser/ReservedKeywords.h"
@@ -2125,6 +2126,17 @@ int main(int argc, char** argv) {
     }
   }
 #endif  // TIME_LIMITED_BUILD
+
+  try {
+    if (!validate_server()) {
+      std::cerr << "License validation failed, please contact support@mapd.com." << std::endl;
+      return 2;
+    }
+  } catch (const std::exception& e) {
+    std::cerr << "License validation failed, please contact support@mapd.com: " << e.what() << std::endl;
+    return 2;
+  }
+
 
   const auto log_path = boost::filesystem::path(base_path) / "mapd_log";
   (void)boost::filesystem::create_directory(log_path);

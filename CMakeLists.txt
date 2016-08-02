@@ -189,9 +189,10 @@ if(ENABLE_ASAN)
   add_definitions("-DRUN_ASAN")
 endif()
 
-# Curl/CPR
+set(MAPD_AWS_BILLINGPRODUCTS "" CACHE STRING "Comma-separated list of valid AWS BillingProducts")
 option(ENABLE_LICENSING_AWS "Enable licensing options for AWS Marketplace" OFF)
 if (ENABLE_LICENSING_AWS)
+  add_definitions("-DHAVE_LICENSING_AWS")
   set(BUILD_CPR_TESTS OFF CACHE BOOL "Don't build cpr tests")
   find_package(CURL)
   if(CURL_FOUND)
@@ -199,6 +200,7 @@ if (ENABLE_LICENSING_AWS)
   endif()
   add_subdirectory(ThirdParty/cpr/cpr)
   include_directories(ThirdParty/cpr/cpr/include)
+  set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-aws")
 endif()
 
 ADD_SUBDIRECTORY    (Catalog)
@@ -236,6 +238,10 @@ endif()
 
 if (ENABLE_RENDERING)
     list(APPEND MAPD_LIBRARIES "${MAPD_RENDERING_LIBRARIES}")
+endif()
+
+if (ENABLE_LICENSING_AWS)
+  list(APPEND MAPD_LIBRARIES AWSMarketplace)
 endif()
 
 enable_testing()
