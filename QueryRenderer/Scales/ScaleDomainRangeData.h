@@ -141,22 +141,8 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
         _vectorPtr.reset(new std::vector<T>(jsonObj.Capacity()));
 
         // gather all the items
-        QueryDataType itemType;
-
-        bool supportStr = (typeid(T) == typeid(std::string));
         size_t idx = 0;
         for (vitr = jsonObj.Begin(); vitr != jsonObj.End(); ++vitr, ++idx) {
-          // only strings are currently allowed in the domains
-          itemType = RapidJSONUtils::getDataTypeFromJSONObj(*vitr, supportStr);
-
-          RUNTIME_EX_ASSERT(
-              itemType == dataType,
-              RapidJSONUtils::getJsonParseErrorStr(
-                  ctx->getUserWidgetIds(),
-                  jsonObj,
-                  "scale " + _name + " item " + std::to_string(vitr - jsonObj.Begin()) + " has an invalid type."));
-
-          // _pushItem(*vitr);
           _setItem(idx, *vitr);
         }
       }
@@ -215,7 +201,9 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
   void _pushItem(const rapidjson::Value& obj) { _vectorPtr->push_back(getDataValueFromJSONObj(obj)); }
 
-  void _setItem(size_t idx, const rapidjson::Value& obj) { (*_vectorPtr)[idx] = getDataValueFromJSONObj(obj); }
+  void _setItem(size_t idx, const rapidjson::Value& obj) {
+    (*_vectorPtr)[idx] = static_cast<T>(getDataValueFromJSONObj(obj));
+  }
 
   void _setFromStringValue(const std::string& strVal, ScaleType type) {
     if (type == ScaleType::LINEAR && (strVal == "width" || strVal == "height")) {

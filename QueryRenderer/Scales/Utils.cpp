@@ -117,7 +117,7 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, con
                     RapidJSONUtils::getJsonParseErrorStr(
                         obj, "\"domain\" property for scales must exist and must be an object or an array."));
 
-  QueryDataType domainType;
+  QueryDataType domainType, itemType;
 
   if (isObject) {
     domainType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
@@ -127,6 +127,19 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, con
     // can support strings for domain values. Others shouldn't.
     // Will allow all domains to accept all strings for now.
     domainType = getDataTypeFromJSONObj(itr->value[0], true);
+
+    for (size_t i = 1; i < itr->value.Size(); ++i) {
+      itemType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[i], true);
+
+      try {
+        domainType = getHigherPriorityDataType(domainType, itemType);
+      } catch (const std::runtime_error& e) {
+        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+            obj,
+            "scale domain item at index " + std::to_string(i) + " has an incompatible type. " + to_string(domainType) +
+                " is not compatible with " + to_string(itemType)));
+      }
+    }
   }
 
   return domainType;
@@ -144,7 +157,7 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, cons
                     RapidJSONUtils::getJsonParseErrorStr(
                         obj, "\"range\" property for scales must exist and must be an object or a string."));
 
-  QueryDataType rangeType;
+  QueryDataType rangeType, itemType;
   if (isObject) {
     rangeType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
   } else if (isString) {
@@ -163,6 +176,19 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, cons
     rangeType = QueryDataType::FLOAT;
   } else {
     rangeType = getDataTypeFromJSONObj(itr->value[0]);
+
+    for (size_t i = 1; i < itr->value.Size(); ++i) {
+      itemType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[i]);
+
+      try {
+        rangeType = getHigherPriorityDataType(rangeType, itemType);
+      } catch (const std::runtime_error& e) {
+        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj,
+                                                              "scale range item at index " + std::to_string(i) +
+                                                                  " has an incompatible type. " + to_string(rangeType) +
+                                                                  " is not compatible with " + to_string(itemType)));
+      }
+    }
   }
 
   return rangeType;
@@ -323,6 +349,46 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     default:
       THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "domain type is unsupported."));
   }
+}
+
+QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const QueryDataType checkDataType) {
+  if (baseDataType == checkDataType) {
+    return baseDataType;
+  }
+
+  switch (baseDataType) {
+    case QueryDataType::FLOAT:
+      if (checkDataType == QueryDataType::UINT || checkDataType == QueryDataType::INT) {
+        return baseDataType;
+      } else if (checkDataType == QueryDataType::DOUBLE) {
+        return checkDataType;
+      }
+      break;
+    case QueryDataType::DOUBLE:
+      if (checkDataType == QueryDataType::UINT || checkDataType == QueryDataType::INT ||
+          checkDataType == QueryDataType::FLOAT) {
+        return baseDataType;
+      }
+      break;
+    case QueryDataType::INT:
+      if (checkDataType == QueryDataType::UINT) {
+        return baseDataType;
+      } else if (checkDataType == QueryDataType::FLOAT || checkDataType == QueryDataType::DOUBLE) {
+        return checkDataType;
+      }
+      break;
+    case QueryDataType::UINT:
+      if (checkDataType == QueryDataType::INT || checkDataType == QueryDataType::FLOAT ||
+          checkDataType == QueryDataType::DOUBLE) {
+        return checkDataType;
+      }
+      break;
+    default:
+      break;
+  }
+
+  THROW_RUNTIME_EX(to_string(baseDataType) + " is incompatible with " + to_string(checkDataType));
+  return baseDataType;
 }
 
 }  // namespace QueryRenderer
