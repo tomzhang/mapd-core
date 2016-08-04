@@ -30,6 +30,7 @@ class BaseScale {
   static size_t convertNumAccumValsToNumAccumTextures(size_t numAccumVals, AccumulatorType accumType);
   static size_t convertNumAccumTexturesToNumAccumVals(size_t numAccumTxts, AccumulatorType accumType);
 
+  enum class ScaleShaderType { QUANTITATIVE = 0, ORDINAL, QUANTIZE };
   const static std::vector<std::string> scaleVertexShaderSource;
 
   BaseScale(const QueryRendererContextShPtr& ctx,
@@ -81,6 +82,7 @@ class BaseScale {
   std::string getRangeGLSLUniformName() { return "uRanges_" + _name; }
 
   virtual void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                                      std::unordered_map<std::string, std::string>& subroutineMap,
                                       const std::string& extraSuffix = "",
                                       bool ignoreDomain = false,
                                       bool ignoreRange = false,
@@ -141,7 +143,9 @@ class BaseScale {
 
   bool _updateAccumulatorFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
   void _setNumAccumulatorVals(int numAccumulatorVals);
-  void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, bool ignoreAccum);
+  void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                               std::unordered_map<std::string, std::string>& subroutineMap,
+                               bool ignoreAccum);
 
   bool hasNumAccumulatorValsChanged() const { return _numAccumulatorValsChanged; }
 
@@ -238,11 +242,15 @@ class Scale : public BaseScale {
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
  protected:
-  std::string _getGLSLCode(const std::string& extraSuffix, bool ignoreDomain, bool ignoreRange, bool ignoreAccum) {
+  std::string _getGLSLCode(const std::string& extraSuffix,
+                           bool ignoreDomain,
+                           bool ignoreRange,
+                           bool ignoreAccum,
+                           const BaseScale::ScaleShaderType scaleShader) {
     RUNTIME_EX_ASSERT(_domainPtr.size() > 0 && _rangePtr.size() > 0,
                       std::string(*this) + " getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
 
-    std::string shaderCode = scaleVertexShaderSource[static_cast<int>(_type)];
+    std::string shaderCode = scaleVertexShaderSource[static_cast<int>(scaleShader)];
     std::ostringstream ss;
 
     if (!ignoreDomain) {
@@ -270,7 +278,10 @@ class Scale : public BaseScale {
     return shaderCode;
   }
 
-  bool _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+  bool _updateFromJSONObj(const rapidjson::Value& obj,
+                          const rapidjson::Pointer& objPath,
+                          std::function<void(DomainType&)> domainValConvert = [](DomainType& domainVal) { return; },
+                          std::function<void(RangeType&)> rangeValConvert = [](RangeType& rangeVal) { return; }) {
     bool rtn = false;
 
     if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
@@ -278,8 +289,9 @@ class Scale : public BaseScale {
           obj.IsObject(),
           RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "scale items must be objects."));
 
-      _domainPtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged);
-      _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged);
+      _domainPtr.initializeFromJSONObj(
+          obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged, domainValConvert);
+      _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged, rangeValConvert);
 
       rtn = hasDomainDataChanged() || hasRangeDataChanged();
 
@@ -308,6 +320,7 @@ class Scale : public BaseScale {
   }
 
   void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                               std::unordered_map<std::string, std::string>& subroutineMap,
                                const std::string& extraSuffix,
                                bool ignoreDomain,
                                bool ignoreRange,
@@ -320,7 +333,7 @@ class Scale : public BaseScale {
       activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorDataRef());
     }
 
-    BaseScale::_bindUniformsToRenderer(activeShader, ignoreAccum);
+    BaseScale::_bindUniformsToRenderer(activeShader, subroutineMap, ignoreAccum);
   }
 
   std::string _printInfo() const {
@@ -342,45 +355,63 @@ class Scale : public BaseScale {
 };
 
 template <typename DomainType, typename RangeType>
-class LinearScale : public Scale<DomainType, RangeType> {
+class QuantitativeScale : public Scale<DomainType, RangeType> {
  public:
-  LinearScale(const rapidjson::Value& obj,
-              const rapidjson::Pointer& objPath,
-              const QueryRendererContextShPtr& ctx,
-              const std::string& name = "")
-      : Scale<DomainType, RangeType>(obj,
-                                     objPath,
-                                     ctx,
-                                     name,
-                                     ScaleType::LINEAR,
-                                     true,
-                                     static_cast<uint8_t>(AccumulatorType::DENSITY)),
-        _useClamp(false) {
-    updateFromJSONObj(obj, objPath);
-  }
+  QuantitativeScale(const rapidjson::Value& obj,
+                    const rapidjson::Pointer& objPath,
+                    const QueryRendererContextShPtr& ctx,
+                    const std::string& name,
+                    const ScaleType scaleType)
+      : Scale<DomainType,
+              RangeType>(obj, objPath, ctx, name, scaleType, true, static_cast<uint8_t>(AccumulatorType::DENSITY)),
+        _useClamp(false) {}
 
-  ~LinearScale() {}
+  virtual ~QuantitativeScale() {}
 
   bool hasPropertiesChanged() const final { return hasClampChanged(); }
   bool hasClampChanged() const { return _clampChanged; }
 
-  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
-                              const std::string& extraSuffix = "",
-                              bool ignoreDomain = false,
-                              bool ignoreRange = false,
-                              bool ignoreAccum = false) final {
+  virtual void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                                      std::unordered_map<std::string, std::string>& subroutineMap,
+                                      const std::string& extraSuffix = "",
+                                      bool ignoreDomain = false,
+                                      bool ignoreRange = false,
+                                      bool ignoreAccum = false) {
     if (!ignoreAccum && this->hasAccumulator()) {
       ignoreDomain = true;
       ignoreRange = true;
     }
-    this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+    this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+
+    std::string transformFunc;
+    switch (this->_type) {
+      case ScaleType::LINEAR:
+        transformFunc = "passThruTransform";
+        break;
+      case ScaleType::LOG:
+        transformFunc = "logTransform";
+        break;
+      case ScaleType::POW:
+        transformFunc = "powTransform";
+        break;
+      case ScaleType::SQRT:
+        transformFunc = "sqrtTransform";
+        break;
+      default:
+        THROW_RUNTIME_EX("ScaleType " + to_string(this->_type) + " does not have a supported glsl transform func.");
+    }
+
+    transformFunc += "_" + this->_name + extraSuffix;
+
+    subroutineMap["quantTransform_" + this->_name + extraSuffix] = transformFunc;
   }
 
   std::string getGLSLCode(const std::string& extraSuffix = "",
                           bool ignoreDomain = false,
                           bool ignoreRange = false,
                           bool ignoreAccum = false) final {
-    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+    std::string shaderCode = this->_getGLSLCode(
+        extraSuffix, ignoreDomain, ignoreRange, ignoreAccum, BaseScale::ScaleShaderType::QUANTITATIVE);
 
     std::ostringstream ss;
     ss << _useClamp;
@@ -389,8 +420,12 @@ class LinearScale : public Scale<DomainType, RangeType> {
     return shaderCode;
   }
 
-  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
-    bool updated = this->_updateFromJSONObj(obj, objPath);
+  bool _updateQuantitativeFromJSONObj(const rapidjson::Value& obj,
+                                      const rapidjson::Pointer& objPath,
+                                      std::function<void(DomainType&)> domainValConvert = [](DomainType& domainVal) {
+    return;
+  }) {
+    bool updated = this->_updateFromJSONObj(obj, objPath, domainValConvert);
 
     if (updated) {
       rapidjson::Value::ConstMemberIterator itr;
@@ -429,8 +464,6 @@ class LinearScale : public Scale<DomainType, RangeType> {
     return updated;
   }
 
-  operator std::string() const final { return "LinearScale" + this->_printInfo(); }
-
  private:
   bool _useClamp;
   bool _clampChanged;
@@ -444,6 +477,148 @@ class LinearScale : public Scale<DomainType, RangeType> {
     auto& data = this->_rangePtr.getVectorDataRef();
     CHECK(static_cast<int>(data.size()) == this->getNumAccumulatorValues());
     shaderPtr->setUniformAttribute(attrName, data, checkFullSize);
+  }
+};
+
+template <typename DomainType, typename RangeType>
+class LinearScale : public QuantitativeScale<DomainType, RangeType> {
+ public:
+  LinearScale(const rapidjson::Value& obj,
+              const rapidjson::Pointer& objPath,
+              const QueryRendererContextShPtr& ctx,
+              const std::string& name = "")
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LINEAR) {
+    updateFromJSONObj(obj, objPath);
+  }
+
+  ~LinearScale() {}
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    bool updated = this->_updateQuantitativeFromJSONObj(obj, objPath);
+    this->_jsonPath = objPath;
+    return updated;
+  }
+
+  operator std::string() const final { return "LinearScale" + this->_printInfo(); }
+};
+
+template <typename DomainType, typename RangeType>
+class LogScale : public QuantitativeScale<DomainType, RangeType> {
+ public:
+  LogScale(const rapidjson::Value& obj,
+           const rapidjson::Pointer& objPath,
+           const QueryRendererContextShPtr& ctx,
+           const std::string& name = "")
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LOG) {
+    updateFromJSONObj(obj, objPath);
+  }
+
+  ~LogScale() {}
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    bool updated = this->_updateQuantitativeFromJSONObj(obj, objPath, logFunc);
+    this->_jsonPath = objPath;
+    return updated;
+  }
+
+  operator std::string() const final { return "LogScale" + this->_printInfo(); }
+
+ private:
+  static void logFunc(DomainType& val) {
+    RUNTIME_EX_ASSERT(val > 0, std::to_string(val) + " is <= 0. Log scales only work with positive values");
+    val = std::log(val);
+  }
+};
+
+template <typename DomainType, typename RangeType>
+class PowScale : public QuantitativeScale<DomainType, RangeType> {
+ public:
+  PowScale(const rapidjson::Value& obj,
+           const rapidjson::Pointer& objPath,
+           const QueryRendererContextShPtr& ctx,
+           const std::string& name = "")
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::POW), _exponent(1.0) {
+    updateFromJSONObj(obj, objPath);
+  }
+
+  ~PowScale() {}
+
+  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              std::unordered_map<std::string, std::string>& subroutineMap,
+                              const std::string& extraSuffix = "",
+                              bool ignoreDomain = false,
+                              bool ignoreRange = false,
+                              bool ignoreAccum = false) final {
+    QuantitativeScale<DomainType, RangeType>::bindUniformsToRenderer(
+        activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+
+    activeShader->setUniformAttribute("uExponent_" + this->_name + extraSuffix, _exponent);
+  }
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    if (!this->_ctx->isJSONCacheUpToDate(this->_jsonPath, obj)) {
+      rapidjson::Value::ConstMemberIterator itr;
+
+      // TODO(croot): move the "exponent" prop name into a const somewhere.
+      std::string expProp = "exponent";
+
+      if ((itr = obj.FindMember(expProp.c_str())) != obj.MemberEnd()) {
+        RUNTIME_EX_ASSERT(
+            itr->value.IsNumber(),
+            RapidJSONUtils::getJsonParseErrorStr(
+                this->_ctx->getUserWidgetIds(), obj, "the \"exponent\" property for pow scales must be a number."));
+
+        _exponent = RapidJSONUtils::getNumValFromJSONObj<float>(itr->value);
+      } else {
+        // TODO(croot): set a const default for _exponent somewhere
+        _exponent = DomainType(1);
+      }
+    }
+
+    bool updated =
+        this->_updateQuantitativeFromJSONObj(obj, objPath, std::bind(powFunc, std::placeholders::_1, _exponent));
+
+    this->_jsonPath = objPath;
+    return updated;
+  }
+
+  operator std::string() const final { return "PowScale" + this->_printInfo(); }
+
+ private:
+  // TODO(croot): should this be any type? Right now, it seems we can only do
+  // a pow() of a float in glsl. That, and because of polymorphism issues when
+  // there's a ScaleRef() object doing type coercion, it's easist to just
+  // keep this as a float.
+  float _exponent;
+
+  static void powFunc(DomainType& val, float exponent) { val = std::pow(val, exponent); }
+};
+
+template <typename DomainType, typename RangeType>
+class SqrtScale : public QuantitativeScale<DomainType, RangeType> {
+ public:
+  SqrtScale(const rapidjson::Value& obj,
+            const rapidjson::Pointer& objPath,
+            const QueryRendererContextShPtr& ctx,
+            const std::string& name = "")
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::SQRT) {
+    updateFromJSONObj(obj, objPath);
+  }
+
+  ~SqrtScale() {}
+
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
+    bool updated = this->_updateQuantitativeFromJSONObj(obj, objPath, sqrtFunc);
+    this->_jsonPath = objPath;
+    return updated;
+  }
+
+  operator std::string() const final { return "SqrtScale" + this->_printInfo(); }
+
+ private:
+  static void sqrtFunc(DomainType& val) {
+    RUNTIME_EX_ASSERT(val >= 0, std::to_string(val) + " is < 0. sqrt scales only work with positive values");
+    val = std::sqrt(val);
   }
 };
 
@@ -472,14 +647,15 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
   std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + this->_name; }
 
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              std::unordered_map<std::string, std::string>& subroutineMap,
                               const std::string& extraSuffix = "",
                               bool ignoreDomain = false,
                               bool ignoreRange = false,
                               bool ignoreAccum = false) final {
     if (!ignoreAccum && this->hasAccumulator()) {
-      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, true, ignoreAccum);
+      this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, true, ignoreAccum);
     } else {
-      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+      this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
       activeShader->setUniformAttribute(this->getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
     }
   }
@@ -488,7 +664,8 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
                           bool ignoreDomain = false,
                           bool ignoreRange = false,
                           bool ignoreAccum = false) final {
-    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+    std::string shaderCode =
+        this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum, BaseScale::ScaleShaderType::ORDINAL);
 
     return shaderCode;
   }
@@ -571,14 +748,15 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
   // bool hasPropertiesChanged() final { return hasClampChanged(); }
 
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              std::unordered_map<std::string, std::string>& subroutineMap,
                               const std::string& extraSuffix = "",
                               bool ignoreDomain = false,
                               bool ignoreRange = false,
                               bool ignoreAccum = false) final {
     if (!ignoreAccum && this->hasAccumulator()) {
-      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, true, ignoreAccum);
+      this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, true, ignoreAccum);
     } else {
-      this->_bindUniformsToRenderer(activeShader, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+      this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
     }
 
     double diff = this->_domainPtr.getDifference(this->_rangePtr.size());
@@ -589,7 +767,8 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
                           bool ignoreDomain = false,
                           bool ignoreRange = false,
                           bool ignoreAccum = false) final {
-    std::string shaderCode = this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+    std::string shaderCode =
+        this->_getGLSLCode(extraSuffix, ignoreDomain, ignoreRange, ignoreAccum, BaseScale::ScaleShaderType::QUANTIZE);
     return shaderCode;
   }
 

@@ -1,7 +1,7 @@
 #include "Scale.h"
 #include "Utils.h"
 #include "../Utils/ShaderUtils.h"
-#include "shaders/linearScaleTemplate_vert.h"
+#include "shaders/quantitativeScaleTemplate_vert.h"
 #include "shaders/ordinalScaleTemplate_vert.h"
 #include "shaders/quantizeScaleTemplate_vert.h"
 #include "shaders/accumulatorScale_1stPass_frag.h"
@@ -17,9 +17,9 @@
 namespace QueryRenderer {
 
 const std::vector<std::string> BaseScale::scaleVertexShaderSource = {
-    LinearScaleTemplate_vert::source,    // LINEAR
-    OrdinalScaleTemplate_vert::source,   // ORDINAL
-    QuantizeScaleTemplate_vert::source,  // QUANTIZE
+    QuantitativeScaleTemplate_vert::source,  // LINEAR, LOG, POW, SQRT
+    OrdinalScaleTemplate_vert::source,       // ORDINAL
+    QuantizeScaleTemplate_vert::source,      // QUANTIZE
 };
 
 const size_t BaseScale::maxAccumTextures = 30;
@@ -101,7 +101,10 @@ std::string BaseScale::getScaleGLSLFuncName(const std::string& extraSuffix) {
 
   switch (_type) {
     case ScaleType::LINEAR:
-      scaleName = "Linear";
+    case ScaleType::LOG:
+    case ScaleType::POW:
+    case ScaleType::SQRT:
+      scaleName = "Quantitative";
       break;
     case ScaleType::ORDINAL:
       scaleName = "Ordinal";
@@ -262,7 +265,7 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
     case AccumulatorType::DENSITY:
       accumFunc = "getDensityAccumulatedColor";
       bindUniformsToRenderer(
-          itr->second.accumulator2ndPassShaderPtr.get(), "_" + to_string(_accumType), false, false, true);
+          itr->second.accumulator2ndPassShaderPtr.get(), subroutines, "_" + to_string(_accumType), false, false, true);
       break;
     default:
       THROW_RUNTIME_EX("Accumulator type " + to_string(_accumType) + " is currently unsupported for rendering");
@@ -493,7 +496,9 @@ void BaseScale::_setNumAccumulatorVals(int numAccumulatorVals) {
   }
 }
 
-void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, bool ignoreAccum) {
+void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                                        std::unordered_map<std::string, std::string>& subroutineMap,
+                                        bool ignoreAccum) {
   if (!ignoreAccum && hasAccumulator()) {
     auto gpuId = activeShader->getGLRenderer()->getGpuId();
     auto itr = this->_perGpuData.find(gpuId);
@@ -516,10 +521,11 @@ void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* ac
         break;
     }
 
-    // TODO(croot): what if the mark uses subroutines? It's more efficient to
-    // set all the subroutines at once. May want to consider passing in a map
-    // to insert the subroutines to set
-    activeShader->setSubroutine("accumulate", accumFunc);
+    // TODO(croot): should we verify that subroutines of the
+    // same name don't exist? I'm choosing not to as I'm
+    // assuming the shader compilation would fail if there are two
+    // subroutines of the same name.
+    subroutineMap["accumulate"] = accumFunc;
   }
 }
 

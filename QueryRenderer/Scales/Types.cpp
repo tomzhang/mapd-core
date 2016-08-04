@@ -6,6 +6,12 @@ std::string to_string(ScaleType scaleType) {
   switch (scaleType) {
     case ScaleType::LINEAR:
       return "LINEAR";
+    case ScaleType::LOG:
+      return "LOG";
+    case ScaleType::POW:
+      return "POW";
+    case ScaleType::SQRT:
+      return "SQRT";
     case ScaleType::ORDINAL:
       return "ORDINAL";
     case ScaleType::QUANTIZE:

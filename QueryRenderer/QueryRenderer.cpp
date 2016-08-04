@@ -319,9 +319,10 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
           // TODO(croot): scale config is changing. Need to validate any previously existing references.
           // One way to do this is store a map of all objects changing in-place in order to
           // validate.
-          if (scalePtr->getType() != getScaleTypeFromJSONObj(*vitr) ||
-              scalePtr->getDomainDataType() != getScaleDomainDataTypeFromJSONObj(*vitr, _ctx) ||
-              scalePtr->getRangeDataType() != getScaleRangeDataTypeFromJSONObj(*vitr, _ctx)) {
+          auto currScaleType = getScaleTypeFromJSONObj(*vitr);
+          if (scalePtr->getType() != currScaleType ||
+              scalePtr->getDomainDataType() != getScaleDomainDataTypeFromJSONObj(*vitr, _ctx, currScaleType) ||
+              scalePtr->getRangeDataType() != getScaleRangeDataTypeFromJSONObj(*vitr, _ctx, currScaleType)) {
             // completely new scale type, so destroy previous one and
             // build a new one from scratch.
             _ctx->_scaleConfigMap.erase(scaleName);

@@ -2,6 +2,7 @@
 #include "Scale.h"
 #include "../Utils/RapidJSONUtils.h"
 #include <Rendering/Objects/ColorRGBA.h>
+#include <type_traits>
 
 namespace QueryRenderer {
 
@@ -94,6 +95,12 @@ ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj) {
 
     if (strScaleType == "linear") {
       rtn = ScaleType::LINEAR;
+    } else if (strScaleType == "log") {
+      rtn = ScaleType::LOG;
+    } else if (strScaleType == "pow") {
+      rtn = ScaleType::POW;
+    } else if (strScaleType == "sqrt") {
+      rtn = ScaleType::SQRT;
     } else if (strScaleType == "ordinal") {
       rtn = ScaleType::ORDINAL;
     } else if (strScaleType == "quantize") {
@@ -107,7 +114,9 @@ ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj) {
   return rtn;
 }
 
-QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
+QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
+                                                const QueryRendererContextShPtr& ctx,
+                                                const ScaleType scaleType) {
   rapidjson::Value::ConstMemberIterator itr;
   bool isObject = false;
 
@@ -126,9 +135,23 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, con
     // to the different scales. For example, ordinal/categorical scales
     // can support strings for domain values. Others shouldn't.
     // Will allow all domains to accept all strings for now.
-    domainType = getDataTypeFromJSONObj(itr->value[0], true);
 
-    for (size_t i = 1; i < itr->value.Size(); ++i) {
+    size_t startIdx = 0;
+    switch (scaleType) {
+      case ScaleType::LOG:
+      case ScaleType::SQRT:
+      case ScaleType::POW:
+        // TODO(croot): support float?
+        domainType = QueryDataType::DOUBLE;
+        startIdx = 0;
+        break;
+      default:
+        domainType = getDataTypeFromJSONObj(itr->value[0], true);
+        startIdx = 1;
+        break;
+    }
+
+    for (size_t i = startIdx; i < itr->value.Size(); ++i) {
       itemType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[i], true);
 
       try {
@@ -145,7 +168,9 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, con
   return domainType;
 }
 
-QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
+QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
+                                               const QueryRendererContextShPtr& ctx,
+                                               const ScaleType scaleType) {
   rapidjson::Value::ConstMemberIterator itr;
   bool isObject = false;
   bool isString;
@@ -203,6 +228,27 @@ ScaleShPtr createScalePtr(const rapidjson::Value& obj,
   switch (scaleType) {
     case ScaleType::LINEAR:
       return ScaleShPtr(new LinearScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
+    case ScaleType::LOG: {
+      // TODO(croot): support float?
+      // NOTE: DomainType should have been validated before hand
+      bool isValid = std::is_same<DomainType, double>::value;
+      CHECK(isValid);
+      return ScaleShPtr(new LogScale<double, RangeType>(obj, objPath, ctx, scaleName));
+    }
+    case ScaleType::POW: {
+      // TODO(croot): support float?
+      // NOTE: DomainType should have been validated before hand
+      bool isValid = std::is_same<DomainType, double>::value;
+      CHECK(isValid);
+      return ScaleShPtr(new PowScale<double, RangeType>(obj, objPath, ctx, scaleName));
+    }
+    case ScaleType::SQRT: {
+      // TODO(croot): support float?
+      // NOTE: DomainType should have been validated before hand
+      bool isValid = std::is_same<DomainType, double>::value;
+      CHECK(isValid);
+      return ScaleShPtr(new SqrtScale<double, RangeType>(obj, objPath, ctx, scaleName));
+    }
     case ScaleType::ORDINAL:
       return ScaleShPtr(new OrdinalScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
     case ScaleType::QUANTIZE:
@@ -236,18 +282,18 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
 
   rapidjson::Value::ConstMemberIterator itr;
 
-  QueryDataType domainType = getScaleDomainDataTypeFromJSONObj(obj, ctx);
-  QueryDataType rangeType = getScaleRangeDataTypeFromJSONObj(obj, ctx);
+  QueryDataType domainType = getScaleDomainDataTypeFromJSONObj(obj, ctx, scaleType);
+  QueryDataType rangeType = getScaleRangeDataTypeFromJSONObj(obj, ctx, scaleType);
 
-  // TODO(croot): put this in the quantize scale class? It's easier to do here, so keeping for
-  // now.
-  if (scaleType == ScaleType::QUANTIZE) {
-    RUNTIME_EX_ASSERT(
-        domainType == QueryDataType::UINT || domainType == QueryDataType::INT || domainType == QueryDataType::FLOAT ||
-            domainType == QueryDataType::DOUBLE,
-        RapidJSONUtils::getJsonParseErrorStr(
-            obj, "Domain type " + to_string(domainType) + " is not a supported domain for a quantize scale."));
-  }
+  RUNTIME_EX_ASSERT(
+      isScaleDomainCompatible(scaleType, domainType),
+      RapidJSONUtils::getJsonParseErrorStr(
+          obj, "Domain type " + to_string(domainType) + " is not supported for a " + to_string(scaleType) + " scale."));
+
+  RUNTIME_EX_ASSERT(
+      isScaleRangeCompatible(scaleType, rangeType),
+      RapidJSONUtils::getJsonParseErrorStr(
+          obj, "Range type " + to_string(domainType) + " is not supported for a " + to_string(scaleType) + " scale."));
 
   switch (domainType) {
     case QueryDataType::UINT:
@@ -389,6 +435,30 @@ QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const 
 
   THROW_RUNTIME_EX(to_string(baseDataType) + " is incompatible with " + to_string(checkDataType));
   return baseDataType;
+}
+
+bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType domainType) {
+  // TODO(croot): put this in the scale classes? It's easier to do here because
+  // otherwise we'd have to do template specializations, which would require a lot
+  // of extra code, so keeping here for now.
+  switch (scaleType) {
+    case ScaleType::LOG:
+    case ScaleType::POW:
+    case ScaleType::SQRT:
+      // TODO(croot): support float?
+      return (domainType == QueryDataType::DOUBLE);
+    case ScaleType::QUANTIZE:
+      return (domainType == QueryDataType::UINT || domainType == QueryDataType::INT ||
+              domainType == QueryDataType::FLOAT || domainType == QueryDataType::DOUBLE);
+    default:
+      return true;
+  }
+
+  return true;
+}
+
+bool isScaleRangeCompatible(const ScaleType scaleType, const QueryDataType rangeType) {
+  return true;
 }
 
 }  // namespace QueryRenderer

@@ -46,9 +46,10 @@ std::string BaseScaleRef::getGLSLCode(const std::string& extraSuffix) {
 }
 
 void BaseScaleRef::bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                                          std::unordered_map<std::string, std::string>& subroutineMap,
                                           const std::string& extraSuffix) {
   _verifyScalePointer();
-  return _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix);
+  return _scalePtr->bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix);
 }
 
 void BaseScaleRef::_verifyScalePointer() const {

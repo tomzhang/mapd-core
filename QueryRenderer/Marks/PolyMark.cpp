@@ -554,11 +554,13 @@ void PolyMark::_buildVAOData(const GpuId& gpuId,
 
 void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader,
                                       const std::set<BaseRenderProperty*>& props) {
+  std::unordered_map<std::string, std::string> subroutines;
+
   for (auto prop : _vboProps) {
     if (props.find(prop) != props.end() && activeShader->hasVertexAttribute(prop->getName())) {
       const ScaleRefShPtr& scalePtr = prop->getScaleReference();
       if (scalePtr != nullptr) {
-        scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+        scalePtr->bindUniformsToRenderer(activeShader, subroutines, "_" + prop->getName());
       }
     }
   }
@@ -567,7 +569,7 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
     if (props.find(prop) != props.end()) {
       const ScaleRefShPtr& scalePtr = prop->getScaleReference();
       if (scalePtr != nullptr && activeShader->hasUniformBlockAttribute(prop->getDataColumnName())) {
-        scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+        scalePtr->bindUniformsToRenderer(activeShader, subroutines, "_" + prop->getName());
       }
     }
   }
@@ -576,11 +578,15 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
     if (props.find(prop) != props.end() && activeShader->hasUniformAttribute(prop->getName())) {
       const ScaleRefShPtr& scalePtr = prop->getScaleReference();
       if (scalePtr != nullptr) {
-        scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+        scalePtr->bindUniformsToRenderer(activeShader, subroutines, "_" + prop->getName());
       }
 
       prop->bindUniformToRenderer(activeShader, prop->getName());
     }
+  }
+
+  if (subroutines.size()) {
+    activeShader->setSubroutines(subroutines);
   }
 }
 

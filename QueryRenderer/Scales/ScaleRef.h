@@ -34,6 +34,7 @@ class BaseScaleRef {
   virtual std::string getGLSLCode(const std::string& extraSuffix = "");
 
   virtual void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                                      std::unordered_map<std::string, std::string>& subroutineMap,
                                       const std::string& extraSuffix = "");
 
   virtual void updateScaleRef(const ScaleShPtr& scalePtr) = 0;
@@ -152,7 +153,9 @@ class ScaleRef : public BaseScaleRef {
     _initScalePtr();
   }
 
-  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader, const std::string& extraSuffix = "") {
+  void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
+                              std::unordered_map<std::string, std::string>& subroutineMap,
+                              const std::string& extraSuffix = "") {
     _verifyScalePointer();
 
     auto accumType = _scalePtr->getAccumulatorType();
@@ -169,7 +172,7 @@ class ScaleRef : public BaseScaleRef {
                                         _coercedRangeData->getVectorDataRef());
     }
 
-    _scalePtr->bindUniformsToRenderer(activeShader, extraSuffix, coerceDomain, coerceRange);
+    _scalePtr->bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, coerceDomain, coerceRange);
   }
 
   operator std::string() const final {

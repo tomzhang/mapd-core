@@ -49,7 +49,8 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
                              const QueryRendererContextShPtr& ctx,
                              ScaleType type,
                              bool& sizeChanged,
-                             bool& valsChanged) {
+                             bool& valsChanged,
+                             std::function<void(T&)> valConvert) {
     sizeChanged = false;
     valsChanged = false;
 
@@ -143,7 +144,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
         // gather all the items
         size_t idx = 0;
         for (vitr = jsonObj.Begin(); vitr != jsonObj.End(); ++vitr, ++idx) {
-          _setItem(idx, *vitr);
+          _setItem(idx, *vitr, valConvert);
         }
       }
 
@@ -201,8 +202,9 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
   void _pushItem(const rapidjson::Value& obj) { _vectorPtr->push_back(getDataValueFromJSONObj(obj)); }
 
-  void _setItem(size_t idx, const rapidjson::Value& obj) {
+  void _setItem(size_t idx, const rapidjson::Value& obj, std::function<void(T&)> valConvertFunc) {
     (*_vectorPtr)[idx] = static_cast<T>(getDataValueFromJSONObj(obj));
+    valConvertFunc((*_vectorPtr)[idx]);
   }
 
   void _setFromStringValue(const std::string& strVal, ScaleType type) {

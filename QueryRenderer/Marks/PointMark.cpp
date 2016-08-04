@@ -367,6 +367,8 @@ void PointMark::_buildVAOData(const GpuId& gpuId,
 }
 
 void PointMark::_bindUniformProperties(GLShader* activeShader) {
+  std::unordered_map<std::string, std::string> subroutines;
+
   // TODO(croot): create a static invalidKeyAttrName string on the class
   static const std::string invalidKeyAttrName = "invalidKey";
   if (key.hasVboPtr()) {
@@ -393,7 +395,7 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
   for (auto prop : _vboProps) {
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
     if (scalePtr != nullptr) {
-      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+      scalePtr->bindUniformsToRenderer(activeShader, subroutines, "_" + prop->getName());
     }
   }
 
@@ -401,13 +403,17 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
     bool hasDensityAccumulator = false;
     if (scalePtr != nullptr) {
-      scalePtr->bindUniformsToRenderer(activeShader, "_" + prop->getName());
+      scalePtr->bindUniformsToRenderer(activeShader, subroutines, "_" + prop->getName());
       hasDensityAccumulator = (scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
     }
 
     if (!hasDensityAccumulator || activeShader->hasUniformAttribute(prop->getName())) {
       prop->bindUniformToRenderer(activeShader, prop->getName());
     }
+  }
+
+  if (subroutines.size()) {
+    activeShader->setSubroutines(subroutines);
   }
 }
 

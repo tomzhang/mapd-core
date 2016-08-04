@@ -11,8 +11,12 @@ namespace QueryRenderer {
 
 std::string getScaleNameFromJSONObj(const rapidjson::Value& obj);
 ScaleType getScaleTypeFromJSONObj(const rapidjson::Value& obj);
-QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
-QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx);
+QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
+                                                const QueryRendererContextShPtr& ctx,
+                                                const ScaleType scaleType);
+QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
+                                               const QueryRendererContextShPtr& ctx,
+                                               const ScaleType scaleType);
 ScaleShPtr createScale(const rapidjson::Value& obj,
                        const rapidjson::Pointer& objPath,
                        const QueryRendererContextShPtr& ctx,
@@ -21,6 +25,8 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
                        ScaleType type = ScaleType::UNDEFINED);
 
 QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const QueryDataType checkDataType);
+bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType domainType);
+bool isScaleRangeCompatible(const ScaleType scaleType, const QueryDataType rangeType);
 
 }  // namespace QueryRenderer
 

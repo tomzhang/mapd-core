@@ -5,7 +5,7 @@
 
 namespace QueryRenderer {
 
-enum class ScaleType { LINEAR = 0, ORDINAL, QUANTIZE, UNDEFINED };
+enum class ScaleType { LINEAR = 0, LOG, POW, SQRT, ORDINAL, QUANTIZE, UNDEFINED };
 enum class AccumulatorType : uint8_t {
   MIN = 0x1,
   MAX = 0x2,
