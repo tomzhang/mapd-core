@@ -32,7 +32,12 @@ const std::string QuantizeScaleTemplate_vert::source =
     // accumulatorScale_1stPass_frag.h to automatically set the
     // accumulator texture index to 0 rather than using 'accumTx'
     "rangeType_<name> getQuantizeScale_<name>(in domainType_<name> category) {\n"
-    "    double diff = double(category - uDomains_<name>[0]);\n"
+    "    double diff;\n"
+    "    if (uDomains_<name>[0] >= 0) {\n"
+    "        diff = min(double(category), double(category - uDomains_<name>[0]));\n"
+    "    } else {\n"
+    "        diff = max(double(category), double(category - uDomains_<name>[0]));\n"
+    "    }\n"
     "    int idx = int(max(min(trunc(diff / quantizeDiff), double(numRanges_<name>-1)), "
     "double(0)));\n"
     "\n"
