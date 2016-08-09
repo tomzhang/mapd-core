@@ -6,6 +6,7 @@
 #include "../Marks/Types.h"
 #include "Scale.h"
 #include "ScaleDomainRangeData.h"
+#include "Utils.h"
 
 #include <Rendering/Renderer/GL/TypeGL.h>
 #include <Rendering/Renderer/GL/Resources/GLShader.h>
@@ -165,11 +166,27 @@ class ScaleRef : public BaseScaleRef {
     if (coerceDomain) {
       activeShader->setUniformAttribute(_scalePtr->getDomainGLSLUniformName() + extraSuffix,
                                         _coercedDomainData->getVectorDataRef());
+
+      auto domainUniformData = _scalePtr->getDomainTypeUniforms(extraSuffix);
+      auto& domainType = domainUniformData.first;
+      auto& uniformMap = domainUniformData.second;
+
+      for (auto& itr : uniformMap) {
+        activeShader->setUniformAttribute(itr.first, convertType<DomainType>(domainType, itr.second));
+      }
     }
 
     if (coerceRange) {
       activeShader->setUniformAttribute(_scalePtr->getRangeGLSLUniformName() + extraSuffix,
                                         _coercedRangeData->getVectorDataRef());
+
+      auto rangeUniformData = _scalePtr->getRangeTypeUniforms(extraSuffix);
+      auto& rangeType = rangeUniformData.first;
+      auto& uniformMap = rangeUniformData.second;
+
+      for (auto& itr : uniformMap) {
+        activeShader->setUniformAttribute(itr.first, convertType<RangeType>(rangeType, itr.second));
+      }
     }
 
     _scalePtr->bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, coerceDomain, coerceRange);
@@ -183,7 +200,6 @@ class ScaleRef : public BaseScaleRef {
  private:
   std::unique_ptr<ScaleDomainRangeData<DomainType>> _coercedDomainData;
   std::unique_ptr<ScaleDomainRangeData<RangeType>> _coercedRangeData;
-  std::unique_ptr<RangeType> _coercedDefaultVal;
 
   void _updateDomainRange(bool updateDomain, bool updateRange, bool force = false) {
     CHECK(_scalePtr != nullptr);

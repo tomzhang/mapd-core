@@ -179,6 +179,10 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   std::vector<T> getVectorData() { return *_vectorPtr; }
 
   QueryDataType getType() const final { return dataType; }
+  static T getNullValue() {
+    THROW_RUNTIME_EX("Nulls of domain/range type " + to_string(dataType) + " are not currently supported.");
+    return T();
+  }
 
   const ::Rendering::GL::TypeGLShPtr& getTypeGL() {
     if (!_cachedTypeGL) {
@@ -189,11 +193,9 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
   inline const std::type_info& getTypeInfo() { return typeid(T); }
 
-  static T getDataValueFromJSONObj(const rapidjson::Value& obj);
+  static T getDataValueFromJSONObj(const rapidjson::Value& obj) { return RapidJSONUtils::getNumValFromJSONObj<T>(obj); }
 
   operator std::string() const { return "ScaleDomainRangeData<T>(name: " + _name + ")"; }
-
-  std::string getTypeStr() const;
 
  private:
   std::shared_ptr<std::vector<T>> _vectorPtr;
@@ -203,7 +205,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   void _pushItem(const rapidjson::Value& obj) { _vectorPtr->push_back(getDataValueFromJSONObj(obj)); }
 
   void _setItem(size_t idx, const rapidjson::Value& obj, std::function<void(T&)> valConvertFunc) {
-    (*_vectorPtr)[idx] = static_cast<T>(getDataValueFromJSONObj(obj));
+    (*_vectorPtr)[idx] = getDataValueFromJSONObj(obj);
     valConvertFunc((*_vectorPtr)[idx]);
   }
 
@@ -247,18 +249,6 @@ template <>
 const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<std::string>::getTypeGL();
 
 template <>
-unsigned int ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj);
-
-template <>
-int ScaleDomainRangeData<int>::getDataValueFromJSONObj(const rapidjson::Value& obj);
-
-template <>
-float ScaleDomainRangeData<float>::getDataValueFromJSONObj(const rapidjson::Value& obj);
-
-template <>
-double ScaleDomainRangeData<double>::getDataValueFromJSONObj(const rapidjson::Value& obj);
-
-template <>
 ::Rendering::Objects::ColorRGBA ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::getDataValueFromJSONObj(
     const rapidjson::Value& obj);
 
@@ -276,6 +266,15 @@ template <>
 void ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::_updateVectorDataByType(
     TDataColumn<::Rendering::Objects::ColorRGBA>* dataColumnPtr,
     ScaleType type);
+
+template <>
+int ScaleDomainRangeData<int>::getNullValue();
+
+template <>
+float ScaleDomainRangeData<float>::getNullValue();
+
+template <>
+double ScaleDomainRangeData<double>::getNullValue();
 
 }  // namespace QueryRenderer
 

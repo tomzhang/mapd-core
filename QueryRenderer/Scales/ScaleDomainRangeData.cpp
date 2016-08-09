@@ -1,5 +1,6 @@
 #include "ScaleDomainRangeData.h"
 #include "Scale.h"
+#include <Shared/sqltypes.h>
 
 namespace QueryRenderer {
 
@@ -40,33 +41,13 @@ template <>
 const QueryDataType ScaleDomainRangeData<unsigned int>::dataType = QueryDataType::UINT;
 
 template <>
-unsigned int ScaleDomainRangeData<unsigned int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
-  return obj.GetUint();
-}
-
-template <>
 const QueryDataType ScaleDomainRangeData<int>::dataType = QueryDataType::INT;
-
-template <>
-int ScaleDomainRangeData<int>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
-  return obj.GetInt();
-}
 
 template <>
 const QueryDataType ScaleDomainRangeData<float>::dataType = QueryDataType::FLOAT;
 
 template <>
-float ScaleDomainRangeData<float>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
-  return static_cast<float>(obj.GetDouble());
-}
-
-template <>
 const QueryDataType ScaleDomainRangeData<double>::dataType = QueryDataType::DOUBLE;
-
-template <>
-double ScaleDomainRangeData<double>::getDataValueFromJSONObj(const rapidjson::Value& obj) {
-  return obj.GetDouble();
-}
 
 template <>
 const QueryDataType ScaleDomainRangeData<ColorRGBA>::dataType = QueryDataType::COLOR;
@@ -105,6 +86,21 @@ void ScaleDomainRangeData<ColorRGBA>::_updateVectorDataByType(TDataColumn<ColorR
     THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
         "getting the extrema of colors in the domain/range is unsupported for scale type" + to_string(type) + "."));
   }
+}
+
+template <>
+int ScaleDomainRangeData<int>::getNullValue() {
+  return NULL_INT;
+}
+
+template <>
+float ScaleDomainRangeData<float>::getNullValue() {
+  return NULL_FLOAT;
+}
+
+template <>
+double ScaleDomainRangeData<double>::getNullValue() {
+  return NULL_DOUBLE;
 }
 
 }  // namespace QueryRenderer

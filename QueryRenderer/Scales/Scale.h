@@ -21,6 +21,7 @@
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/regex.hpp>
+#include <boost/any.hpp>
 
 namespace QueryRenderer {
 
@@ -102,6 +103,11 @@ class BaseScale {
   bool hasRangeDataChanged() const { return _rangeSizeChanged || _rangeValsChanged; }
   bool hasAccumulatorTypeChanged() const { return _accumTypeChanged; }
   bool hasNumAccumulatorTexturesChanged() const { return _numAccumulatorTxtsChanged; }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix) const = 0;
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
+      const std::string& extraSuffix) const = 0;
 
   virtual operator std::string() const = 0;
 
@@ -232,7 +238,9 @@ class Scale : public BaseScale {
                   allowsAccumulator,
                   accumTypeMask),
         _domainPtr("domain", false),
-        _rangePtr("range", true) {
+        _rangePtr("range", true),
+        _nullVal(),
+        _useNullVal(false) {
     _initGLTypes();
   }
 
@@ -240,6 +248,28 @@ class Scale : public BaseScale {
 
   BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix) const {
+    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(_domainPtr.getType(), {});
+
+    if (_useNullVal) {
+      rtn.second.emplace("nullDomainVal_" + this->_name + extraSuffix, _domainPtr.getNullValue());
+    }
+
+    return rtn;
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
+      const std::string& extraSuffix) const {
+    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(_rangePtr.getType(), {});
+
+    if (_useNullVal) {
+      rtn.second.emplace("nullRangeVal_" + this->_name + extraSuffix, _nullVal);
+    }
+
+    return rtn;
+  }
 
  protected:
   std::string _getGLSLCode(const std::string& extraSuffix,
@@ -295,8 +325,40 @@ class Scale : public BaseScale {
 
       rtn = hasDomainDataChanged() || hasRangeDataChanged();
 
+      // TODO(croot): expose "nullValue" as a constant somewhere;
+      std::string nullstr = "nullValue";
+      rapidjson::Value::ConstMemberIterator mitr;
+
+      if ((mitr = obj.FindMember(nullstr.c_str())) != obj.MemberEnd()) {
+        QueryDataType itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value);
+
+        RUNTIME_EX_ASSERT(
+            areTypesCompatible(_rangePtr.getType(), itemType),
+            RapidJSONUtils::getJsonParseErrorStr(
+                this->_ctx->getUserWidgetIds(),
+                mitr->value,
+                "the scale \"" + this->_name + "\" has a range of type " + to_string(_rangePtr.getType()) +
+                    " which is not compatible with a nullValue of type " + to_string(itemType) + "."));
+
+        _nullVal = this->_rangePtr.getDataValueFromJSONObj(mitr->value);
+        _useNullVal = true;
+      } else {
+        // set an undefined default
+        _nullVal = RangeType();
+        _useNullVal = false;
+      }
+
       if (_allowsAccumulator) {
         bool accumUpdated = _updateAccumulatorFromJSONObj(obj, objPath);
+
+        // TODO(croot): Properly handle null values in accumulations.
+        // This would require adding the null value to the accumulation arrays
+        // for ordinal and quantize scales. If we properly handle that case,
+        // then remove the following LOG_IF warning.
+        LOG_IF(WARNING, accumUpdated && hasAccumulator() && _useNullVal)
+            << "Render scale " << std::string(*this)
+            << ", accumulation scale with null values defined may have unwanted results";
+
         rtn = rtn || accumUpdated;
 
         QueryDataType dtype = getDomainDataType();
@@ -324,13 +386,34 @@ class Scale : public BaseScale {
                                const std::string& extraSuffix,
                                bool ignoreDomain,
                                bool ignoreRange,
-                               bool ignoreAccum) {
+                               bool ignoreAccum,
+                               bool ignoreNull = false) {
     if (!ignoreDomain) {
       activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, _domainPtr.getVectorDataRef());
+
+      if (_useNullVal) {
+        activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix, _domainPtr.getNullValue());
+      }
     }
 
     if (!ignoreRange) {
       activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorDataRef());
+
+      if (_useNullVal) {
+        activeShader->setUniformAttribute("nullRangeVal_" + this->_name + extraSuffix, _nullVal);
+      }
+    }
+
+    // NOTE: when rendering the final accumulation pass, the null val func
+    // can be turned off.
+    // TODO(croot): Should we find a better way to deactive null vals for
+    // accumulation passes?
+    if (!ignoreNull) {
+      if (_useNullVal && !ignoreAccum) {
+        subroutineMap["isNullValFunc_" + this->_name + extraSuffix] = "isNullVal_" + this->_name + extraSuffix;
+      } else {
+        subroutineMap["isNullValFunc_" + this->_name + extraSuffix] = "isNullValPassThru_" + this->_name + extraSuffix;
+      }
     }
 
     BaseScale::_bindUniformsToRenderer(activeShader, subroutineMap, ignoreAccum);
@@ -345,6 +428,9 @@ class Scale : public BaseScale {
   ScaleDomainRangeData<RangeType> _rangePtr;
 
  private:
+  RangeType _nullVal;
+  bool _useNullVal;
+
   void _pushDomainItem(const rapidjson::Value& obj);
   void _pushRangeItem(const rapidjson::Value& obj);
 
@@ -377,33 +463,38 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
                                       bool ignoreDomain = false,
                                       bool ignoreRange = false,
                                       bool ignoreAccum = false) {
+    bool doAccum = false;
     if (!ignoreAccum && this->hasAccumulator()) {
       ignoreDomain = true;
       ignoreRange = true;
+      doAccum = true;
     }
-    this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
+    this->_bindUniformsToRenderer(
+        activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum, doAccum);
 
-    std::string transformFunc;
-    switch (this->_type) {
-      case ScaleType::LINEAR:
-        transformFunc = "passThruTransform";
-        break;
-      case ScaleType::LOG:
-        transformFunc = "logTransform";
-        break;
-      case ScaleType::POW:
-        transformFunc = "powTransform";
-        break;
-      case ScaleType::SQRT:
-        transformFunc = "sqrtTransform";
-        break;
-      default:
-        THROW_RUNTIME_EX("ScaleType " + to_string(this->_type) + " does not have a supported glsl transform func.");
+    if (!doAccum) {
+      std::string transformFunc;
+      switch (this->_type) {
+        case ScaleType::LINEAR:
+          transformFunc = "passThruTransform";
+          break;
+        case ScaleType::LOG:
+          transformFunc = "logTransform";
+          break;
+        case ScaleType::POW:
+          transformFunc = "powTransform";
+          break;
+        case ScaleType::SQRT:
+          transformFunc = "sqrtTransform";
+          break;
+        default:
+          THROW_RUNTIME_EX("ScaleType " + to_string(this->_type) + " does not have a supported glsl transform func.");
+      }
+
+      transformFunc += "_" + this->_name + extraSuffix;
+
+      subroutineMap["quantTransform_" + this->_name + extraSuffix] = transformFunc;
     }
-
-    transformFunc += "_" + this->_name + extraSuffix;
-
-    subroutineMap["quantTransform_" + this->_name + extraSuffix] = transformFunc;
   }
 
   std::string getGLSLCode(const std::string& extraSuffix = "",
@@ -644,7 +735,7 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
 
   ~OrdinalScale() {}
 
-  std::string getRangeDefaultGLSLUniformName() { return "uDefault_" + this->_name; }
+  std::string getRangeDefaultGLSLUniformName() const { return "uDefault_" + this->_name; }
 
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                               std::unordered_map<std::string, std::string>& subroutineMap,
@@ -656,7 +747,10 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
       this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, true, ignoreAccum);
     } else {
       this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
-      activeShader->setUniformAttribute(this->getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
+
+      if (!ignoreRange) {
+        activeShader->setUniformAttribute(this->getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
+      }
     }
   }
 
@@ -703,6 +797,15 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
     if (this->hasAccumulator()) {
       this->_setNumAccumulatorVals(this->_rangePtr.size() + 1);
     }
+
+    return rtn;
+  }
+
+  std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
+      const std::string& extraSuffix) const {
+    auto rtn = Scale<DomainType, RangeType>::getRangeTypeUniforms(extraSuffix);
+
+    rtn.second.emplace(this->getRangeDefaultGLSLUniformName() + extraSuffix, _defaultVal);
 
     return rtn;
   }

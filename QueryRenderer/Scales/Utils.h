@@ -7,6 +7,11 @@
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 
+#include <Rendering/RenderError.h>
+#include <Rendering/Objects/ColorRGBA.h>
+
+#include <boost/any.hpp>
+
 namespace QueryRenderer {
 
 std::string getScaleNameFromJSONObj(const rapidjson::Value& obj);
@@ -27,6 +32,34 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
 QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const QueryDataType checkDataType);
 bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType domainType);
 bool isScaleRangeCompatible(const ScaleType scaleType, const QueryDataType rangeType);
+bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType);
+
+template <typename T>
+T convertType(const QueryDataType type, const boost::any& value) {
+  switch (type) {
+    case QueryDataType::UINT: {
+      unsigned int val = boost::any_cast<unsigned int>(value);
+      return static_cast<T>(val);
+    }
+    case QueryDataType::INT: {
+      int val = boost::any_cast<int>(value);
+      return static_cast<T>(val);
+    }
+    case QueryDataType::FLOAT: {
+      float val = boost::any_cast<float>(value);
+      return static_cast<T>(val);
+    }
+    case QueryDataType::DOUBLE: {
+      double val = boost::any_cast<double>(value);
+      return static_cast<T>(val);
+    }
+    default:
+      THROW_RUNTIME_EX("Converting " + to_string(type) + " to " + typeid(T).name() + " is currently unsupported.");
+  }
+}
+
+template <>
+Rendering::Objects::ColorRGBA convertType(const QueryDataType type, const boost::any& value);
 
 }  // namespace QueryRenderer
 

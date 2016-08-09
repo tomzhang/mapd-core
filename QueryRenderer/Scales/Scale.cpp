@@ -252,6 +252,7 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   }
 
   std::string accumFunc;
+  bool ignoreDomain = true, ignoreRange = true;
   switch (_accumType) {
     case AccumulatorType::MIN:
       accumFunc = "getMinAccumulatedColor";
@@ -264,13 +265,21 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
       break;
     case AccumulatorType::DENSITY:
       accumFunc = "getDensityAccumulatedColor";
-      bindUniformsToRenderer(
-          itr->second.accumulator2ndPassShaderPtr.get(), subroutines, "_" + to_string(_accumType), false, false, true);
+      ignoreDomain = false;
+      ignoreRange = false;
       break;
     default:
       THROW_RUNTIME_EX("Accumulator type " + to_string(_accumType) + " is currently unsupported for rendering");
   }
   subroutines["getAccumulatedColor"] = accumFunc;
+
+  bindUniformsToRenderer(itr->second.accumulator2ndPassShaderPtr.get(),
+                         subroutines,
+                         "_ACCUMULATION",  // TODO(croot): expose as a global
+                         ignoreDomain,
+                         ignoreRange,
+                         true);
+
   itr->second.accumulator2ndPassShaderPtr->setSubroutines(subroutines);
   itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<uint32_t>("minDensity", _minDensity);
   itr->second.accumulator2ndPassShaderPtr->setUniformAttribute<uint32_t>("maxDensity", _maxDensity);
@@ -539,7 +548,7 @@ void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* ac
   boost::replace_all(fragSrc, "<numAccumColors>", std::to_string(_numAccumulatorVals));
   boost::replace_all(fragSrc, "<numAccumTextures>", std::to_string(numTextures));
 
-  std::string suffix = "_" + to_string(AccumulatorType::DENSITY);
+  std::string suffix = "_ACCUMULATION";
   auto funcRange = ShaderUtils::getGLSLFunctionBounds(fragSrc, "getDensityColor");
   std::string scaleCode = getGLSLCode(suffix, false, false, true);
   boost::replace_range(fragSrc, funcRange, scaleCode);

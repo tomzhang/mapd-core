@@ -461,4 +461,27 @@ bool isScaleRangeCompatible(const ScaleType scaleType, const QueryDataType range
   return true;
 }
 
+bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType) {
+  if (srcType == inType) {
+    return true;
+  }
+
+  switch (srcType) {
+    case QueryDataType::UINT:
+    case QueryDataType::INT:
+    case QueryDataType::FLOAT:
+    case QueryDataType::DOUBLE:
+      return (inType == QueryDataType::UINT || inType == QueryDataType::INT || inType == QueryDataType::FLOAT ||
+              inType == QueryDataType::DOUBLE);
+    default:
+      return false;
+  }
+}
+
+template <>
+Rendering::Objects::ColorRGBA convertType(const QueryDataType type, const boost::any& value) {
+  THROW_RUNTIME_EX("Converting " + to_string(type) + " to a ColorRGBA is unsupported.");
+  return Rendering::Objects::ColorRGBA();
+}
+
 }  // namespace QueryRenderer

@@ -493,7 +493,8 @@ GLuint UniformSubroutineAttrInfo::getCompatibleSubroutineIndex(const std::string
   auto itr = compatibleSubroutines.find(compatibleSubroutine);
   RUNTIME_EX_ASSERT(itr != compatibleSubroutines.end(),
                     "The GLSL function/subroutine \"" + compatibleSubroutine +
-                        "\" is not compatible with the uniform subroutine attr \"" + subroutineName + "\".");
+                        "\" either does not exist or is not compatible with the uniform subroutine attr \"" +
+                        subroutineName + "\".");
 
   // TODO(croot): As indicated here:
   // https://www.opengl.org/wiki/Shader_Subroutine#Runtime_selection
