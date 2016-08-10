@@ -423,7 +423,7 @@ class Executor {
   llvm::Value* rowsPerScan() const;
   llvm::ConstantInt* inlineIntNull(const SQLTypeInfo&);
   llvm::ConstantFP* inlineFpNull(const SQLTypeInfo&);
-  std::pair<llvm::ConstantInt*, llvm::ConstantInt*> inlineIntMaxMin(const size_t byte_width);
+  std::pair<llvm::ConstantInt*, llvm::ConstantInt*> inlineIntMaxMin(const size_t byte_width, const bool is_signed);
 
   ResultRows executeSelectPlan(const Planner::Plan* plan,
                                const int64_t limit,
