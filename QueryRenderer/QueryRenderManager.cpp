@@ -473,15 +473,21 @@ void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
 
   ActiveRendererGuard activeRendererGuard;
 
-  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
-  if (itr == _gpuCache->polyCacheMap.end()) {
-    auto insertItr = _gpuCache->polyCacheMap.emplace(std::piecewise_construct,
-                                                     std::forward_as_tuple(polyTableName),
-                                                     std::forward_as_tuple(_gpuCache, polyTableName));
-    itr = insertItr.first;
-  }
+  try {
+    auto itr = _gpuCache->polyCacheMap.find(polyTableName);
 
-  itr->second.allocBuffers(gpuIdx, initTableData, vertLayoutPtr);
+    if (itr == _gpuCache->polyCacheMap.end()) {
+      auto insertItr = _gpuCache->polyCacheMap.emplace(std::piecewise_construct,
+                                                       std::forward_as_tuple(polyTableName),
+                                                       std::forward_as_tuple(_gpuCache, polyTableName));
+      itr = insertItr.first;
+    }
+
+    itr->second.allocBuffers(gpuIdx, initTableData, vertLayoutPtr);
+  } catch (const ::Rendering::RenderError& e) {
+    _gpuCache->polyCacheMap.erase(polyTableName);
+    throw e;
+  }
 }
 
 void QueryRenderManager::deletePolyTableCache(const std::string& polyTableName) {
@@ -520,13 +526,18 @@ PolyCudaHandles QueryRenderManager::getPolyTableCudaHandles(const std::string& p
 
   RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
-                    "QueryRenderManager::getPolyCudaHandlesFromCache(): Invalid gpu index " + std::to_string(gpuIdx) +
+                    "QueryRenderManager::getPolyTableCudaHandles(): Invalid gpu index " + std::to_string(gpuIdx) +
                         ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
 
   if (initTableData) {
-    itr->second.allocBuffers(gpuIdx, *initTableData);
+    try {
+      itr->second.allocBuffers(gpuIdx, *initTableData);
+    } catch (const ::Rendering::RenderError& e) {
+      _gpuCache->polyCacheMap.erase(polyTableName);
+      throw e;
+    }
   }
 
   return itr->second.getCudaHandlesPreQuery(gpuIdx);

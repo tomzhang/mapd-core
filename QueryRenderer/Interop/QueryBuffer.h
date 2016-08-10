@@ -119,7 +119,7 @@ class QueryBuffer {
 
   void checkCudaErrors(CUresult result, const char* filename, int lineno);
 
-  CUgraphicsResource _getCudaGraphicsResource(bool registerResource = false);
+  CUgraphicsResource _getCudaGraphicsResource();
 
   void _mapCudaGraphicsResource(CUgraphicsResource& rsrc);
   void _unmapCudaGraphicsResource(CUgraphicsResource& rsrc);

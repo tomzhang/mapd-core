@@ -76,7 +76,7 @@ CudaHandle QueryBuffer::getCudaHandlePreQuery(bool useAllAllocatedBytes) {
                     "QueryBuffer " + std::to_string(gpuId) + " is already in use. Cannot access cuda handle.");
 
   // now map the buffer for cuda
-  CUgraphicsResource cudaRsrc = _getCudaGraphicsResource(true);
+  CUgraphicsResource cudaRsrc = _getCudaGraphicsResource();
   _mapCudaGraphicsResource(cudaRsrc);
 
   size_t num_bytes = 0;
@@ -225,7 +225,7 @@ void QueryBuffer::_removeCudaGraphicsResource() {
   }
 }
 
-CUgraphicsResource QueryBuffer::_getCudaGraphicsResource(bool registerResource) {
+CUgraphicsResource QueryBuffer::_getCudaGraphicsResource() {
   CUcontext currCudaCtx;
   CUdevice ctxDevice;
 
