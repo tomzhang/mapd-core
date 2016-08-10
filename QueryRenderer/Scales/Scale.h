@@ -251,7 +251,8 @@ class Scale : public BaseScale {
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
       const std::string& extraSuffix) const {
-    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(_domainPtr.getType(), {{}});
+    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(
+        _domainPtr.getType(), std::unordered_map<std::string, boost::any>());
 
     if (_useNullVal) {
       rtn.second.emplace("nullDomainVal_" + this->_name + extraSuffix, _domainPtr.getNullValue());
@@ -262,7 +263,8 @@ class Scale : public BaseScale {
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
       const std::string& extraSuffix) const {
-    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(_rangePtr.getType(), {{}});
+    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(
+        _rangePtr.getType(), std::unordered_map<std::string, boost::any>());
 
     if (_useNullVal) {
       rtn.second.emplace("nullRangeVal_" + this->_name + extraSuffix, _nullVal);
