@@ -480,8 +480,9 @@ bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType)
 
 template <>
 Rendering::Objects::ColorRGBA convertType(const QueryDataType type, const boost::any& value) {
-  THROW_RUNTIME_EX("Converting " + to_string(type) + " to a ColorRGBA is unsupported.");
-  return Rendering::Objects::ColorRGBA();
+  RUNTIME_EX_ASSERT(type == QueryDataType::COLOR, "Converting " + to_string(type) + " to a ColorRGBA is unsupported.");
+
+  return boost::any_cast<Rendering::Objects::ColorRGBA>(value);
 }
 
 }  // namespace QueryRenderer
