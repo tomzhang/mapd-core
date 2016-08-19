@@ -206,7 +206,7 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     gpuDataPtr->makeInactive();
   }
 
-  LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << endDevice
+  LOG(INFO) << "QueryRenderManager initialized for rendering. start GPU: " << startDevice << ", num GPUs: " << numGpus
             << ", Render cache limit: " << _renderCacheLimit;
 }
 
