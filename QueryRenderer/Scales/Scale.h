@@ -105,6 +105,22 @@ class BaseScale {
   bool hasNumAccumulatorTexturesChanged() const { return _numAccumulatorTxtsChanged; }
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<int>* domainOverride) const = 0;
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<unsigned int>* domainOverride) const = 0;
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<float>* domainOverride) const = 0;
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<double>* domainOverride) const = 0;
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
       const std::string& extraSuffix) const = 0;
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
       const std::string& extraSuffix) const = 0;
@@ -250,15 +266,32 @@ class Scale : public BaseScale {
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<int>* domainOverride) const {
+    return _getDomainTypeUniforms<int>(extraSuffix, domainOverride);
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<unsigned int>* domainOverride) const {
+    return _getDomainTypeUniforms<unsigned int>(extraSuffix, domainOverride);
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<float>* domainOverride) const {
+    return _getDomainTypeUniforms<float>(extraSuffix, domainOverride);
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<double>* domainOverride) const {
+    return _getDomainTypeUniforms<double>(extraSuffix, domainOverride);
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
       const std::string& extraSuffix) const {
-    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(
-        _domainPtr.getType(), std::unordered_map<std::string, boost::any>());
-
-    if (_useNullVal) {
-      rtn.second.emplace("nullDomainVal_" + this->_name + extraSuffix, _domainPtr.getNullValue());
-    }
-
-    return rtn;
+    return _getDomainTypeUniforms<DomainType>(extraSuffix, &_domainPtr);
   }
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
@@ -439,6 +472,20 @@ class Scale : public BaseScale {
   void _initGLTypes() {
     _domainTypeGL = _domainPtr.getTypeGL();
     _rangeTypeGL = _rangePtr.getTypeGL();
+  }
+
+  template <typename T>
+  std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> _getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<T>* domainPtr) const {
+    std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> rtn(
+        domainPtr->getType(), std::unordered_map<std::string, boost::any>());
+
+    if (_useNullVal) {
+      rtn.second.emplace("nullDomainVal_" + this->_name + extraSuffix, domainPtr->getNullValue());
+    }
+
+    return rtn;
   }
 };
 

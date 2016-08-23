@@ -167,7 +167,7 @@ class ScaleRef : public BaseScaleRef {
       activeShader->setUniformAttribute(_scalePtr->getDomainGLSLUniformName() + extraSuffix,
                                         _coercedDomainData->getVectorDataRef());
 
-      auto domainUniformData = _scalePtr->getDomainTypeUniforms(extraSuffix);
+      auto domainUniformData = _scalePtr->getDomainTypeUniforms(extraSuffix, _coercedDomainData.get());
       auto& domainType = domainUniformData.first;
       auto& uniformMap = domainUniformData.second;
 
