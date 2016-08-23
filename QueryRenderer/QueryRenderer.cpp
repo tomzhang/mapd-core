@@ -8,6 +8,7 @@
 #include "Scales/Utils.h"
 #include "Rendering/QueryFramebuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
+#include "Rendering/QueryRenderSMAAPass.h"
 #include <Rendering/Window.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
@@ -708,7 +709,7 @@ void QueryRenderer::renderPasses(
         scalePtr->accumulationPreRender(gpuId);
       }
 
-      GLRenderer* renderer = (*itr)->getGLRenderer();
+      auto renderer = (*itr)->getGLRenderer();
       CHECK(renderer != nullptr);
 
       auto& framebufferPtr = (*itr)->getRenderFramebuffer();
@@ -894,10 +895,11 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
       CHECK(qrmItr != qrmPerGpuDataPtr->end());
       if (numGpusToRender == 1) {
         auto usedFramebuffer = renderGpu((*qrmItr)->gpuId, qrmPerGpuDataPtr, _ctx.get(), 0, 0, 0, 0).get();
+        auto aaFramebuffer = _runAntialiasingPass(*qrmItr, usedFramebuffer);
 
-        if (usedFramebuffer->getNumSamples() > 1) {
+        if (aaFramebuffer->getNumSamples() > 1) {
           // need to blit the multisampled fbo into a non-sampled fbo
-          auto& blitFramebuffer = (*qrmItr)->getBlitFramebuffer();
+          auto& blitFramebuffer = (*qrmItr)->getAntiAliasingFramebuffer();
           CHECK(blitFramebuffer && blitFramebuffer->getGLRenderer() == usedFramebuffer->getGLRenderer());
           usedFramebuffer->blitToFramebuffer(*blitFramebuffer, 0, 0, _ctx->getWidth(), _ctx->getHeight());
           usedFramebuffer = blitFramebuffer.get();
@@ -929,7 +931,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
 
         if (usedFramebuffer->getNumSamples() > 1) {
           // need to blit the multisampled fbo into a non-sampled fbo
-          auto& blitFramebuffer = (*qrmItr)->getBlitFramebuffer();
+          auto& blitFramebuffer = (*qrmItr)->getAntiAliasingFramebuffer();
           CHECK(blitFramebuffer && blitFramebuffer->getGLRenderer() == usedFramebuffer->getGLRenderer());
           auto renderer = usedFramebuffer->getRenderer();
           renderer->makeActiveOnCurrentThread();
@@ -937,13 +939,15 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
           usedFramebuffer = blitFramebuffer.get();
         }
 
+        auto aaFramebuffer = _runAntialiasingPass(*qrmItr, usedFramebuffer);
+
         // time_ms = timer_stop(clock_begin);
         // std::cerr << "\t\t\tCROOT - compositor render : " << time_ms << "ms" << std::endl;
         // clock_begin = timer_start();
 
         if (_ctx->doHitTest()) {
           CHECK(_idPixels && _pbo && usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
-          Renderer* renderer = usedFramebuffer->getRenderer();
+          auto renderer = usedFramebuffer->getRenderer();
           renderer->makeActiveOnCurrentThread();
 
           usedFramebuffer->copyIdBufferToPbo(_pbo);
@@ -970,6 +974,20 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
     _clearAll(true);
     throw e;
   }
+}
+
+QueryFramebufferShPtr& QueryRenderer::_runAntialiasingPass(const RootPerGpuDataShPtr& gpuData,
+                                                           QueryFramebuffer* rndrFbo) {
+  auto aaPassPtr = gpuData->getSMAAPassPtr();
+  auto renderer = rndrFbo->getGLRenderer();
+  auto& outputFbo = gpuData->getAntiAliasingFramebuffer();
+  CHECK(aaPassPtr && renderer->getGpuId() == gpuData->gpuId && outputFbo);
+
+  auto inFbo = rndrFbo->getGLFramebuffer();
+  auto outFbo = outputFbo->getGLFramebuffer();
+  aaPassPtr->runPass(_ctx->_width, _ctx->_height, renderer, inFbo, outFbo);
+
+  return outputFbo;
 }
 
 PngData QueryRenderer::renderToPng(int compressionLevel) {
@@ -1014,7 +1032,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
         auto renderer = compositorPtr->getGLRenderer();
         renderer->makeActiveOnCurrentThread();
 
-        auto framebufferPtr = (*itr)->getBlitFramebuffer().get();
+        auto framebufferPtr = (*itr)->getAntiAliasingFramebuffer().get();
         if (framebufferPtr) {
           framebufferPtr->bindToRenderer(renderer, FboBind::READ);
           pixelsPtr = framebufferPtr->readColorBuffer(0, 0, width, height);
@@ -1024,7 +1042,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
         renderer->makeInactive();
       } else {
         auto renderer = (*itr)->getGLRenderer();
-        auto framebufferPtr = (*itr)->getBlitFramebuffer().get();
+        auto framebufferPtr = (*itr)->getAntiAliasingFramebuffer().get();
         if (!framebufferPtr) {
           framebufferPtr = (*itr)->getRenderFramebuffer().get();
         }

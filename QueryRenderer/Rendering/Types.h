@@ -21,6 +21,9 @@ typedef std::unique_ptr<QueryAccumTxPool> QueryAccumTxPoolUqPtr;
 class QueryRenderCompositor;
 typedef std::shared_ptr<QueryRenderCompositor> QueryRenderCompositorShPtr;
 
+class QueryRenderSMAAPass;
+typedef std::shared_ptr<QueryRenderSMAAPass> QueryRenderSMAAPassShPtr;
+
 }  // namespace QueryRenderer
 
 #endif  // QUERYRENDERER_RENDERING_TYPES_H_

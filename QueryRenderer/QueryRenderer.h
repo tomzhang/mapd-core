@@ -119,6 +119,7 @@ class QueryRenderer {
   void _updatePbo();
 
   void _render(const std::set<GpuId>& usedGpus, bool inactivateRendererOnThread = true);
+  QueryFramebufferShPtr& _runAntialiasingPass(const RootPerGpuDataShPtr& gpuData, QueryFramebuffer* rndrFbo);
 
   friend class QueryRendererContext;
   friend class QueryRenderCompositor;

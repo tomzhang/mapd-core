@@ -271,8 +271,8 @@ void GLRenderer::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc)
   _bindState.bindVertexBuffer(vboRsrc);
 }
 
-void GLRenderer::bindFramebuffer(FboBind bindType, const GLFramebufferShPtr& fboRsrc) {
-  _bindState.bindFramebuffer(bindType, fboRsrc);
+void GLRenderer::bindFramebuffer(const GLFramebufferShPtr& fboRsrc, const FboBind bindType) {
+  _bindState.bindFramebuffer(fboRsrc, bindType);
 }
 
 void GLRenderer::bindShader(const GLShaderShPtr& shaderRsrc) {

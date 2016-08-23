@@ -1,6 +1,7 @@
 #include "QueryRenderManager.h"
 #include "QueryRenderer.h"
 #include "Utils/Utils.h"
+#include "Rendering/QueryRenderSMAAPass.h"
 #include <Rendering/WindowManager.h>
 #include <Rendering/Settings/WindowSettings.h>
 #include <Rendering/Settings/RendererSettings.h>
@@ -196,11 +197,18 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
 
     gpuDataPtr->pboPoolPtr.reset(new QueryIdMapPboPool(renderer));
 
-    if (numSamples > 1) {
-      // create a framebuffer to blit the multi-sampled framebuffers into
-      gpuDataPtr->blitFramebufferPtr.reset(
-          new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false, 1));
-    }
+    // create a framebuffer for anti-aliasing.
+    // If multi-sampling is enabled, this is used to blit the multi-sampled framebuffers into
+    // Otherwise it's used to store the output of an anti-aliasing post-processing pass
+    gpuDataPtr->aaFramebufferPtr.reset(
+        new QueryFramebuffer(renderer.get(), defaultWidth, defaultHeight, true, false, 1));
+
+    gpuDataPtr->smaaPassPtr.reset(new QueryRenderSMAAPass(renderer,
+                                                          defaultWidth,
+                                                          defaultHeight,
+                                                          numSamples,
+                                                          QueryRenderSMAAPass::SMAA_QUALITY_PRESET::HIGH,
+                                                          QueryRenderSMAAPass::SMAA_EDGE_DETECTION_TYPE::LUMA));
 
     // make sure to clear the renderer from the current thread
     gpuDataPtr->makeInactive();

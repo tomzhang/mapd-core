@@ -229,7 +229,7 @@ std::pair<std::vector<GLenum>, std::vector<GLenum>> QueryFramebuffer::getEnabled
 }
 
 void QueryFramebuffer::bindToRenderer(GLRenderer* renderer, FboBind bindType) {
-  renderer->bindFramebuffer(bindType, _fbo);
+  renderer->bindFramebuffer(_fbo, bindType);
 
   if (bindType == FboBind::DRAW || bindType == FboBind::READ_AND_DRAW) {
     // std::vector<GLenum> enableAttachments = {};

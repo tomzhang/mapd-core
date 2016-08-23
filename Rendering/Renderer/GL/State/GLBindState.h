@@ -33,7 +33,7 @@ class GLBindState {
   void bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc);
   void bindTexture2dArray(const Resources::GLTexture2dArrayShPtr& texArrayRsrc);
   void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
-  void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fbRsrc);
+  void bindFramebuffer(const Resources::GLFramebufferShPtr& fbRsrc, const Resources::FboBind bindType);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
   void bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc);
   void bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc);

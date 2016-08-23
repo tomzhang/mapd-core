@@ -10,7 +10,6 @@
 #include <boost/multi_index/random_access_index.hpp>
 #include <boost/multi_index/member.hpp>
 
-#include <vector>
 #include <unordered_map>
 #include <memory>
 
@@ -160,6 +159,8 @@ class GLFramebuffer : public GLResource {
   void enableAttachment(GLenum attachment);
   void disableAttachment(GLenum attachment);
 
+  GLResourceShPtr getAttachmentResource(GLenum attachment);
+
   void activateEnabledAttachmentsForDrawing();
 
  private:
@@ -169,10 +170,10 @@ class GLFramebuffer : public GLResource {
   GLuint _fbo;
 
   // texture buffers
-  std::vector<GLTexture2dShPtr> _textureBuffers;
+  std::unordered_map<GLenum, GLTexture2dShPtr> _textureBuffers;
 
   // render buffers
-  std::vector<GLRenderbufferShPtr> _renderBuffers;
+  std::unordered_map<GLenum, GLRenderbufferShPtr> _renderBuffers;
 
   // attachment manager
   detail::AttachmentContainer _attachmentManager;
@@ -184,8 +185,8 @@ class GLFramebuffer : public GLResource {
   // void bindToRenderer(GLRenderer* renderer, FboBind bindType = FboBind::READ_AND_DRAW);
 
   friend void ::Rendering::GL::State::GLBindState::bindFramebuffer(
-      ::Rendering::GL::Resources::FboBind,
-      const ::Rendering::GL::Resources::GLFramebufferShPtr&);
+      const ::Rendering::GL::Resources::GLFramebufferShPtr&,
+      ::Rendering::GL::Resources::FboBind);
   friend class ::Rendering::GL::GLResourceManager;
 };
 

@@ -240,25 +240,8 @@ class MapDHandler : virtual public MapDIf {
     // or cpu-mode with software rendering is supported.
     if (enable_rendering_ && !cpu_mode_only_) {
       try {
-#ifdef MAPDGL_EGL
-        int numSamples = 4;
-        if (num_gpus > 1) {
-          // EGL compositing is done using EGLImage objects, but
-          // they don't support multi-samples, unfortunately
-          numSamples = 1;
-        }
-        render_manager_.reset(new ::QueryRenderer::QueryRenderManager(
-            // EGL compositing using
-            data_mgr_->cudaMgr_,
-            num_gpus,
-            start_gpu,
-            render_mem_bytes,
-            500,
-            numSamples));
-#else
-        render_manager_.reset(new ::QueryRenderer::QueryRenderManager(
-            data_mgr_->cudaMgr_, num_gpus, start_gpu, render_mem_bytes, 500, 4));
-#endif  // MAPDGL_EGL
+        render_manager_.reset(
+            new ::QueryRenderer::QueryRenderManager(data_mgr_->cudaMgr_, num_gpus, start_gpu, render_mem_bytes, 500));
       } catch (const std::exception& e) {
         enable_rendering_ = false;
         LOG(ERROR) << "Backend rendering disabled: " << e.what();

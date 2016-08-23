@@ -3,20 +3,13 @@
 #include "Rendering/QueryRenderCompositor.h"
 #include "Rendering/QueryIdMapPboPool.h"
 #include "Rendering/QueryAccumTxPool.h"
+#include "Rendering/QueryRenderSMAAPass.h"
 
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
 namespace QueryRenderer {
 
-RootPerGpuData::RootPerGpuData(GpuId gpuId)
-    : gpuId(gpuId),
-      queryResultBufferPtr(nullptr),
-      windowPtr(nullptr),
-      rendererPtr(nullptr),
-      msFramebufferPtr(nullptr),
-      blitFramebufferPtr(nullptr),
-      compositorPtr(nullptr),
-      pboPoolPtr(nullptr) {
+RootPerGpuData::RootPerGpuData(GpuId gpuId) : gpuId(gpuId) {
 }
 
 RootPerGpuData::~RootPerGpuData() {
@@ -73,18 +66,30 @@ void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) 
     if (renderer != prevRenderer) {
       reset = true;
       renderer->makeActiveOnCurrentThread();
+      prevRenderer = renderer;
     }
     compositorPtr->resize(width, height);
   }
 
-  if (blitFramebufferPtr && (blitFramebufferPtr->getWidth() < width || blitFramebufferPtr->getHeight() < height)) {
-    ::Rendering::GL::GLRenderer* renderer = blitFramebufferPtr->getGLRenderer();
+  if (aaFramebufferPtr && (aaFramebufferPtr->getWidth() < width || aaFramebufferPtr->getHeight() < height)) {
+    ::Rendering::GL::GLRenderer* renderer = aaFramebufferPtr->getGLRenderer();
+    CHECK(renderer);
+    if (renderer != prevRenderer) {
+      reset = true;
+      renderer->makeActiveOnCurrentThread();
+      prevRenderer = renderer;
+    }
+    aaFramebufferPtr->resize(width, height);
+  }
+
+  if (smaaPassPtr && (smaaPassPtr->getWidth() < width || smaaPassPtr->getHeight() < height)) {
+    ::Rendering::GL::GLRenderer* renderer = smaaPassPtr->getGLRenderer();
     CHECK(renderer);
     if (renderer != prevRenderer) {
       reset = true;
       renderer->makeActiveOnCurrentThread();
     }
-    blitFramebufferPtr->resize(width, height);
+    smaaPassPtr->resize(width, height);
   }
 
   if (reset) {
@@ -165,10 +170,10 @@ QueryFramebufferUqPtr& BasePerGpuData::getRenderFramebuffer() {
   return qrmGpuDataShPtr->getRenderFramebuffer();
 }
 
-QueryFramebufferShPtr& BasePerGpuData::getBlitFramebuffer() {
+QueryFramebufferShPtr& BasePerGpuData::getAntiAliasingFramebuffer() {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
-  return qrmGpuDataShPtr->getBlitFramebuffer();
+  return qrmGpuDataShPtr->getAntiAliasingFramebuffer();
 }
 
 bool BasePerGpuData::hasCompositor() const {

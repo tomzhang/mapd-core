@@ -191,11 +191,11 @@ void GLFramebuffer::_initResource(const GLFramebufferAttachmentMap& attachments)
     switch (rsrcType) {
       case GLResourceType::TEXTURE_2D:
         _attachmentManager.addTexture2dAttachment(atchmnt, itr.second->getId(), itr.second->getTarget());
-        _textureBuffers.push_back(std::static_pointer_cast<GLTexture2d>(itr.second));
+        _textureBuffers.emplace(atchmnt, std::static_pointer_cast<GLTexture2d>(itr.second));
         break;
       case GLResourceType::RENDERBUFFER:
         _attachmentManager.addRenderbufferAttachment(atchmnt, itr.second->getId());
-        _renderBuffers.push_back(std::static_pointer_cast<GLRenderbuffer>(itr.second));
+        _renderBuffers.emplace(atchmnt, std::static_pointer_cast<GLRenderbuffer>(itr.second));
         break;
       default:
         LOG(WARNING) << "Invalid resource type " << rsrcType << " to bind to framebuffer at attachmet " << atchmnt
@@ -269,27 +269,27 @@ void GLFramebuffer::_makeEmpty() {
 
 size_t GLFramebuffer::getWidth() const {
   if (_textureBuffers.size()) {
-    return _textureBuffers[0]->getWidth();
+    return _textureBuffers.begin()->second->getWidth();
   } else if (_renderBuffers.size()) {
-    return _renderBuffers[0]->getWidth();
+    return _renderBuffers.begin()->second->getWidth();
   }
   return 0;
 }
 
 size_t GLFramebuffer::getHeight() const {
   if (_textureBuffers.size()) {
-    return _textureBuffers[0]->getHeight();
+    return _textureBuffers.begin()->second->getHeight();
   } else if (_renderBuffers.size()) {
-    return _renderBuffers[0]->getHeight();
+    return _renderBuffers.begin()->second->getHeight();
   }
   return 0;
 }
 
 size_t GLFramebuffer::getNumSamples() const {
   if (_textureBuffers.size()) {
-    return _textureBuffers[0]->getNumSamples();
+    return _textureBuffers.begin()->second->getNumSamples();
   } else if (_renderBuffers.size()) {
-    return _renderBuffers[0]->getNumSamples();
+    return _renderBuffers.begin()->second->getNumSamples();
   }
   return 0;
 }
@@ -544,12 +544,12 @@ void GLFramebuffer::resize(size_t width, size_t height) {
   // TODO(croot): should we worry about which renderer here? Or is always defaulting to
   // the parent renderer ok?
 
-  for (auto& tex : _textureBuffers) {
-    tex->resize(width, height);
+  for (auto& itr : _textureBuffers) {
+    itr.second->resize(width, height);
   }
 
-  for (auto& rb : _renderBuffers) {
-    rb->resize(width, height);
+  for (auto& itr : _renderBuffers) {
+    itr.second->resize(width, height);
   }
 }
 
@@ -579,6 +579,20 @@ void GLFramebuffer::enableAttachment(GLenum attachment) {
 
 void GLFramebuffer::disableAttachment(GLenum attachment) {
   _attachmentManager.disableAttachment(attachment);
+}
+
+GLResourceShPtr GLFramebuffer::getAttachmentResource(GLenum attachment) {
+  auto txItr = _textureBuffers.find(attachment);
+  if (txItr != _textureBuffers.end()) {
+    return txItr->second;
+  }
+
+  auto rbItr = _renderBuffers.find(attachment);
+  if (rbItr != _renderBuffers.end()) {
+    return rbItr->second;
+  }
+
+  return nullptr;
 }
 
 void GLFramebuffer::activateEnabledAttachmentsForDrawing() {

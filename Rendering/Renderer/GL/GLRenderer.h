@@ -81,7 +81,8 @@ class GLRenderer : public Renderer {
   void bindTexture2d(const Resources::GLTexture2dShPtr& texRsrc);
   void bindTexture2dArray(const Resources::GLTexture2dArrayShPtr& texArrayRsrc);
   void bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc);
-  void bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fboRsrc);
+  void bindFramebuffer(const Resources::GLFramebufferShPtr& fboRsrc,
+                       const Resources::FboBind bindType = Resources::FboBind::READ_AND_DRAW);
   void bindShader(const Resources::GLShaderShPtr& shaderRsrc);
   void bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc);
   void bindRenderbuffer(const Resources::GLRenderbufferShPtr& rboRsrc);

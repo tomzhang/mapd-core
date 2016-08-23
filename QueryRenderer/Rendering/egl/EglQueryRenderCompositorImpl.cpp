@@ -216,6 +216,10 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
       }
     }
   }
+
+  if (glRenderer != eglRenderer) {
+    eglRenderer->makeActiveOnCurrentThread();
+  }
 }
 
 GLTexture2dShPtr EglQueryRenderCompositorImpl::createFboTexture2d(::Rendering::GL::GLRenderer* renderer,

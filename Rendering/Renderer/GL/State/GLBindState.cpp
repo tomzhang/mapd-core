@@ -30,7 +30,7 @@ void GLBindState::bindResource(const Resources::GLResourceShPtr& rsrc) {
   Resources::GLResourceType type = rsrc->getResourceType();
   switch (type) {
     case Resources::GLResourceType::FRAMEBUFFER:
-      bindFramebuffer(Resources::FboBind::READ_AND_DRAW, std::static_pointer_cast<Resources::GLFramebuffer>(rsrc));
+      bindFramebuffer(std::static_pointer_cast<Resources::GLFramebuffer>(rsrc), Resources::FboBind::READ_AND_DRAW);
       break;
     case Resources::GLResourceType::SHADER:
       bindShader(std::static_pointer_cast<Resources::GLShader>(rsrc));
@@ -130,7 +130,7 @@ void GLBindState::bindVertexBuffer(const Resources::GLVertexBufferShPtr& vboRsrc
   }
 }
 
-void GLBindState::bindFramebuffer(Resources::FboBind bindType, const Resources::GLFramebufferShPtr& fbRsrc) {
+void GLBindState::bindFramebuffer(const Resources::GLFramebufferShPtr& fbRsrc, Resources::FboBind bindType) {
   GLuint fboId = (fbRsrc ? fbRsrc->getId() : 0);
 
   bool bindRead = false;
