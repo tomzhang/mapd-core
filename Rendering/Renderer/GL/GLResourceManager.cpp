@@ -93,12 +93,13 @@ GLTexture2dShPtr GLResourceManager::createTexture2d(size_t width,
                                                     GLenum pixelFormat,
                                                     GLenum pixelType,
                                                     size_t numSamples,
-                                                    const GLTexture2dSampleProps& sampleProps) {
+                                                    const GLTexture2dSampleProps& sampleProps,
+                                                    const GLvoid* pixelData) {
   CHECK(!_prntRenderer.expired());
 
   // TODO(croot): make thread safe?
-  GLTexture2dShPtr rtn(
-      new GLTexture2d(_prntRenderer, width, height, internalFormat, pixelFormat, pixelType, numSamples, sampleProps));
+  GLTexture2dShPtr rtn(new GLTexture2d(
+      _prntRenderer, width, height, internalFormat, pixelFormat, pixelType, numSamples, sampleProps, pixelData));
   _addGLResource(rtn);
 
   return rtn;
@@ -439,7 +440,7 @@ void GLResourceManager::_addGLResource(Resources::GLResourceShPtr glResource) {
 
   auto itr = _glResources.begin();
   for (i = deletedIndices.size() - 1; i >= 0; --i) {
-    _glResources.erase(itr + i);
+    _glResources.erase(itr + deletedIndices[i]);
   }
 
   _glResources.emplace_back(glResource);

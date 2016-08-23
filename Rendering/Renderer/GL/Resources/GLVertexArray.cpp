@@ -80,13 +80,14 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
                                GLRenderer* renderer) {
   GLRenderer* rendererToUse = renderer;
   GLRenderer* myRenderer = dynamic_cast<GLRenderer*>(_rendererPtr.lock().get());
-  CHECK(rendererToUse);
 
   if (!rendererToUse) {
     rendererToUse = myRenderer;
   }
 
-  _initialize(vboAttrToShaderAttrMap, iboPtr, renderer);
+  CHECK(rendererToUse);
+
+  _initialize(vboAttrToShaderAttrMap, iboPtr, rendererToUse);
 
   GLResourceManagerShPtr rsrcMgr = myRenderer->getResourceManager();
   GLVertexArrayShPtr myRsrc = std::dynamic_pointer_cast<GLVertexArray>(rsrcMgr->getResourcePtr(this));
@@ -199,7 +200,7 @@ void GLVertexArray::_deleteVertexBuffer(GLVertexBuffer* vbo) {
     _usedVbos.erase(vboWkPtr);
   }
 
-  if (resync) {
+  if (resync || _numItemsVbo.expired() || _numVerticesVbo.expired()) {
     _syncWithVBOs();
   }
 }

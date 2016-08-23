@@ -35,7 +35,8 @@ class GLResourceManager {
       GLenum pixelFormat,
       GLenum pixelType,
       size_t numSamples = 1,
-      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps());
+      const Resources::GLTexture2dSampleProps& sampleProps = Resources::GLTexture2dSampleProps(),
+      const GLvoid* pixelData = nullptr);
 
   Resources::GLTexture2dArrayShPtr createTexture2dArray(
       size_t width,
@@ -126,7 +127,7 @@ class GLResourceManager {
     // TODO(croot): make thread safe?
     Resources::GLVertexBufferShPtr rtn(
         new Resources::GLVertexBuffer(_prntRenderer, data, layoutPtr, accessType, accessFreq));
-    _glResources.push_back(Resources::GLResourceWkPtr(rtn));
+    _addGLResource(rtn);
 
     return rtn;
   }
@@ -176,7 +177,7 @@ class GLResourceManager {
     // TODO(croot): make thread safe?
     Resources::GLUniformBufferShPtr rtn(
         new Resources::GLUniformBuffer(_prntRenderer, data, shaderBlockLayoutPtr, accessType, accessFreq));
-    _glResources.push_back(Resources::GLResourceWkPtr(rtn));
+    _addGLResource(rtn);
 
     return rtn;
   }

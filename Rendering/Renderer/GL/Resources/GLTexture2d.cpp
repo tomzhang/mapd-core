@@ -15,6 +15,7 @@ static void resizeTexture2d(GLenum& target,
                             GLenum pixelType,
                             int numSamples = 1,
                             GLTexture2dSampleProps* sampleProps = nullptr,
+                            const GLvoid* pixelData = nullptr,
                             bool keepBound = false) {
   int maxSize = -1;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize));
@@ -35,6 +36,10 @@ static void resizeTexture2d(GLenum& target,
   GLenum bindingTarget = GL_TEXTURE_BINDING_2D;
 
   CHECK(numSamples > 0);
+
+  RUNTIME_EX_ASSERT(!pixelData || numSamples == 1,
+                    "Initializing a multisampled 2D texture with pixel data is unsupported.");
+
   if (numSamples > 1) {
     if (target != GL_TEXTURE_2D_MULTISAMPLE) {
       LOG(WARNING) << "resizeTexture2d(): target " << target
@@ -65,7 +70,7 @@ static void resizeTexture2d(GLenum& target,
   if (numSamples > 1) {
     MAPD_CHECK_GL_ERROR(glTexImage2DMultisample(target, numSamples, internalFormat, width, height, GL_TRUE));
   } else {
-    MAPD_CHECK_GL_ERROR(glTexImage2D(target, 0, internalFormat, width, height, 0, pixelFormat, pixelType, NULL));
+    MAPD_CHECK_GL_ERROR(glTexImage2D(target, 0, internalFormat, width, height, 0, pixelFormat, pixelType, pixelData));
   }
 
   if (currTex != static_cast<GLint>(tex)) {
@@ -124,7 +129,8 @@ GLTexture2d::GLTexture2d(const RendererWkPtr& rendererPtr,
                          GLenum pixelFormat,
                          GLenum pixelType,
                          size_t numSamples,
-                         const GLTexture2dSampleProps& sampleProps)
+                         const GLTexture2dSampleProps& sampleProps,
+                         const GLvoid* pixelData)
     : GLResource(rendererPtr, GLResourceType::TEXTURE_2D),
       _width(width),
       _height(height),
@@ -135,14 +141,14 @@ GLTexture2d::GLTexture2d(const RendererWkPtr& rendererPtr,
       _numSamples(numSamples),
       _textureId(0) {
   RUNTIME_EX_ASSERT(width > 0 && height > 0, "Invalid dimensions for the texture. Dimensions must be > 0");
-  _initResource();
+  _initResource(pixelData);
 }
 
 GLTexture2d::~GLTexture2d() {
   cleanupResource();
 }
 
-void GLTexture2d::_initResource() {
+void GLTexture2d::_initResource(const GLvoid* pixelData) {
   validateRenderer(__FILE__, __LINE__);
 
   RUNTIME_EX_ASSERT(_numSamples > 0, "Invalid number of samples " + std::to_string(_numSamples));
@@ -155,8 +161,16 @@ void GLTexture2d::_initResource() {
 
   MAPD_CHECK_GL_ERROR(glGenTextures(1, &_textureId));
 
-  resizeTexture2d(
-      _target, _textureId, _width, _height, _internalFormat, _pixelFormat, _pixelType, _numSamples, &_sampleProps);
+  resizeTexture2d(_target,
+                  _textureId,
+                  _width,
+                  _height,
+                  _internalFormat,
+                  _pixelFormat,
+                  _pixelType,
+                  _numSamples,
+                  &_sampleProps,
+                  pixelData);
 
   setUsable();
 }
