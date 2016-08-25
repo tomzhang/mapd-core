@@ -816,26 +816,24 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
   bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
     bool rtn = this->_updateFromJSONObj(obj, objPath);
 
-    if (rtn) {
-      if (!this->_ctx->isJSONCacheUpToDate(_defaultJsonPath, obj)) {
-        // TODO(croot): expose "default" as a constant somewhere;
-        std::string defaultStr = "default";
-        rapidjson::Value::ConstMemberIterator mitr;
+    if (!this->_ctx->isJSONCacheUpToDate(_defaultJsonPath, obj)) {
+      // TODO(croot): expose "default" as a constant somewhere;
+      std::string defaultStr = "default";
+      rapidjson::Value::ConstMemberIterator mitr;
 
-        if ((mitr = obj.FindMember(defaultStr.c_str())) != obj.MemberEnd()) {
-          QueryDataType itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value);
+      if ((mitr = obj.FindMember(defaultStr.c_str())) != obj.MemberEnd()) {
+        QueryDataType itemType = RapidJSONUtils::getDataTypeFromJSONObj(mitr->value);
 
-          RUNTIME_EX_ASSERT(itemType == this->_rangePtr.dataType,
-                            RapidJSONUtils::getJsonParseErrorStr(
-                                this->_ctx->getUserWidgetIds(),
-                                mitr->value,
-                                "scale \"" + this->_name + "\" default is not the same type as its range."));
+        RUNTIME_EX_ASSERT(itemType == this->_rangePtr.dataType,
+                          RapidJSONUtils::getJsonParseErrorStr(
+                              this->_ctx->getUserWidgetIds(),
+                              mitr->value,
+                              "scale \"" + this->_name + "\" default is not the same type as its range."));
 
-          _defaultVal = this->_rangePtr.getDataValueFromJSONObj(mitr->value);
-        } else {
-          // set an undefined default
-          _defaultVal = RangeType();
-        }
+        _defaultVal = this->_rangePtr.getDataValueFromJSONObj(mitr->value);
+      } else {
+        // set an undefined default
+        _defaultVal = RangeType();
       }
     }
 

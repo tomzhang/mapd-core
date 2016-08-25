@@ -97,7 +97,7 @@ template <typename DomainType, typename RangeType>
 class ScaleRef : public BaseScaleRef {
  public:
   ScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp)
-      : BaseScaleRef(ctx, scalePtr, rndrProp), _coercedDomainData(nullptr), _coercedRangeData(nullptr) {
+      : BaseScaleRef(ctx, scalePtr, rndrProp), _coercedDomainData(nullptr), _coercedRangeData(nullptr), _sorted(false) {
     _updateDomainRange(true, true);
   }
 
@@ -200,6 +200,7 @@ class ScaleRef : public BaseScaleRef {
  private:
   std::unique_ptr<ScaleDomainRangeData<DomainType>> _coercedDomainData;
   std::unique_ptr<ScaleDomainRangeData<RangeType>> _coercedRangeData;
+  bool _sorted;
 
   void _updateDomainRange(bool updateDomain, bool updateRange, bool force = false) {
     CHECK(_scalePtr != nullptr);
@@ -210,7 +211,11 @@ class ScaleRef : public BaseScaleRef {
     ScaleDomainRangeData<double>* doubleDomain;
     ScaleDomainRangeData<std::string>* stringDomain;
     ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>* colorDomain;
-    bool doSort = false;
+
+    bool prevSorted = _sorted, doSort = false, updatedDomain = false, updatedRange = false;
+
+    // reset the sort flag
+    _sorted = false;
 
     if (updateDomain) {
       BaseScaleDomainRangeData* domainDataPtr = _scalePtr->getDomainData();
@@ -238,9 +243,12 @@ class ScaleRef : public BaseScaleRef {
       } else {
         _coercedDomainData = nullptr;
       }
+
+      updatedDomain = true;
     }
 
-    if (updateRange) {
+    // make sure to un-sort the range if it was previously sorted
+    if (updateRange || (!doSort && prevSorted)) {
       BaseScaleDomainRangeData* rangeDataPtr = _scalePtr->getRangeData();
       if (force || rangeDataPtr->getTypeInfo() != typeid(RangeType)) {
         uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(rangeDataPtr);
@@ -266,10 +274,14 @@ class ScaleRef : public BaseScaleRef {
       } else {
         _coercedRangeData = nullptr;
       }
+
+      updatedRange = true;
     }
 
-    if (doSort) {
-      _sort();
+    if (!force && (doSort || (prevSorted && !updateDomain && updateRange))) {
+      // make sure to redo the sort if the domain wasn't updated, but the range was
+      // and the data was previously sorted
+      _sort(updatedDomain, updatedRange);
     }
   }
 
@@ -326,11 +338,11 @@ class ScaleRef : public BaseScaleRef {
     }
   }
 
-  void _sort() {
+  void _sort(bool domainUpdated, bool rangeUpdated) {
     _verifyScalePointer();
 
-    bool hasDomain = (_coercedDomainData != nullptr);
-    bool hasRange = (_coercedRangeData != nullptr);
+    bool hasDomain = (domainUpdated && _coercedDomainData != nullptr);
+    bool hasRange = (rangeUpdated && _coercedRangeData != nullptr);
 
     // force a copy of both the domain and range to sort
     _updateDomainRange(!hasDomain, !hasRange, true);
@@ -366,6 +378,8 @@ class ScaleRef : public BaseScaleRef {
       domainVec[i] = sortVec[i].first;
       rangeVec[i] = sortVec[i].second;
     }
+
+    _sorted = true;
   }
 };
 
