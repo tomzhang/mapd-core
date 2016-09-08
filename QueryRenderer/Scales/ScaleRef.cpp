@@ -35,9 +35,29 @@ const ::Rendering::GL::TypeGLShPtr& BaseScaleRef::getRangeTypeGL() {
   return _scalePtr->getRangeTypeGL();
 }
 
+std::string BaseScaleRef::getDomainGLSLTypeName(const std::string& extraSuffix) {
+  _verifyScalePointer();
+  return _scalePtr->getDomainGLSLTypeName(extraSuffix);
+}
+
+std::string BaseScaleRef::getRangeGLSLTypeName(const std::string& extraSuffix) {
+  _verifyScalePointer();
+  return _scalePtr->getRangeGLSLTypeName(extraSuffix);
+}
+
 std::string BaseScaleRef::getScaleGLSLFuncName(const std::string& extraSuffix) {
   _verifyScalePointer();
   return _scalePtr->getScaleGLSLFuncName(extraSuffix);
+}
+
+const ::Rendering::GL::TypeGLShPtr& BaseScaleRef::getDomainTypeGL() const {
+  _verifyScalePointer();
+  return _scalePtr->getDomainTypeGL();
+}
+
+const ::Rendering::GL::TypeGLShPtr& BaseScaleRef::getRangeTypeGL() const {
+  _verifyScalePointer();
+  return _scalePtr->getRangeTypeGL();
 }
 
 std::string BaseScaleRef::getGLSLCode(const std::string& extraSuffix) {

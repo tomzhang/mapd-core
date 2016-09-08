@@ -138,6 +138,7 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
 
     size_t startIdx = 0;
     switch (scaleType) {
+      case ScaleType::LINEAR:
       case ScaleType::LOG:
       case ScaleType::SQRT:
       case ScaleType::POW:
@@ -475,6 +476,26 @@ bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType)
               inType == QueryDataType::DOUBLE);
     default:
       return false;
+  }
+}
+
+bool areTypesCompatible(const std::type_info& srcType, const std::type_info& inType) {
+  return areTypesCompatible(convertTypeIdToDataType(srcType), convertTypeIdToDataType(inType));
+}
+
+QueryDataType convertTypeIdToDataType(const std::type_info& srcTypeId) {
+  if (srcTypeId == typeid(int)) {
+    return QueryDataType::INT;
+  } else if (srcTypeId == typeid(unsigned int)) {
+    return QueryDataType::UINT;
+  } else if (srcTypeId == typeid(float)) {
+    return QueryDataType::FLOAT;
+  } else if (srcTypeId == typeid(double)) {
+    return QueryDataType::DOUBLE;
+  } else if (srcTypeId == typeid(::Rendering::Objects::ColorRGBA)) {
+    return QueryDataType::COLOR;
+  } else {
+    THROW_RUNTIME_EX("Type id: " + std::string(srcTypeId.name()) + " cannot be converted to a QueryDataType");
   }
 }
 

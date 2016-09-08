@@ -8,6 +8,7 @@
 #include "../Data/QueryPolyDataTable.h"
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
+#include <regex>
 
 namespace QueryRenderer {
 
@@ -390,6 +391,7 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
       // do there as well, but it is likely rare that the same
       // scale be referenced many times at this point (11/9/15), so
       // it's probably not worth the effort to optimize at this point.
+      std::string suffix = "_" + prop->getName();
       propFuncName = prop->getGLSLFunc();
 
       bool found = false;
@@ -402,15 +404,20 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
         funcRange = ShaderUtils::getGLSLFunctionBounds(shaderSrc, propFuncName);
         if (!funcRange.empty()) {
           found = true;
-          std::string scaleCode = scalePtr->getGLSLCode("_" + prop->getName());
+          std::string scaleCode = scalePtr->getGLSLCode(suffix);
 
           boost::replace_range(shaderSrc, funcRange, scaleCode);
 
-          funcName = scalePtr->getScaleGLSLFuncName("_" + prop->getName());
+          funcName = scalePtr->getScaleGLSLFuncName(suffix);
 
-          boost::replace_all(shaderSrc, prop->getGLSLFunc() + "(", funcName + "(");
+          if (*prop->getInTypeGL() == *scalePtr->getDomainTypeGL()) {
+            boost::replace_all(shaderSrc, propFuncName + "(", funcName + "(");
+          } else {
+            std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
+            std::regex funcRegex(propFuncName + "\\((\\s*[\\w.<>]*\\s*)\\)");
 
-          boost::replace_all(shaderSrc, prop->getGLSLFunc() + "(", funcName + "(");
+            shaderSrc = std::regex_replace(shaderSrc, funcRegex, funcName + "(" + domainType + "($1))");
+          }
         }
       }
 

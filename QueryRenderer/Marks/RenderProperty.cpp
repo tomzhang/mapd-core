@@ -211,17 +211,14 @@ std::string BaseRenderProperty::getInGLSLType() const {
   RUNTIME_EX_ASSERT(_inType != nullptr,
                     std::string(*this) + " getInGLSLType(): input type for \"" + _name + "\" is uninitialized.");
 
-  if (_scaleConfigPtr != nullptr) {
-    auto scalePtr = _scaleConfigPtr->getScalePtr();
-    std::string glslType = _scaleConfigPtr->getDomainTypeGL()->glslType();
-    RUNTIME_EX_ASSERT(glslType == _inType->glslType() || scalePtr->getAccumulatorType() == AccumulatorType::DENSITY,
-                      std::string(*this) + " getInGLSLType(): the domain type for scale \"" +
-                          _scaleConfigPtr->getNameRef() + "\" does not match the type for mark property \"" + _name +
-                          "\"");
-    return glslType;
-  }
-
   return _inType->glslType();
+}
+
+const ::Rendering::GL::TypeGLShPtr& BaseRenderProperty::getInTypeGL() const {
+  RUNTIME_EX_ASSERT(_inType != nullptr,
+                    std::string(*this) + " getInTypeGL(): input type for \"" + _name + "\" is uninitialized.");
+
+  return _inType;
 }
 
 std::string BaseRenderProperty::getOutGLSLType() const {
@@ -234,6 +231,13 @@ std::string BaseRenderProperty::getOutGLSLType() const {
       std::string(*this) + " getOutGLSLType(): output type for mark property \"" + _name + "\" is uninitialized.");
 
   return (_outType->glslType());
+}
+
+const ::Rendering::GL::TypeGLShPtr& BaseRenderProperty::getOutTypeGL() const {
+  RUNTIME_EX_ASSERT(_outType != nullptr,
+                    std::string(*this) + " getOutTypeGL(): input type for \"" + _name + "\" is uninitialized.");
+
+  return _outType;
 }
 
 void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,

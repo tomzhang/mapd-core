@@ -67,7 +67,6 @@ class BaseScale {
   QueryDataType getRangeDataType() { return _rangeDataType; }
 
   const ::Rendering::GL::TypeGLShPtr& getDomainTypeGL();
-
   const ::Rendering::GL::TypeGLShPtr& getRangeTypeGL();
 
   std::string getScaleGLSLFuncName(const std::string& extraSuffix = "");
@@ -78,8 +77,10 @@ class BaseScale {
                                   bool ignoreRange = false,
                                   bool ignoreAccum = false) = 0;
 
-  std::string getDomainGLSLUniformName() { return "uDomains_" + _name; }
+  std::string getDomainGLSLTypeName(const std::string& extraSuffix = "") { return "domainType_" + _name + extraSuffix; }
+  std::string getRangeGLSLTypeName(const std::string& extraSuffix = "") { return "rangeType_" + _name + extraSuffix; }
 
+  std::string getDomainGLSLUniformName() { return "uDomains_" + _name; }
   std::string getRangeGLSLUniformName() { return "uRanges_" + _name; }
 
   virtual void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,

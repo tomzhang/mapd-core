@@ -57,12 +57,12 @@ class BaseRenderProperty {
   std::string getGLSLFunc() const { return "get" + _name; }
 
   std::string getInGLSLName() const { return "inT" + _name; }
-
   std::string getInGLSLType() const;
+  const ::Rendering::GL::TypeGLShPtr& getInTypeGL() const;
 
   std::string getOutGLSLName() const { return "outT" + _name; }
-
   std::string getOutGLSLType() const;
+  const ::Rendering::GL::TypeGLShPtr& getOutTypeGL() const;
 
   bool hasVboPtr();
   bool hasVboPtr(const GpuId& gpuId);

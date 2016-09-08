@@ -30,7 +30,12 @@ class BaseScaleRef {
 
   virtual const ::Rendering::GL::TypeGLShPtr& getRangeTypeGL();
 
+  std::string getDomainGLSLTypeName(const std::string& extraSuffix = "");
+  std::string getRangeGLSLTypeName(const std::string& extraSuffix = "");
   std::string getScaleGLSLFuncName(const std::string& extraSuffix = "");
+
+  const ::Rendering::GL::TypeGLShPtr& getDomainTypeGL() const;
+  const ::Rendering::GL::TypeGLShPtr& getRangeTypeGL() const;
 
   virtual std::string getGLSLCode(const std::string& extraSuffix = "");
 
@@ -219,7 +224,11 @@ class ScaleRef : public BaseScaleRef {
 
     if (updateDomain) {
       BaseScaleDomainRangeData* domainDataPtr = _scalePtr->getDomainData();
-      if (force || domainDataPtr->getTypeInfo() != typeid(DomainType)) {
+      bool isQuantScale = isQuantitativeScale(_scalePtr->getType());
+      const auto& theirDomainType = domainDataPtr->getTypeInfo();
+      const auto& ourDomainType = typeid(DomainType);
+      if (force || (!isQuantScale && theirDomainType != ourDomainType) ||
+          (isQuantScale && !areTypesCompatible(ourDomainType, theirDomainType))) {
         uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(domainDataPtr);
         intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(domainDataPtr);
         floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(domainDataPtr);

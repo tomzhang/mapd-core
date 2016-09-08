@@ -267,6 +267,7 @@ void PointMark::_updateShader() {
       // do there as well, but it is likely rare that the same
       // scale be referenced many times at this point (11/9/15), so
       // it's probably not worth the effort to optimize at this point.
+      std::string suffix = "_" + prop->getName();
       propFuncName = prop->getGLSLFunc();
 
       funcRange = ShaderUtils::getGLSLFunctionBounds(vertSrc, propFuncName);
@@ -275,14 +276,21 @@ void PointMark::_updateShader() {
                         std::string(*this) + ": Cannot find a properly defined \"" + propFuncName +
                             "\" function in the vertex shader.");
 
-      std::string scaleCode = scalePtr->getGLSLCode("_" + prop->getName());
+      std::string scaleCode = scalePtr->getGLSLCode(suffix);
 
       boost::replace_range(vertSrc, funcRange, scaleCode);
 
-      funcName = scalePtr->getScaleGLSLFuncName("_" + prop->getName());
+      funcName = scalePtr->getScaleGLSLFuncName(suffix);
 
-      boost::replace_all(
-          vertSrc, prop->getGLSLFunc() + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
+      if (*prop->getInTypeGL() == *scalePtr->getDomainTypeGL()) {
+        boost::replace_all(vertSrc, propFuncName + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
+
+      } else {
+        std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
+        boost::replace_all(vertSrc,
+                           propFuncName + "(" + prop->getName() + ")",
+                           funcName + "(" + domainType + "(" + prop->getName() + "))");
+      }
     }
   }
 

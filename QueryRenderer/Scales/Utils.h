@@ -33,6 +33,9 @@ QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const 
 bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType domainType);
 bool isScaleRangeCompatible(const ScaleType scaleType, const QueryDataType rangeType);
 bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType);
+bool areTypesCompatible(const std::type_info& srcType, const std::type_info& inType);
+
+QueryDataType convertTypeIdToDataType(const std::type_info& srcTypeId);
 
 template <typename T>
 T convertType(const QueryDataType type, const boost::any& value) {
