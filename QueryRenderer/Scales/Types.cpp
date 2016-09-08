@@ -46,4 +46,8 @@ std::string to_string(AccumulatorType accumType) {
   return "";
 }
 
+bool isQuantitativeScale(const ScaleType type) {
+  return (type == ScaleType::LINEAR || type == ScaleType::LOG || type == ScaleType::POW || type == ScaleType::SQRT);
+}
+
 }  // namespace QueryRenderer

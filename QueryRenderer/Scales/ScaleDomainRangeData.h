@@ -210,7 +210,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   }
 
   void _setFromStringValue(const std::string& strVal, ScaleType type) {
-    if (type == ScaleType::LINEAR && (strVal == "width" || strVal == "height")) {
+    if (isQuantitativeScale(type) && (strVal == "width" || strVal == "height")) {
       // TODO(croot): Handle actual width/height vals
       _vectorPtr.reset(new std::vector<T>({0, 1}));
 

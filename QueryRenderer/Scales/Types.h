@@ -26,6 +26,8 @@ typedef std::shared_ptr<BaseScaleRef> ScaleRefShPtr;
 std::string to_string(ScaleType scaleType);
 std::string to_string(AccumulatorType accumType);
 
+bool isQuantitativeScale(const ScaleType type);
+
 }  // namespace QueryRenderer
 
 #endif  // QUERYRENDERER_SCALES_TYPES_H_
