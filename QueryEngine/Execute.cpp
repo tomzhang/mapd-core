@@ -412,11 +412,9 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
         return ResultRows(rrows, queue_time_ms, render_time_ms);
       }
 #endif  // HAVE_RENDERING
-#ifdef ENABLE_COMPACTION
       if (error_code == ERR_OVERFLOW_OR_UNDERFLOW) {
         throw std::runtime_error("Overflow or underflow");
       }
-#endif
       if (error_code == ERR_DIV_BY_ZERO) {
         throw std::runtime_error("Division by zero");
       }
