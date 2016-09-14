@@ -209,7 +209,6 @@ class MapDHandler : virtual public MapDIf {
     if (executor_device == "gpu") {
 #ifdef HAVE_CUDA
       executor_device_type_ = ExecutorDeviceType::GPU;
-      LOG(INFO) << "Started in GPU Mode" << std::endl;
       cpu_mode_only_ = false;
 #else
       executor_device_type_ = ExecutorDeviceType::CPU;
@@ -218,11 +217,9 @@ class MapDHandler : virtual public MapDIf {
 #endif  // HAVE_CUDA
     } else if (executor_device == "hybrid") {
       executor_device_type_ = ExecutorDeviceType::Hybrid;
-      LOG(INFO) << "Started in Hybrid Mode" << std::endl;
       cpu_mode_only_ = false;
     } else {
       executor_device_type_ = ExecutorDeviceType::CPU;
-      LOG(INFO) << "Started in CPU Mode" << std::endl;
       cpu_mode_only_ = true;
     }
     const auto data_path = boost::filesystem::path(base_data_path_) / "mapd_data";
@@ -234,6 +231,25 @@ class MapDHandler : virtual public MapDIf {
     ExtensionFunctionsWhitelist::add(calcite_->getExtensionFunctionWhitelist());
 #endif  // HAVE_RAVM
 #endif  // HAVE_CALCITE
+
+    if (!data_mgr_->gpusPresent()) {
+      executor_device_type_ = ExecutorDeviceType::CPU;
+      LOG(ERROR) << "No GPUs detected, falling back to CPU mode";
+      cpu_mode_only_ = true;
+    }
+
+    switch (executor_device_type_) {
+      case ExecutorDeviceType::GPU:
+        LOG(INFO) << "Started in GPU mode" << std::endl;
+        break;
+      case ExecutorDeviceType::CPU:
+        LOG(INFO) << "Started in CPU mode" << std::endl;
+        break;
+      case ExecutorDeviceType::Hybrid:
+        LOG(INFO) << "Started in Hybrid mode" << std::endl;
+        break;
+    }
+
 #ifdef HAVE_RENDERING
     // TODO(croot): remove the cpu_mode_only_ rendering restriction
     // when cpu-mode with hardware accelerated rendering
@@ -246,6 +262,9 @@ class MapDHandler : virtual public MapDIf {
         enable_rendering_ = false;
         LOG(ERROR) << "Backend rendering disabled: " << e.what();
       }
+    } else if (enable_rendering_ && cpu_mode_only_) {
+      enable_rendering_ = false;
+      LOG(ERROR) << "Backend rendering disabled: running in CPU mode";
     }
 #endif  // HAVE_RENDERING
 
