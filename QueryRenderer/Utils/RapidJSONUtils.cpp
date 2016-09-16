@@ -74,6 +74,10 @@ QueryDataType RapidJSONUtils::getDataTypeFromJSONObj(const rapidjson::Value& obj
         THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "non-color strings are not a supported type."));
       }
     } break;
+    case rapidjson::kTrueType:
+    case rapidjson::kFalseType:
+      rtn = QueryDataType::BOOL;
+      break;
     default:
       THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "type from JSON is unsupported."));
   }

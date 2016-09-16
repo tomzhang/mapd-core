@@ -114,6 +114,32 @@ struct TypeGL : BaseTypeGL {
 
 // SPECIALIZATIONS
 
+// BOOL:
+
+template <>
+std::string TypeGL<bool, 1>::glslType() const;
+
+template <>
+int TypeGL<bool, 1>::baseGLType() const;
+
+template <>
+std::string TypeGL<bool, 2>::glslType() const;
+
+template <>
+int TypeGL<bool, 2>::baseGLType() const;
+
+template <>
+std::string TypeGL<bool, 3>::glslType() const;
+
+template <>
+int TypeGL<bool, 3>::baseGLType() const;
+
+template <>
+std::string TypeGL<bool, 4>::glslType() const;
+
+template <>
+int TypeGL<bool, 4>::baseGLType() const;
+
 // UNSIGNED INT:
 
 template <>

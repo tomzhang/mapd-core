@@ -281,7 +281,9 @@ DataColumnUqPtr DataTable::createDataColumnFromRowMajorObj(const std::string& co
   } else if (rowItem.IsDouble()) {
     // TODO(croot): How do we properly handle floats?
     return DataColumnUqPtr(new TDataColumn<double>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
-
+  } else if (rowItem.IsBool()) {
+    // TODO(croot): How do we properly handle bools?
+    return DataColumnUqPtr(new TDataColumn<unsigned int>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
     // double val = rowItem.GetDouble();
     // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
     //   return DataColumnUqPtr(new TDataColumn<float>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
@@ -444,6 +446,9 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
             _columns.push_back(
                 createColorDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
           }
+        } else if (mitr2->value.IsBool()) {
+          bool val = mitr2->value.GetBool();
+          _columns.push_back(createDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
         }
       }
     }

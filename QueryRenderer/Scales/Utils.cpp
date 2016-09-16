@@ -8,47 +8,6 @@ namespace QueryRenderer {
 
 using ::Rendering::Objects::ColorRGBA;
 
-static QueryDataType getDataTypeFromJSONObj(const rapidjson::Value& obj, bool supportString = false) {
-  QueryDataType rtn(QueryDataType::INT);
-  rapidjson::Type type = obj.GetType();
-
-  switch (type) {
-    case rapidjson::kNumberType:
-      if (obj.IsInt()) {
-        rtn = QueryDataType::INT;
-      } else if (obj.IsUint()) {
-        rtn = QueryDataType::UINT;
-      } else if (obj.IsDouble()) {
-        rtn = QueryDataType::DOUBLE;
-
-        // double val = obj.GetDouble();
-        // TODO(croot): how do we handle floats?
-        // if (val <= std::numeric_limits<float>::max() && val >= std::numeric_limits<float>::lowest()) {
-        //   rtn = QueryDataType::FLOAT;
-        // } else {
-        //   rtn = QueryDataType::DOUBLE;
-        // }
-      } else {
-        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "RapidJSON number type is not supported."));
-      }
-      break;
-    case rapidjson::kStringType: {
-      std::string val = obj.GetString();
-      if (supportString) {
-        rtn = QueryDataType::STRING;
-      } else if (ColorRGBA::isColorString(val)) {
-        rtn = QueryDataType::COLOR;
-      } else {
-        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "non-color strings are not a supported type."));
-      }
-    } break;
-    default:
-      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "type from JSON is unsupported."));
-  }
-
-  return rtn;
-}
-
 static QueryDataType getDataTypeFromDataRefJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
   RUNTIME_EX_ASSERT(obj.IsObject(), RapidJSONUtils::getJsonParseErrorStr(obj, "data reference is not a JSON object."));
 
@@ -147,7 +106,7 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
         startIdx = 0;
         break;
       default:
-        domainType = getDataTypeFromJSONObj(itr->value[0], true);
+        domainType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[0], true);
         startIdx = 1;
         break;
     }
@@ -201,7 +160,7 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
     // true 0-height in that case.
     rangeType = QueryDataType::FLOAT;
   } else {
-    rangeType = getDataTypeFromJSONObj(itr->value[0]);
+    rangeType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[0]);
 
     for (size_t i = 1; i < itr->value.Size(); ++i) {
       itemType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[i]);
@@ -389,6 +348,32 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<std::string, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
           return createScalePtr<std::string, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+        default:
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
+      }
+    case QueryDataType::BOOL:
+      // NOTE: using unsigned ints for booleans. Doing this shouldn't be too wasteful
+      // memory-wise as the domains/ranges of any boolean type scale should be no more
+      // than two. Ultimately using unsigned ints for 2 reasons:
+      // 1) the inability to get a bool pointer for std::vector<bool>
+      //    (i.e. bool* boolptr = &boolvec[0]; // this results in errors)
+      // 2) although glsl supports a bool type, setting a uniform boolean array
+      //    requires using the glUniform{2|3|4}{f|i|ui}, which means the booleans need
+      //    to be stored in 32-bit registers when passed as uniforms
+      // TODO(croot): one way to possibly avert doing this is to use a ScaleDomainRangeData
+      // class template specialization for booleans
+      switch (rangeType) {
+        case QueryDataType::UINT:
+          return createScalePtr<unsigned int, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT:
+          return createScalePtr<unsigned int, int>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::FLOAT:
+          return createScalePtr<unsigned int, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::DOUBLE:
+          return createScalePtr<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::COLOR:
+          return createScalePtr<unsigned int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));

@@ -5,6 +5,50 @@ namespace Rendering {
 namespace GL {
 
 /*****************
+ * BOOL
+ *****************/
+
+template <>
+std::string TypeGL<bool, 1>::glslType() const {
+  return "bool";
+}
+
+template <>
+int TypeGL<bool, 1>::baseGLType() const {
+  return GL_BOOL;
+}
+
+template <>
+std::string TypeGL<bool, 2>::glslType() const {
+  return "bvec2";
+}
+
+template <>
+int TypeGL<bool, 2>::baseGLType() const {
+  return GL_BOOL;
+}
+
+template <>
+std::string TypeGL<bool, 3>::glslType() const {
+  return "bvec3";
+}
+
+template <>
+int TypeGL<bool, 3>::baseGLType() const {
+  return GL_BOOL;
+}
+
+template <>
+std::string TypeGL<bool, 4>::glslType() const {
+  return "bvec4";
+}
+
+template <>
+int TypeGL<bool, 4>::baseGLType() const {
+  return GL_BOOL;
+}
+
+/*****************
  * UNSIGNED INT
  *****************/
 

@@ -5,7 +5,7 @@
 
 namespace QueryRenderer {
 
-enum class QueryDataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR, STRING, POLYGON_DOUBLE };
+enum class QueryDataType { UINT = 0, INT, FLOAT, DOUBLE, COLOR, STRING, BOOL, POLYGON_DOUBLE };
 enum class QueryDataTableType { SQLQUERY = 0, EMBEDDED, URL, UNSUPPORTED };
 enum class QueryDataTableBaseType { BASIC_VBO = 0, POLY, UNSUPPORTED };
 

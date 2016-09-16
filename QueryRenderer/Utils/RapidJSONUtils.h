@@ -32,7 +32,7 @@ struct RapidJSONUtils {
 
   template <typename T>
   static T getNumValFromJSONObj(const rapidjson::Value& obj) {
-    RUNTIME_EX_ASSERT(obj.IsNumber(),
+    RUNTIME_EX_ASSERT(obj.IsNumber() || obj.IsBool(),
                       getJsonParseErrorStr(
                           obj, "getNumValFromJSONObj(): rapidjson object is not a number. Cannot get a number value."));
 
@@ -57,6 +57,9 @@ struct RapidJSONUtils {
       rtn = static_cast<T>(val);
     } else if (obj.IsUint()) {
       unsigned int val = obj.GetUint();
+      rtn = static_cast<T>(val);
+    } else if (obj.IsBool()) {
+      bool val = obj.GetBool();
       rtn = static_cast<T>(val);
     }  // else if (obj.IsInt64()) {
     // } else if (obj.IsUInt64()) {

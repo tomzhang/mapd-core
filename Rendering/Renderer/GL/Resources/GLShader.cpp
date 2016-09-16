@@ -586,6 +586,22 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
   UniformAttrInfo* rtn = NULL;
 
   switch (type) {
+    // NOTE: uniform booleans can be set using
+    // any of the ui/i/f constructs. It does
+    // not have one of its own.
+    case GL_BOOL:
+      rtn = new Uniform1iAttr(type, size, location);
+      break;
+    case GL_BOOL_VEC2:
+      rtn = new Uniform2iAttr(type, size, location);
+      break;
+    case GL_BOOL_VEC3:
+      rtn = new Uniform3iAttr(type, size, location);
+      break;
+    case GL_BOOL_VEC4:
+      rtn = new Uniform4iAttr(type, size, location);
+      break;
+
     case GL_UNSIGNED_INT:
       rtn = new Uniform1uiAttr(type, size, location);
       break;
