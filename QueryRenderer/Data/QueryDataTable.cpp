@@ -447,7 +447,6 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
                 createColorDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
           }
         } else if (mitr2->value.IsBool()) {
-          bool val = mitr2->value.GetBool();
           _columns.push_back(createDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
         }
       }
