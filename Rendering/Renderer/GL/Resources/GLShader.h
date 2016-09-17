@@ -179,7 +179,10 @@ class GLShader : public GLResource {
   void setSubroutines(const std::unordered_map<std::string, std::string>& subroutineVals);
 
   bool hasUniformBlockAttribute(const std::string& attrName);
-  void bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx = -1);
+  void bindUniformBufferToBlock(const std::string& blockName,
+                                const GLUniformBufferShPtr& ubo,
+                                int idx = -1,
+                                const GLShaderBlockLayoutShPtr& layoutPtr = nullptr);
 
   bool hasVertexAttribute(const std::string& attrName) const;
   GLuint getVertexAttributeLocation(const std::string& attrName) const;

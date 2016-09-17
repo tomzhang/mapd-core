@@ -120,9 +120,10 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
   }
 
   void bindToShader(GLShader* activeShader,
-                    int numActiveBufferItems,
+                    const size_t usedBytes,
+                    const size_t offsetBytes,
                     const std::string& attr = "",
-                    const std::string& shaderAttr = "");
+                    const std::string& shaderAttr = "") const final;
 
   static void _initNumAlignmentBytes();
   static void _initMaxUniformBlockSize();

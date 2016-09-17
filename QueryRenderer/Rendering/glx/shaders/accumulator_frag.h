@@ -16,6 +16,7 @@ const std::string Accumulator_frag::source =
     "\n"
     "layout(location = 0) out vec4 color;\n"
     "layout(location = 1) out uint id;\n"
+    "layout(location = 2) out uint tableId;\n"
     "\n"
     "uniform usampler2DArray accumulatorSampler;\n"
     "layout(r32ui, binding=0) uniform coherent uimage2DArray inTxPixelCounter;\n"

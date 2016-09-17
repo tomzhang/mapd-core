@@ -17,7 +17,7 @@ namespace QueryRenderer {
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
 using ::Rendering::GL::Resources::GLShader;
-using ::Rendering::GL::Resources::VboAttrToShaderAttrMap;
+using ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap;
 
 PointMark::PointMark(const rapidjson::Value& obj,
                      const rapidjson::Pointer& objPath,
@@ -348,7 +348,7 @@ void PointMark::_updateShader() {
 
 void PointMark::_buildVAOData(const GpuId& gpuId,
                               ::Rendering::GL::Resources::GLShader* activeShader,
-                              VboAttrToShaderAttrMap& attrMap,
+                              VboLayoutAttrToShaderAttrMap& attrMap,
                               ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) {
   int cnt = 0;
   int vboSize = 0;
@@ -420,6 +420,14 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
     }
   }
 
+  // TODO(croot): fold this into the base class
+  if (_ctx->doHitTest() && _dataPtr) {
+    auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(_dataPtr);
+    if (dataPtr) {
+      activeShader->setUniformAttribute("uTableId", dataPtr->getTableId());
+    }
+  }
+
   if (subroutines.size()) {
     activeShader->setSubroutines(subroutines);
   }
@@ -439,7 +447,9 @@ void PointMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ct
 void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   // NOTE: shader should have been updated before calling this
   auto itr = _perGpuData.find(gpuId);
-  CHECK(itr != _perGpuData.end());
+  if (itr == _perGpuData.end()) {
+    return;
+  }
 
   RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
   CHECK(qrmGpuData);
@@ -469,7 +479,8 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   }
 
   // now draw points
-  renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numItems());
+  // auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
+  renderer->drawVertexBuffers(GL_POINTS, 0, itr->second.vaoPtr->numVertices());
 
   // unset state
   renderer->disable(GL_PROGRAM_POINT_SIZE);

@@ -2,6 +2,7 @@
 #define RENDERING_GL_TYPES_H_
 
 #include <memory>
+#include "../../Types.h"
 
 namespace Rendering {
 
@@ -23,6 +24,11 @@ typedef std::unique_ptr<GLWindow> GLWindowUqPtr;
 struct BaseTypeGL;
 typedef std::shared_ptr<BaseTypeGL> TypeGLShPtr;
 typedef std::unique_ptr<BaseTypeGL> TypeGLUqPtr;
+
+typedef uint32_t ResourceId;
+typedef std::pair<RendererId, ResourceId> UniqueResourceId;
+
+std::string to_string(const UniqueResourceId& id);
 
 }  // namespace GL
 

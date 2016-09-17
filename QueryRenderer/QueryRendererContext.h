@@ -6,18 +6,12 @@
 #include "Marks/Types.h"
 #include "Data/Types.h"
 #include "Scales/Types.h"
-
 #include "Utils/RapidJSONUtils.h"
-
-class Executor;
 
 namespace QueryRenderer {
 
 class QueryRendererContext {
  public:
-  typedef std::shared_ptr<BaseScale> ScaleShPtr;
-  typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
-
   explicit QueryRendererContext(int userId,
                                 int widgetId,
                                 const RootCacheShPtr& qrmGpuCache,
@@ -49,7 +43,10 @@ class QueryRendererContext {
     return qrmGpuCache->numSamples;
   }
 
-  const Executor* const getExecutor() { return executor_; }
+  Executor* const getExecutor() { return executor_; }
+  QueryExecCB getQueryExecutionFunc() { return execFunc_; }
+  std::shared_ptr<RenderQueryExecuteTimer> getRenderTimer() const { return renderTimer_; }
+
   const RapidJSONUtils::JsonCachePtr& getJsonCachePtr() { return _jsonCache; }
 
   const RootCacheShPtr getRootGpuCache() const { return _qrmGpuCache.lock(); }
@@ -61,6 +58,7 @@ class QueryRendererContext {
   ScaleShPtr getScale(const std::string& scaleConfigName) const;
 
   bool isJSONCacheUpToDate(const rapidjson::Pointer& objPath, const rapidjson::Value& obj);
+  const rapidjson::Value* getJSONObj(const rapidjson::Pointer& objPath);
 
   // bool hasMark(const std::string& geomConfigName) const {
   //     return (_geomConfigMap.find(geomConfigName) != _geomConfigMap.end());
@@ -77,8 +75,8 @@ class QueryRendererContext {
   //     return rtn;
   // }
 
-  void subscribeToRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
-  void unsubscribeFromRefEvent(RefEventType eventType, const ScaleShPtr& eventObj, RefEventCallback cb);
+  RefCallbackId subscribeToRefEvent(RefEventType eventType, const RefObjShPtr& eventObj, RefEventCallback cb);
+  void unsubscribeFromRefEvent(RefEventType eventType, const RefObjShPtr& eventObj, const RefCallbackId cbId);
 
   std::set<GpuId> getUsedGpus() const;
 
@@ -88,21 +86,38 @@ class QueryRendererContext {
   friend class QueryRenderer;
 
  private:
-  typedef std::unordered_map<std::string, ScaleShPtr> ScaleConfigMap;
+  struct ScaleName {};
+  typedef boost::multi_index_container<
+      ScaleShPtr,
+      boost::multi_index::indexed_by<
+          boost::multi_index::random_access<>,
+
+          // hashed on name
+          boost::multi_index::hashed_unique<
+              boost::multi_index::tag<ScaleName>,
+              boost::multi_index::const_mem_fun<JSONRefObject, std::string, &JSONRefObject::getName>>>> ScaleConfigMap;
+  typedef ScaleConfigMap::index<ScaleName>::type ScaleConfigMap_by_name;
+
+  struct DataTableName {};
+  typedef boost::multi_index_container<
+      QueryDataTableJSONShPtr,
+      boost::multi_index::indexed_by<
+          boost::multi_index::random_access<>,
+
+          // hashed on name
+          boost::multi_index::hashed_unique<
+              boost::multi_index::tag<DataTableName>,
+              boost::multi_index::const_mem_fun<JSONRefObject, std::string, &JSONRefObject::getName>>>> DataTableMap;
+  typedef DataTableMap::index<DataTableName>::type DataTableMap_by_name;
 
   typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
-
   typedef std::vector<GeomConfigShPtr> GeomConfigVector;
-  typedef std::unordered_map<std::string, QueryDataTableShPtr> DataTableMap;
 
-  struct func_compare {
-    bool operator()(const RefEventCallback& lhs, const RefEventCallback& rhs) const {
-      return lhs.target_type().hash_code() < rhs.target_type().hash_code();
-    }
-  };
-  typedef std::set<RefEventCallback, func_compare> EventCallbackList;
-  typedef std::array<EventCallbackList, static_cast<size_t>(RefEventType::ALL)> EventCallbacksArray;
-  typedef std::unordered_map<std::string, EventCallbacksArray> EventCallbacksMap;
+  typedef std::unordered_map<RefCallbackId, RefEventCallback> EventCallbackMap;
+  typedef std::array<EventCallbackMap, static_cast<size_t>(RefEventType::ALL)> EventCallbacksArray;
+
+  typedef std::unordered_map<std::string, EventCallbacksArray> EventCallbacksByNameMap;
+  typedef std::unordered_map<int, EventCallbacksByNameMap> EventCallbacksMap;
 
   std::weak_ptr<RootCache> _qrmGpuCache;
   DataTableMap _dataTableMap;
@@ -111,7 +126,9 @@ class QueryRendererContext {
 
   std::unordered_set<std::string> _accumulatorScales;
 
-  const Executor* executor_;
+  Executor* executor_;
+  QueryExecCB execFunc_;
+  std::shared_ptr<RenderQueryExecuteTimer> renderTimer_;
 
   UserWidgetIdPair _userWidget;
   size_t _width;
@@ -121,20 +138,18 @@ class QueryRendererContext {
 
   RapidJSONUtils::JsonCachePtr _jsonCache;
 
+  RefCallbackId _currCbId;
   EventCallbacksMap _eventCallbacksMap;
 
   QueryDataLayoutShPtr _queryDataLayoutPtr;
 
   void _clear(bool preserveDimensions = false);
-  // void _clearGpuResources();
-  // void _initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData, const std::unordered_set<GpuId>& unusedGpus);
   void _updateConfigGpuResources();
 
-  void _fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj);
+  void _fireRefEvent(RefEventType eventType, const RefObjShPtr& eventObj);
 
   void _update();
 };
-
 };  // QueryRenderer namespace
 
 #endif  // QUERYRENDERER_QUERYRENDERERCONTEXT_H_

@@ -23,7 +23,7 @@ namespace QueryRenderer {
 
 class QueryRenderCompositor;
 
-enum class FboColorBuffer { COLOR_BUFFER = 0, ID_BUFFER, MAX_TEXTURE_BUFFERS = ID_BUFFER };
+enum class FboColorBuffer { COLOR_BUFFER = 0, ID_BUFFER, ID2_BUFFER, MAX_TEXTURE_BUFFERS = ID2_BUFFER };
 enum class FboRenderBuffer { DEPTH_BUFFER = 0, MAX_RENDER_BUFFERS = DEPTH_BUFFER };
 
 ///////////////////////////////////////////////////////////////////////
@@ -53,12 +53,22 @@ class QueryFramebuffer {
       ::Rendering::GL::Resources::FboBind bindType = ::Rendering::GL::Resources::FboBind::READ_AND_DRAW);
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
-  void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
-  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+  void readIdBuffer(size_t startx,
+                    size_t starty,
+                    int width,
+                    int height,
+                    unsigned int* idBuffer,
+                    const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
+  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0,
+                                             size_t starty = 0,
+                                             int width = -1,
+                                             int height = -1,
+                                             const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
 
   void blitToFramebuffer(QueryFramebuffer& dstFboPtr, size_t startx, size_t starty, size_t width, size_t height);
 
-  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo);
+  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo,
+                         const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
 
   size_t getWidth() const;
   size_t getHeight() const;
@@ -99,7 +109,8 @@ class QueryFramebuffer {
   bool _doHitTest, _doDepthTest;
 
   ::Rendering::GL::Resources::GLTexture2dShPtr _rgbaTex;
-  ::Rendering::GL::Resources::GLTexture2dShPtr _idTex;
+  ::Rendering::GL::Resources::GLTexture2dShPtr _idTex1;
+  ::Rendering::GL::Resources::GLTexture2dShPtr _idTex2;
   ::Rendering::GL::Resources::GLRenderbufferShPtr _rbo;
   ::Rendering::GL::Resources::GLFramebufferShPtr _fbo;
 

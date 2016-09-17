@@ -74,6 +74,10 @@ class BaseMark {
     ::Rendering::GL::Resources::GLVertexArrayShPtr strokeVaoPtr;
 
     PerGpuData() : BasePerGpuData() {}
+    explicit PerGpuData(const RootPerGpuDataShPtr& rootData,
+                        const ::Rendering::GL::Resources::GLShaderShPtr& shaderPtr = nullptr,
+                        const ::Rendering::GL::Resources::GLShaderShPtr& strokeShaderPtr = nullptr)
+        : BasePerGpuData(rootData), shaderPtr(shaderPtr), strokeShaderPtr(strokeShaderPtr) {}
     explicit PerGpuData(const BasePerGpuData& data,
                         const ::Rendering::GL::Resources::GLShaderShPtr& shaderPtr = nullptr,
                         const ::Rendering::GL::Resources::GLShaderShPtr& strokeShaderPtr = nullptr)
@@ -146,7 +150,7 @@ class BaseMark {
 
   virtual void _buildVAOData(const GpuId& gpuId,
                              ::Rendering::GL::Resources::GLShader* activeShader,
-                             ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
+                             ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap& attrMap,
                              ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) = 0;
 
   std::set<GpuId> _initUnusedGpus() const;

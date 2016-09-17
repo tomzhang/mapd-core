@@ -47,11 +47,7 @@ EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderManager* p
                                                            size_t numSamples,
                                                            bool doHitTest,
                                                            bool doDepthTest)
-    : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest),
-      _rgbaEglImgPtr(nullptr),
-      _idEglImgPtr(nullptr),
-      _depthEglImgPtr(nullptr),
-      _consumedRsrcs() {
+    : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest) {
   EglGLRenderer* eglRenderer = dynamic_cast<EglGLRenderer*>(rendererPtr.get());
   CHECK(eglRenderer && _framebufferPtr);
 
@@ -63,6 +59,10 @@ EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderManager* p
     _idEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
                                     eglRenderer->getEGLContext(),
                                     _framebufferPtr->getId(FboColorBuffer::ID_BUFFER)));
+
+    _id2EglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
+                                     eglRenderer->getEGLContext(),
+                                     _framebufferPtr->getId(FboColorBuffer::ID2_BUFFER)));
   }
 
   if (doDepthTest) {
@@ -95,6 +95,10 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
     _idEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
                                     eglRenderer->getEGLContext(),
                                     _framebufferPtr->getId(FboColorBuffer::ID_BUFFER)));
+
+    _id2EglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
+                                     eglRenderer->getEGLContext(),
+                                     _framebufferPtr->getId(FboColorBuffer::ID2_BUFFER)));
   }
 
   if (doDepth) {
@@ -118,46 +122,37 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
   for (auto& itr : _consumedRsrcs) {
     glRenderer = nullptr;
 
-    std::vector<int> rgbaTexturesMarkedForDeletion;
     auto& rgbaTextures = itr.second.rgbaTextures;
-    for (i = 0; i < static_cast<int>(rgbaTextures.size()); ++i) {
-      if (rgbaTextures[i].expired()) {
-        rgbaTexturesMarkedForDeletion.push_back(i);
-      } else if (!glRenderer) {
-        glRenderer = rgbaTextures[i].lock()->getGLRenderer();
-      }
+    rgbaTextures.erase(std::remove_if(rgbaTextures.begin(), rgbaTextures.end(), [](auto& rgbaTexture) {
+                         return rgbaTexture.expired();
+                       }),
+                       rgbaTextures.end());
+
+    if (rgbaTextures.size()) {
+      glRenderer = rgbaTextures[0].lock()->getGLRenderer();
     }
 
-    for (i = rgbaTexturesMarkedForDeletion.size() - 1; i >= 0; --i) {
-      rgbaTextures.erase(rgbaTextures.begin() + i);
-    }
-
-    std::vector<int> idTexturesMarkedForDeletion;
     auto& idTextures = itr.second.idTextures;
-    for (i = 0; i < static_cast<int>(idTextures.size()); ++i) {
-      if (idTextures[i].expired()) {
-        idTexturesMarkedForDeletion.push_back(i);
-      } else if (!glRenderer) {
-        glRenderer = idTextures[i].lock()->getGLRenderer();
-      }
+    idTextures.erase(
+        std::remove_if(idTextures.begin(), idTextures.end(), [](auto& idTexture) { return idTexture.expired(); }),
+        idTextures.end());
+
+    if (!glRenderer && idTextures.size()) {
+      glRenderer = idTextures[0].lock()->getGLRenderer();
     }
 
-    for (i = idTexturesMarkedForDeletion.size() - 1; i >= 0; --i) {
-      idTextures.erase(rgbaTextures.begin() + i);
-    }
+    auto& id2Textures = itr.second.id2Textures;
+    id2Textures.erase(
+        std::remove_if(id2Textures.begin(), id2Textures.end(), [](auto& id2Texture) { return id2Texture.expired(); }),
+        id2Textures.end());
 
-    std::vector<int> rbosMarkedForDeletion;
+    CHECK(idTextures.size() == id2Textures.size());
+
     auto& rbos = itr.second.rbos;
-    for (i = 0; i < static_cast<int>(rbos.size()); ++i) {
-      if (rbos[i].expired()) {
-        rbosMarkedForDeletion.push_back(i);
-      } else if (!glRenderer) {
-        glRenderer = rbos[i].lock()->getGLRenderer();
-      }
-    }
+    rbos.erase(std::remove_if(rbos.begin(), rbos.end(), [](auto& rbo) { return rbo.expired(); }), rbos.end());
 
-    for (i = rbosMarkedForDeletion.size() - 1; i >= 0; --i) {
-      rbos.erase(rbos.begin() + i);
+    if (!glRenderer && rbos.size()) {
+      glRenderer = rbos[0].lock()->getGLRenderer();
     }
 
     if (!glRenderer) {
@@ -192,6 +187,14 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
 
         glRenderer->bindTexture2d(texPtr);
         MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(texPtr->getTarget(), _idEglImgPtr->img));
+      }
+
+      for (auto& id2Tex : id2Textures) {
+        texPtr = id2Tex.lock();
+        CHECK(texPtr);
+
+        glRenderer->bindTexture2d(texPtr);
+        MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(texPtr->getTarget(), _id2EglImgPtr->img));
       }
 
       // TODO(croot): implement depth buffers
@@ -242,6 +245,10 @@ GLTexture2dShPtr EglQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
     case FboColorBuffer::ID_BUFFER:
       MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _idEglImgPtr->img));
       rsrcStorage.idTextures.push_back(tex);
+      break;
+    case FboColorBuffer::ID2_BUFFER:
+      MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _id2EglImgPtr->img));
+      rsrcStorage.id2Textures.push_back(tex);
       break;
     default:
       CHECK(false);

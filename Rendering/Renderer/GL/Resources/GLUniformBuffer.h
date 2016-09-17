@@ -3,37 +3,22 @@
 
 #include "Types.h"
 #include "GLShaderBlockLayout.h"
-#include "GLBaseBuffer.h"
+#include "GLLayoutBuffer.h"
 #include "../TypeGL.h"
 
 namespace Rendering {
 namespace GL {
 namespace Resources {
 
-class GLUniformBuffer : public GLBaseBuffer {
+class GLUniformBuffer : public GLLayoutBuffer<GLShaderBlockLayout> {
  public:
   ~GLUniformBuffer();
 
-  bool hasAttribute(const std::string& attrName) const;
-
-  TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const;
-
-  GLBufferAttrType getAttributeType(const std::string& attrName) const;
-
-  int numAttributes() const;
-  size_t numItems() const;
-  size_t getNumBytesInBlock() const;
-  size_t getNumBytesPerItem() const;
+  size_t getNumBytesInBlock(const GLShaderBlockLayoutShPtr& layoutPtr = nullptr) const;
+  size_t getNumBytesPerItem(const GLShaderBlockLayoutShPtr& layoutPtr = nullptr) const;
   size_t getNumAlignmentBytes() const;
 
-  const GLBufferAttrInfo& operator[](size_t i) const;
-
-  GLShaderBlockLayoutShPtr getBufferLayout() const { return _shaderBlockLayoutPtr; }
-  void setBufferLayout(const GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr, size_t numItems);
-
-  // void bindToShader(GLShader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "");
-
-  void bufferData(void* data, size_t numItems, size_t numBytesPerItem);
+  void bufferData(void* data, const size_t numBytes, const GLShaderBlockLayoutShPtr& layoutPtr = nullptr) final;
 
   template <typename T>
   void setAttrData(size_t idx, const std::string& attrName, T attrValue) {
@@ -60,37 +45,19 @@ class GLUniformBuffer : public GLBaseBuffer {
                            BufferAccessType accessType = BufferAccessType::WRITE,
                            BufferAccessFreq accessFreq = BufferAccessFreq::DYNAMIC);
 
-  explicit GLUniformBuffer(const RendererWkPtr& rendererPtr,
-                           const GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
-                           size_t numItems = 0,
-                           BufferAccessType accessType = BufferAccessType::WRITE,
-                           BufferAccessFreq accessFreq = BufferAccessFreq::DYNAMIC);
-
-  template <typename T>
-  explicit GLUniformBuffer(const RendererWkPtr& rendererPtr,
-                           const std::vector<T>& data,
-                           const GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
-                           BufferAccessType accessType = BufferAccessType::WRITE,
-                           BufferAccessFreq accessFreq = BufferAccessFreq::DYNAMIC)
-      : GLUniformBuffer(rendererPtr, shaderBlockLayoutPtr, 0, accessType, accessFreq) {
-    // TODO(croot): validate that the data and the layout align
-    // NOTE: _size will be set in the bufferData() call
-    bufferData((void*)&data[0], data.size(), sizeof(T));
-  }
-
   void _makeEmpty() final;
+
+  void _validateBufferLayout(size_t numBytes,
+                             size_t offsetBytes,
+                             const GLBufferLayoutShPtr& layoutPtr,
+                             bool replaceExistingLayout = false,
+                             const std::string& errPrefix = "") final;
 
   void _bufferSubData(const std::string& attrName,
                       const void* data,
                       size_t bytesPerComponent,
                       size_t numComponents,
                       int idx);
-
-  // void _bindToShaderInternal(GLShader* activeShader, const std::string& attr = "", const std::string& shaderAttr =
-  // "");
-
-  GLShaderBlockLayoutShPtr _shaderBlockLayoutPtr;
-  size_t _numItems;
 
   friend class ::Rendering::GL::GLResourceManager;
 };

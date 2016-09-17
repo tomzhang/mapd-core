@@ -80,10 +80,10 @@ struct BasePerGpuData {
   RootPerGpuDataWkPtr rootPerGpuData;
 
   BasePerGpuData() : rootPerGpuData() {}
-  BasePerGpuData(const RootPerGpuDataShPtr& rootPerGpuData) : rootPerGpuData(rootPerGpuData) {}
-  BasePerGpuData(const BasePerGpuData& gpuData) : rootPerGpuData(gpuData.rootPerGpuData) {}
-  BasePerGpuData(BasePerGpuData&& data) noexcept : rootPerGpuData(std::move(data.rootPerGpuData)) {}
-  ~BasePerGpuData() {
+  explicit BasePerGpuData(const RootPerGpuDataShPtr& rootPerGpuData) : rootPerGpuData(rootPerGpuData) {}
+  explicit BasePerGpuData(const BasePerGpuData& gpuData) : rootPerGpuData(gpuData.rootPerGpuData) {}
+  explicit BasePerGpuData(BasePerGpuData&& data) noexcept : rootPerGpuData(std::move(data.rootPerGpuData)) {}
+  virtual ~BasePerGpuData() {
     // need to make active to properly destroy gpu resources
     // TODO(croot): uncomment this if we have GL resources at
     // this level (i.e. a framebuffer or a compositor per gpu)

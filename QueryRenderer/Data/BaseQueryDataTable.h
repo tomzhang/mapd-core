@@ -7,6 +7,7 @@
 
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
+#include <Rendering/Renderer/GL/Resources/Types.h>
 
 #include <map>
 #include <set>
@@ -41,7 +42,7 @@ class BaseQueryDataTable {
   friend class QueryRendererContext;
 };
 
-class BaseQueryDataTableJSON {
+class BaseQueryDataTableJSON : public JSONRefObject {
  public:
   BaseQueryDataTableJSON(const QueryRendererContextShPtr& ctx,
                          const std::string& name,
@@ -49,16 +50,12 @@ class BaseQueryDataTableJSON {
                          const rapidjson::Pointer& objPath);
   virtual ~BaseQueryDataTableJSON() {}
 
-  void updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
-
-  std::string getName() const { return _name; }
+  bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
   virtual operator std::string() const = 0;
 
  protected:
   QueryRendererContextShPtr _ctx;
-  std::string _name;
-  rapidjson::Pointer _jsonPath;
 
   std::string _printInfo() const;
 
@@ -68,18 +65,47 @@ class BaseQueryDataTableJSON {
 
 class BaseQueryDataTableSQL {
  public:
-  BaseQueryDataTableSQL(const std::string& tableName, const std::string& sqlQueryStr)
-      : _tableName(tableName), _sqlQueryStr(sqlQueryStr) {}
+  BaseQueryDataTableSQL(const std::string& tableName = "", const std::string& sqlQueryStr = "")
+      : _tableId(-1), _tableName(tableName), _sqlQueryStr(sqlQueryStr) {}
   virtual ~BaseQueryDataTableSQL() {}
 
+  int32_t getTableId() const { return _tableId; }
   std::string getTableName() const { return _tableName; }
   std::string getSqlQueryStr() const { return _sqlQueryStr; }
 
  protected:
+  int32_t _tableId;
   std::string _tableName;
   std::string _sqlQueryStr;
 
   std::string _printInfo() const { return "sqlQuery: " + _sqlQueryStr + ", table name: " + _tableName; }
+};
+
+class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQueryDataTableSQL {
+ public:
+  BaseQueryDataTableSQLJSON(const QueryRendererContextShPtr& ctx,
+                            const std::string& name,
+                            const rapidjson::Value& obj,
+                            const rapidjson::Pointer& objPath,
+                            bool isPolyQuery);
+
+  virtual ~BaseQueryDataTableSQLJSON() {}
+
+  virtual QueryDataLayoutShPtr getQueryDataLayout() const { return _queryDataLayoutPtr; }
+  ::Rendering::GL::Resources::GLBufferLayoutShPtr getGLBufferLayout() const;
+
+ protected:
+  std::string _printInfo() const {
+    return BaseQueryDataTableJSON::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
+  }
+
+  bool _executeQuery(const rapidjson::Value* dataObj = nullptr);
+  virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+
+  QueryDataLayoutShPtr _queryDataLayoutPtr;
+
+ private:
+  bool _isPolyQuery;
 };
 
 }  // namespace QueryRenderer

@@ -20,8 +20,8 @@ class GLBaseBuffer : public GLResource {
   BufferAccessFreq getAccessFreq() const { return _accessFreq; }
   GLenum getGLUsage() const { return _usage; }
 
-  size_t numBytes() const { return _numBytes; }
-  GLBufferType type() const { return _type; }
+  size_t getNumBytes() const { return _numBytes; }
+  GLBufferType getType() const { return _type; }
 
   bool isReadable() const {
     return (_accessType == BufferAccessType::READ || _accessType == BufferAccessType::READ_AND_WRITE ||
@@ -34,6 +34,7 @@ class GLBaseBuffer : public GLResource {
   }
 
   virtual void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0);
+  virtual void bufferSubData(const void* data, size_t numBytes, size_t byteOffset, GLenum altTarget = 0);
   virtual void getBufferData(void* data, size_t dataSzBytes, size_t byteOffset = 0);
 
  protected:
@@ -41,8 +42,8 @@ class GLBaseBuffer : public GLResource {
                         GLResourceType rsrcType,
                         GLBufferType type,
                         GLenum target = GL_ARRAY_BUFFER,
-                        BufferAccessType = BufferAccessType::READ_AND_WRITE,
-                        BufferAccessFreq = BufferAccessFreq::STATIC);
+                        BufferAccessType accessType = BufferAccessType::READ_AND_WRITE,
+                        BufferAccessFreq accessFreq = BufferAccessFreq::STATIC);
 
   void _initResource();
 
@@ -59,7 +60,9 @@ class GLBaseBuffer : public GLResource {
   BufferAccessFreq _accessFreq;
 
   size_t _numBytes;
-  size_t _numUsedBytes;
+
+  // TODO(croot): should we add a data structure that manages intervals
+  // of the data that has been initialized with data?
 };
 
 }  // namespace Resources

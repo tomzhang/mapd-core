@@ -1,4 +1,5 @@
 #include "GLBufferLayout.h"
+#include "GLLayoutBuffer.h"
 #include "GLShader.h"
 
 namespace Rendering {
@@ -111,6 +112,84 @@ int GLBaseBufferLayout::getAttributeByteOffset(const std::string& attrName) cons
   return getAttributeInfo(attrName).offset;
 }
 
+bool GLBaseBufferLayout::operator==(const GLBaseBufferLayout& layoutPtr) const {
+  if (_layoutType != layoutPtr._layoutType) {
+    return false;
+  }
+
+  if (_attrMap.size() != layoutPtr._attrMap.size()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < _attrMap.size(); ++i) {
+    if (*_attrMap[i] != *layoutPtr._attrMap[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// size_t GLBaseBufferLayout::getBufferNumItems(const GLLayoutManagerBuffer* bufferPtr) const {
+//   RUNTIME_EX_ASSERT(_itemByteSize > 0,
+//                     "Buffer layout has yet to be initialized with attributes and bound to a buffer. Cannot get the "
+//                     "number of items associated with it");
+
+//   auto itr = validateBoundBuffer(bufferPtr);
+
+//   return itr->usedBytes / _itemByteSize;
+// }
+
+// size_t GLBaseBufferLayout::getBufferNumItems(const GLLayoutManagerBufferShPtr& bufferPtr) const {
+//   return getBufferNumItems(bufferPtr.get());
+// }
+
+// GLBaseBufferLayout::BoundBufferMap_by_id::const_iterator GLBaseBufferLayout::validateBoundBuffer(
+//     const GLLayoutManagerBuffer* buffer) const {
+//   RUNTIME_EX_ASSERT(buffer, "A valid buffer ptr must be supplied");
+
+//   const BoundBufferMap_by_id& idLookup = _boundBufferMap.get<MultiIndexTags::rsrcid>();
+
+//   auto rsrcPtr = dynamic_cast<const GLResource*>(buffer);
+//   CHECK(rsrcPtr);
+//   auto id = rsrcPtr->getRsrcId();
+
+//   auto itr = idLookup.find(id);
+//   RUNTIME_EX_ASSERT(
+//       itr != idLookup.end() && !itr->bufferPtr.expired(),
+//       "The buffer with unique id: " + ::Rendering::GL::to_string(id) + " is not bound to the buffer layout.");
+
+//   CHECK(itr->bufferPtr.lock().get() == buffer);
+
+//   return itr;
+// }
+
+// GLBaseBufferLayout::BoundBufferMap_by_id::const_iterator GLBaseBufferLayout::validateBoundBuffer(
+//     const GLLayoutManagerBufferShPtr& buffer) const {
+//   return validateBoundBuffer(buffer.get());
+// }
+
+// void GLBaseBufferLayout::validateBoundBuffer() const {
+//   RUNTIME_EX_ASSERT(!_boundBufferPtr.expired(), "There is not a valid buffer bound to the buffer layout");
+// }
+
+// bool GLBaseBufferLayout::hasBoundBuffer(const GLLayoutManagerBufferShPtr& bufferPtr) const {
+//   RUNTIME_EX_ASSERT(bufferPtr, "A valid buffer ptr must be supplied");
+
+//   const BoundBufferMap_by_id& idLookup = _boundBufferMap.get<MultiIndexTags::rsrcid>();
+
+//   auto rsrcPtr = std::dynamic_pointer_cast<GLResource>(bufferPtr);
+//   CHECK(rsrcPtr);
+//   auto id = rsrcPtr->getRsrcId();
+
+//   auto itr = idLookup.find(id);
+
+//   return (itr != idLookup.end() && !itr->bufferPtr.expired());
+// }
+
+// GLLayoutManagerBufferShPtr GLBaseBufferLayout::getBoundBuffer() const {
+//   return _boundBufferPtr.lock();
+// }
+
 const GLBufferAttrInfo& GLBaseBufferLayout::operator[](size_t i) const {
   RUNTIME_EX_ASSERT(i < _attrMap.size(),
                     "GLBaseBufferLayout::operator[]: cannot retrieve attribute info at index: " + std::to_string(i) +
@@ -118,6 +197,39 @@ const GLBufferAttrInfo& GLBaseBufferLayout::operator[](size_t i) const {
 
   return *_attrMap[i];
 }
+
+// void GLBaseBufferLayout::addBuffer(const GLLayoutManagerBufferShPtr& buffer,
+//                                    const size_t usedBytes,
+//                                    const size_t offsetBytes) {
+//   RUNTIME_EX_ASSERT(buffer, "A valid buffer ptr must be supplied");
+
+//   const BoundBufferMap_by_id& idLookup = _boundBufferMap.get<MultiIndexTags::rsrcid>();
+
+//   auto rsrcPtr = std::dynamic_pointer_cast<GLResource>(buffer);
+//   CHECK(rsrcPtr);
+//   auto id = rsrcPtr->getRsrcId();
+
+//   auto itr = idLookup.find(id);
+
+//   if (itr == idLookup.end()) {
+//     auto rsrc = std::dynamic_pointer_cast<GLResource>(buffer);
+//     _boundBufferMap.emplace_back(rsrc->getRsrcId(), buffer, usedBytes, offsetBytes);
+//     return;
+//   }
+
+//   CHECK(!itr->bufferPtr.expired());
+
+//   auto modified = idLookup.modify(itr, [usedBytes, offsetBytes](BoundBufferData& bufData) {
+//     bufData.usedBytes = usedBytes;
+//     bufData.offsetBytes = offsetBytes;
+//   });
+
+//   CHECK(modified);
+// }
+
+// void GLBaseBufferLayout::clearBuffers() {
+//   _boundBufferMap.clear();
+// }
 
 void GLCustomBufferLayout::addAttribute(const std::string& attrName, GLBufferAttrType type, int stride, int offset) {
   RUNTIME_EX_ASSERT(!hasAttribute(attrName) && attrName.length(),
@@ -158,12 +270,12 @@ void GLInterleavedBufferLayout::addAttribute(const std::string& attrName, GLBuff
 }
 
 void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
-                                             int numActiveBufferItems,
+                                             const size_t usedBytes,
+                                             const size_t offsetBytes,
                                              const std::string& attr,
-                                             const std::string& shaderAttr) {
+                                             const std::string& shaderAttr) const {
   GLuint attrLoc;
   BaseTypeGL* attrPtr;
-
   GLBufferAttrInfo* bufAttrPtr;
 
   if (!attr.length()) {
@@ -172,10 +284,10 @@ void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
       bufAttrPtr = itr->get();
       attrLoc = activeShader->getVertexAttributeLocation(bufAttrPtr->name);
       attrPtr = bufAttrPtr->typeInfo;
-      attrPtr->bind(attrLoc, _itemByteSize, bufAttrPtr->offset);
+      attrPtr->bind(attrLoc, _itemByteSize, offsetBytes + bufAttrPtr->offset);
     }
   } else {
-    BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
+    const BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
     BufferAttrMap_by_name::iterator itr;
 
     RUNTIME_EX_ASSERT((itr = nameLookup.find(attr)) != nameLookup.end(),
@@ -183,7 +295,7 @@ void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
     bufAttrPtr = itr->get();
     attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
     attrPtr = bufAttrPtr->typeInfo;
-    attrPtr->bind(attrLoc, _itemByteSize, bufAttrPtr->offset);
+    attrPtr->bind(attrLoc, _itemByteSize, offsetBytes + bufAttrPtr->offset);
   }
 }
 
@@ -204,12 +316,14 @@ void GLSequentialBufferLayout::addAttribute(const std::string& attrName, GLBuffe
 }
 
 void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,
-                                            int numActiveBufferItems,
+                                            const size_t usedBytes,
+                                            const size_t offsetBytes,
                                             const std::string& attr,
-                                            const std::string& shaderAttr) {
+                                            const std::string& shaderAttr) const {
   GLuint attrLoc;
   BaseTypeGL* attrPtr;
-  int offset = 0;
+  int offset = offsetBytes;
+  auto numVerts = usedBytes / _itemByteSize;
 
   GLBufferAttrInfo* bufAttrPtr;
 
@@ -224,7 +338,7 @@ void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,
       // BUFFER_OFFFSET(offset));
       attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
       MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
-      offset += attrPtr->numBytes() * numActiveBufferItems;
+      offset += attrPtr->numBytes() * numVerts;
     }
   } else {
     RUNTIME_EX_ASSERT(hasAttribute(attr),
@@ -244,19 +358,9 @@ void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,
         break;
       }
 
-      offset += attrPtr->numBytes() * numActiveBufferItems;
+      offset += attrPtr->numBytes() * numVerts;
     }
   }
-
-  // for (const auto& itr : _attrMap) {
-  //     attrLoc = activeShader->getVertexAttributeLocation(itr.first);
-  //     attrPtr = itr.second->typeInfo;
-  //     MAPD_CHECK_GL_ERROR(glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE,
-  //     itr.second->stride,
-  //     BUFFER_OFFSET(offset)));
-  //     MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
-  //     offset += attrPtr->numBytes() * numActiveBufferItems;
-  // }
 }
 
 }  // namespace Resources

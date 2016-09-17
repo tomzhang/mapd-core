@@ -101,9 +101,13 @@ std::shared_ptr<unsigned char> QueryRenderCompositor::readColorBuffer(size_t sta
   return _implPtr->readColorBuffer(startx, starty, width, height);
 }
 
-std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width, int height) {
+std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx,
+                                                                  size_t starty,
+                                                                  int width,
+                                                                  int height,
+                                                                  const FboColorBuffer idBufferType) {
   CHECK(_implPtr);
-  return _implPtr->readIdBuffer(startx, starty, width, height);
+  return _implPtr->readIdBuffer(startx, starty, width, height, idBufferType);
 }
 
 void QueryRenderCompositor::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {

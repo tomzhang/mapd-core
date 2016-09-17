@@ -41,7 +41,7 @@ class PointMark : public BaseMark {
 
   void _buildVAOData(const GpuId& gpuId,
                      ::Rendering::GL::Resources::GLShader* activeShader,
-                     ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
+                     ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap& attrMap,
                      ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) final;
 
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader);

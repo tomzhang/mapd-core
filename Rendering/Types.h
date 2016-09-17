@@ -5,14 +5,9 @@
 
 namespace Rendering {
 
-// class ColorRGBA;
-
-// class Viewport;
-// typedef std::shared_ptr<Viewport> ViewportShPtr;
-// typedef std::unique_ptr<Viewport> ViewportUqPtr;
+typedef uint32_t RendererId;
 
 enum class RendererClass { GPU = 0, CPU };
-
 enum class RendererType { OPENGL = 0 };
 
 class Renderer;

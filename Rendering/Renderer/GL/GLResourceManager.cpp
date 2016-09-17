@@ -38,7 +38,7 @@ using Resources::GLVertexArray;
 using Resources::GLVertexArrayShPtr;
 using Resources::VboAttrToShaderAttrMap;
 
-GLResourceManager::GLResourceManager(const RendererShPtr& prnt) : _prntRenderer() {
+GLResourceManager::GLResourceManager(const RendererShPtr& prnt) : _prntRenderer(), _currRsrcId(0) {
   GLRenderer* renderer = dynamic_cast<GLRenderer*>(prnt.get());
   CHECK(renderer != nullptr);
   _prntRenderer = prnt;
@@ -294,18 +294,6 @@ GLVertexBufferShPtr GLResourceManager::createVertexBuffer(size_t numBytes,
   return rtn;
 }
 
-GLVertexBufferShPtr GLResourceManager::createVertexBuffer(const Resources::GLBufferLayoutShPtr& layoutPtr,
-                                                          BufferAccessType accessType,
-                                                          BufferAccessFreq accessFreq) {
-  CHECK(!_prntRenderer.expired());
-
-  // TODO(croot): make thread safe?
-  GLVertexBufferShPtr rtn(new GLVertexBuffer(_prntRenderer, layoutPtr, accessType, accessFreq));
-  _addGLResource(rtn);
-
-  return rtn;
-}
-
 GLPixelBuffer2dShPtr GLResourceManager::createPixelBuffer2d(size_t width,
                                                             size_t height,
                                                             // GLenum internalFormat,
@@ -377,19 +365,20 @@ GLUniformBufferShPtr GLResourceManager::createUniformBuffer(size_t numBytes,
   return rtn;
 }
 
-GLUniformBufferShPtr GLResourceManager::createUniformBuffer(
-    const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
-    size_t numItems,
-    Resources::BufferAccessType accessType,
-    Resources::BufferAccessFreq accessFreq) {
-  CHECK(!_prntRenderer.expired());
+// GLUniformBufferShPtr GLResourceManager::createUniformBuffer(
+//     const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
+//     size_t numItems,
+//     Resources::BufferAccessType accessType,
+//     Resources::BufferAccessFreq accessFreq) {
+//   CHECK(!_prntRenderer.expired());
 
-  // TODO(croot): make thread safe?
-  GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, shaderBlockLayoutPtr, numItems, accessType, accessFreq));
-  _addGLResource(rtn);
+//   // TODO(croot): make thread safe?
+//   GLUniformBufferShPtr rtn(new GLUniformBuffer(_prntRenderer, shaderBlockLayoutPtr, numItems, accessType,
+//   accessFreq));
+//   _addGLResource(rtn);
 
-  return rtn;
-}
+//   return rtn;
+// }
 
 GLVertexArrayShPtr GLResourceManager::createVertexArray() {
   CHECK(!_prntRenderer.expired());
@@ -416,7 +405,23 @@ GLVertexArrayShPtr GLResourceManager::createVertexArray(const VboAttrToShaderAtt
   return rtn;
 }
 
-GLResourceShPtr GLResourceManager::getResourcePtr(GLResource* rsrc) {
+GLVertexArrayShPtr GLResourceManager::createVertexArray(
+    const Resources::VboLayoutAttrToShaderAttrMap& vboLayoutAttrToShaderAttrMap,
+    const GLIndexBufferShPtr& iboPtr) {
+  CHECK(!_prntRenderer.expired());
+
+  // TODO(croot): make thread safe?
+  GLVertexArrayShPtr rtn(new GLVertexArray(_prntRenderer, vboLayoutAttrToShaderAttrMap, iboPtr));
+  _addGLResource(rtn);
+
+  for (auto& item : vboLayoutAttrToShaderAttrMap) {
+    item.first.first->_addVertexArray(rtn);
+  }
+
+  return rtn;
+}
+
+const GLResourceShPtr GLResourceManager::getSharedResourcePtr(const GLResource* rsrc) const {
   GLResourceShPtr rtn;
   for (size_t i = 0; i < _glResources.size(); ++i) {
     rtn = _glResources[i].lock();
@@ -428,21 +433,21 @@ GLResourceShPtr GLResourceManager::getResourcePtr(GLResource* rsrc) {
   return rtn;
 }
 
+GLResourceShPtr GLResourceManager::getSharedResourcePtr(const GLResource* rsrc) {
+  auto rtn = static_cast<const GLResourceManager&>(*this).getSharedResourcePtr(static_cast<const GLResource*>(rsrc));
+  return const_cast<GLResourceShPtr&>(rtn);
+}
+
 void GLResourceManager::_addGLResource(Resources::GLResourceShPtr glResource) {
   // do a purge of any delete resources first
-  int i, sz = _glResources.size();
-  std::vector<int> deletedIndices;
-  for (i = 0; i < sz; ++i) {
-    if (_glResources[i].expired()) {
-      deletedIndices.push_back(i);
-    }
-  }
+  _glResources.erase(
+      std::remove_if(_glResources.begin(), _glResources.end(), [](auto& glResource) { return glResource.expired(); }),
+      _glResources.end());
 
-  auto itr = _glResources.begin();
-  for (i = deletedIndices.size() - 1; i >= 0; --i) {
-    _glResources.erase(itr + deletedIndices[i]);
-  }
+  RUNTIME_EX_ASSERT(_currRsrcId < std::numeric_limits<decltype(_currRsrcId)>::max(),
+                    "The maximum resource limit reached.");
 
+  glResource->_rsrcId = _currRsrcId++;
   _glResources.emplace_back(glResource);
 }
 

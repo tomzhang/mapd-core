@@ -13,7 +13,7 @@ class GLBaseIndirectDrawBuffer : public GLBaseBuffer {
  public:
   virtual ~GLBaseIndirectDrawBuffer() {}
 
-  size_t numItems() const { return numBytes() / getStructByteSize(); }
+  size_t numItems() const { return getNumBytes() / getStructByteSize(); }
   virtual size_t getStructByteSize() const = 0;
 
  protected:

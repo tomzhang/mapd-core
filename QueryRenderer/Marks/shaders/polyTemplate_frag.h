@@ -13,7 +13,9 @@ const std::string PolyTemplate_Frag::source =
     "\n"
     "layout(location = 0) out vec4 color;\n"
     "layout(location = 1) out uint id;\n"
+    "layout(location = 2) out uint tableId;\n"
     "\n"
+    "uniform int uTableId;\n"
     "flat in uint fPrimitiveId;\n"
     "\n"
     "#define usePerVertColor <usePerVertColor>\n"
@@ -27,6 +29,7 @@ const std::string PolyTemplate_Frag::source =
     "    // TODO(croot): do some kind of temporary anti-aliasing?\n"
     "    color = fColor;\n"
     "    id = fPrimitiveId;\n"
+    "    tableId = uTableId + 1;\n"
     "}\n";
 
 }  // namespace QueryRenderer

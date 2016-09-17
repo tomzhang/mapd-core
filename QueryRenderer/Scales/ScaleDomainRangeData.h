@@ -101,6 +101,9 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
         // tricky, because in order to do so we'd have to use compute
         // shaders/cuda to do min/max/other math stuff, and uniform buffers or
         // storage buffers to send the values as uniforms
+
+        // TODO(croot): if we support query result vbos, then we need to set
+        // up callbacks for data replace/update/removes
         RUNTIME_EX_ASSERT(tablePtr->getType() == QueryDataTableType::EMBEDDED,
                           RapidJSONUtils::getJsonParseErrorStr(
                               ctx->getUserWidgetIds(),

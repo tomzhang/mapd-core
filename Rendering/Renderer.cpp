@@ -5,7 +5,10 @@ namespace Rendering {
 
 using Settings::RendererSettings;
 
+RendererId Renderer::rendererCnt = 0;
+
 Renderer::Renderer(const RendererSettings& settings) : _attachedWindows(), _initialized(false), _settings(settings) {
+  _id = rendererCnt++;
 }
 
 Renderer::~Renderer() {

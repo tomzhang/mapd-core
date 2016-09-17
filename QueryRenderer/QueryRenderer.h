@@ -57,13 +57,16 @@ class QueryRenderer {
   void setJSONConfig(const std::string& configJSON, bool forceUpdate = false);
   void setJSONDocument(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
 
-  void updateResultsPostQuery(const Executor* executor);
+  void updateResultsPostQuery(Executor* executor);
+  void setQueryExecutionParams(Executor* executor,
+                               QueryExecCB execFunc,
+                               std::shared_ptr<RenderQueryExecuteTimer>& renderTimer);
   // void activateGpus(const std::vector<GpuId>& gpusToActivate = {});
 
   void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);
 
-  unsigned int getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
+  TableIdRowIdPair getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
 
   QueryRendererContext* getContext() { return _ctx.get(); }
 
@@ -89,11 +92,13 @@ class QueryRenderer {
   std::shared_ptr<QueryRendererContext> _ctx;
 
   GpuId _pboGpu;
-  QueryIdMapPixelBufferShPtr _pbo;
+  QueryIdMapPixelBufferShPtr _pbo1;  // need a pbo for each of the id buffers
+  QueryIdMapPixelBufferShPtr _pbo2;  // 2 id buffers - one for the row id, the other for table id
 
   typedef ::Rendering::Objects::Array2d<unsigned int> Array2dui;
   bool _idPixelsDirty;
   std::shared_ptr<Array2dui> _idPixels;
+  std::shared_ptr<Array2dui> _id2Pixels;
 
   void _clear(bool preserveDimensions = false);
   void _clearGpuResources();

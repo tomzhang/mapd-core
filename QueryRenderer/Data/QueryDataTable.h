@@ -46,9 +46,7 @@ QueryDataType getDataTypeForType<std::string>();
 class BaseQueryDataTableVBO : public BaseQueryDataTable {
  public:
   BaseQueryDataTableVBO(const RootCacheShPtr& qrmGpuCache, QueryDataTableType type)
-      : BaseQueryDataTable(type, QueryDataTableBaseType::BASIC_VBO) {
-    _initGpuResources(qrmGpuCache);
-  }
+      : BaseQueryDataTable(type, QueryDataTableBaseType::BASIC_VBO) {}
 
   // explicit BaseQueryDataTableVBO(const QueryRendererContextShPtr& ctx,
   //                                const std::string& name,
@@ -64,14 +62,16 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
   std::set<GpuId> getUsedGpuIds() const final;
 
  protected:
-  struct PerGpuData : BasePerGpuData {
+  struct PerGpuData : public BasePerGpuData {
     QueryVertexBufferShPtr vbo;
 
     PerGpuData() : BasePerGpuData(), vbo(nullptr) {}
+    explicit PerGpuData(const RootPerGpuDataShPtr& rootData, const QueryVertexBufferShPtr& vbo = nullptr)
+        : BasePerGpuData(rootData), vbo(vbo) {}
     explicit PerGpuData(const BasePerGpuData& data, const QueryVertexBufferShPtr& vbo = nullptr)
         : BasePerGpuData(data), vbo(vbo) {}
-    PerGpuData(const PerGpuData& data) : BasePerGpuData(data), vbo(data.vbo) {}
-    PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), vbo(std::move(data.vbo)) {}
+    explicit PerGpuData(const PerGpuData& data) : BasePerGpuData(data), vbo(data.vbo) {}
+    explicit PerGpuData(PerGpuData&& data) : BasePerGpuData(std::move(data)), vbo(std::move(data.vbo)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete gpu resources
@@ -85,22 +85,28 @@ class BaseQueryDataTableVBO : public BaseQueryDataTable {
 
   std::string _printInfo() const;
 
- private:
-  void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
+  void _initGpuResourcesFromBuffers(const RootCacheShPtr& qrmGpuCache, const QueryDataLayoutShPtr& layoutPtr = nullptr);
 
+ private:
   // void _initVBOs(const std::map<GpuId, QueryVertexBufferShPtr>& vboMap);
 
   friend class QueryRendererContext;
 };
 
-class SqlQueryDataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableSQL {
+// class SqlQueryDataTable : public BaseQueryDataTableVBO {
+//  public:
+//   SqlQueryDataTable(const RootCacheShPtr& qrmGpuCache)
+//       : BaseQueryDataTableVBO(qrmGpuCache, QueryDataTableType::SQLQUERY) {}
+//   virtual ~SqlQueryDataTable() {}
+// };
+
+class SqlQueryDataTableJSON : public BaseQueryDataTableVBO, public BaseQueryDataTableSQLJSON {
  public:
-  SqlQueryDataTable(const RootCacheShPtr& qrmGpuCache,
-                    const std::string& tableName,
-                    const std::string& sqlQueryStr = "")
-      : BaseQueryDataTableVBO(qrmGpuCache, QueryDataTableType::SQLQUERY),
-        BaseQueryDataTableSQL(tableName, sqlQueryStr) {}
-  virtual ~SqlQueryDataTable() {}
+  SqlQueryDataTableJSON(const QueryRendererContextShPtr& ctx,
+                        const std::string& name,
+                        const rapidjson::Value& obj,
+                        const rapidjson::Pointer& objPath);
+  ~SqlQueryDataTableJSON() {}
 
   bool hasAttribute(const std::string& attrName) final;
   QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
@@ -108,36 +114,25 @@ class SqlQueryDataTable : public BaseQueryDataTableVBO, public BaseQueryDataTabl
   QueryDataType getAttributeType(const std::string& attrName) final;
 
   int numRows(const GpuId& gpuId) final;
+  bool hasLayoutOffsetChanged(const GpuId* gpuId = nullptr) const;
 
-  QueryDataLayoutShPtr getQueryDataLayout() const;
-
- protected:
-  std::string _printInfo(bool useClassSuffix = false) const {
-    std::string rtn = BaseQueryDataTableVBO::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
-
-    if (useClassSuffix) {
-      rtn = "SqlQueryDataTable(" + rtn + ")";
-    }
-
-    return rtn;
-  }
-};
-
-class SqlQueryDataTableJSON : public SqlQueryDataTable, public BaseQueryDataTableJSON {
- public:
-  SqlQueryDataTableJSON(const QueryRendererContextShPtr& ctx,
-                        const std::string& name,
-                        const rapidjson::Value& obj,
-                        const rapidjson::Pointer& objPath,
-                        const std::string& tableName = "",
-                        const std::string& sqlQueryStr = "");
-  ~SqlQueryDataTableJSON() {}
+  QueryDataLayoutShPtr getQueryDataLayout() const final;
 
   operator std::string() const final;
 
+ protected:
+  std::string _printInfo(bool useClassSuffix = false) const;
+
  private:
-  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
+  bool _justInitialized;
+  std::map<GpuId, std::pair<size_t, bool>> _currBufOffsetBytes;
+  bool _layoutOffsetChanged;
+
   void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+  void _runQueryAndInitResources(const RootCacheShPtr& qrmPerGpuDataPtr,
+                                 bool isInitializing,
+                                 const rapidjson::Value* dataObj = nullptr);
+  void _initGpuResources(const RootCacheShPtr& qrmPerGpuDataPtr) final;
 };
 
 struct TypelessColumnData {
@@ -320,6 +315,8 @@ class DataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableJSON {
   void _initBuffers(BaseQueryDataTableVBO::PerGpuData& perGpuData);
   std::pair<::Rendering::GL::Resources::GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>>
   _createVBOData();
+
+  void _initGpuResources(const RootCacheShPtr& qrmPerGpuDataPtr) final;
 };
 
 typedef std::unique_ptr<DataTable> DataTableUqPtr;

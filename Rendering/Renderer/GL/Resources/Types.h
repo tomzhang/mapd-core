@@ -37,6 +37,10 @@ class GLBaseBuffer;
 typedef std::weak_ptr<GLBaseBuffer> GLBaseBufferWkPtr;
 typedef std::shared_ptr<GLBaseBuffer> GLBaseBufferShPtr;
 
+class GLLayoutManagerBuffer;
+typedef std::weak_ptr<GLLayoutManagerBuffer> GLLayoutManagerBufferWkPtr;
+typedef std::shared_ptr<GLLayoutManagerBuffer> GLLayoutManagerBufferShPtr;
+
 class GLVertexBuffer;
 typedef std::weak_ptr<GLVertexBuffer> GLVertexBufferWkPtr;
 typedef std::shared_ptr<GLVertexBuffer> GLVertexBufferShPtr;
@@ -66,6 +70,7 @@ typedef std::weak_ptr<GLIndirectDrawIndexBuffer> GLIndirectDrawIndexBufferWkPtr;
 typedef std::shared_ptr<GLIndirectDrawIndexBuffer> GLIndirectDrawIndexBufferShPtr;
 
 class GLBaseBufferLayout;
+typedef std::weak_ptr<GLBaseBufferLayout> GLBufferLayoutWkPtr;
 typedef std::shared_ptr<GLBaseBufferLayout> GLBufferLayoutShPtr;
 
 class GLCustomBufferLayout;

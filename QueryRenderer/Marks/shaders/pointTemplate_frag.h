@@ -13,7 +13,9 @@ const std::string PointTemplate_Frag::source =
     "\n"
     "layout(location = 0) out vec4 color;\n"
     "layout(location = 1) out uint id;\n"
+    "layout(location = 2) out uint tableId;\n"
     "\n"
+    "uniform int uTableId;\n"
     "flat in uint fPrimitiveId;\n"
     "flat in vec4 fColor;\n"
     "flat in float fPointSize;\n"
@@ -41,6 +43,7 @@ const std::string PointTemplate_Frag::source =
     "        color = vec4(fragColor.xyz, fragColor.w*alpha);\n"
     "    }\n"
     "    id = fPrimitiveId;\n"
+    "    tableId = uTableId + 1;\n"
     "}\n";
 }  // namespace QueryRenderer
 

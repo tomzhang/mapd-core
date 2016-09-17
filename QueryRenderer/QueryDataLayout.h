@@ -42,6 +42,9 @@ struct QueryDataLayout {
   Rendering::GL::Resources::GLBufferLayoutShPtr convertToBufferLayout();
   Rendering::GL::Resources::GLShaderBlockLayoutShPtr convertToUniformBufferLayout();
 
+  bool hasBeenConverted() const { return _convertedLayout != nullptr; }
+  Rendering::GL::Resources::GLBufferLayoutShPtr getBufferLayout() const { return _convertedLayout; }
+
  private:
   static const std::string dummyPrefix;
 

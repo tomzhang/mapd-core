@@ -7,7 +7,7 @@ namespace QueryRenderer {
 
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLResourceManagerShPtr;
-using ::Rendering::GL::Resources::VboAttrToShaderAttrMap;
+using ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap;
 
 BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
     : _type(geomType),
@@ -163,9 +163,17 @@ void BaseMark::_updateShader(std::string& vertSrc, std::string& fragSrc) {
 }
 
 void BaseMark::_buildVertexArrayObjectFromProperties() {
-  if (!_propsDirty || !_perGpuData.size()) {
-    // early out
+  std::shared_ptr<SqlQueryDataTableJSON> dataPtr;
+  if (!_perGpuData.size()) {
     return;
+  } else if (!_propsDirty) {
+    if (!_dataPtr) {
+      return;
+    }
+    dataPtr = std::dynamic_pointer_cast<SqlQueryDataTableJSON>(_dataPtr);
+    if (!dataPtr || !dataPtr->hasLayoutOffsetChanged()) {
+      return;
+    }
   }
 
   _updateProps(_getUsedProps());
@@ -188,29 +196,32 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
-    if (itr.second.shaderPtr) {
+    bool deleteVao = true;
+    if (itr.second.shaderPtr &&
+        (!itr.second.vaoPtr || _propsDirty || !dataPtr || (deleteVao = dataPtr->hasLayoutOffsetChanged(&itr.first)))) {
       currRenderer->bindShader(itr.second.shaderPtr);
 
       // build property map for how vertex buffer attributes will
       // be bound to shader attributes
-      VboAttrToShaderAttrMap attrMap;
+      VboLayoutAttrToShaderAttrMap attrMap;
       ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
       _buildVAOData(itr.first, itr.second.shaderPtr.get(), attrMap, ibo);
 
       itr.second.vaoPtr = rsrcMgr->createVertexArray(attrMap, ibo);
-    } else {
+      deleteVao = false;
+    } else if (!itr.second.shaderPtr || deleteVao) {
       itr.second.vaoPtr = nullptr;
     }
 
-    if (itr.second.strokeShaderPtr) {
+    if (itr.second.strokeShaderPtr && (!itr.second.strokeVaoPtr || _propsDirty || !dataPtr || !deleteVao)) {
       currRenderer->bindShader(itr.second.strokeShaderPtr);
 
-      VboAttrToShaderAttrMap strokeAttrMap;
+      VboLayoutAttrToShaderAttrMap strokeAttrMap;
       ::Rendering::GL::Resources::GLIndexBufferShPtr strokeIbo;
       _buildVAOData(itr.first, itr.second.strokeShaderPtr.get(), strokeAttrMap, strokeIbo);
 
       itr.second.strokeVaoPtr = rsrcMgr->createVertexArray(strokeAttrMap, strokeIbo);
-    } else {
+    } else if (!itr.second.strokeShaderPtr || deleteVao) {
       itr.second.strokeVaoPtr = nullptr;
     }
   }
@@ -254,9 +265,14 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
     usedGpuIds.insert((*qrmItr)->gpuId);
     auto perGpuItr = _perGpuData.find((*qrmItr)->gpuId);
     if (perGpuItr == _perGpuData.end()) {
-      PerGpuData gpuData(*qrmItr);
+      auto rtn = _perGpuData.emplace(
+          std::piecewise_construct, std::forward_as_tuple((*qrmItr)->gpuId), std::forward_as_tuple(*qrmItr));
+      auto& gpuData = rtn.first->second;
       if (update) {
         auto beginItr = _perGpuData.begin();
+        if (beginItr == rtn.first) {
+          beginItr++;
+        }
         CHECK(beginItr != _perGpuData.end());
 
         beginItr->second.makeActiveOnCurrentThread();
@@ -293,7 +309,6 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
         // been updated.
         createdNewGpuRsrc = true;
       }
-      _perGpuData.emplace((*qrmItr)->gpuId, std::move(gpuData));
     }
     unusedGpus.erase((*qrmItr)->gpuId);
   } else {
@@ -305,9 +320,14 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
         qrmItr = qrmPerGpuDataPtr->find(gpuId);
         CHECK(qrmItr != qrmPerGpuDataPtr->end());
 
-        PerGpuData gpuData(*qrmItr);
+        auto rtn = _perGpuData.emplace(
+            std::piecewise_construct, std::forward_as_tuple((*qrmItr)->gpuId), std::forward_as_tuple(*qrmItr));
+        auto& gpuData = rtn.first->second;
         if (update) {
           auto beginItr = _perGpuData.begin();
+          if (beginItr == rtn.first) {
+            beginItr++;
+          }
           CHECK(beginItr != _perGpuData.end() && beginItr->second.shaderPtr);
 
           beginItr->second.makeActiveOnCurrentThread();
@@ -345,7 +365,6 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
           // been updated.
           createdNewGpuRsrc = true;
         }
-        _perGpuData.emplace((*qrmItr)->gpuId, std::move(gpuData));
       }
 
       unusedGpus.erase(gpuId);
@@ -381,7 +400,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
         if (itr.second.shaderPtr) {
           renderer->bindShader(itr.second.shaderPtr);
 
-          ::Rendering::GL::Resources::VboAttrToShaderAttrMap attrMap;
+          VboLayoutAttrToShaderAttrMap attrMap;
           ::Rendering::GL::Resources::GLIndexBufferShPtr ibo;
           _buildVAOData(itr.first, itr.second.shaderPtr.get(), attrMap, ibo);
 
@@ -391,7 +410,7 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
         }
 
         if (itr.second.strokeShaderPtr) {
-          VboAttrToShaderAttrMap strokeAttrMap;
+          VboLayoutAttrToShaderAttrMap strokeAttrMap;
           ::Rendering::GL::Resources::GLIndexBufferShPtr strokeIbo;
           _buildVAOData(itr.first, itr.second.strokeShaderPtr.get(), strokeAttrMap, strokeIbo);
 

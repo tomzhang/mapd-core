@@ -36,14 +36,16 @@ size_t BaseScale::convertNumAccumTexturesToNumAccumVals(size_t numAccumTxts, Acc
   return numAccumTxts * 2;
 }
 
-BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
+BaseScale::BaseScale(const rapidjson::Value& obj,
+                     const rapidjson::Pointer& objPath,
+                     const QueryRendererContextShPtr& ctx,
                      QueryDataType domainDataType,
                      QueryDataType rangeDataType,
                      const std::string& name,
                      ScaleType type,
                      bool allowsAccumulator,
                      uint8_t accumTypeMask)
-    : _name(name),
+    : JSONRefObject(RefType::SCALE, name, objPath),
       _type(type),
       _domainDataType(domainDataType),
       _domainTypeGL(nullptr),
@@ -65,18 +67,6 @@ BaseScale::BaseScale(const QueryRendererContextShPtr& ctx,
       _findMaxDensity(false),
       _findStdDev(false),
       _justBuilt(false) {
-}
-
-BaseScale::BaseScale(const rapidjson::Value& obj,
-                     const rapidjson::Pointer& objPath,
-                     const QueryRendererContextShPtr& ctx,
-                     QueryDataType domainDataType,
-                     QueryDataType rangeDataType,
-                     const std::string& name,
-                     ScaleType type,
-                     bool allowsAccumulator,
-                     uint8_t accumTypeMask)
-    : BaseScale(ctx, domainDataType, rangeDataType, name, type, allowsAccumulator, accumTypeMask) {
 }
 
 BaseScale::~BaseScale() {
@@ -177,7 +167,7 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   // do anything with the ids, or in other words GL_COLOR_ATTACHMENT1 of
   // the fbo, so disable it.
 
-  // TODO(croot): re-activate GL_COLOR_ATTACHMENT1 after we're all done?
+  // TODO(croot): re-activate GL_COLOR_ATTACHMENT1/2 after we're all done?
   // TODO(croot): improve this API:
   // 1) the enable/disableAttachment functions should maybe return true/false
   //    if the attachment was changed? But how would we deal with the multiple
@@ -186,6 +176,7 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   //    enables/disables the attachments provided?
   // 3) improve the activateEnabledAttachmentsForDrawing method name?
   fbo->disableAttachment(GL_COLOR_ATTACHMENT1);
+  fbo->disableAttachment(GL_COLOR_ATTACHMENT2);
   fbo->activateEnabledAttachmentsForDrawing();
 
   ::Rendering::GL::Resources::GLTexture2dShPtr extentTx;
@@ -581,7 +572,9 @@ void BaseScale::_initGpuResources(QueryRendererContext* ctx, bool initializing) 
     bufferLayout->addAttribute<float, 2>("pos");
 
     for (auto& itr : *qrmPerGpuDataPtr) {
-      PerGpuData gpuData(itr);
+      auto rtn =
+          _perGpuData.emplace(std::piecewise_construct, std::forward_as_tuple(itr->gpuId), std::forward_as_tuple(itr));
+      auto& gpuData = rtn.first->second;
 
       itr->makeActiveOnCurrentThread();
       renderer = itr->getGLRenderer();
@@ -595,8 +588,6 @@ void BaseScale::_initGpuResources(QueryRendererContext* ctx, bool initializing) 
 
       renderer->bindShader(gpuData.accumulator2ndPassShaderPtr);
       gpuData.vao = rsrcMgr->createVertexArray({{gpuData.rectvbo, {}}});
-
-      _perGpuData.emplace(itr->gpuId, std::move(gpuData));
     }
 
     ctx->addAccumulatorScale(_name);

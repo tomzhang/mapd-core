@@ -10,7 +10,10 @@ RenderAllocator::RenderAllocator(int8_t* preallocated_ptr,
                                  const size_t preallocated_size,
                                  const unsigned block_size_x,
                                  const unsigned grid_size_x)
-    : preallocated_ptr_(preallocated_ptr), preallocated_size_(preallocated_size), crt_allocated_bytes_(0) {
+    : preallocated_ptr_(preallocated_ptr),
+      preallocated_size_(preallocated_size),
+      crt_chunk_offset_bytes_(0),
+      crt_allocated_bytes_(0) {
 #ifdef HAVE_CUDA
   init_render_buffer_on_device(
       reinterpret_cast<int64_t*>(preallocated_ptr_), preallocated_size_ / 8, block_size_x, grid_size_x);
@@ -58,8 +61,22 @@ RenderAllocator* RenderAllocatorMap::operator[](size_t device_id) {
   return &render_allocator_map_[device_id];
 }
 
+void RenderAllocatorMap::setDataLayout(const std::shared_ptr<::QueryRenderer::QueryDataLayout>& query_data_layout) {
+#ifdef HAVE_RENDERING
+  for (size_t i = 0; i < render_allocator_map_.size(); ++i) {
+    render_manager_->setCudaBufferDataLayout(i,
+                                             render_allocator_map_[i].getCurrentChunkOffset(),
+                                             render_allocator_map_[i].getCurrentChunkSize(),
+                                             query_data_layout);
+    render_allocator_map_[i].markChunkComplete();
+  }
+#endif
+}
+
 void RenderAllocatorMap::prepForRendering(const std::shared_ptr<::QueryRenderer::QueryDataLayout>& query_data_layout) {
 #ifdef HAVE_RENDERING
+  // NOTE: the query_data_layout argument is deprecated
+  // TODO(croot): remove the query_data_layout when deprecation is complete
   for (size_t i = 0; i < render_allocator_map_.size(); ++i) {
     cuda_mgr_->setContext(i);
     render_manager_->setCudaHandleUsedBytes(i, render_allocator_map_[i].getAllocatedSize(), query_data_layout);

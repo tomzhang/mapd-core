@@ -14,6 +14,10 @@ using ::Rendering::Objects::ColorRGBA;
 using ::Rendering::GL::Resources::GLShader;
 using ::Rendering::GL::TypeGLShPtr;
 
+BaseRenderProperty::~BaseRenderProperty() {
+  _unsubscribeFromDataEvent();
+}
+
 void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
                                                const rapidjson::Pointer& objPath,
                                                const QueryDataTableShPtr& dataPtr) {
@@ -41,10 +45,21 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
                           RapidJSONUtils::getJsonParseErrorStr(
                               _ctx->getUserWidgetIds(), obj, "\"field\" property for mark must be a string."));
 
-        // TODO(croot): need to update references when a data
-        // ptr has changed, but the scale reference hasn't
-        // changed.
+        bool dataPtrChanged = dataPtr != _dataPtr;
+        if (dataPtrChanged) {
+          _unsubscribeFromDataEvent();
+        }
+
         initializeFromData(mitr->value.GetString(), dataPtr);
+
+        if (dataPtrChanged) {
+          // setup callbacks for data updates
+          auto dataJSONPtr = std::dynamic_pointer_cast<BaseQueryDataTableJSON>(dataPtr);
+          CHECK(dataJSONPtr);
+          auto cb =
+              std::bind(&BaseRenderProperty::_dataRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
+          _dataRefSubscriptionId = _ctx->subscribeToRefEvent(RefEventType::ALL, dataJSONPtr, cb);
+        }
       }
 
       _fieldJsonPath = objPath.Append(fieldProp.c_str(), fieldProp.length());
@@ -53,7 +68,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     } else if ((mitr = obj.FindMember(valueProp.c_str())) != obj.MemberEnd()) {
       // need to clear out the field path
       _fieldJsonPath = rapidjson::Pointer();
-      _dataPtr = nullptr;
+      _clearDataPtr();
       _vboAttrName = "";
 
       if (!_ctx->isJSONCacheUpToDate(_valueJsonPath, mitr->value)) {
@@ -108,7 +123,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     _fieldJsonPath = rapidjson::Pointer();
     _valueJsonPath = rapidjson::Pointer();
     _scaleJsonPath = rapidjson::Pointer();
-    _dataPtr = nullptr;
+    _clearDataPtr();
     _vboAttrName = "";
 
     _scaleConfigPtr = nullptr;
@@ -117,7 +132,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
   }
 }
 
-void BaseRenderProperty::initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr) {
+bool BaseRenderProperty::initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr) {
   RUNTIME_EX_ASSERT(dataPtr != nullptr,
                     std::string(*this) + ": Cannot initialize mark property " + _name +
                         " from data. A valid data reference hasn't been initialized.");
@@ -128,15 +143,19 @@ void BaseRenderProperty::initializeFromData(const std::string& attrName, const Q
   _initBuffers(_dataPtr->getAttributeDataBuffers(attrName));
   _vboInitType = VboInitType::FROM_DATAREF;
 
-  _prntMark->setPropsDirty();
+  auto changed = _initTypeFromBuffer();
+  if (changed) {
+    _prntMark->setPropsDirty();
+  }
 
-  _initTypeFromBuffer();
+  return changed;
 }
 
 int BaseRenderProperty::size(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   if (itr != _perGpuData.end()) {
-    return itr->second.vbo->numItems();
+    auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
+    return itr->second.vbo->numVertices(dataPtr ? dataPtr->getQueryDataLayout() : nullptr);
   }
   return 0;
 }
@@ -241,7 +260,7 @@ const ::Rendering::GL::TypeGLShPtr& BaseRenderProperty::getOutTypeGL() const {
 }
 
 void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,
-                                         ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const {
+                                         ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap& attrMap) const {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr->second.vbo != nullptr,
@@ -250,9 +269,11 @@ void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,
                         "vbo->shader attr map.");
 
   ::Rendering::GL::Resources::GLVertexBufferShPtr glVbo = itr->second.vbo->getGLVertexBufferPtr();
-  auto attrMapItr = attrMap.find(glVbo);
+  auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
+  auto pair = std::make_pair(glVbo, (dataPtr ? dataPtr->getGLBufferLayout() : nullptr));
+  auto attrMapItr = attrMap.find(pair);
   if (attrMapItr == attrMap.end()) {
-    attrMap.insert({glVbo, {{_vboAttrName, _name}}});
+    attrMap.insert({pair, {{_vboAttrName, _name}}});
   } else {
     attrMapItr->second.push_back({_vboAttrName, _name});
   }
@@ -267,7 +288,9 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
     if (_perGpuData.find(gpuId) == _perGpuData.end()) {
       auto qrmItr = qrmPerGpuData->find(gpuId);
       CHECK(qrmItr != qrmPerGpuData->end());
-      PerGpuData gpuData(*qrmItr);
+      auto rtn =
+          _perGpuData.emplace(std::piecewise_construct, std::forward_as_tuple(gpuId), std::forward_as_tuple(*qrmItr));
+      auto& gpuData = rtn.first->second;
       if (_dataPtr) {
         QueryBufferShPtr bufferPtr = _dataPtr->getAttributeDataBuffer(gpuId, _vboAttrName);
         switch (bufferPtr->getGLResourceType()) {
@@ -282,7 +305,6 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
           default:
             CHECK(false) << "Unsupported resource type " << bufferPtr->getGLResourceType() << " for render properties.";
         }
-        _perGpuData.emplace(gpuId, std::move(gpuData));
       }
     }
   }
@@ -364,6 +386,35 @@ void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferShPtr>& b
   }
 }
 
+void BaseRenderProperty::_dataRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) {
+  auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTable>(refObjPtr);
+  CHECK(dataPtr);
+  switch (refEventType) {
+    case RefEventType::UPDATE:
+      CHECK(dataPtr == _dataPtr);
+    // pass thru to the REPLACE code
+    case RefEventType::REPLACE:
+      CHECK(_vboAttrName.size());
+      if (initializeFromData(_vboAttrName, dataPtr)) {
+        _setShaderDirty();
+      }
+      break;
+    case RefEventType::REMOVE:
+      THROW_RUNTIME_EX(std::string(*this) + ": Error, data table " + refObjPtr->getName() +
+                       " has been removed but is still being referenced by this render property.")
+      break;
+    default:
+      THROW_RUNTIME_EX(std::string(*this) + ": Ref event type: " + std::to_string(static_cast<int>(refEventType)) +
+                       " isn't currently supported for data reference updates.");
+      break;
+  }
+}
+
+void BaseRenderProperty::_clearDataPtr() {
+  _unsubscribeFromDataEvent();
+  _dataPtr = nullptr;
+}
+
 void BaseRenderProperty::_setAccumulatorFromScale(const ScaleShPtr& scalePtr) {
   if (scalePtr && scalePtr->hasAccumulator()) {
     // TODO(croot): what if there are two accumulator scales in the
@@ -384,9 +435,17 @@ void BaseRenderProperty::_clearAccumulatorFromScale(const ScaleShPtr& scalePtr) 
   }
 }
 
-void BaseRenderProperty::_unsubscribeFromRefEvent(const ScaleShPtr& scalePtr) {
+void BaseRenderProperty::_unsubscribeFromScaleEvent(const ScaleShPtr& scalePtr) {
   if (scalePtr) {
-    _ctx->unsubscribeFromRefEvent(RefEventType::ALL, scalePtr, _scaleRefSubscriptionCB);
+    _ctx->unsubscribeFromRefEvent(RefEventType::ALL, scalePtr, _scaleRefSubscriptionId);
+  }
+}
+
+void BaseRenderProperty::_unsubscribeFromDataEvent() {
+  if (_dataPtr) {
+    auto dataJSONPtr = std::dynamic_pointer_cast<BaseQueryDataTableJSON>(_dataPtr);
+    CHECK(dataJSONPtr);
+    _ctx->unsubscribeFromRefEvent(RefEventType::ALL, dataJSONPtr, _dataRefSubscriptionId);
   }
 }
 

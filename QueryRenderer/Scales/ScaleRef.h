@@ -313,7 +313,7 @@ class ScaleRef : public BaseScaleRef {
     QueryDataTableVBOShPtr vboDataTable = std::dynamic_pointer_cast<BaseQueryDataTableVBO>(dataTable);
     CHECK(vboDataTable != nullptr);
 
-    SqlQueryDataTable* sqlDataTable = dynamic_cast<SqlQueryDataTable*>(vboDataTable.get());
+    SqlQueryDataTableJSON* sqlDataTable = dynamic_cast<SqlQueryDataTableJSON*>(vboDataTable.get());
 
     RUNTIME_EX_ASSERT(sqlDataTable != nullptr,
                       std::string(*this) + ": The data table referenced by render property \"" + _getRndrPropName() +

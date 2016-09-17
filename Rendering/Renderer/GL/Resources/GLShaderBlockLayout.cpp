@@ -126,9 +126,10 @@ std::string GLShaderBlockLayout::buildShaderBlockCode(const std::string& blockNa
 }
 
 void GLShaderBlockLayout::bindToShader(GLShader* activeShader,
-                                       int numActiveBufferItems,
+                                       const size_t usedBytes,
+                                       const size_t offsetBytes,
                                        const std::string& attr,
-                                       const std::string& shaderAttr) {
+                                       const std::string& shaderAttr) const {
   THROW_RUNTIME_EX(
       "A GLShaderBlockLayout cannot be bound to a shader. It is instead defined by a shader via a shader storage "
       "block.")

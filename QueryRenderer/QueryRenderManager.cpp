@@ -7,8 +7,13 @@
 #include <Rendering/Settings/RendererSettings.h>
 #include <Rendering/Renderer/GL/Types.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
+#include <QueryEngine/Execute.h>
+#include <Shared/measure.h>
+
 #include <unordered_map>
 #include <boost/lambda/lambda.hpp>
+
+#include "rapidjson/error/en.h"
 
 namespace QueryRenderer {
 
@@ -54,9 +59,9 @@ QueryRenderManager::ActiveRendererGuard::~ActiveRendererGuard() {
     renderer->makeInactive();
   }
 
-  if (qrm) {
-    qrm->_resetQueryResultBuffers();
-  }
+  // if (qrm) {
+  //   qrm->_resetQueryResultBuffers();
+  // }
 }
 
 QueryRenderManager::QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
@@ -223,59 +228,41 @@ void QueryRenderManager::_resetQueryResultBuffers() noexcept {
     itr->queryResultBufferPtr->reset();
   }
 
-  for (auto& cacheItr : _gpuCache->polyCacheMap) {
-    cacheItr.second.reset();
-  }
+  // for (auto& cacheItr : _gpuCache->polyCacheMap) {
+  //   cacheItr.second.reset();
+  // }
 }
 
-void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
+void QueryRenderManager::_setActiveUserWidgetInternal(int userId, int widgetId) {
   // purge any idle users
+  if (_activeItr == _rendererMap.end() || (userId != _activeItr->userId || widgetId != _activeItr->widgetId)) {
+    auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
-  {
-    std::lock_guard<std::mutex> render_lock(_renderMtx);
+    RUNTIME_EX_ASSERT(
+        itr != _rendererMap.end(),
+        "User id: " + std::to_string(userId) + ", Widget Id: " + std::to_string(widgetId) + " does not exist.");
 
-    if (_activeItr == _rendererMap.end() || (userId != _activeItr->userId || widgetId != _activeItr->widgetId)) {
-      auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
-
-      RUNTIME_EX_ASSERT(
-          itr != _rendererMap.end(),
-          "User id: " + std::to_string(userId) + ", Widget Id: " + std::to_string(widgetId) + " does not exist.");
-
-      _activeItr = itr;
-      LOG(INFO) << "Active render session [userId: " << _activeItr->userId << ", widgetId: " << _activeItr->widgetId
-                << "]";
-    }
-
-    _updateActiveLastRenderTime();
+    _activeItr = itr;
+    LOG(INFO) << "Active render session [userId: " << _activeItr->userId << ", widgetId: " << _activeItr->widgetId
+              << "]";
   }
+
+  _updateActiveLastRenderTime();
 
   _purgeUnusedWidgets();
 }
 
-void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPair) {
-  setActiveUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
-}
-
-bool QueryRenderManager::hasUser(int userId) const {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
+bool QueryRenderManager::_hasUserInternal(int userId) const {
   auto& userIdMap = _rendererMap.get<UserId>();
 
   return (userIdMap.find(userId) != userIdMap.end());
 }
 
-bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+bool QueryRenderManager::_hasUserWidgetInternal(int userId, int widgetId) const {
   return (_rendererMap.find(std::make_tuple(userId, widgetId)) != _rendererMap.end());
 }
 
-bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) const {
-  return hasUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
-}
-
-void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
+void QueryRenderManager::_addUserWidgetInternal(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
   RUNTIME_EX_ASSERT(_rendererMap.find(std::make_tuple(userId, widgetId)) == _rendererMap.end(),
                     "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
                         std::to_string(widgetId) + " already exists.");
@@ -313,12 +300,7 @@ void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest,
   _rendererMap.emplace(userId, widgetId, new QueryRenderer(userId, widgetId, _gpuCache, doHitTest, doDepthTest));
 }
 
-void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
-  addUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair), doHitTest, doDepthTest);
-}
-
-void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+void QueryRenderManager::_removeUserWidgetInternal(int userId, int widgetId) {
   auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
   RUNTIME_EX_ASSERT(itr != _rendererMap.end(),
@@ -334,14 +316,7 @@ void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
   }
 }
 
-void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
-  removeUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
-}
-
-// Removes all widgets/sessions for a particular user id.
-void QueryRenderManager::removeUser(int userId) {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
+void QueryRenderManager::_removeUserInternal(int userId) {
   auto& userIdMap = _rendererMap.get<UserId>();
 
   auto startEndItr = userIdMap.equal_range(userId);
@@ -357,14 +332,64 @@ void QueryRenderManager::removeUser(int userId) {
   userIdMap.erase(startEndItr.first, startEndItr.second);
 }
 
+void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
+  // DEPRECATED
+
+  // purge any idle users
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  return _setActiveUserWidgetInternal(userId, widgetId);
+}
+
+void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPair) {
+  // DEPRECATED
+  setActiveUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
+}
+
+bool QueryRenderManager::hasUser(int userId) const {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  return _hasUserInternal(userId);
+}
+
+bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  return _hasUserWidgetInternal(userId, widgetId);
+}
+
+bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) const {
+  return hasUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
+}
+
+void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  return _addUserWidgetInternal(userId, widgetId, doHitTest, doDepthTest);
+}
+
+void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest, bool doDepthTest) {
+  addUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair), doHitTest, doDepthTest);
+}
+
+void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  return _removeUserWidgetInternal(userId, widgetId);
+}
+
+void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) {
+  removeUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
+}
+
+// Removes all widgets/sessions for a particular user id.
+void QueryRenderManager::removeUser(int userId) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  return _removeUserInternal(userId);
+}
+
 void QueryRenderManager::_clearActiveUserWidget() {
   _activeItr = _rendererMap.end();
   LOG(INFO) << "Active render session [userId: -1, widgetId: -1] (unset)";
 }
 
 void QueryRenderManager::_purgeUnusedWidgets() {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
   std::chrono::milliseconds cutoffTime = getCurrentTimeMS() - maxWidgetIdleTime;
 
   // the currently active itr should not be a purgable
@@ -406,9 +431,11 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
                         std::to_string(inOrder.size()) + " gpus available.");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_bufferMtx);
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
+
+  inOrder[gpuIdx]->queryResultBufferPtr->reset();
   CudaHandle rtn = inOrder[gpuIdx]->queryResultBufferPtr->getCudaHandlePreQuery();
 
   return rtn;
@@ -417,23 +444,43 @@ CudaHandle QueryRenderManager::getCudaHandle(size_t gpuIdx) {
 #endif  // HAVE_CUDA
 }
 
+void QueryRenderManager::setCudaBufferDataLayout(size_t gpuIdx,
+                                                 size_t offsetBytes,
+                                                 size_t numUsedBytes,
+                                                 const QueryDataLayoutShPtr& vertLayoutPtr) {
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
+  RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
+                    "Cannot set cuda handle results for gpu index " + std::to_string(gpuIdx) + ". There are only " +
+                        std::to_string(inOrder.size()) + " gpus available.");
+
+  RUNTIME_EX_ASSERT(vertLayoutPtr, "A valid data layout is required");
+
+  // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
+  std::lock_guard<std::mutex> render_lock(_bufferMtx);
+
+  inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(vertLayoutPtr, numUsedBytes, offsetBytes);
+}
+
 void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx,
                                                 size_t numUsedBytes,
                                                 const QueryDataLayoutShPtr& vertLayoutPtr) {
 #ifdef HAVE_CUDA
+  // TODO(croot): deprecate the vertLayoutPtr argument
   RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
                     "Cannot set cuda handle results for gpu index " + std::to_string(gpuIdx) + ". There are only " +
                         std::to_string(inOrder.size()) + " gpus available.");
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_bufferMtx);
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
 
   if (vertLayoutPtr) {
-    inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(vertLayoutPtr);
+    inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(vertLayoutPtr, numUsedBytes);
+  } else if (!numUsedBytes) {
+    inOrder[gpuIdx]->queryResultBufferPtr->deleteAllQueryDataLayouts();
   }
 #else
   CHECK(false) << "Cuda is not activated. Cannot set cuda handle bytes.";
@@ -441,7 +488,7 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx,
 }
 
 int QueryRenderManager::getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
 
   RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
   RUNTIME_EX_ASSERT(gpuIdx < inOrder.size(),
@@ -455,6 +502,7 @@ int QueryRenderManager::getPolyDataBufferAlignmentBytes(const size_t gpuIdx) con
 }
 
 bool QueryRenderManager::hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const {
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
   auto itr = _gpuCache->polyCacheMap.find(polyTableName);
   if (itr == _gpuCache->polyCacheMap.end()) {
     return false;
@@ -465,6 +513,7 @@ bool QueryRenderManager::hasPolyTableCache(const std::string& polyTableName, con
 
 PolyTableDataInfo QueryRenderManager::getPolyTableCacheDataInfo(const std::string& polyTableName,
                                                                 const size_t gpuIdx) const {
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
   auto itr = _gpuCache->polyCacheMap.find(polyTableName);
   RUNTIME_EX_ASSERT(itr != _gpuCache->polyCacheMap.end(),
                     "Cannot get poly table cache info for poly table " + polyTableName + ". The cache does not exist.");
@@ -477,7 +526,7 @@ void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
                                               const PolyTableByteData& initTableData,
                                               const QueryDataLayoutShPtr& vertLayoutPtr) {
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
 
   ActiveRendererGuard activeRendererGuard;
 
@@ -485,9 +534,8 @@ void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
     auto itr = _gpuCache->polyCacheMap.find(polyTableName);
 
     if (itr == _gpuCache->polyCacheMap.end()) {
-      auto insertItr = _gpuCache->polyCacheMap.emplace(std::piecewise_construct,
-                                                       std::forward_as_tuple(polyTableName),
-                                                       std::forward_as_tuple(_gpuCache, polyTableName));
+      auto insertItr = _gpuCache->polyCacheMap.emplace(
+          std::piecewise_construct, std::forward_as_tuple(polyTableName), std::forward_as_tuple(_gpuCache));
       itr = insertItr.first;
     }
 
@@ -499,7 +547,7 @@ void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
 }
 
 void QueryRenderManager::deletePolyTableCache(const std::string& polyTableName) {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
 
   ActiveRendererGuard activeRendererGuard;
   _gpuCache->polyCacheMap.erase(polyTableName);
@@ -510,7 +558,7 @@ void QueryRenderManager::deletePolyTableCache(const std::string& polyTableName) 
 }
 
 void QueryRenderManager::deleteAllPolyTableCaches() {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
 
   ActiveRendererGuard activeRendererGuard;
   _gpuCache->polyCacheMap.clear();
@@ -523,7 +571,7 @@ PolyCudaHandles QueryRenderManager::getPolyTableCudaHandles(const std::string& p
                                                             const PolyTableByteData* initTableData) {
 #ifdef HAVE_CUDA
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
 
   auto itr = _gpuCache->polyCacheMap.find(polyTableName);
   RUNTIME_EX_ASSERT(
@@ -567,7 +615,7 @@ void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTable
 #ifdef HAVE_CUDA
 
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
 
   auto itr = _gpuCache->polyCacheMap.find(polyTableName);
   RUNTIME_EX_ASSERT(
@@ -586,40 +634,32 @@ void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTable
 #endif  // HAVE_CUDA
 }
 
+void QueryRenderManager::_configureRenderInternal(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr) {
+  _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
+}
+
+void QueryRenderManager::_configureRenderInternal(const std::string& jsonDocumentStr) {
+  _activeItr->renderer->setJSONConfig(jsonDocumentStr, false);
+}
+
 void QueryRenderManager::configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
-                                         const Executor* executor) {
+                                         Executor* executor) {
+  // DEPRECATED
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
                     "ConfigureRender: There is no active user/widget id. Must set a user/widget id active before "
                     "configuring the render.");
 
-  ActiveRendererGuard activeRendererGuard(nullptr, this);
+  ActiveRendererGuard activeRendererGuard;
 
   // need to update the data layout of the query result buffer before building up
   // from the json obj
   if (executor) {
     _activeItr->renderer->updateResultsPostQuery(executor);
   }
-  // else {
-  //   CHECK(_gpuCache->perGpuData->size());
 
-  //   _activeItr->renderer->activateGpus();
-  // }
-
-  _activeItr->renderer->setJSONDocument(jsonDocumentPtr, false);
-}
-
-void QueryRenderManager::setWidthHeight(int width, int height) {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
-  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
-                    "setWidthHeight: There is no active user/widget id. Must set an active user/widget id before "
-                    "setting width/height.");
-
-  ActiveRendererGuard activeRendererGuard;
-
-  _activeItr->renderer->setWidthHeight(width, height);
+  return _configureRenderInternal(jsonDocumentPtr);
 }
 
 size_t QueryRenderManager::getNumGpus() const {
@@ -635,26 +675,23 @@ std::vector<GpuId> QueryRenderManager::getAllGpuIds() const {
   return rtn;
 }
 
-void QueryRenderManager::render() {
-  std::lock_guard<std::mutex> render_lock(_renderMtx);
-
-  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
-                    "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
-
+void QueryRenderManager::_renderInternal() {
   ActiveRendererGuard activeRendererGuard;
 
   _activeItr->renderer->render();
   _updateActiveLastRenderTime();
 }
 
-PngData QueryRenderManager::renderToPng(int compressionLevel) {
+void QueryRenderManager::render() {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
-                    "There is no active user/widget id. Must set a user/widget id active before rendering.");
+                    "render(): There is no active user/widget id. Must set a user/widget id active before rendering.");
 
-  ActiveRendererGuard activeRendererGuard;
+  _renderInternal();
+}
 
+PngData QueryRenderManager::_renderToPngInternal(int compressionLevel) {
   PngData rtn = _activeItr->renderer->renderToPng(compressionLevel);
 
   _updateActiveLastRenderTime();
@@ -662,7 +699,68 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   return rtn;
 }
 
-int64_t QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {
+PngData QueryRenderManager::renderToPng(int compressionLevel) {
+  // DEPRECATED
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard(nullptr, this);
+
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
+                    "There is no active user/widget id. Must set a user/widget id active before rendering.");
+
+  return _renderToPngInternal(compressionLevel);
+}
+
+void QueryRenderManager::runRenderRequest(TRenderResult& _return,
+                                          int userId,
+                                          int widgetId,
+                                          const std::string& jsonStr,
+                                          Executor* executor,
+                                          RenderInfo* renderInfo,
+                                          QueryExecCB queryExecFunc,
+                                          int compressionLevel,
+                                          bool doHitTest,
+                                          bool doDepthTest) {
+  auto renderTimerPtr = std::make_shared<RenderQueryExecuteTimer>();
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard;
+
+  auto clock_begin = timer_start();
+  if (!_hasUserWidgetInternal(userId, widgetId)) {
+    _addUserWidgetInternal(userId, widgetId, doHitTest, doDepthTest);
+  }
+
+  _setActiveUserWidgetInternal(userId, widgetId);
+
+  _activeItr->renderer->setQueryExecutionParams(executor, queryExecFunc, renderTimerPtr);
+
+  _configureRenderInternal(jsonStr);
+
+  CHECK(renderInfo);
+
+  if (renderInfo->render_allocator_map_ptr) {
+    // unmap any used buffers from cuda back to opengl
+    renderInfo->render_allocator_map_ptr->prepForRendering(nullptr);
+  }
+
+  const auto pngdata = _renderToPngInternal(compressionLevel);
+
+  int64_t render_time_ms = timer_stop(clock_begin);
+
+  // Note: this time includes query queue time
+
+  // TODO(croot): perhasp the best way to measure this time is to return
+  // the time spent in the callback function and return that
+  // as part of the _configureRenderInternal func or something
+  // and subtract that from the total time here.
+  _return.execution_time_ms = renderTimerPtr->execution_time_ms;
+  _return.render_time_ms = render_time_ms - renderTimerPtr->execution_time_ms - renderTimerPtr->queue_time_ms;
+
+  _return.image = std::string(pngdata.pngDataPtr.get(), pngdata.pngSize);
+}
+
+std::pair<int32_t, int64_t> QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
   RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
@@ -670,14 +768,17 @@ int64_t QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {
                     "requesting pixel data.");
 
   ActiveRendererGuard activeRendererGuard;
-  int64_t id = _activeItr->renderer->getIdAt(x, y, pixelRadius);
+
+  decltype(TableIdRowIdPair::first) tableId;
+  decltype(TableIdRowIdPair::second) rowId;
+  std::tie(tableId, rowId) = _activeItr->renderer->getIdAt(x, y, pixelRadius);
   _updateActiveLastRenderTime();
 
   // ids go from 0 to numitems-1, but since we're storing
   // the ids as unsigned ints, and there isn't a way to specify the
   // clear value for secondary buffers, we need to account for that
   // offset here
-  return id - 1;
+  return std::make_pair(tableId - 1, rowId - 1);
 }
 
 }  // namespace QueryRenderer

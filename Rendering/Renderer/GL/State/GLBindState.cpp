@@ -196,7 +196,7 @@ void GLBindState::bindVertexArray(const Resources::GLVertexArrayShPtr& vaoRsrc) 
 
   if (bind) {
     if (vaoRsrc) {
-      vaoRsrc->validateRenderer(__FILE__, __LINE__, _prntRenderer);
+      vaoRsrc->validateUsability(__FILE__, __LINE__, _prntRenderer);
     }
 
     MAPD_CHECK_GL_ERROR(glBindVertexArray(vao));

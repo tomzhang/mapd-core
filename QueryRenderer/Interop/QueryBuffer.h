@@ -68,9 +68,14 @@ class QueryBuffer {
 
   virtual ~QueryBuffer();
 
-  size_t getNumUsedBytes() const { return _usedBytes; }
-  size_t numBytes() const { return (_bufRsrc ? _bufRsrc->numBytes() : 0); }
-  void reset() { _usedBytes = 0; }
+  virtual size_t getNumUsedBytes(const QueryDataLayoutShPtr& layoutPtr = nullptr) const {
+    RUNTIME_EX_ASSERT(!layoutPtr,
+                      "getNumUsedBytes() must take no arguments. Perhaps this function was meant to be overridden by a "
+                      "derived class");
+    return _usedBytes;
+  }
+  size_t getNumBytes() const { return (_bufRsrc ? _bufRsrc->getNumBytes() : 0); }
+  virtual void reset() { _usedBytes = 0; }
 
   BufType getType() const { return _type; }
   ::Rendering::GL::Resources::GLResourceType getGLResourceType() const {
@@ -80,11 +85,14 @@ class QueryBuffer {
 
   ::Rendering::GL::Resources::GLBaseBufferShPtr getGLBufferPtr() const { return _bufRsrc; }
 
-  virtual ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const {
+  virtual ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(
+      const std::string& attrName,
+      const QueryDataLayoutShPtr& layoutPtr = nullptr) const {
     THROW_RUNTIME_EX("QueryBuffer::getAttributeType() is undefined for " + std::to_string(static_cast<int>(getType())));
   }
 
-  virtual ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const {
+  virtual ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName,
+                                                          const QueryDataLayoutShPtr& layoutPtr = nullptr) const {
     THROW_RUNTIME_EX("QueryBuffer::getAttributeTypeGL() is undefined for " +
                      std::to_string(static_cast<int>(getType())));
   }
@@ -133,29 +141,45 @@ class QueryLayoutBuffer : public QueryBuffer {
 
   virtual ~QueryLayoutBuffer() {}
 
-  bool hasAttribute(const std::string& attrName) const {
-    CHECK(_bufRsrc);
-    return _getGLResource()->hasAttribute(attrName);
+  size_t getNumUsedBytes(const QueryDataLayoutShPtr& layoutPtr = nullptr) const final {
+    CHECK(_bufRsrc && (!layoutPtr || layoutPtr->hasBeenConverted()));
+    return _getGLResource()->getNumUsedBytes(layoutPtr ? layoutPtr->getBufferLayout() : nullptr);
+  }
+  size_t getLayoutOffsetBytes(const QueryDataLayoutShPtr& layoutPtr = nullptr) const {
+    CHECK(_bufRsrc && layoutPtr && layoutPtr->hasBeenConverted());
+    return _getGLResource()->getBufferLayoutData(layoutPtr->getBufferLayout()).second;
   }
 
-  size_t numItems() const {
-    CHECK(_bufRsrc);
-    return _getGLResource()->numItems();
+  void reset() final {
+    QueryBuffer::reset();
+    deleteAllQueryDataLayouts();
   }
 
-  ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(const std::string& attrName) const final {
-    CHECK(_bufRsrc);
-    return _getGLResource()->getAttributeType(attrName);
+  bool hasAttribute(const std::string& attrName, const QueryDataLayoutShPtr& layoutPtr = nullptr) const {
+    CHECK(_bufRsrc && (!layoutPtr || layoutPtr->hasBeenConverted()));
+    return _getGLResource()->hasAttribute(attrName, (layoutPtr ? layoutPtr->getBufferLayout() : nullptr));
   }
 
-  ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName) const final {
-    CHECK(_bufRsrc);
-    return _getGLResource()->getAttributeTypeGL(attrName);
+  // size_t numItems() const {
+  //   CHECK(_bufRsrc);
+  //   return _getGLResource()->numItems();
+  // }
+
+  ::Rendering::GL::Resources::GLBufferAttrType getAttributeType(
+      const std::string& attrName,
+      const QueryDataLayoutShPtr& layoutPtr = nullptr) const final {
+    CHECK(_bufRsrc && (!layoutPtr || layoutPtr->hasBeenConverted()));
+    return _getGLResource()->getAttributeType(attrName, (layoutPtr ? layoutPtr->getBufferLayout() : nullptr));
   }
 
-  void setBufferLayout(const std::shared_ptr<GLLayoutType>& bufferLayout) {
+  ::Rendering::GL::TypeGLShPtr getAttributeTypeGL(const std::string& attrName,
+                                                  const QueryDataLayoutShPtr& layoutPtr = nullptr) const final {
+    CHECK(_bufRsrc && (!layoutPtr || layoutPtr->hasBeenConverted()));
+    return _getGLResource()->getAttributeTypeGL(attrName, (layoutPtr ? layoutPtr->getBufferLayout() : nullptr));
+  }
+
+  void setBufferLayout(const std::shared_ptr<GLLayoutType>& bufferLayout, size_t usedBytes, size_t offsetBytes) {
     size_t bytesPerVertex = bufferLayout->getNumBytesPerItem();
-    size_t usedBytes = getNumUsedBytes();
     RUNTIME_EX_ASSERT(usedBytes % bytesPerVertex == 0,
                       "QueryLayoutBuffer " + std::to_string(_getGpuId()) + ": Buffer layout bytes-per-vertex " +
                           std::to_string(bytesPerVertex) +
@@ -163,31 +187,35 @@ class QueryLayoutBuffer : public QueryBuffer {
                           ".");
 
     CHECK(_bufRsrc);
-    _getGLResource()->setBufferLayout(bufferLayout, usedBytes / bytesPerVertex);
+    _getGLResource()->replaceBufferLayoutAtOffset(bufferLayout, usedBytes, offsetBytes);
   }
 
-  void bufferData(void* data, size_t numItems, size_t numBytesPerItem) {
+  void bufferData(void* data, const size_t numBytes, const std::shared_ptr<GLLayoutType>& layoutPtr) {
     CHECK(_bufRsrc);
-    _getGLResource()->bufferData(data, numItems, numBytesPerItem);
-    _setUsedBytes(numItems * numBytesPerItem);
+    _getGLResource()->bufferData(data, numBytes, layoutPtr);
+    _setUsedBytes(numBytes);
   }
 
   QueryDataLayoutShPtr getQueryDataLayout() const { return _queryDataLayoutPtr; }
 
-  void setQueryDataLayout(const QueryDataLayoutShPtr& queryDataLayoutPtr) {
+  void setQueryDataLayout(const QueryDataLayoutShPtr& queryDataLayoutPtr,
+                          size_t usedBytes = 0,
+                          size_t offsetBytes = 0) {
     CHECK(queryDataLayoutPtr && getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER);
     _queryDataLayoutPtr = queryDataLayoutPtr;
-    setBufferLayout(queryDataLayoutPtr->convertToBufferLayout());
+    setBufferLayout(queryDataLayoutPtr->convertToBufferLayout(), usedBytes, offsetBytes);
   }
+
+  void deleteAllQueryDataLayouts() { _getGLResource()->deleteAllBufferLayouts(); }
 
  protected:
   std::shared_ptr<GLBufferType> _getGLResource() const { return std::dynamic_pointer_cast<GLBufferType>(_bufRsrc); }
 
  private:
-  virtual void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-                                 Rendering::GL::Resources::BufferAccessType accessType,
-                                 Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                                 const std::shared_ptr<GLLayoutType>& layoutPtr) = 0;
+  // virtual void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
+  //                                Rendering::GL::Resources::BufferAccessType accessType,
+  //                                Rendering::GL::Resources::BufferAccessFreq accessFreq,
+  //                                const std::shared_ptr<GLLayoutType>& layoutPtr) = 0;
 
   QueryDataLayoutShPtr _queryDataLayoutPtr;
 };
@@ -198,7 +226,6 @@ class QueryVertexBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::G
 
   explicit QueryVertexBuffer(
       Rendering::GL::GLRenderer* renderer,
-      size_t numBytes,
       Rendering::GL::Resources::BufferAccessType accessType =
           Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
       Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::STATIC,
@@ -206,31 +233,40 @@ class QueryVertexBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::G
 
   explicit QueryVertexBuffer(
       Rendering::GL::GLRenderer* renderer,
-      const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+      size_t numBytes,
       Rendering::GL::Resources::BufferAccessType accessType =
           Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
       Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::STATIC,
       QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
 
+  // explicit QueryVertexBuffer(
+  //     Rendering::GL::GLRenderer* renderer,
+  //     const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+  //     Rendering::GL::Resources::BufferAccessType accessType =
+  //         Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+  //     Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::STATIC,
+  //     QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
   ~QueryVertexBuffer();
 
   ::Rendering::GL::Resources::GLVertexBufferShPtr getGLVertexBufferPtr() const { return _getGLResource(); }
 
-  int numVertices() const {
+  int numVertices(const QueryDataLayoutShPtr& layoutPtr = nullptr) const {
     auto rsrc = getGLVertexBufferPtr();
-    return (rsrc ? rsrc->numVertices() : 0);
+    CHECK(!layoutPtr || layoutPtr->hasBeenConverted());
+    return (rsrc ? rsrc->numVertices(layoutPtr ? layoutPtr->getBufferLayout() : nullptr) : 0);
   }
 
  private:
   void _initBuffer(Rendering::GL::GLRenderer* renderer,
                    Rendering::GL::Resources::BufferAccessType accessType,
                    Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                   size_t numBytes);
+                   size_t numBytes = 0);
 
-  void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-                         Rendering::GL::Resources::BufferAccessType accessType,
-                         Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                         const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) final;
+  // void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
+  //                        Rendering::GL::Resources::BufferAccessType accessType,
+  //                        Rendering::GL::Resources::BufferAccessFreq accessFreq,
+  //                        const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) final;
 };
 
 class QueryResultVertexBuffer : public QueryVertexBuffer {
@@ -321,19 +357,26 @@ class QueryUniformBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::
 
   explicit QueryUniformBuffer(
       Rendering::GL::GLRenderer* renderer,
+      Rendering::GL::Resources::BufferAccessType accessType =
+          Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+      Rendering::GL::Resources::BufferAccessFreq accessFreq = Rendering::GL::Resources::BufferAccessFreq::STATIC,
+      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+
+  explicit QueryUniformBuffer(
+      Rendering::GL::GLRenderer* renderer,
       size_t numBytes,
       ::Rendering::GL::Resources::BufferAccessType accessType =
           ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
       ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
       QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
 
-  explicit QueryUniformBuffer(
-      ::Rendering::GL::GLRenderer* renderer,
-      const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr,
-      ::Rendering::GL::Resources::BufferAccessType accessType =
-          ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
-      ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
-      QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
+  // explicit QueryUniformBuffer(
+  //     ::Rendering::GL::GLRenderer* renderer,
+  //     const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr,
+  //     ::Rendering::GL::Resources::BufferAccessType accessType =
+  //         ::Rendering::GL::Resources::BufferAccessType::READ_AND_WRITE,
+  //     ::Rendering::GL::Resources::BufferAccessFreq accessFreq = ::Rendering::GL::Resources::BufferAccessFreq::STATIC,
+  //     QueryBuffer::BufType type = QueryBuffer::BufType::QUERY_BUFFER);
 
   ~QueryUniformBuffer();
 
@@ -345,12 +388,12 @@ class QueryUniformBuffer : public QueryLayoutBuffer<::Rendering::GL::Resources::
   void _initBuffer(::Rendering::GL::GLRenderer* renderer,
                    ::Rendering::GL::Resources::BufferAccessType accessType,
                    ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                   size_t numBytes);
+                   size_t numBytes = 0);
 
-  void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-                         Rendering::GL::Resources::BufferAccessType accessType,
-                         Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                         const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr) final;
+  // void _initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
+  //                        Rendering::GL::Resources::BufferAccessType accessType,
+  //                        Rendering::GL::Resources::BufferAccessFreq accessFreq,
+  //                        const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr);
 };
 
 class QueryResultUniformBuffer : public QueryUniformBuffer {

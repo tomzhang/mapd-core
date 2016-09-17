@@ -18,22 +18,22 @@ class GLResource {
   virtual ~GLResource() {}
 
   GLResourceType getResourceType() const { return _rsrcType; }
+  UniqueResourceId getRsrcId() const;
   virtual GLuint getId() const = 0;
   virtual GLenum getTarget() const = 0;
 
   bool isUsable() const { return (!_rendererPtr.expired() && _usable); }
-  bool isUsableOnThread() const { return (isUsable() && _rendererPtr.lock()->isActiveOnCurrentThread()); }
-  Renderer* getRenderer() { return _rendererPtr.lock().get(); }
-  GLRenderer* getGLRenderer() { return dynamic_cast<GLRenderer*>(_rendererPtr.lock().get()); }
+  bool isUsableOnThread() const {
+    return (isUsable() && !_rendererPtr.expired() && _rendererPtr.lock()->isActiveOnCurrentThread());
+  }
+  const Renderer* getRenderer() const;
+  Renderer* getRenderer();
+  GLRenderer* getGLRenderer();
+  GLRendererShPtr getGLRendererShPtr();
+  GLResourceManagerShPtr getGLResourceManager();
 
  protected:
-  GLResource(const RendererWkPtr& rendererPtr, GLResourceType rsrcType)
-      : _rendererPtr(), _usable(false), _rsrcType(rsrcType) {
-    CHECK(!rendererPtr.expired());
-    GLRenderer* renderer = dynamic_cast<GLRenderer*>(rendererPtr.lock().get());
-    CHECK(renderer != nullptr);
-    _rendererPtr = rendererPtr;
-  }
+  GLResource(const RendererWkPtr& rendererPtr, GLResourceType rsrcType);
 
   RendererWkPtr _rendererPtr;
 
@@ -43,65 +43,20 @@ class GLResource {
   void validateRenderer(const char* filename,
                         int lineno,
                         GLRenderer* renderer = nullptr,
-                        bool checkThread = true) const {
-    GLRenderer* currRenderer = renderer;
-
-    RUNTIME_EX_ASSERT(!_rendererPtr.expired(),
-                      std::string(filename) + ":" + std::to_string(lineno) + " The renderer for a resource of type " +
-                          to_string(getResourceType()) + " has been removed. Cannot use resource.");
-
-    // TODO(croot): check that the renderer is a valid renderer for this resource.
-    // That means the renderer is the ownere of this resource or is a renderer
-    // this resource is shared with.
-    if (!currRenderer) {
-      currRenderer = dynamic_cast<GLRenderer*>(_rendererPtr.lock().get());
-    }
-    CHECK(currRenderer);
-
-    if (checkThread && !currRenderer->isActiveOnCurrentThread()) {
-      Window* window = currRenderer->getPrimaryWindow();
-      GLRenderer* currentRenderer = GLRenderer::getCurrentThreadRenderer();
-      Window* currentWindow = GLRenderer::getCurrentThreadWindow();
-
-      std::stringstream ss;
-
-      ss << filename << ":" << lineno << " The renderer for the resource of type " << getResourceType()
-         << " hasn't been properly activated on the current thread - threadId: " << std::this_thread::get_id()
-         << " Cannot use resource. Renderer : " << std::hex << currRenderer << " - gpuId : " << currRenderer->getGpuId()
-         << ", window: " << std::hex << window << " - name: " << window->getName()
-         << ". Current active renderer: " << std::hex << currentRenderer
-         << " - gpuId: " << (currentRenderer ? currentRenderer->getGpuId() : -1) << ", active window: " << std::hex
-         << currentWindow << " - name: " << (currentWindow ? currentWindow->getName() : "undefined");
-
-      THROW_RUNTIME_EX(ss.str());
-    }
-  }
+                        bool checkThread = true) const;
 
   void validateUsability(const char* filename,
                          int lineno,
                          GLRenderer* renderer = nullptr,
-                         bool checkThread = true) const {
-    validateRenderer(filename, lineno, renderer, checkThread);
-    RUNTIME_EX_ASSERT(_usable == true,
-                      std::string(filename) + ":" + std::to_string(lineno) + " The resource of type " +
-                          to_string(getResourceType()) +
-                          "hasn't been properly setup. Cannot use resource. This could be a result of the "
-                          "resource being uninitialized, an error occurred during initialization, or the resource was "
-                          "cleaned up by an outside source.");
-  }
+                         bool checkThread = true) const;
 
-  void cleanupResource() {
-    if (isUsableOnThread()) {
-      _cleanupResource();
-    } else if (isUsable()) {
-      // TODO(croot): do we automatically put the context on the current thread
-      // to do a proper cleanup?
-      THROW_RUNTIME_EX("Trying to clean up resource, but render context isn't activated on the current thread.");
-    } else {
-      _makeEmpty();
-    }
+  void cleanupResource();
 
-    setUnusable();
+  const GLResourceShPtr getSharedResourceFromPtr(const GLResource* rsrc);
+
+  template <typename GLResourceType>
+  const std::shared_ptr<GLResourceType> getSharedResourceFromTypePtr(const GLResourceType* rsrc) {
+    return std::dynamic_pointer_cast<GLResourceType>(getSharedResourceFromPtr(rsrc));
   }
 
  private:
@@ -120,6 +75,7 @@ class GLResource {
 
   bool _usable;
   GLResourceType _rsrcType;
+  ResourceId _rsrcId;
 
   friend class ::Rendering::GL::State::GLBindState;
   friend class ::Rendering::GL::GLResourceManager;

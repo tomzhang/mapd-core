@@ -36,6 +36,13 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
     QueryIndirectIboShPtr indibo;
 
     PerGpuData() : BasePerGpuData(), vbo(nullptr), ibo(nullptr), ubo(nullptr), indvbo(nullptr), indibo(nullptr) {}
+    explicit PerGpuData(const RootPerGpuDataShPtr& rootData,
+                        const QueryVertexBufferShPtr& vbo = nullptr,
+                        const QueryIndexBufferShPtr& ibo = nullptr,
+                        const QueryUniformBufferShPtr& ubo = nullptr,
+                        const QueryIndirectVboShPtr& indvbo = nullptr,
+                        const QueryIndirectIboShPtr& indibo = nullptr)
+        : BasePerGpuData(rootData), vbo(vbo), ibo(ibo), ubo(ubo), indvbo(indvbo), indibo(indibo) {}
     explicit PerGpuData(const BasePerGpuData& data,
                         const QueryVertexBufferShPtr& vbo = nullptr,
                         const QueryIndexBufferShPtr& ibo = nullptr,
@@ -69,15 +76,12 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   friend class QueryRendererContext;
 };
 
-class SqlQueryPolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDataTableSQL {
+class SqlQueryPolyDataTableCache : public BaseQueryPolyDataTable {
  public:
-  SqlQueryPolyDataTable(const RootCacheShPtr& qrmGpuCache,
-                        const std::string& tableName,
-                        const std::string& sqlQueryStr = "")
-      : BaseQueryPolyDataTable(qrmGpuCache, QueryDataTableType::SQLQUERY),
-        BaseQueryDataTableSQL(tableName, sqlQueryStr),
-        _qrmGpuCache(qrmGpuCache) {}
-  virtual ~SqlQueryPolyDataTable() {}
+  SqlQueryPolyDataTableCache(const RootCacheShPtr& qrmGpuCache)
+      : BaseQueryPolyDataTable(qrmGpuCache, QueryDataTableType::SQLQUERY), _qrmGpuCache(qrmGpuCache) {}
+
+  virtual ~SqlQueryPolyDataTableCache() {}
 
   bool hasAttribute(const std::string& attrName) final;
   QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
@@ -88,24 +92,25 @@ class SqlQueryPolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDat
 
  protected:
   std::string _printInfo(bool useClassSuffix = false) const {
-    std::string rtn = BaseQueryPolyDataTable::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
+    std::string rtn = BaseQueryPolyDataTable::_printInfo();
 
     if (useClassSuffix) {
-      rtn = "SqlQueryPolyDataTable(" + rtn + ")";
+      rtn = "SqlQueryPolyDataTableCache(" + rtn + ")";
     }
 
     return rtn;
   }
 
-  virtual void _initGpuResources(const RootCacheShPtr& qrmGpuCache);
-
  private:
   std::weak_ptr<RootCache> _qrmGpuCache;
+
+  virtual void _initGpuResources(const RootCacheShPtr& qrmGpuCache);
 
   void allocBuffers(const GpuId& gpuId,
                     const PolyTableByteData& initData,
                     const QueryDataLayoutShPtr& vertLayoutPtr = nullptr,
                     const QueryDataLayoutShPtr& uniformLayoutPtr = nullptr);
+
   void reset();
 
 #ifdef HAVE_CUDA
@@ -119,22 +124,31 @@ class SqlQueryPolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDat
   friend class QueryRenderManager;
 };
 
-class SqlQueryPolyDataTableJSON : public SqlQueryPolyDataTable, public BaseQueryDataTableJSON {
+class SqlQueryPolyDataTableJSON : public SqlQueryPolyDataTableCache, public BaseQueryDataTableSQLJSON {
  public:
   SqlQueryPolyDataTableJSON(const QueryRendererContextShPtr& ctx,
                             const std::string& name,
                             const rapidjson::Value& obj,
-                            const rapidjson::Pointer& objPath,
-                            const std::string& tableName = "",
-                            const std::string& sqlQueryStr = "");
+                            const rapidjson::Pointer& objPath);
   ~SqlQueryPolyDataTableJSON() {}
 
   operator std::string() const final;
 
  private:
-  void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
-  void _initFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool forceUpdate = false);
+  bool _justInitialized;
+  std::string _polysKey;
+  std::string _factsKey;
+  std::string _aggExpr;
+  std::string _filterExpr;
+  std::string _factsTableName;
+
+  std::string _printInfo(bool useClassSuffix = false) const;
+
   void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+  void _runQueryAndInitResources(const RootCacheShPtr& qrmPerGpuDataPtr,
+                                 bool isInitializing,
+                                 const rapidjson::Value* dataObj = nullptr);
+  void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
 };
 
 // TODO(croot): create a base class for basic data tables (i.e. DataTable/PolyDataTable)

@@ -3,6 +3,8 @@
 #include "../QueryRendererContext.h"
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
 
+#include <QueryEngine/Execute.h>
+
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 
@@ -75,9 +77,10 @@ std::string BaseQueryDataTableVBO::_printInfo() const {
   return BaseQueryDataTable::_printInfo() + ", usedGpus: [" + oss.str() + "]";
 }
 
-void BaseQueryDataTableVBO::_initGpuResources(const RootCacheShPtr& qrmGpuCache) {
+void BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(const RootCacheShPtr& qrmGpuCache,
+                                                         const QueryDataLayoutShPtr& layoutPtr) {
   // TODO(croot): collapse this function into a parent class as it is nearly identical
-  // to BaseQueryPolyDataTable::_initGpuResources()
+  // to BaseQueryPolyDataTable::_initGpuResourcesFromBuffers()
 
   std::vector<GpuId> unusedGpus;
   switch (getType()) {
@@ -86,8 +89,8 @@ void BaseQueryDataTableVBO::_initGpuResources(const RootCacheShPtr& qrmGpuCache)
       // forcing these tables to always be on the first gpu
       auto itr = qrmGpuCache->perGpuData->begin();
       if (_perGpuData.find((*itr)->gpuId) == _perGpuData.end()) {
-        PerGpuData gpuData((*itr));
-        _perGpuData.emplace((*itr)->gpuId, std::move(gpuData));
+        _perGpuData.emplace(
+            std::piecewise_construct, std::forward_as_tuple((*itr)->gpuId), std::forward_as_tuple(*itr));
       }
 
       for (++itr; itr != qrmGpuCache->perGpuData->end(); ++itr) {
@@ -97,11 +100,11 @@ void BaseQueryDataTableVBO::_initGpuResources(const RootCacheShPtr& qrmGpuCache)
     } break;
     case QueryDataTableType::SQLQUERY: {
       for (const auto& item : *(qrmGpuCache->perGpuData)) {
-        if (item->queryResultBufferPtr->getNumUsedBytes() > 0) {
+        if (item->queryResultBufferPtr->getNumUsedBytes(layoutPtr) > 0) {
           if (_perGpuData.find(item->gpuId) == _perGpuData.end()) {
-            PerGpuData gpuData(item);
-            gpuData.vbo = item->queryResultBufferPtr;
-            _perGpuData.emplace(item->gpuId, std::move(gpuData));
+            auto rtn = _perGpuData.emplace(
+                std::piecewise_construct, std::forward_as_tuple(item->gpuId), std::forward_as_tuple(item));
+            rtn.first->second.vbo = item->queryResultBufferPtr;
           }
         } else {
           unusedGpus.push_back(item->gpuId);
@@ -130,7 +133,18 @@ void BaseQueryDataTableVBO::_initGpuResources(const RootCacheShPtr& qrmGpuCache)
 //   }
 // }
 
-bool SqlQueryDataTable::hasAttribute(const std::string& attrName) {
+SqlQueryDataTableJSON::SqlQueryDataTableJSON(const QueryRendererContextShPtr& ctx,
+                                             const std::string& name,
+                                             const rapidjson::Value& obj,
+                                             const rapidjson::Pointer& objPath)
+    : BaseQueryDataTableVBO(ctx->getRootGpuCache(), QueryDataTableType::SQLQUERY),
+      BaseQueryDataTableSQLJSON(ctx, name, obj, objPath, false),
+      _justInitialized(false),
+      _layoutOffsetChanged(false) {
+  _updateFromJSONObj(obj, objPath);
+}
+
+bool SqlQueryDataTableJSON::hasAttribute(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
@@ -139,7 +153,7 @@ bool SqlQueryDataTable::hasAttribute(const std::string& attrName) {
   return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName) : false);
 }
 
-QueryBufferShPtr SqlQueryDataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
@@ -149,12 +163,13 @@ QueryBufferShPtr SqlQueryDataTable::getAttributeDataBuffer(const GpuId& gpuId, c
                     "Cannot get the data buffer for " + attrName + " in table " + getTableName() +
                         ". The table's vbo has not been initialized yet.");
 
-  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName),
+  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName, getQueryDataLayout()),
                     _printInfo(true) + ": attribute \"" + attrName + "\" does not exist in VBO.");
+
   return itr->second.vbo;
 }
 
-std::map<GpuId, QueryBufferShPtr> SqlQueryDataTable::getAttributeDataBuffers(const std::string& attrName) {
+std::map<GpuId, QueryBufferShPtr> SqlQueryDataTableJSON::getAttributeDataBuffers(const std::string& attrName) {
   std::map<GpuId, QueryBufferShPtr> rtn;
 
   for (auto& itr : _perGpuData) {
@@ -164,7 +179,7 @@ std::map<GpuId, QueryBufferShPtr> SqlQueryDataTable::getAttributeDataBuffers(con
   return rtn;
 }
 
-QueryDataType SqlQueryDataTable::getAttributeType(const std::string& attrName) {
+QueryDataType SqlQueryDataTableJSON::getAttributeType(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
   CHECK(itr != _perGpuData.end());
@@ -191,17 +206,37 @@ QueryDataType SqlQueryDataTable::getAttributeType(const std::string& attrName) {
   }
 }
 
-int SqlQueryDataTable::numRows(const GpuId& gpuId) {
+int SqlQueryDataTableJSON::numRows(const GpuId& gpuId) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(
       itr != _perGpuData.end(),
       _printInfo(true) + ": Cannot find number of rows for column data VBO on gpu " + std::to_string(gpuId));
 
-  return itr->second.vbo->numItems();
+  return itr->second.vbo->numVertices();
 }
 
-QueryDataLayoutShPtr SqlQueryDataTable::getQueryDataLayout() const {
+bool SqlQueryDataTableJSON::hasLayoutOffsetChanged(const GpuId* gpuId) const {
+  if (!gpuId) {
+    return _layoutOffsetChanged;
+  }
+
+  auto itr = _currBufOffsetBytes.find(*gpuId);
+  if (itr == _currBufOffsetBytes.end()) {
+    // TODO(croot): throw a error?
+    return false;
+  }
+
+  return itr->second.second;
+}
+
+QueryDataLayoutShPtr SqlQueryDataTableJSON::getQueryDataLayout() const {
+  auto rtn = BaseQueryDataTableSQLJSON::getQueryDataLayout();
+  if (rtn) {
+    return rtn;
+  }
+
+  // keeping the following for backwards compatibility
   RUNTIME_EX_ASSERT(!_perGpuData.empty(),
                     _printInfo(true) + ": Cannot get query data layout. The data has no buffers defined.");
 
@@ -217,56 +252,78 @@ QueryDataLayoutShPtr SqlQueryDataTable::getQueryDataLayout() const {
   return resultBuffer->getQueryDataLayout();
 }
 
-SqlQueryDataTableJSON::SqlQueryDataTableJSON(const QueryRendererContextShPtr& ctx,
-                                             const std::string& name,
-                                             const rapidjson::Value& obj,
-                                             const rapidjson::Pointer& objPath,
-                                             const std::string& tableName,
-                                             const std::string& sqlQueryStr)
-    : SqlQueryDataTable(ctx->getRootGpuCache(), tableName, sqlQueryStr),
-      BaseQueryDataTableJSON(ctx, name, obj, objPath) {
-  _initFromJSONObj(obj, objPath);
-}
-
 SqlQueryDataTableJSON::operator std::string() const {
-  return "SqlQueryDataTableJSON(" + SqlQueryDataTable::_printInfo() + ") " + BaseQueryDataTableJSON::_printInfo();
+  return _printInfo();
 }
 
-void SqlQueryDataTableJSON::_initFromJSONObj(const rapidjson::Value& obj,
-                                             const rapidjson::Pointer& objPath,
-                                             bool forceUpdate) {
-  // TODO(croot): find a way to collapse this into a base class or a utility
-  // function as it is the same as SqlQueryPolyDataTableJSON::_initFromJSONObj
-  rapidjson::Value::ConstMemberIterator itr;
-  if (forceUpdate || !_sqlQueryStr.length()) {
-    RUNTIME_EX_ASSERT(
-        (itr = obj.FindMember("sql")) != obj.MemberEnd() && itr->value.IsString(),
-        RapidJSONUtils::getJsonParseErrorStr(
-            obj, "SQL data object \"" + _name + "\" must contain an \"sql\" property and it must be a string"));
+std::string SqlQueryDataTableJSON::_printInfo(bool useClassSuffix) const {
+  std::string rtn = BaseQueryDataTableVBO::_printInfo() + ", " + BaseQueryDataTableSQLJSON::_printInfo();
 
-    _sqlQueryStr = itr->value.GetString();
+  if (useClassSuffix) {
+    rtn = "SqlQueryDataTableJSON(" + rtn + ")";
   }
 
-  // TODO(croot) -- should we validate the sql?
-
-  // TODO(croot) - for backwards compatibility, the dbTableName doesn't have to be present
-  // but should it be required? Or can we somehow extract it from the sql?
-  if ((forceUpdate || !_tableName.length()) && (itr = obj.FindMember("dbTableName")) != obj.MemberEnd()) {
-    RUNTIME_EX_ASSERT(itr->value.IsString(),
-                      RapidJSONUtils::getJsonParseErrorStr(
-                          itr->value, "SQL data object \"" + _name + "\" \"dbTableName\" property must be a string"));
-
-    _tableName = itr->value.GetString();
-  }
-
-  _jsonPath = objPath;
+  return rtn;
 }
 
 void SqlQueryDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  // TODO(croot): find a way to collapse this into a base class or a utility
-  // function as it is the same as SqlQueryPolyDataTableJSON::_updateFromJSONObj
-  // force an initialization
-  _initFromJSONObj(obj, objPath, true);
+  auto currSql = _sqlQueryStr;
+  BaseQueryDataTableSQLJSON::_updateFromJSONObj(obj, objPath);
+
+  if (currSql != _sqlQueryStr) {
+    // sql changed, re-run the query
+    _runQueryAndInitResources(_ctx->getRootGpuCache(), true, &obj);
+  }
+}
+
+void SqlQueryDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmPerGpuDataPtr,
+                                                      bool isInitializing,
+                                                      const rapidjson::Value* dataObj) {
+  if (!_justInitialized) {
+    // first run the sql query, then initialize resources
+    if (!_executeQuery(dataObj)) {
+      _currBufOffsetBytes.clear();
+    }
+
+    auto layout = _queryDataLayoutPtr;
+
+    // now initialize resources
+    BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr, layout);
+
+    if (!layout && _perGpuData.size()) {
+      layout = getQueryDataLayout();
+    }
+
+    size_t offset;
+    for (auto itr = _currBufOffsetBytes.begin(); itr != _currBufOffsetBytes.end();) {
+      if (_perGpuData.find(itr->first) == _perGpuData.end()) {
+        itr = _currBufOffsetBytes.erase(itr);
+      } else {
+        itr++;
+      }
+    }
+
+    _layoutOffsetChanged = false;
+    std::for_each(_perGpuData.begin(), _perGpuData.end(), [&](const auto& pitr) {
+      offset = pitr.second.vbo->getLayoutOffsetBytes(layout);
+      auto itr = _currBufOffsetBytes.find(pitr.first);
+      if (itr == _currBufOffsetBytes.end()) {
+        _currBufOffsetBytes.emplace(pitr.first, std::make_pair(offset, false));
+      } else {
+        if (itr->second.first != offset) {
+          _layoutOffsetChanged = true;
+          itr->second.first = offset;
+          itr->second.second = true;
+        }
+      }
+    });
+  }
+
+  _justInitialized = isInitializing;
+}
+
+void SqlQueryDataTableJSON::_initGpuResources(const RootCacheShPtr& qrmPerGpuDataPtr) {
+  _runQueryAndInitResources(qrmPerGpuDataPtr, false);
 }
 
 const std::string DataTable::defaultIdColumnName = "rowid";
@@ -319,6 +376,7 @@ DataTable::DataTable(const QueryRendererContextShPtr& ctx,
       BaseQueryDataTableJSON(ctx, name, obj, objPath),
       _vboType(vboType),
       _numRows(0) {
+  _initGpuResources(ctx->getRootGpuCache());
   _buildColumnsFromJSONObj(obj, objPath, buildIdColumn);
 }
 
@@ -508,8 +566,8 @@ void DataTable::_initBuffers(BaseQueryDataTableVBO::PerGpuData& perGpuData) {
 
     std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData = _createVBOData();
 
-    perGpuData.vbo.reset(new QueryVertexBuffer(renderer, vboData.first));
-    perGpuData.vbo->bufferData(vboData.second.first.get(), _numRows, vboData.second.second);
+    perGpuData.vbo.reset(new QueryVertexBuffer(renderer));
+    perGpuData.vbo->bufferData(vboData.second.first.get(), _numRows * vboData.second.second, vboData.first);
   }
 }
 
@@ -646,6 +704,10 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
   }
 
   return std::make_pair(nullptr, std::make_pair(nullptr, 0));
+}
+
+void DataTable::_initGpuResources(const RootCacheShPtr& qrmPerGpuDataPtr) {
+  BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr);
 }
 
 QueryBufferShPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {

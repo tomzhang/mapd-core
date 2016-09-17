@@ -875,11 +875,7 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
   // subroutines, atomic counters, etc.
   // See: https://www.opengl.org/wiki/Program_Introspection
 
-  GLRenderer* renderer = getGLRenderer();
-  CHECK(renderer);
-
-  GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
-  GLShaderShPtr myRsrc = std::dynamic_pointer_cast<GLShader>(rsrcMgr->getResourcePtr(this));
+  auto myRsrc = getSharedResourceFromTypePtr(this);
   CHECK(myRsrc && myRsrc.get() == this);
 
   // setup the uniform attributes
@@ -1376,13 +1372,17 @@ bool GLShader::hasUniformBlockAttribute(const std::string& attrName) {
   return false;
 }
 
-void GLShader::bindUniformBufferToBlock(const std::string& blockName, const GLUniformBufferShPtr& ubo, int idx) {
+void GLShader::bindUniformBufferToBlock(const std::string& blockName,
+                                        const GLUniformBufferShPtr& ubo,
+                                        int idx,
+                                        const GLShaderBlockLayoutShPtr& layoutPtr) {
   UniformBlockAttrInfo* blockAttr = _validateBlockAttr(blockName, ubo, idx);
   if (idx < 0) {
     blockAttr->bindBuffer(ubo->getId());
   } else {
-    size_t numBytes = ubo->getNumBytesPerItem();
-    blockAttr->bindBuffer(ubo->getId(), idx * numBytes, numBytes);
+    size_t numBytes = ubo->getNumBytesPerItem(layoutPtr);
+    size_t offset = (layoutPtr ? ubo->getBufferLayoutData(layoutPtr).second : 0);
+    blockAttr->bindBuffer(ubo->getId(), offset + idx * numBytes, numBytes);
   }
 }
 

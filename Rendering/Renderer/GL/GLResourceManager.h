@@ -10,6 +10,7 @@
 #include "Resources/GLTexture2dArray.h"
 #include "Resources/GLFramebuffer.h"
 #include "Resources/GLVertexBuffer.h"
+#include "Resources/GLVertexArray.h"
 #include "Resources/GLPixelBuffer2d.h"
 #include "Resources/GLUniformBuffer.h"
 #include "Resources/GLIndexBuffer.h"
@@ -111,10 +112,6 @@ class GLResourceManager {
       size_t numBytes,
       Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
-  Resources::GLVertexBufferShPtr createVertexBuffer(
-      const Resources::GLBufferLayoutShPtr& layoutPtr,
-      Resources::BufferAccessType accessType = Resources::BufferAccessType::READ_AND_WRITE,
-      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::STATIC);
 
   template <typename T>
   Resources::GLVertexBufferShPtr createVertexBuffer(
@@ -125,9 +122,14 @@ class GLResourceManager {
     CHECK(!_prntRenderer.expired());
 
     // TODO(croot): make thread safe?
-    Resources::GLVertexBufferShPtr rtn(
-        new Resources::GLVertexBuffer(_prntRenderer, data, layoutPtr, accessType, accessFreq));
+    Resources::GLVertexBufferShPtr rtn(new Resources::GLVertexBuffer(_prntRenderer, accessType, accessFreq));
     _addGLResource(rtn);
+
+    // NOTE: the bufferData call must be done after the resource has been appropriately added
+
+    // TODO(croot): what if the below bufferData() call fails?
+    // Should we remove the resource internally?
+    rtn->bufferData((void*)&data[0], data.size() * sizeof(T), layoutPtr);
 
     return rtn;
   }
@@ -160,12 +162,6 @@ class GLResourceManager {
       Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
       Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
 
-  Resources::GLUniformBufferShPtr createUniformBuffer(
-      const Resources::GLShaderBlockLayoutShPtr& shaderBlockLayoutPtr,
-      size_t numItems = 0,
-      Resources::BufferAccessType accessType = Resources::BufferAccessType::WRITE,
-      Resources::BufferAccessFreq accessFreq = Resources::BufferAccessFreq::DYNAMIC);
-
   template <typename T>
   Resources::GLUniformBufferShPtr createUniformBuffer(
       const std::vector<T>& data,
@@ -179,14 +175,29 @@ class GLResourceManager {
         new Resources::GLUniformBuffer(_prntRenderer, data, shaderBlockLayoutPtr, accessType, accessFreq));
     _addGLResource(rtn);
 
+    // NOTE: the bufferData call must be done after the resource has been appropriately added
+
+    // TODO(croot): what if the below bufferData() call fails?
+    // Should we remove the resource internally?
+    rtn->bufferData((void*)&data[0], data.size() * sizeof(T), shaderBlockLayoutPtr);
+
     return rtn;
   }
 
   Resources::GLVertexArrayShPtr createVertexArray();
   Resources::GLVertexArrayShPtr createVertexArray(const Resources::VboAttrToShaderAttrMap& vboAttrToShaderAttrMap,
                                                   const Resources::GLIndexBufferShPtr& iboPtr = nullptr);
+  Resources::GLVertexArrayShPtr createVertexArray(
+      const Resources::VboLayoutAttrToShaderAttrMap& vboLayoutAttrToShaderAttrMap,
+      const Resources::GLIndexBufferShPtr& iboPtr = nullptr);
 
-  Resources::GLResourceShPtr getResourcePtr(Resources::GLResource* rsrc);
+  const Resources::GLResourceShPtr getSharedResourcePtr(const Resources::GLResource* rsrc) const;
+  Resources::GLResourceShPtr getSharedResourcePtr(const Resources::GLResource* rsrc);
+
+  template <typename GLResourceType>
+  std::shared_ptr<GLResourceType> getSharedResourceTypePtr(const GLResourceType* rsrc) {
+    return std::dynamic_pointer_cast<GLResourceType>(getSharedResourcePtr(rsrc));
+  }
 
  protected:
   explicit GLResourceManager(const RendererShPtr& prnt);
@@ -195,6 +206,7 @@ class GLResourceManager {
 
  private:
   RendererWkPtr _prntRenderer;
+  ResourceId _currRsrcId;
 
   /**
    * Cleans up all resources. This will be called during destruction of the renderer
@@ -202,16 +214,16 @@ class GLResourceManager {
    */
   void _cleanupResources();
 
-  // TODO(croot): this will hold onto the ptrs for all time right now. It would
-  // probably be useful to purge empty ptrs from time-to-time. And it would
-  // probably be best to keep this hidden from the user. Perhaps the renderer
-  // can do it when idle? Or possibly every nth render call? Need to think
-  // about this, but for the time being it shouldn't be a big deal because a
-  // weak_ptr takes up very little memory.
+  // TODO(croot): Perhaps improve when weak ptrs are purged?
+  // Right now a purge is performed every time a new resource is
+  // created. Perhaps the renderer can do it when idle?
+  // Or possibly every nth render call?
 
   // TODO(croot): improve the data structure used here. May want to separate
   // byte resource types for easier lookups. May want to add a name to resources
   // too for an additional level of categorization.
+  // Ideally this data structure should be good about doing a lookup by
+  // GLResource* too.
   std::vector<Resources::GLResourceWkPtr> _glResources;
   void _addGLResource(Resources::GLResourceShPtr glResource);
 

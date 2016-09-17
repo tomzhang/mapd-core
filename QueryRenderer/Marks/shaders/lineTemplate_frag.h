@@ -13,7 +13,9 @@ const std::string LineTemplate_Frag::source =
     "\n"
     "layout(location = 0) out vec4 finalColor;\n"
     "layout(location = 1) out uint finalId;\n"
+    "layout(location = 2) out uint finalTableId;\n"
     "\n"
+    "uniform int uTableId;\n"
     "#define usePerVertId <usePerVertId>\n"
     "#define useUid <useUid>\n"
     "#if usePerVertId == 1\n"
@@ -79,6 +81,7 @@ const std::string LineTemplate_Frag::source =
     "#elif useUniformBuffer == 1\n"
     "  finalColor = getstrokeColor(lineData.<strokeColor>);\n"
     "#endif\n"
+    "  finalTableId = uTableId + 1;\n"
     "\n"
     "}\n";
 

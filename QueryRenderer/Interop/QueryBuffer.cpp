@@ -80,7 +80,7 @@ CudaHandle QueryBuffer::getCudaHandlePreQuery(bool useAllAllocatedBytes) {
   _mapCudaGraphicsResource(cudaRsrc);
 
   size_t num_bytes = 0;
-  size_t numBufBytes = _bufRsrc->numBytes();
+  size_t numBufBytes = _bufRsrc->getNumBytes();
 
   CUdeviceptr devPtr;
   checkCudaErrors(cuGraphicsResourceGetMappedPointer(&devPtr, &num_bytes, cudaRsrc), __FILE__, __LINE__);
@@ -105,11 +105,10 @@ CudaHandle QueryBuffer::getCudaHandlePreQuery(bool useAllAllocatedBytes) {
 void QueryBuffer::updatePostQuery(size_t numUsedBytes) {
   CHECK(_type == BufType::QUERY_RESULT_BUFFER);
 
-  RUNTIME_EX_ASSERT(
-      _isActive,
-      "QueryBuffer " + std::to_string(_getGpuId()) + " has not been prepped for a query. Cannot set data post query.");
-
-  _isActive = false;
+  _usedBytes = numUsedBytes;
+  if (!_isActive) {
+    return;
+  }
 
 #ifdef HAVE_CUDA
   // unmap buffer object
@@ -117,14 +116,14 @@ void QueryBuffer::updatePostQuery(size_t numUsedBytes) {
   _unmapCudaGraphicsResource(cudaRsrc);
 #endif
 
-  _usedBytes = numUsedBytes;
+  _isActive = false;
 }
 
 void QueryBuffer::resize(size_t numBytes) {
   RUNTIME_EX_ASSERT(!_isActive, "Cannot resize a buffer while it is currently mapped for cuda.");
 
   if (_bufRsrc) {
-    if (numBytes != _bufRsrc->numBytes()) {
+    if (numBytes != _bufRsrc->getNumBytes()) {
       _bufRsrc->bufferData(nullptr, numBytes);
 
 #ifdef HAVE_CUDA
@@ -189,7 +188,7 @@ void QueryBuffer::_initCudaGraphicsResource() {
       throw ::Rendering::OutOfGpuMemoryError(
           "Cuda error code=" + std::to_string(result) +
           ", CUDA_ERROR_UNKNOWN, possibly not enough gpu memory available for the requested buffer size of " +
-          std::to_string(_bufRsrc->numBytes()) + " bytes.");
+          std::to_string(_bufRsrc->getNumBytes()) + " bytes.");
     }
 
     checkCudaErrors(result, __FILE__, __LINE__);
@@ -273,6 +272,14 @@ QueryVertexBuffer::QueryVertexBuffer(QueryBuffer::BufType type)
 }
 
 QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+                                     Rendering::GL::Resources::BufferAccessType accessType,
+                                     Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                     QueryBuffer::BufType type)
+    : QueryVertexBuffer(type) {
+  _initBuffer(renderer, accessType, accessFreq);
+}
+
+QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
                                      size_t numBytes,
                                      Rendering::GL::Resources::BufferAccessType accessType,
                                      Rendering::GL::Resources::BufferAccessFreq accessFreq,
@@ -281,14 +288,14 @@ QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
   _initBuffer(renderer, accessType, accessFreq, numBytes);
 }
 
-QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
-                                     const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
-                                     Rendering::GL::Resources::BufferAccessType accessType,
-                                     Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                                     QueryBuffer::BufType type)
-    : QueryLayoutBuffer<::Rendering::GL::Resources::GLVertexBuffer>(type) {
-  _initLayoutBuffer(renderer, accessType, accessFreq, layoutPtr);
-}
+// QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
+//                                      const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
+//                                      Rendering::GL::Resources::BufferAccessType accessType,
+//                                      Rendering::GL::Resources::BufferAccessFreq accessFreq,
+//                                      QueryBuffer::BufType type)
+//     : QueryLayoutBuffer<::Rendering::GL::Resources::GLVertexBuffer>(type) {
+//   _initLayoutBuffer(renderer, accessType, accessFreq, layoutPtr);
+// }
 
 QueryVertexBuffer::~QueryVertexBuffer() {
 }
@@ -308,16 +315,16 @@ void QueryVertexBuffer::_initBuffer(Rendering::GL::GLRenderer* renderer,
   }
 }
 
-void QueryVertexBuffer::_initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-                                          Rendering::GL::Resources::BufferAccessType accessType,
-                                          Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                                          const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) {
-  if (!_bufRsrc) {
-    Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+// void QueryVertexBuffer::_initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
+//                                           Rendering::GL::Resources::BufferAccessType accessType,
+//                                           Rendering::GL::Resources::BufferAccessFreq accessFreq,
+//                                           const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) {
+//   if (!_bufRsrc) {
+//     Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
-    _bufRsrc = rsrcMgr->createVertexBuffer(layoutPtr, accessType, accessFreq);
-  }
-}
+//     _bufRsrc = rsrcMgr->createVertexBuffer(layoutPtr, accessType, accessFreq);
+//   }
+// }
 
 QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer,
                                                  size_t numBytes,
@@ -419,6 +426,14 @@ QueryUniformBuffer::QueryUniformBuffer(QueryBuffer::BufType type)
 }
 
 QueryUniformBuffer::QueryUniformBuffer(Rendering::GL::GLRenderer* renderer,
+                                       Rendering::GL::Resources::BufferAccessType accessType,
+                                       Rendering::GL::Resources::BufferAccessFreq accessFreq,
+                                       QueryBuffer::BufType type)
+    : QueryUniformBuffer(type) {
+  _initBuffer(renderer, accessType, accessFreq);
+}
+
+QueryUniformBuffer::QueryUniformBuffer(Rendering::GL::GLRenderer* renderer,
                                        size_t numBytes,
                                        ::Rendering::GL::Resources::BufferAccessType accessType,
                                        ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
@@ -428,15 +443,16 @@ QueryUniformBuffer::QueryUniformBuffer(Rendering::GL::GLRenderer* renderer,
   _initBuffer(renderer, accessType, accessFreq, numBytes);
 }
 
-QueryUniformBuffer::QueryUniformBuffer(::Rendering::GL::GLRenderer* renderer,
-                                       const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr,
-                                       ::Rendering::GL::Resources::BufferAccessType accessType,
-                                       ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                                       QueryBuffer::BufType type)
-    : QueryLayoutBuffer<::Rendering::GL::Resources::GLUniformBuffer, ::Rendering::GL::Resources::GLShaderBlockLayout>(
-          type) {
-  _initLayoutBuffer(renderer, accessType, accessFreq, layoutPtr);
-}
+// QueryUniformBuffer::QueryUniformBuffer(::Rendering::GL::GLRenderer* renderer,
+//                                        const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr,
+//                                        ::Rendering::GL::Resources::BufferAccessType accessType,
+//                                        ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
+//                                        QueryBuffer::BufType type)
+//     : QueryLayoutBuffer<::Rendering::GL::Resources::GLUniformBuffer,
+//     ::Rendering::GL::Resources::GLShaderBlockLayout>(
+//           type) {
+//   _initLayoutBuffer(renderer, accessType, accessFreq, layoutPtr);
+// }
 
 QueryUniformBuffer::~QueryUniformBuffer() {
 }
@@ -456,15 +472,15 @@ void QueryUniformBuffer::_initBuffer(::Rendering::GL::GLRenderer* renderer,
   }
 }
 
-void QueryUniformBuffer::_initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-                                           Rendering::GL::Resources::BufferAccessType accessType,
-                                           Rendering::GL::Resources::BufferAccessFreq accessFreq,
-                                           const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr) {
-  if (!_bufRsrc) {
-    Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
-    _bufRsrc = rsrcMgr->createUniformBuffer(layoutPtr, 0, accessType, accessFreq);
-  }
-}
+// void QueryUniformBuffer::_initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
+//                                            Rendering::GL::Resources::BufferAccessType accessType,
+//                                            Rendering::GL::Resources::BufferAccessFreq accessFreq,
+//                                            const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr) {
+//   if (!_bufRsrc) {
+//     Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
+//     _bufRsrc = rsrcMgr->createUniformBuffer(layoutPtr, 0, accessType, accessFreq);
+//   }
+// }
 
 QueryResultUniformBuffer::QueryResultUniformBuffer(Rendering::GL::GLRenderer* renderer,
                                                    size_t numBytes,

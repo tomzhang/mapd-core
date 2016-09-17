@@ -104,7 +104,7 @@ void BaseScaleRef::_initScalePtr() {
 }
 
 void BaseScaleRef::_deleteScalePtr() {
-  _rndrPropPtr->_unsubscribeFromRefEvent(_scalePtr);
+  _rndrPropPtr->_unsubscribeFromScaleEvent(_scalePtr);
   _rndrPropPtr->_clearAccumulatorFromScale(_scalePtr);
   _rndrPropPtr->_setShaderDirty();
   _scalePtr = nullptr;

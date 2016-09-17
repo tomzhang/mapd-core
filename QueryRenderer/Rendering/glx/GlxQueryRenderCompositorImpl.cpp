@@ -53,16 +53,7 @@ GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderManager* p
                                                            bool doHitTest,
                                                            bool doDepthTest)
     : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest),
-      _rendererPtr(rendererPtr),
-      _renderer(nullptr),
-      _rectvbo(nullptr),
-      _shader(nullptr),
-      _vao(nullptr),
-      _rgbaTextureArray(nullptr),
-      _idTextureArray(nullptr),
-      _rgbaTextures(),
-      _idTextures(),
-      _rbos() {
+      _rendererPtr(rendererPtr) {
   CHECK(rendererPtr);
   _renderer = dynamic_cast<GlxGLRenderer*>(rendererPtr.get());
   CHECK(_renderer != nullptr);
@@ -95,6 +86,7 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
   // TODO(croot): automate the texture image unit binding
   _shader->setSamplerTextureImageUnit("rgbaArraySampler", GL_TEXTURE0);
   _shader->setSamplerTextureImageUnit("idArraySampler", GL_TEXTURE1);
+  _shader->setSamplerTextureImageUnit("id2ArraySampler", GL_TEXTURE2);
 
   _vao = rsrcMgr->createVertexArray({{_rectvbo, {}}});
 
@@ -112,6 +104,7 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
 
   if (doHitTest()) {
     _idTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
+    _id2TextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
   }
 }
 
@@ -131,6 +124,11 @@ void GlxQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
   if (_idTextureArray) {
     CHECK(doHitTest());
     _idTextureArray->resize(width, height);
+  }
+
+  if (_id2TextureArray) {
+    CHECK(doHitTest());
+    _id2TextureArray->resize(width, height);
   }
 
   // TODO(croot): do depth
@@ -165,6 +163,9 @@ GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
       break;
     case FboColorBuffer::ID_BUFFER:
       _idTextures.insert(tex.get());
+      break;
+    case FboColorBuffer::ID2_BUFFER:
+      _id2Textures.insert(tex.get());
       break;
     default:
       CHECK(false);
@@ -424,10 +425,14 @@ void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
 
   if (doHitTest) {
     auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
-    CHECK(idTex);
+    auto id2Tex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID2_BUFFER);
+    CHECK(idTex && id2Tex);
 
     auto idItr = _idTextures.find(idTex.get());
     CHECK(idItr != _idTextures.end());
+
+    auto id2Itr = _id2Textures.find(id2Tex.get());
+    CHECK(id2Itr != _id2Textures.end());
 
     glXCopyImageSubDataNV(displayPtr.get(),
                           glxCtx,
@@ -440,6 +445,25 @@ void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
                           myGlxCtx,
                           _idTextureArray->getId(),
                           _idTextureArray->getTarget(),
+                          0,
+                          0,
+                          0,
+                          gpuCnt,
+                          width,
+                          height,
+                          1);
+
+    glXCopyImageSubDataNV(displayPtr.get(),
+                          glxCtx,
+                          id2Tex->getId(),
+                          id2Tex->getTarget(),
+                          0,
+                          0,
+                          0,
+                          0,
+                          myGlxCtx,
+                          _id2TextureArray->getId(),
+                          _id2TextureArray->getTarget(),
                           0,
                           0,
                           0,
@@ -462,9 +486,6 @@ void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
                                                   int passCnt,
                                                   ScaleShPtr& accumulatorScalePtr) {
   _renderer->makeActiveOnCurrentThread();
-
-  // auto fbo = _framebufferPtr->getGLFramebuffer();
-  // _renderer->bindFramebuffer(::Rendering::GL::Resources::FboBind::READ_AND_DRAW, fbo);
 
   _framebufferPtr->setHitTest(accumulatorScalePtr ? false : doHitTest);
   _framebufferPtr->setDepthTest(doDepthTest);
@@ -519,11 +540,15 @@ void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
   _shader->setUniformAttribute("rgbaArraySize", usedGpus.size());
 
   if (doHitTest) {
+    CHECK(_idTextureArray->getDepth() == _id2TextureArray->getDepth());
     _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
+    _shader->setSamplerAttribute("id2ArraySampler", _id2TextureArray);
     _shader->setUniformAttribute("idArraySize", usedGpus.size());
   } else {
     _shader->setUniformAttribute("idArraySize", 0);
   }
+
+  _shader->setUniformAttribute("passIdx", passCnt);
 
   // if (accumulatorScalePtr) {
   //   // std::string accumulator;
@@ -568,7 +593,7 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   bool doHitTest = ctx->doHitTest();
   // bool doDepthTest = ctx->doDepthTest();
 
-  GLTexture2dShPtr rgbaTex, idTex;
+  GLTexture2dShPtr rgbaTex, idTex, id2Tex;
   GLRenderbufferShPtr depthRbo;
 
   CHECK(_rgbaTextureArray && _rgbaTextures.size());
@@ -579,11 +604,18 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   }
 
   if (doHitTest) {
-    CHECK(_idTextureArray && _idTextures.size() && _idTextures.size() == _rgbaTextures.size());
+    CHECK(_idTextureArray && _id2TextureArray && _idTextures.size() && _idTextures.size() == _rgbaTextures.size() &&
+          _id2Textures.size() && _id2Textures.size() == _rgbaTextures.size());
     if (_idTextureArray->getDepth() != _idTextures.size()) {
       _renderer->makeActiveOnCurrentThread();
       _idTextureArray->resize(_idTextures.size());
       CHECK(_idTextures.size() == _idTextureArray->getDepth());
+    }
+
+    if (_id2TextureArray->getDepth() != _id2Textures.size()) {
+      _renderer->makeActiveOnCurrentThread();
+      _id2TextureArray->resize(_id2Textures.size());
+      CHECK(_id2Textures.size() == _id2TextureArray->getDepth() && _idTextures.size() == _id2Textures.size());
     }
   }
   // if (doDepthTest) {

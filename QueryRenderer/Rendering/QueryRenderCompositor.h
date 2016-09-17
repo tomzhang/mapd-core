@@ -73,9 +73,13 @@ class QueryRenderCompositorImpl {
     return _framebufferPtr->readColorBuffer(startx, starty, width, height);
   }
 
-  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1) {
+  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0,
+                                             size_t starty = 0,
+                                             int width = -1,
+                                             int height = -1,
+                                             const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER) {
     CHECK(_framebufferPtr);
-    return _framebufferPtr->readIdBuffer(startx, starty, width, height);
+    return _framebufferPtr->readIdBuffer(startx, starty, width, height, idBufferType);
   }
 
   void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer) {
@@ -150,7 +154,11 @@ class QueryRenderCompositor {
 
   std::shared_ptr<unsigned char> readColorBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
 
-  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0, size_t starty = 0, int width = -1, int height = -1);
+  std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0,
+                                             size_t starty = 0,
+                                             int width = -1,
+                                             int height = -1,
+                                             const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
 
   void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
   void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo);

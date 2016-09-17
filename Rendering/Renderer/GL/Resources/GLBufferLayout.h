@@ -100,6 +100,8 @@ namespace MultiIndexTags {
 // tags for boost::multi_index_container
 struct name {};
 
+struct rsrcid {};
+
 }  // namespace MultiIndexTags
 
 struct GLBufferAttrInfo {
@@ -121,8 +123,10 @@ struct GLBufferAttrInfo {
 
 class GLBaseBufferLayout {
  public:
+  GLBaseBufferLayout(const GLBaseBufferLayout& layout);
   virtual ~GLBaseBufferLayout() {}
 
+  GLBufferLayoutType getLayoutType() const { return _layoutType; }
   virtual size_t getNumBytesPerItem() const { return _itemByteSize; }
 
   bool hasAttribute(const std::string& attrName) const;
@@ -135,13 +139,15 @@ class GLBaseBufferLayout {
   int getAttributeByteOffset(const std::string& attrName) const;
 
   // TODO(croot): add an iterator to iterate over the attributes?
-
   inline int numAttributes() const { return _attrMap.size(); }
-
   const GLBufferAttrInfo& operator[](size_t i) const;
 
+  virtual bool operator==(const GLBaseBufferLayout& layoutPtr) const;
+
+  virtual bool operator!=(const GLBaseBufferLayout& layoutPtr) const { return !operator==(layoutPtr); }
+
  protected:
-  GLBaseBufferLayout(GLBufferLayoutType layoutType) : _layoutType(layoutType), _attrMap(), _itemByteSize(0) {}
+  GLBaseBufferLayout(GLBufferLayoutType layoutType) : _layoutType(layoutType), _itemByteSize(0) {}
 
   typedef std::unique_ptr<GLBufferAttrInfo> BufferAttrInfoPtr;
   typedef boost::multi_index_container<
@@ -158,14 +164,41 @@ class GLBaseBufferLayout {
 
   GLBufferLayoutType _layoutType;
   BufferAttrMap _attrMap;
+
   size_t _itemByteSize;
+
+  // typedef boost::multi_index_container<
+  //     BoundBufferData,
+  //     boost::multi_index::indexed_by<
+  //         boost::multi_index::random_access<>,
+
+  //         // hashed on name
+  //         boost::multi_index::hashed_unique<
+  //             boost::multi_index::tag<MultiIndexTags::rsrcid>,
+  //             boost::multi_index::member<BoundBufferData, UniqueResourceId, &BoundBufferData::rsrcId>>>>
+  //             BoundBufferMap;
+
+  // typedef BoundBufferMap::index<MultiIndexTags::rsrcid>::type BoundBufferMap_by_id;
+
+  // BoundBufferMap _boundBufferMap;
+
+  // // void validateBoundBuffer() const;
+  // BoundBufferMap_by_id::const_iterator validateBoundBuffer(const GLLayoutManagerBuffer* buffer) const;
+  // BoundBufferMap_by_id::const_iterator validateBoundBuffer(const GLLayoutManagerBufferShPtr& buffer) const;
 
  private:
   virtual void bindToShader(GLShader* activeShader,
-                            int numActiveBufferItems,
+                            const size_t usedBytes,
+                            const size_t offsetBytes,
                             const std::string& attr = "",
-                            const std::string& shaderAttr = "") = 0;
+                            const std::string& shaderAttr = "") const = 0;
 
+  // void setByteOffset(size_t byteOffset);
+  // void setUsedBytes(size_t usedBytes);
+  // void addBuffer(const GLLayoutManagerBufferShPtr& buffer, const size_t usedBytes, const size_t offsetBytes = 0);
+  // void clearBuffers();
+
+  friend class ::Rendering::GL::Resources::GLLayoutManagerBuffer;
   friend class ::Rendering::GL::Resources::GLVertexBuffer;
 };
 
@@ -178,9 +211,10 @@ class GLCustomBufferLayout : public GLBaseBufferLayout {
 
  private:
   void bindToShader(GLShader* activeShader,
-                    int numActiveBufferItems,
+                    const size_t usedBytes,
+                    const size_t offsetBytes,
                     const std::string& attr = "",
-                    const std::string& shaderAttr = "") final {
+                    const std::string& shaderAttr = "") const final {
     // TODO(croot): implement
     THROW_RUNTIME_EX("CustomBufferLayout::bindToShader() has yet to be implemented.");
   }
@@ -209,9 +243,10 @@ class GLInterleavedBufferLayout : public GLBaseBufferLayout {
 
  private:
   void bindToShader(GLShader* activeShader,
-                    int numActiveBufferItems,
+                    const size_t usedBytes,
+                    const size_t offsetBytes,
                     const std::string& attr = "",
-                    const std::string& shaderAttr = "") final;
+                    const std::string& shaderAttr = "") const final;
 };
 
 class GLSequentialBufferLayout : public GLBaseBufferLayout {
@@ -240,9 +275,10 @@ class GLSequentialBufferLayout : public GLBaseBufferLayout {
 
  private:
   void bindToShader(GLShader* activeShader,
-                    int numActiveBufferItems,
+                    const size_t usedBytes,
+                    const size_t offsetBytes,
                     const std::string& attr = "",
-                    const std::string& shaderAttr = "") final;
+                    const std::string& shaderAttr = "") const final;
 };
 
 }  // namespace Resources

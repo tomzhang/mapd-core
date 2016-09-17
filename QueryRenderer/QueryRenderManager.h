@@ -11,6 +11,8 @@
 #include "RootCache.h"
 #include <Rendering/Types.h>
 #include <CudaMgr/CudaMgr.h>
+#include <gen-cpp/mapd_types.h>
+#include <Catalog/TableDescriptor.h>
 
 #include "rapidjson/document.h"
 
@@ -27,6 +29,7 @@
 #include <boost/multi_index/mem_fun.hpp>
 
 class Executor;
+struct RenderInfo;
 
 namespace QueryRenderer {
 
@@ -66,13 +69,15 @@ class QueryRenderManager {
   void setActiveUserWidget(int userId, int widgetId);
   void setActiveUserWidget(const UserWidgetPair& userWidgetPair);
 
-  void setWidthHeight(int width, int height);
-
   size_t getNumGpus() const;
   std::vector<GpuId> getAllGpuIds() const;
   RootPerGpuDataMap* getPerGpuData() { return _gpuCache->perGpuData.get(); }
 
   CudaHandle getCudaHandle(size_t gpuIdx);
+  void setCudaBufferDataLayout(size_t gpuIdx,
+                               size_t offsetBytes,
+                               size_t numUsedBytes,
+                               const QueryDataLayoutShPtr& vertLayoutPtr);
   void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes, const QueryDataLayoutShPtr& vertLayoutPtr);
 
   int getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const;
@@ -94,13 +99,24 @@ class QueryRenderManager {
                                   const QueryDataLayoutShPtr& uniformLayoutPtr,
                                   const QueryDataLayoutShPtr& vertLayoutPtr = nullptr);
 
-  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, const Executor* executor = nullptr);
+  void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, Executor* executor = nullptr);
 
   void render();
   PngData renderToPng(int compressionLevel = -1);
 
+  void runRenderRequest(TRenderResult& _return,
+                        int userId,
+                        int widgetId,
+                        const std::string& jsonStr,
+                        Executor* executor,
+                        RenderInfo* renderInfo,
+                        QueryExecCB queryExecFunc,
+                        int compressionLevel = -1,
+                        bool doHitTest = false,
+                        bool doDepthTest = false);
+
   // get the id at a specific pixel
-  int64_t getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
+  std::pair<int32_t, int64_t> getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
 
  private:
   static const UserWidgetPair _emptyUserWidget;
@@ -176,7 +192,18 @@ class QueryRenderManager {
   void _purgeUnusedWidgets();
   void _updateActiveLastRenderTime();
 
-  mutable std::mutex _renderMtx;
+  bool _hasUserInternal(int userId) const;
+  bool _hasUserWidgetInternal(int userId, int widgetId) const;
+  void _addUserWidgetInternal(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
+  void _removeUserWidgetInternal(int userId, int widgetId);
+  void _removeUserInternal(int userId);
+  void _setActiveUserWidgetInternal(int userId, int widgetId);
+  void _configureRenderInternal(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr);
+  void _configureRenderInternal(const std::string& jsonDocumentStr);
+  void _renderInternal();
+  PngData _renderToPngInternal(int compressionLevel = -1);
+
+  mutable std::mutex _renderMtx, _bufferMtx, _polyMtx;
 
   const size_t _renderCacheLimit;
 

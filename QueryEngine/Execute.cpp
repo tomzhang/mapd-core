@@ -440,12 +440,12 @@ RowSetPtr Executor::executeSelectPlan(const Planner::Plan* plan,
 
 ResultRows Executor::execute(const Planner::RootPlan* root_plan,
                              const Catalog_Namespace::SessionInfo& session,
-                             const int render_widget_id,
                              const bool hoist_literals,
                              const ExecutorDeviceType device_type,
                              const ExecutorOptLevel opt_level,
                              const bool allow_multifrag,
-                             const bool allow_loop_joins) {
+                             const bool allow_loop_joins,
+                             RenderInfo* render_info) {
   catalog_ = &root_plan->get_catalog();
   const auto stmt_type = root_plan->get_stmt_type();
   // capture the lock acquistion time
@@ -458,7 +458,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
       int32_t error_code{0};
       size_t max_groups_buffer_entry_guess{16384};
 
-      std::unique_ptr<RenderAllocatorMap> render_allocator_map;
+      std::unique_ptr<RenderInfo> render_info_ptr;
       if (root_plan->get_plan_dest() == Planner::RootPlan::kRENDER) {
         if (device_type != ExecutorDeviceType::GPU) {
           throw std::runtime_error("Backend rendering is only supported on GPU");
@@ -468,30 +468,39 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
           throw std::runtime_error("This build doesn't support backend rendering");
         }
 
-        render_allocator_map.reset(
-            new RenderAllocatorMap(catalog_->get_dataMgr().cudaMgr_, render_manager_, blockSize(), gridSize()));
+        CHECK(render_info);
+
+        if (!render_info->render_allocator_map_ptr) {
+          // make backwards compatible, can be removed when MapDHandler::render(...)
+          // in MapDServer.cpp is removed
+          render_info->render_allocator_map_ptr.reset(
+              new RenderAllocatorMap(catalog_->get_dataMgr().cudaMgr_, render_manager_, blockSize(), gridSize()));
+        }
       }
-      auto rows = executeSelectPlan(root_plan->get_plan(),
-                                    root_plan->get_limit(),
-                                    root_plan->get_offset(),
-                                    hoist_literals,
-                                    device_type,
-                                    opt_level,
-                                    root_plan->get_catalog(),
-                                    max_groups_buffer_entry_guess,
-                                    &error_code,
-                                    nullptr,
-                                    allow_multifrag,
-                                    root_plan->get_plan_dest() == Planner::RootPlan::kEXPLAIN,
-                                    allow_loop_joins,
-                                    render_allocator_map.get());
+      auto rows = executeSelectPlan(
+          root_plan->get_plan(),
+          root_plan->get_limit(),
+          root_plan->get_offset(),
+          hoist_literals,
+          device_type,
+          opt_level,
+          root_plan->get_catalog(),
+          max_groups_buffer_entry_guess,
+          &error_code,
+          nullptr,
+          allow_multifrag,
+          root_plan->get_plan_dest() == Planner::RootPlan::kEXPLAIN,
+          allow_loop_joins,
+          render_info && render_info->do_render ? render_info->render_allocator_map_ptr.get() : nullptr);
 #ifdef HAVE_RENDERING
-      const int session_id = session.get_session_id();
       if (error_code == ERR_OUT_OF_RENDER_MEM) {
         CHECK_EQ(Planner::RootPlan::kRENDER, root_plan->get_plan_dest());
         throw std::runtime_error("Not enough OpenGL memory to render the query results");
       }
-      if (render_allocator_map) {
+
+      // NOTE: render_info->do_render would be false if rendering shouldn't
+      // immediately follow query execution -- i.e. a join on a poly table
+      if (render_info && render_info->render_allocator_map_ptr && render_info->do_render) {
         if (error_code == ERR_OUT_OF_GPU_MEM) {
           throw std::runtime_error("Not enough GPU memory to execute the query");
         }
@@ -500,11 +509,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
           throw std::runtime_error("Ran out of slots in the output buffer");
         }
         auto clock_begin = timer_start();
-        auto rrows = renderRows(root_plan->get_plan()->get_targetlist(),
-                                root_plan->get_render_type(),
-                                render_allocator_map.get(),
-                                session_id,
-                                render_widget_id);
+        auto rrows = renderRows(root_plan->get_plan()->get_targetlist(), render_info);
         int64_t render_time_ms = timer_stop(clock_begin);
         return ResultRows(rrows, queue_time_ms, render_time_ms);
       }
@@ -616,11 +621,8 @@ void set_render_widget(::QueryRenderer::QueryRenderManager* render_manager,
 }  // namespace
 
 std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::TargetEntry>>& targets,
-                                 const std::string& config_json,
-                                 RenderAllocatorMap* render_allocator_map,
-                                 const int session_id,
-                                 const int render_widget_id) {
-  CHECK(render_allocator_map);
+                                 RenderInfo* render_info) {
+  CHECK(render_info);
 
   std::vector<std::string> attr_names{"key"};
   std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types{::QueryRenderer::QueryDataLayout::AttrType::INT64};
@@ -649,13 +651,24 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
                                            EMPTY_KEY_64,
                                            ::QueryRenderer::QueryDataLayout::LayoutType::INTERLEAVED));
 
-  // the following function unmaps the gl buffers used by cuda
-  render_allocator_map->prepForRendering(query_data_layout);
+  if (!render_info->render_vega.length() || render_info->render_vega == "NONE") {
+    // NOTE: this is a new render call, but we need the
+    // query_data_layout for later use, so storing it here
+    // TODO(croot): refactor as part of render query validation
+    // effort
+    render_info->result_query_data_layout = query_data_layout;
+    return "";
+  }
 
-  set_render_widget(render_manager_, session_id, render_widget_id);
+  CHECK(render_info->render_allocator_map_ptr);
+
+  // the following function unmaps the gl buffers used by cuda
+  render_info->render_allocator_map_ptr->prepForRendering(query_data_layout);
+
+  set_render_widget(render_manager_, render_info->session_id, render_info->render_widget_id);
 
   std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
-  json_doc->Parse(config_json.c_str());
+  json_doc->Parse(render_info->render_vega.c_str());
   CHECK(!json_doc->HasParseError());
 
   render_manager_->configureRender(json_doc, this);
@@ -673,9 +686,16 @@ int64_t Executor::getRowidForPixel(const int64_t x,
                                    const int session_id,
                                    const int render_widget_id,
                                    const int pixelRadius) {
+  // DEPRECATED
   set_render_widget(render_manager_, session_id, render_widget_id);
 
-  return render_manager_->getIdAt(x, y, pixelRadius);
+  auto pixelIds = render_manager_->getIdAt(x, y, pixelRadius);
+
+  // NOTE: the table id of the above call should be -1,
+  // indicating the use of the old APIs
+  CHECK(pixelIds.first == -1);
+
+  return pixelIds.second;
 }
 
 namespace {
@@ -693,28 +713,15 @@ size_t get_rowid_idx(const std::vector<TargetMetaInfo>& row_shape) {
   return 0;
 }
 
-bool render_outline(const rapidjson::Value& render_config) {
-  const auto& marks = field(render_config, "marks");
-  CHECK(marks.IsArray());
-  CHECK_EQ(unsigned(1), marks.Size());
-  const auto& mark = *(marks.Begin());
-  const auto& properties = field(mark, "properties");
-  return properties.HasMember("strokeColor");
-}
-
 }  // namespace
 
 ResultRows Executor::renderPolygons(const ResultRows& rows,
                                     const std::vector<TargetMetaInfo>& row_shape,
-                                    const std::string& render_config_json,
                                     const Catalog_Namespace::SessionInfo& session,
-                                    const int render_widget_id) {
+                                    const int render_widget_id,
+                                    const rapidjson::Value& data_desc,
+                                    const std::string* render_config_json) {
 #ifdef HAVE_CUDA
-  rapidjson::Document render_config;
-  render_config.Parse(render_config_json.c_str());
-  CHECK(!render_config.HasParseError());
-  CHECK(render_config.IsObject());
-
   // capture the lock acquistion time
   auto clock_begin = timer_start();
   std::lock_guard<std::mutex> lock(execute_mutex_);
@@ -727,10 +734,6 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   const int gpuId = 0;
   session.get_catalog().get_dataMgr().cudaMgr_->setContext(gpuId);
 
-  const auto& data_descs = field(render_config, "data");
-  CHECK(data_descs.IsArray());
-  CHECK_EQ(unsigned(1), data_descs.Size());
-  const auto& data_desc = *(data_descs.Begin());
   const auto polyTableName = json_str(field(data_desc, "dbTableName"));
   const auto shape_col_group = json_str(field(data_desc, "shapeColGroup"));
 
@@ -751,9 +754,7 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  auto lineDrawData = render_outline(render_config)
-                          ? getShapeLineDrawData(session, td, shape_col_group)
-                          : LineDrawData{std::vector<::Rendering::GL::Resources::IndirectDrawVertexData>{}, {}};
+  auto lineDrawData = getShapeLineDrawData(session, td, shape_col_group);
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
@@ -834,13 +835,19 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
   // set the buffers as renderable
   render_manager_->setPolyTableReadyForRender(polyTableName, gpuId, data_query_result.poly_render_data_layout);
 
-  // set the session, like normal
-  set_render_widget(render_manager_, session_id, render_widget_id);
+  if (!render_config_json || !render_config_json->length() || *render_config_json == "NONE") {
+    int64_t render_time_ms = timer_stop(clock_begin);
+    return ResultRows(std::string(), queue_time_ms, render_time_ms);
+  }
 
   // now configure the render like normal
   std::shared_ptr<rapidjson::Document> json_doc(new rapidjson::Document());
-  json_doc->Parse(render_config_json.c_str());
+  json_doc->Parse(render_config_json->c_str());
   CHECK(!json_doc->HasParseError());
+  CHECK(json_doc->IsObject());
+
+  // set the session, like normal
+  set_render_widget(render_manager_, session_id, render_widget_id);
 
   render_manager_->configureRender(json_doc, this);
 

@@ -77,6 +77,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLVertexArrayShPtr _vao;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _rgbaTextureArray;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _idTextureArray;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _id2TextureArray;
 
   ::Rendering::GL::Resources::GLPixelBuffer2dShPtr _clearPboPtr;
   ::Rendering::GL::Resources::GLShaderShPtr _accumulatorShader;
@@ -88,6 +89,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
 
   std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _rgbaTextures;
   std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _idTextures;
+  std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _id2Textures;
   std::unordered_set<::Rendering::GL::Resources::GLRenderbuffer*> _rbos;
 
   friend class ::QueryRenderer::QueryRenderCompositor;

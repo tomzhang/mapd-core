@@ -25,7 +25,7 @@
 
 namespace QueryRenderer {
 
-class BaseScale {
+class BaseScale : public JSONRefObject {
  public:
   static const size_t maxAccumTextures;
   static size_t convertNumAccumValsToNumAccumTextures(size_t numAccumVals, AccumulatorType accumType);
@@ -34,13 +34,6 @@ class BaseScale {
   enum class ScaleShaderType { QUANTITATIVE = 0, ORDINAL, QUANTIZE };
   const static std::vector<std::string> scaleVertexShaderSource;
 
-  BaseScale(const QueryRendererContextShPtr& ctx,
-            QueryDataType domainDataType,
-            QueryDataType rangeDataType,
-            const std::string& name = "",
-            ScaleType type = ScaleType::UNDEFINED,
-            bool allowsAccumulator = false,
-            uint8_t accumTypeMask = static_cast<uint8_t>(AccumulatorType::ALL));
   BaseScale(const rapidjson::Value& obj,
             const rapidjson::Pointer& objPath,
             const QueryRendererContextShPtr& ctx,
@@ -53,8 +46,6 @@ class BaseScale {
 
   virtual ~BaseScale();
 
-  std::string getName() { return _name; }
-  const std::string& getNameRef() const { return _name; }
   ScaleType getType() { return _type; }
   AccumulatorType getAccumulatorType() const { return _accumType; }
   bool hasAccumulator() const { return _accumType != AccumulatorType::UNDEFINED; }
@@ -141,7 +132,6 @@ class BaseScale {
                                      bool checkFullSize = true);
 
  protected:
-  std::string _name;
   ScaleType _type;
 
   // TODO(croot): somehow consolidate all the types and use typeid() or the like
@@ -157,8 +147,6 @@ class BaseScale {
   bool _rangeValsChanged;
 
   QueryRendererContextShPtr _ctx;
-
-  rapidjson::Pointer _jsonPath;
 
   bool _allowsAccumulator;
 
@@ -181,8 +169,15 @@ class BaseScale {
     ::Rendering::GL::Resources::GLVertexArrayShPtr vao;
 
     PerGpuData() : BasePerGpuData() {}
+    explicit PerGpuData(const RootPerGpuDataShPtr& rootData,
+                        const ::Rendering::GL::Resources::GLShaderShPtr& accumulator2ndPassShaderPtr = nullptr,
+                        const ::Rendering::GL::Resources::GLVertexBufferShPtr& rectvbo = nullptr,
+                        const ::Rendering::GL::Resources::GLVertexArrayShPtr& vao = nullptr)
+        : BasePerGpuData(rootData),
+          accumulator2ndPassShaderPtr(accumulator2ndPassShaderPtr),
+          rectvbo(rectvbo),
+          vao(vao) {}
     explicit PerGpuData(const BasePerGpuData& data,
-                        // const ::Rendering::GL::Resources::GLPixelBuffer2dShPtr& clearPboPtr = nullptr,
                         const ::Rendering::GL::Resources::GLShaderShPtr& accumulator2ndPassShaderPtr = nullptr,
                         const ::Rendering::GL::Resources::GLVertexBufferShPtr& rectvbo = nullptr,
                         const ::Rendering::GL::Resources::GLVertexArrayShPtr& vao = nullptr)

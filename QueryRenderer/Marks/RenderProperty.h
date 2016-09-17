@@ -40,15 +40,17 @@ class BaseRenderProperty {
         _inType(nullptr),
         _outType(nullptr),
         _scaleConfigPtr(nullptr),
-        _flexibleType(flexibleType) {}
+        _flexibleType(flexibleType),
+        _scaleRefSubscriptionId(0),
+        _dataRefSubscriptionId(0) {}
 
-  virtual ~BaseRenderProperty() {}
+  virtual ~BaseRenderProperty();
 
   void initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
                              const QueryDataTableShPtr& dataPtr);
 
-  void initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr);
+  bool initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr);
 
   int size(const GpuId& gpuId) const;
 
@@ -80,7 +82,7 @@ class BaseRenderProperty {
 
   const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
 
-  void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap) const;
+  void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap& attrMap) const;
 
   virtual void bindUniformToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                                      const std::string& uniformAttrName) const = 0;
@@ -109,6 +111,11 @@ class BaseRenderProperty {
     QueryUniformBufferShPtr ubo;
 
     PerGpuData() : BasePerGpuData(), vbo(nullptr), ubo(nullptr) {}
+    explicit PerGpuData(const RootPerGpuDataShPtr& rootData,
+                        const QueryVertexBufferShPtr& vbo = nullptr,
+                        const QueryUniformBufferShPtr& ubo = nullptr)
+        : BasePerGpuData(rootData), vbo(vbo), ubo(ubo) {}
+
     explicit PerGpuData(const BasePerGpuData& perGpuData,
                         const QueryVertexBufferShPtr& vbo = nullptr,
                         const QueryUniformBufferShPtr& ubo = nullptr)
@@ -144,22 +151,24 @@ class BaseRenderProperty {
   rapidjson::Pointer _valueJsonPath;
   rapidjson::Pointer _scaleJsonPath;
 
-  // TODO(croot): redefining RefEventCallback here, so we should have a "types"
-  // header file somewhere
-  typedef std::function<void(RefEventType, const ScaleShPtr&)> RefEventCallback;
-  RefEventCallback _scaleRefSubscriptionCB;
+  RefCallbackId _scaleRefSubscriptionId;
+  RefCallbackId _dataRefSubscriptionId;
 
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
-  virtual void _initTypeFromBuffer() = 0;
+  virtual bool _initTypeFromBuffer() = 0;
   virtual void _verifyScale() = 0;
-  virtual void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) = 0;
+  virtual void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) = 0;
   virtual void _updateScalePtr(const ScaleShPtr& scalePtr);
+
+  void _dataRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr);
+  void _clearDataPtr();
 
   void _setAccumulatorFromScale(const ScaleShPtr& scalePtr);
   void _clearAccumulatorFromScale(const ScaleShPtr& scalePtr);
-  void _unsubscribeFromRefEvent(const ScaleShPtr& scalePtr);
+  void _unsubscribeFromScaleEvent(const ScaleShPtr& scalePtr);
+  void _unsubscribeFromDataEvent();
   void _setShaderDirty();
   void _setPropsDirty();
 
@@ -293,9 +302,9 @@ class RenderProperty : public BaseRenderProperty {
     BaseRenderProperty::_updateScalePtr(scalePtr);
 
     // setup callbacks for scale updates
-    _scaleRefSubscriptionCB = std::bind(
+    auto cb = std::bind(
         &RenderProperty<T, numComponents>::_scaleRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
-    _ctx->subscribeToRefEvent(RefEventType::ALL, scalePtr, _scaleRefSubscriptionCB);
+    _scaleRefSubscriptionId = _ctx->subscribeToRefEvent(RefEventType::ALL, scalePtr, cb);
   }
 
   void _initFromJSONObj(const rapidjson::Value& obj) {
@@ -323,7 +332,7 @@ class RenderProperty : public BaseRenderProperty {
     initializeValue(val);
   }
 
-  void _initTypeFromBuffer() {
+  bool _initTypeFromBuffer() {
     auto itr = _perGpuData.begin();
     CHECK(itr != _perGpuData.end());
 
@@ -334,9 +343,15 @@ class RenderProperty : public BaseRenderProperty {
                           ": Vertex/uniform buffer is uninitialized. Cannot initialize type for mark property \"" +
                           _name + "\".");
 
-    ::Rendering::GL::TypeGLShPtr vboType = bufToUse->getAttributeTypeGL(_vboAttrName);
+    auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
+    ::Rendering::GL::TypeGLShPtr vboType =
+        bufToUse->getAttributeTypeGL(_vboAttrName, (dataPtr ? dataPtr->getQueryDataLayout() : nullptr));
 
+    bool rtn = false;
     if (_flexibleType) {
+      if (!_inType || !_outType || *_inType != *vboType || *_outType != *vboType) {
+        rtn = true;
+      }
       _inType = vboType;
       _outType = vboType;
     } else {
@@ -348,11 +363,15 @@ class RenderProperty : public BaseRenderProperty {
                             ": The vertex buffer type does not match the output type for mark property \"" + _name +
                             "\".");
     }
+
+    return rtn;
   }
 
   void _verifyScale() {}
 
-  void _scaleRefUpdateCB(RefEventType refEventType, const ScaleShPtr& scalePtr) {
+  void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) {
+    auto scalePtr = std::dynamic_pointer_cast<BaseScale>(refObjPtr);
+    CHECK(scalePtr);
     switch (refEventType) {
       case RefEventType::UPDATE: {
         bool accumulatorChanged = scalePtr->hasNumAccumulatorTexturesChanged();
@@ -372,7 +391,8 @@ class RenderProperty : public BaseRenderProperty {
         _updateScalePtr(scalePtr);
         break;
       case RefEventType::REMOVE:
-        _clearAccumulatorFromScale(scalePtr);
+        THROW_RUNTIME_EX(std::string(*this) + ": Error, scale: " + refObjPtr->getName() +
+                         " has been removed but is still being referenced by this render property.")
         break;
       default:
         THROW_RUNTIME_EX(std::string(*this) + ": Ref event type: " + std::to_string(static_cast<int>(refEventType)) +

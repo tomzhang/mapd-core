@@ -53,6 +53,7 @@ class Renderer {
   const Window* getPrimaryWindow() const;
   WindowArray getAllWindows();
   int numWindows() const;
+  RendererId getId() const { return _id; }
 
  protected:
   Renderer(const RendererSettings& settings);
@@ -85,11 +86,15 @@ class Renderer {
   void detachWindow(Window* window);
 
  private:
+  static RendererId rendererCnt;
+
   /** Verifies that a window is attachable. This is called
    * during the attachWindow() method and should be overridden
    * by derived classes.
    */
   virtual bool _verifyWindowIsAttachable(const Window* window) = 0;
+
+  RendererId _id;
 
   friend class Window;
 };

@@ -18,8 +18,7 @@ GLBaseBuffer::GLBaseBuffer(const RendererWkPtr& rendererPtr,
       _usage(getBufferUsage(accessType, accessFreq)),
       _accessType(accessType),
       _accessFreq(accessFreq),
-      _numBytes(0),
-      _numUsedBytes(0) {
+      _numBytes(0) {
   _initResource();
 }
 
@@ -46,7 +45,6 @@ void GLBaseBuffer::_cleanupResource() {
 void GLBaseBuffer::_makeEmpty() {
   _bufferId = 0;
   _numBytes = 0;
-  _numUsedBytes = 0;
 }
 
 void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarget) {
@@ -80,7 +78,6 @@ void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarge
   // instead?
   MAPD_CHECK_GL_ERROR(glBufferData(target, numBytes, NULL, _usage));
   MAPD_CHECK_GL_MEMORY_ERROR();
-  _numUsedBytes = 0;
 
   // Did the orphaning above, now actually buffer the data to the orphaned
   // buffer.
@@ -89,7 +86,6 @@ void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarge
   if (data) {
     MAPD_CHECK_GL_ERROR(glBufferData(target, numBytes, data, _usage));
     MAPD_CHECK_GL_MEMORY_ERROR();
-    _numUsedBytes = numBytes;
   }
 
   // restore the state
@@ -99,13 +95,41 @@ void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarge
   setUsable();
 }
 
+void GLBaseBuffer::bufferSubData(const void* data, size_t numBytes, size_t byteOffset, GLenum altTarget) {
+  // TODO(croot): this could be a performance hit when buffering data
+  // frequently. Should perhaps look into buffer object streaming techniques:
+  // https://www.opengl.org/wiki/Buffer_Object_Streaming
+
+  RUNTIME_EX_ASSERT(byteOffset + numBytes < _numBytes,
+                    "Cannot update GL buffer with " + std::to_string(numBytes) + " bytes starting at byteOffset: " +
+                        std::to_string(byteOffset) + " as it would overrun the buffer of " + std::to_string(_numBytes) +
+                        " bytes.");
+
+  validateRenderer(__FILE__, __LINE__);
+
+  // don't mess with the current state
+  // TODO(croot): Apply some kind of push-pop state system
+  GLint currArrayBuf;
+
+  GLenum target = (altTarget ? altTarget : _target);
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(target), &currArrayBuf));
+  MAPD_CHECK_GL_ERROR(glBindBuffer(target, _bufferId));
+  MAPD_CHECK_GL_ERROR(glBufferSubData(target, byteOffset, numBytes, data));
+
+  // TODO(croot): should we add a data structure that manages intervals
+  // of the data that has been initialized with data?
+
+  // restore the state
+  MAPD_CHECK_GL_ERROR(glBindBuffer(target, currArrayBuf));
+}
+
 void GLBaseBuffer::getBufferData(void* data, size_t dataSzBytes, size_t byteOffset) {
   RUNTIME_EX_ASSERT(dataSzBytes <= _numBytes,
                     "Asking to retrive " + std::to_string(dataSzBytes) +
                         " of data from a buffer, but the buffer only has " + std::to_string(_numBytes) +
                         " of data available.");
 
-  validateRenderer(__FILE__, __LINE__);
+  validateUsability(__FILE__, __LINE__);
 
   GLint currArrayBuf;
   MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(_target), &currArrayBuf));

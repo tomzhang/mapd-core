@@ -27,7 +27,8 @@ QueryRendererContext::QueryRendererContext(int userId,
       _height(0),
       _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
-      _jsonCache(nullptr) {
+      _jsonCache(nullptr),
+      _currCbId(0) {
 }
 
 QueryRendererContext::QueryRendererContext(int userId,
@@ -45,6 +46,7 @@ QueryRendererContext::QueryRendererContext(int userId,
       _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
       _jsonCache(nullptr),
+      _currCbId(0),
       _queryDataLayoutPtr(nullptr) {
 }
 
@@ -65,33 +67,18 @@ void QueryRendererContext::_clear(bool preserveDimensions) {
   _jsonCache = nullptr;
 }
 
-// void QueryRendererContext::_clearGpuResources() {
-//   _perGpuData.clear();
-// }
-
-// void QueryRendererContext::_initGpuResources(QueryRenderer::PerGpuDataMap& qrPerGpuData,
-//                                              const std::unordered_set<GpuId>& unusedGpus) {
-//   for (const auto& itr : qrPerGpuData) {
-//     if (_perGpuData.find(itr.first) == _perGpuData.end()) {
-//       _perGpuData.insert({itr.first, PerGpuData(itr.second)});
-//     }
-//   }
-
-//   for (auto gpuId : unusedGpus) {
-//     _perGpuData.erase(gpuId);
-//   }
-// }
-
 void QueryRendererContext::_updateConfigGpuResources() {
   auto qrmGpuCache = getRootGpuCache();
   CHECK(qrmGpuCache);
 
-  for (auto dataItr : _dataTableMap) {
-    dataItr.second->_initGpuResources(qrmGpuCache);
+  for (auto dataPtr : _dataTableMap) {
+    auto dtPtr = std::dynamic_pointer_cast<BaseQueryDataTable>(dataPtr);
+    CHECK(dtPtr);
+    dtPtr->_initGpuResources(qrmGpuCache);
   }
 
-  for (auto scaleItr : _scaleConfigMap) {
-    scaleItr.second->_initGpuResources(this, false);
+  for (auto& scalePtr : _scaleConfigMap) {
+    scalePtr->_initGpuResources(this, false);
   }
 
   for (auto geomItr : _geomConfigs) {
@@ -100,60 +87,39 @@ void QueryRendererContext::_updateConfigGpuResources() {
 }
 
 bool QueryRendererContext::hasDataTable(const std::string& tableName) const {
-  return (_dataTableMap.find(tableName) != _dataTableMap.end());
+  auto& nameLookup = _dataTableMap.get<DataTableName>();
+  return (nameLookup.find(tableName) != nameLookup.end());
 }
 
 QueryDataTableShPtr QueryRendererContext::getDataTable(const std::string& tableName) const {
   QueryDataTableShPtr rtn(nullptr);
 
-  auto itr = _dataTableMap.find(tableName);
-  if (itr != _dataTableMap.end()) {
-    rtn = itr->second;
+  auto& nameLookup = _dataTableMap.get<DataTableName>();
+  auto itr = nameLookup.find(tableName);
+  if (itr != nameLookup.end()) {
+    rtn = std::dynamic_pointer_cast<BaseQueryDataTable>(*itr);
+    CHECK(rtn);
   }
 
   return rtn;
 }
 
 bool QueryRendererContext::hasScale(const std::string& scaleConfigName) const {
-  return (_scaleConfigMap.find(scaleConfigName) != _scaleConfigMap.end());
+  auto& nameLookup = _scaleConfigMap.get<ScaleName>();
+  return (nameLookup.find(scaleConfigName) != nameLookup.end());
 }
 
 ScaleShPtr QueryRendererContext::getScale(const std::string& scaleConfigName) const {
   ScaleShPtr rtn(nullptr);
 
-  auto itr = _scaleConfigMap.find(scaleConfigName);
-  if (itr != _scaleConfigMap.end()) {
-    rtn = itr->second;
+  auto& nameLookup = _scaleConfigMap.get<ScaleName>();
+  auto itr = nameLookup.find(scaleConfigName);
+  if (itr != nameLookup.end()) {
+    rtn = *itr;
   }
 
   return rtn;
 }
-
-// QueryResultVertexBufferShPtr QueryRendererContext::getQueryResultVertexBuffer(const GpuId& gpuId) const {
-//   // TODO(croot): make thread safe?
-
-//   auto qrmGpuCache = _qrmGpuCache.lock();
-//   CHECK(qrmGpuCache != nullptr);
-//   auto itr = qrmGpuCache->find(gpuId);
-
-//   RUNTIME_EX_ASSERT(itr != qrmGpuCache->end(),
-//                     "QueryRendererContext " + to_string(_userWidget) +
-//                         ": Cannot get query result vertex buffer for gpuId " + std::to_string(gpuId) + ".");
-//   return (*itr)->queryResultBufferPtr;
-// }
-
-// std::map<GpuId, QueryVertexBufferShPtr> QueryRendererContext::getQueryResultVertexBuffers() const {
-//   std::map<GpuId, QueryVertexBufferShPtr> rtn;
-
-//   auto qrmGpuCache = _qrmGpuCache.lock();
-//   CHECK(qrmGpuCache != nullptr);
-
-//   for (auto& itr : (*qrmGpuCache)) {
-//     rtn.insert({itr->gpuId, itr->queryResultBufferPtr});
-//   }
-
-//   return rtn;
-// }
 
 bool QueryRendererContext::isJSONCacheUpToDate(const rapidjson::Pointer& objPath, const rapidjson::Value& obj) {
   if (!_jsonCache) {
@@ -162,58 +128,98 @@ bool QueryRendererContext::isJSONCacheUpToDate(const rapidjson::Pointer& objPath
 
   const rapidjson::Value* cachedVal = GetValueByPointer(*_jsonCache, objPath);
 
-  // TODO(croot): throw an exception or just return false?
-  RUNTIME_EX_ASSERT(cachedVal != nullptr,
-                    "QueryRendererContext " + to_string(_userWidget) + ": The path " +
-                        RapidJSONUtils::getPointerPath(objPath) + " is not a valid path in the cached json.");
-
   return (cachedVal ? (*cachedVal == obj) : false);
 }
 
-void QueryRendererContext::subscribeToRefEvent(RefEventType eventType,
-                                               const ScaleShPtr& eventObj,
-                                               RefEventCallback cb) {
+const rapidjson::Value* QueryRendererContext::getJSONObj(const rapidjson::Pointer& objPath) {
+  if (_jsonCache) {
+    return GetValueByPointer(*_jsonCache, objPath);
+  }
+
+  return nullptr;
+}
+
+RefCallbackId QueryRendererContext::subscribeToRefEvent(RefEventType eventType,
+                                                        const RefObjShPtr& eventObj,
+                                                        RefEventCallback cb) {
+  auto refType = eventObj->getRefType();
   const std::string& eventObjName = eventObj->getNameRef();
-  RUNTIME_EX_ASSERT(hasScale(eventObjName),
-                    "QueryRendererContext " + to_string(_userWidget) + ": Cannot subscribe to event for scale \"" +
-                        eventObj->getNameRef() + "\". The scale does not exist.");
 
-  EventCallbacksMap::iterator itr;
+  switch (refType) {
+    case RefType::DATA: {
+      RUNTIME_EX_ASSERT(hasDataTable(eventObjName),
+                        "QueryRendererContext " + to_string(_userWidget) +
+                            ": Cannot subscribe to event for data table \"" + eventObj->getNameRef() +
+                            "\". The data table does not exist.");
+    } break;
+    case RefType::SCALE:
+      RUNTIME_EX_ASSERT(hasScale(eventObjName),
+                        "QueryRendererContext " + to_string(_userWidget) + ": Cannot subscribe to event for scale \"" +
+                            eventObj->getNameRef() + "\". The scale does not exist.");
+      break;
+    default:
+      THROW_RUNTIME_EX("QueryRendererContext " + to_string(_userWidget) +
+                       ": Cannot subscribe to event for an object of type " + to_string(refType) + ". " +
+                       to_string(refType) + " is an unsupported type.");
+  }
 
-  if ((itr = _eventCallbacksMap.find(eventObjName)) == _eventCallbacksMap.end()) {
-    itr = _eventCallbacksMap.insert(itr, std::make_pair(eventObjName, std::move(EventCallbacksArray())));
+  auto refTypeConv = static_cast<int>(refType);
+  auto id = ++_currCbId;
+
+  EventCallbacksByNameMap::iterator nameItr;
+  EventCallbacksMap::iterator typeItr;
+
+  if ((typeItr = _eventCallbacksMap.find(refTypeConv)) == _eventCallbacksMap.end()) {
+    EventCallbacksByNameMap nameMap = {{eventObjName, std::move(EventCallbacksArray())}};
+    typeItr = _eventCallbacksMap.insert(typeItr, std::make_pair(refTypeConv, std::move(nameMap)));
+    nameItr = typeItr->second.begin();
+  } else if ((nameItr = typeItr->second.find(eventObjName)) == typeItr->second.end()) {
+    nameItr = typeItr->second.insert(nameItr, std::make_pair(eventObjName, std::move(EventCallbacksArray())));
   }
 
   size_t idx = static_cast<size_t>(eventType);
   if (eventType == RefEventType::ALL) {
     for (size_t i = 0; i < idx; ++i) {
-      itr->second[i].insert(cb);
+      CHECK(nameItr->second[i].emplace(id, cb).second);
     }
   } else {
-    itr->second[idx].insert(cb);
+    CHECK(nameItr->second[idx].emplace(id, cb).second);
   }
+
+  return id;
 }
 
 void QueryRendererContext::unsubscribeFromRefEvent(RefEventType eventType,
-                                                   const ScaleShPtr& eventObj,
-                                                   RefEventCallback cb) {
+                                                   const RefObjShPtr& eventObj,
+                                                   const RefCallbackId cbId) {
+  EventCallbacksByNameMap::iterator nitr;
   EventCallbacksMap::iterator mitr;
-  EventCallbackList::iterator sitr;
-  const std::string& eventObjName = eventObj->getNameRef();
+  EventCallbackMap::iterator sitr;
 
-  if ((mitr = _eventCallbacksMap.find(eventObjName)) != _eventCallbacksMap.end()) {
+  const std::string& eventObjName = eventObj->getNameRef();
+  auto refType = static_cast<int>(eventObj->getRefType());
+
+  if ((mitr = _eventCallbacksMap.find(refType)) != _eventCallbacksMap.end() &&
+      (nitr = mitr->second.find(eventObjName)) != mitr->second.end()) {
     size_t idx = static_cast<size_t>(eventType);
 
     if (eventType == RefEventType::ALL) {
       for (size_t i = 0; i < idx; ++i) {
-        if ((sitr = mitr->second[i].find(cb)) != mitr->second[i].end()) {
-          mitr->second[i].erase(sitr);
+        if ((sitr = nitr->second[i].find(cbId)) != nitr->second[i].end()) {
+          nitr->second[i].erase(sitr);
         }
       }
     } else {
-      if ((sitr = mitr->second[idx].find(cb)) != mitr->second[idx].end()) {
-        mitr->second[idx].erase(sitr);
+      if ((sitr = nitr->second[idx].find(cbId)) != nitr->second[idx].end()) {
+        nitr->second[idx].erase(sitr);
       }
+    }
+
+    if (!nitr->second.size()) {
+      mitr->second.erase(eventObjName);
+    }
+    if (!mitr->second.size()) {
+      _eventCallbacksMap.erase(refType);
     }
   }
 
@@ -240,25 +246,29 @@ void QueryRendererContext::removeAccumulatorScale(const std::string& scaleName) 
   _accumulatorScales.erase(scaleName);
 }
 
-void QueryRendererContext::_fireRefEvent(RefEventType eventType, const ScaleShPtr& eventObj) {
+void QueryRendererContext::_fireRefEvent(RefEventType eventType, const RefObjShPtr& eventObj) {
   CHECK(eventType != RefEventType::ALL);
 
+  EventCallbacksByNameMap::iterator nitr;
   EventCallbacksMap::iterator mitr;
-  const std::string& eventObjName = eventObj->getNameRef();
 
-  if ((mitr = _eventCallbacksMap.find(eventObjName)) != _eventCallbacksMap.end()) {
+  auto refType = static_cast<int>(eventObj->getRefType());
+  auto& eventObjName = eventObj->getNameRef();
+
+  if ((mitr = _eventCallbacksMap.find(refType)) != _eventCallbacksMap.end() &&
+      (nitr = mitr->second.find(eventObjName)) != mitr->second.end()) {
     size_t idx = static_cast<size_t>(eventType);
 
-    std::vector<RefEventCallback> callbacksToCall(mitr->second[idx].size());
+    std::vector<RefEventCallback> callbacksToCall(nitr->second[idx].size());
 
     int i = 0;
-    for (auto& cb : mitr->second[idx]) {
+    for (auto& cb : nitr->second[idx]) {
       // callbacks have the ability to subscribe and unsubscribe from the events
       // so we can't just call them here while looping through the data structure
       // that holds the callbacks as that data structure can be modified mid-stream.
       // So we'll store an additional data structure for all callbacks that need
       // calling and call them.
-      callbacksToCall[i++] = cb;
+      callbacksToCall[i++] = cb.second;
     }
 
     for (auto& cb : callbacksToCall) {

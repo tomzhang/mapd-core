@@ -11,7 +11,7 @@
 ExecutionResult RelAlgExecutor::executeRelAlgSeq(std::vector<RaExecutionDesc>& exec_descs,
                                                  const CompilationOptions& co,
                                                  const ExecutionOptions& eo,
-                                                 const RenderInfo& render_info) {
+                                                 RenderInfo* render_info) {
   // capture the lock acquistion time
   auto clock_begin = timer_start();
   std::lock_guard<std::mutex> lock(executor_->execute_mutex_);
@@ -676,7 +676,7 @@ std::vector<TargetMetaInfo> get_targets_meta(const RA* ra_node, const std::vecto
 ExecutionResult RelAlgExecutor::executeCompound(const RelCompound* compound,
                                                 const CompilationOptions& co,
                                                 const ExecutionOptions& eo,
-                                                const RenderInfo& render_info,
+                                                RenderInfo* render_info,
                                                 const int64_t queue_time_ms) {
   const auto work_unit = createCompoundWorkUnit(compound, {{}, SortAlgorithm::Default, 0, 0});
   return executeWorkUnit(
@@ -686,7 +686,7 @@ ExecutionResult RelAlgExecutor::executeCompound(const RelCompound* compound,
 ExecutionResult RelAlgExecutor::executeAggregate(const RelAggregate* aggregate,
                                                  const CompilationOptions& co,
                                                  const ExecutionOptions& eo,
-                                                 const RenderInfo& render_info,
+                                                 RenderInfo* render_info,
                                                  const int64_t queue_time_ms) {
   const auto work_unit = createAggregateWorkUnit(aggregate, {{}, SortAlgorithm::Default, 0, 0});
   return executeWorkUnit(work_unit, aggregate->getOutputMetainfo(), true, co, eo, render_info, queue_time_ms);
@@ -695,7 +695,7 @@ ExecutionResult RelAlgExecutor::executeAggregate(const RelAggregate* aggregate,
 ExecutionResult RelAlgExecutor::executeProject(const RelProject* project,
                                                const CompilationOptions& co,
                                                const ExecutionOptions& eo,
-                                               const RenderInfo& render_info,
+                                               RenderInfo* render_info,
                                                const int64_t queue_time_ms) {
   const auto work_unit = createProjectWorkUnit(project, {{}, SortAlgorithm::Default, 0, 0});
   return executeWorkUnit(work_unit, project->getOutputMetainfo(), false, co, eo, render_info, queue_time_ms);
@@ -704,7 +704,7 @@ ExecutionResult RelAlgExecutor::executeProject(const RelProject* project,
 ExecutionResult RelAlgExecutor::executeFilter(const RelFilter* filter,
                                               const CompilationOptions& co,
                                               const ExecutionOptions& eo,
-                                              const RenderInfo& render_info,
+                                              RenderInfo* render_info,
                                               const int64_t queue_time_ms) {
   const auto work_unit = createFilterWorkUnit(filter, {{}, SortAlgorithm::Default, 0, 0});
   return executeWorkUnit(work_unit, filter->getOutputMetainfo(), false, co, eo, render_info, queue_time_ms);
@@ -713,7 +713,7 @@ ExecutionResult RelAlgExecutor::executeFilter(const RelFilter* filter,
 ExecutionResult RelAlgExecutor::executeJoin(const RelJoin* join,
                                             const CompilationOptions& co,
                                             const ExecutionOptions& eo,
-                                            const RenderInfo& render_info,
+                                            RenderInfo* render_info,
                                             const int64_t queue_time_ms) {
   const auto work_unit = createJoinWorkUnit(join, {{}, SortAlgorithm::Default, 0, 0});
   return executeWorkUnit(work_unit, join->getOutputMetainfo(), false, co, eo, render_info, queue_time_ms);
@@ -752,7 +752,7 @@ bool first_oe_is_desc(const std::list<Analyzer::OrderEntry>& order_entries) {
 ExecutionResult RelAlgExecutor::executeSort(const RelSort* sort,
                                             const CompilationOptions& co,
                                             const ExecutionOptions& eo,
-                                            const RenderInfo& render_info,
+                                            RenderInfo* render_info,
                                             const int64_t queue_time_ms) {
   CHECK_EQ(size_t(1), sort->inputCount());
   const auto source = sort->getInput(0);
@@ -771,7 +771,7 @@ ExecutionResult RelAlgExecutor::executeSort(const RelSort* sort,
       groupby_exprs = source_work_unit.exe_unit.groupby_exprs;
       auto source_result = executeWorkUnit(
           source_work_unit, source->getOutputMetainfo(), is_aggregate, co, eo, render_info, queue_time_ms);
-      if (render_info.is_render) {
+      if (render_info && render_info->do_render) {
         return source_result;
       }
       auto rows_to_sort = source_result.getRows();
@@ -840,37 +840,43 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
                                                 const bool is_agg,
                                                 const CompilationOptions& co,
                                                 const ExecutionOptions& eo,
-                                                const RenderInfo& render_info,
+                                                RenderInfo* render_info,
                                                 const int64_t queue_time_ms) {
   int32_t error_code{0};
   size_t max_groups_buffer_entry_guess = work_unit.max_groups_buffer_entry_guess;
-  std::unique_ptr<RenderAllocatorMap> render_allocator_map;
-  if (render_info.is_render) {
+  if (render_info && render_info->do_render) {
     if (co.device_type_ != ExecutorDeviceType::GPU) {
       throw std::runtime_error("Backend rendering is only supported on GPU");
     }
     if (!executor_->render_manager_) {
       throw std::runtime_error("This build doesn't support backend rendering");
     }
-    render_allocator_map.reset(new RenderAllocatorMap(
-        cat_.get_dataMgr().cudaMgr_, executor_->render_manager_, executor_->blockSize(), executor_->gridSize()));
+
+    if (!render_info->render_allocator_map_ptr) {
+      // for backwards compatibility, can be removed when MapDHandler::render(...)
+      // in MapDServer.cpp is removed
+      render_info->render_allocator_map_ptr.reset(new RenderAllocatorMap(
+          cat_.get_dataMgr().cudaMgr_, executor_->render_manager_, executor_->blockSize(), executor_->gridSize()));
+    }
   }
 
-  ExecutionResult result = {executor_->executeWorkUnit(&error_code,
-                                                       max_groups_buffer_entry_guess,
-                                                       is_agg,
-                                                       get_table_infos(work_unit.exe_unit, cat_, temporary_tables_),
-                                                       work_unit.exe_unit,
-                                                       co,
-                                                       eo,
-                                                       cat_,
-                                                       executor_->row_set_mem_owner_,
-                                                       render_allocator_map.get()),
-                            targets_meta};
+  ExecutionResult result = {
+      executor_->executeWorkUnit(
+          &error_code,
+          max_groups_buffer_entry_guess,
+          is_agg,
+          get_table_infos(work_unit.exe_unit, cat_, temporary_tables_),
+          work_unit.exe_unit,
+          co,
+          eo,
+          cat_,
+          executor_->row_set_mem_owner_,
+          (render_info && render_info->do_render ? render_info->render_allocator_map_ptr.get() : nullptr)),
+      targets_meta};
   result.setQueueTime(queue_time_ms);
 #ifdef HAVE_RENDERING
-  if (render_info.is_render) {
-    return renderWorkUnit(work_unit, targets_meta, render_allocator_map.get(), render_info, error_code, queue_time_ms);
+  if (render_info && render_info->do_render) {
+    return renderWorkUnit(work_unit, targets_meta, render_info, error_code, queue_time_ms);
   }
 #endif  // HAVE_RENDERING
   if (!error_code) {
@@ -898,8 +904,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
 #ifdef HAVE_RENDERING
 ExecutionResult RelAlgExecutor::renderWorkUnit(const RelAlgExecutor::WorkUnit& work_unit,
                                                const std::vector<TargetMetaInfo>& targets_meta,
-                                               RenderAllocatorMap* render_allocator_map,
-                                               const RenderInfo& render_info,
+                                               RenderInfo* render_info,
                                                const int32_t error_code,
                                                const int64_t queue_time_ms) {
   if (error_code == Executor::ERR_OUT_OF_RENDER_MEM) {
@@ -919,11 +924,7 @@ ExecutionResult RelAlgExecutor::renderWorkUnit(const RelAlgExecutor::WorkUnit& w
     target_entries.emplace_back(
         new Analyzer::TargetEntry(targets_meta[i].get_resname(), target_exprs_owned_[i], false));
   }
-  auto image_bytes = executor_->renderRows(target_entries,
-                                           render_info.render_type,
-                                           render_allocator_map,
-                                           render_info.session_id,
-                                           render_info.render_widget_id);
+  auto image_bytes = executor_->renderRows(target_entries, render_info);
   int64_t render_time_ms = timer_stop(clock_begin);
   return {boost::make_unique<ResultRows>(image_bytes, queue_time_ms, render_time_ms), {}};
 }

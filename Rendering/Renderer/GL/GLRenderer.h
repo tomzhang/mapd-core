@@ -134,7 +134,11 @@ class GLRenderer : public Renderer {
   Resources::GLIndirectDrawIndexBufferShPtr getBoundIndirectDrawIndexBuffer() const;
   bool hasBoundIndirectDrawIndexBuffer() const;
 
-  void drawVertexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);
+  void drawVertexBuffers(GLenum primitiveMode,
+                         size_t startIndex = 0,
+                         int numItemsToDraw = -1,
+                         const Resources::GLBufferLayoutShPtr& layoutPtr = nullptr);
+
   void drawIndirectVertexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);
 
   void drawIndexBuffers(GLenum primitiveMode, size_t startIndex = 0, int numItemsToDraw = -1);

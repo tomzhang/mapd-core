@@ -349,7 +349,9 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
     ubo = (_perGpuData.size() ? (*_uboProps.begin())->getUboPtr(_perGpuData.begin()->first) : nullptr);
     CHECK(ubo);
 
-    auto shaderBlockLayout = ubo->getGLUniformBufferPtr()->getBufferLayout();
+    auto glUbo = ubo->getGLUniformBufferPtr();
+    CHECK(glUbo->getNumBufferLayouts() == 1);
+    auto shaderBlockLayout = glUbo->getBufferLayoutAtIndex(0);
 
     std::string shaderBlockCode = shaderBlockLayout->buildShaderBlockCode(
         uniformBlockName, uniformBlockInstanceName, ::Rendering::GL::Resources::StorageQualifier::UNIFORM);
@@ -529,7 +531,7 @@ void PolyMark::_updateShader() {
 
 void PolyMark::_buildVAOData(const GpuId& gpuId,
                              ::Rendering::GL::Resources::GLShader* activeShader,
-                             ::Rendering::GL::Resources::VboAttrToShaderAttrMap& attrMap,
+                             ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap& attrMap,
                              ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) {
   int cnt = 0;
   int vboSize = 0;
@@ -592,6 +594,14 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
     }
   }
 
+  // TODO(croot): fold this into the base class
+  if (_ctx->doHitTest() && _dataPtr) {
+    auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(_dataPtr);
+    if (dataPtr) {
+      activeShader->setUniformAttribute("uTableId", dataPtr->getTableId());
+    }
+  }
+
   if (subroutines.size()) {
     activeShader->setSubroutines(subroutines);
   }
@@ -614,7 +624,9 @@ void PolyMark::_updateRenderPropertyGpuResources(const QueryRendererContext* ctx
 void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
   // NOTE: shader should have been updated before calling this
   auto itr = _perGpuData.find(gpuId);
-  CHECK(itr != _perGpuData.end());
+  if (itr == _perGpuData.end()) {
+    return;
+  }
 
   RootPerGpuDataShPtr qrmGpuData = itr->second.getRootPerGpuData();
   CHECK(qrmGpuData);

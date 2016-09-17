@@ -13,6 +13,10 @@ class BaseQueryDataTable;
 typedef std::unique_ptr<BaseQueryDataTable> QueryDataTableUqPtr;
 typedef std::shared_ptr<BaseQueryDataTable> QueryDataTableShPtr;
 
+class BaseQueryDataTableJSON;
+typedef std::unique_ptr<BaseQueryDataTableJSON> QueryDataTableJSONUqPtr;
+typedef std::shared_ptr<BaseQueryDataTableJSON> QueryDataTableJSONShPtr;
+
 class BaseQueryDataTableVBO;
 typedef std::unique_ptr<BaseQueryDataTableVBO> QueryDataTableVBOUqPtr;
 typedef std::shared_ptr<BaseQueryDataTableVBO> QueryDataTableVBOShPtr;

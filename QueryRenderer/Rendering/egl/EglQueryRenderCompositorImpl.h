@@ -55,6 +55,7 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   struct GLResourceStorage {
     std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> rgbaTextures;
     std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> idTextures;
+    std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> id2Textures;
     std::vector<::Rendering::GL::Resources::GLRenderbufferWkPtr> rbos;
     AccumulatorArray registeredAccumTxts;
   };
@@ -91,6 +92,7 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
 
   std::unique_ptr<EglImage> _rgbaEglImgPtr;
   std::unique_ptr<EglImage> _idEglImgPtr;
+  std::unique_ptr<EglImage> _id2EglImgPtr;
   std::unique_ptr<EglImage> _depthEglImgPtr;
 
   std::map<GpuId, GLResourceStorage> _consumedRsrcs;

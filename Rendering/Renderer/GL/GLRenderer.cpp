@@ -419,14 +419,27 @@ bool GLRenderer::hasBoundIndirectDrawIndexBuffer() const {
   return _bindState.hasBoundIndirectDrawIndexBuffer();
 }
 
-void GLRenderer::drawVertexBuffers(GLenum primitiveMode, size_t startIndex, int numItemsToDraw) {
-  CHECK(hasBoundVertexBuffer() || hasBoundVertexArray());
+void GLRenderer::drawVertexBuffers(GLenum primitiveMode,
+                                   size_t startIndex,
+                                   int numItemsToDraw,
+                                   const Resources::GLBufferLayoutShPtr& layoutPtr) {
+  GLResourceShPtr vertRsrc = getBoundVertexArray();
+  if (!vertRsrc) {
+    vertRsrc = getBoundVertexBuffer();
+  }
+  RUNTIME_EX_ASSERT(
+      vertRsrc && vertRsrc->isUsable(),
+      "An active and usable vertex buffer or vertex array object needs to be bound to the renderer to draw vertices");
 
   if (numItemsToDraw < 0) {
-    if (hasBoundVertexArray()) {
-      numItemsToDraw = getBoundVertexArray()->numVertices();
+    if (vertRsrc->getResourceType() == GLResourceType::VERTEXARRAY) {
+      auto vao = std::dynamic_pointer_cast<Resources::GLVertexArray>(vertRsrc);
+      CHECK(vao);
+      numItemsToDraw = vao->numVertices();
     } else {
-      numItemsToDraw = getBoundVertexBuffer()->numVertices();
+      auto vbo = std::dynamic_pointer_cast<Resources::GLVertexBuffer>(vertRsrc);
+      CHECK(vbo);
+      numItemsToDraw = vbo->numVertices(layoutPtr);
     }
   }
 
