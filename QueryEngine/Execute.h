@@ -216,7 +216,7 @@ struct SortInfo {
 struct RelAlgExecutionUnit {
   const std::vector<InputDescriptor> input_descs;
   const std::vector<InputDescriptor> extra_input_descs;
-  const std::list<InputColDescriptor> input_col_descs;
+  const std::list<std::shared_ptr<const InputColDescriptor>> input_col_descs;
   const std::list<std::shared_ptr<Analyzer::Expr>> simple_quals;
   const std::list<std::shared_ptr<Analyzer::Expr>> quals;
   const JoinType join_type;
@@ -618,7 +618,7 @@ class Executor {
                                 const Data_Namespace::MemoryLevel memory_level,
                                 const int device_id) const;
 
-    const int8_t* getColumn(const InputColDescriptor& col_desc,
+    const int8_t* getColumn(const InputColDescriptor* col_desc,
                             const int frag_id,
                             const std::map<int, const TableFragments*>& all_tables_fragments,
                             const Data_Namespace::MemoryLevel memory_level,
@@ -708,7 +708,7 @@ class Executor {
 
   void buildSelectedFragsMapping(std::vector<std::vector<size_t>>& selected_fragments_crossjoin,
                                  std::vector<size_t>& local_col_to_frag_pos,
-                                 const std::list<InputColDescriptor>& col_global_ids,
+                                 const std::list<std::shared_ptr<const InputColDescriptor>>& col_global_ids,
                                  const std::map<int, std::vector<size_t>>& selected_fragments,
                                  const std::vector<InputDescriptor>& input_descs);
 
@@ -808,7 +808,7 @@ class Executor {
 
   JoinInfo chooseJoinType(const std::list<std::shared_ptr<Analyzer::Expr>>&,
                           const std::vector<Fragmenter_Namespace::TableInfo>&,
-                          const std::list<InputColDescriptor>&,
+                          const std::list<std::shared_ptr<const InputColDescriptor>>&,
                           const ExecutorDeviceType device_type);
 
   void bindInitGroupByBuffer(llvm::Function* query_func,
@@ -849,7 +849,7 @@ class Executor {
   llvm::Value* castToTypeIn(llvm::Value* val, const size_t bit_width);
   llvm::Value* castToIntPtrTyIn(llvm::Value* val, const size_t bit_width);
 
-  void allocateLocalColumnIds(const std::list<InputColDescriptor>& global_col_ids);
+  void allocateLocalColumnIds(const std::list<std::shared_ptr<const InputColDescriptor>>& global_col_ids);
   int getLocalColumnId(const Analyzer::ColumnVar* col_var, const bool fetch_column) const;
 
   std::pair<bool, int64_t> skipFragment(const int table_id,
