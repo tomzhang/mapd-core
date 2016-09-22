@@ -2992,26 +2992,14 @@ llvm::Value* Executor::codegenArith(const Analyzer::BinOper* bin_oper, const Com
     const auto int_typename = numeric_or_time_interval_type_name(lhs_type, rhs_type);
     switch (optype) {
       case kMINUS:
-        return codegenSub(bin_oper,
-			  lhs_lv,
-			  rhs_lv,
-                          null_check_suffix.empty() ? "" : int_typename,
-                          null_check_suffix,
-                          oper_type);
+        return codegenSub(
+            bin_oper, lhs_lv, rhs_lv, null_check_suffix.empty() ? "" : int_typename, null_check_suffix, oper_type);
       case kPLUS:
-        return codegenAdd(bin_oper,
-			  lhs_lv,
-                          rhs_lv,
-                          null_check_suffix.empty() ? "" : int_typename,
-                          null_check_suffix,
-                          oper_type);
+        return codegenAdd(
+            bin_oper, lhs_lv, rhs_lv, null_check_suffix.empty() ? "" : int_typename, null_check_suffix, oper_type);
       case kMULTIPLY:
-        return codegenMul(bin_oper,
-			  lhs_lv,
-                          rhs_lv,
-                          null_check_suffix.empty() ? "" : int_typename,
-                          null_check_suffix,
-                          oper_type);
+        return codegenMul(
+            bin_oper, lhs_lv, rhs_lv, null_check_suffix.empty() ? "" : int_typename, null_check_suffix, oper_type);
       case kDIVIDE:
         return codegenDiv(lhs_lv, rhs_lv, null_check_suffix.empty() ? "" : int_typename, null_check_suffix, oper_type);
       case kMODULO:
@@ -3046,9 +3034,7 @@ llvm::Value* Executor::codegenArith(const Analyzer::BinOper* bin_oper, const Com
   return nullptr;
 }
 
-bool Executor::checkExpressionRanges(const Analyzer::BinOper* bin_oper,
-				     int64_t min,
-				     int64_t max) {
+bool Executor::checkExpressionRanges(const Analyzer::BinOper* bin_oper, int64_t min, int64_t max) {
   if (bin_oper->get_type_info().is_decimal())
     return false;
 
@@ -3064,7 +3050,7 @@ bool Executor::checkExpressionRanges(const Analyzer::BinOper* bin_oper,
 }
 
 llvm::Value* Executor::codegenAdd(const Analyzer::BinOper* bin_oper,
-				  llvm::Value* lhs_lv,
+                                  llvm::Value* lhs_lv,
                                   llvm::Value* rhs_lv,
                                   const std::string& null_typename,
                                   const std::string& null_check_suffix,
@@ -3075,8 +3061,8 @@ llvm::Value* Executor::codegenAdd(const Analyzer::BinOper* bin_oper,
   llvm::Value* chosen_min{nullptr};
   std::tie(chosen_max, chosen_min) = inlineIntMaxMin(ti.get_size(), true);
   auto need_overflow_check = !checkExpressionRanges(bin_oper,
-						    static_cast<llvm::ConstantInt*>(chosen_min)->getSExtValue(),
-						    static_cast<llvm::ConstantInt*>(chosen_max)->getSExtValue());
+                                                    static_cast<llvm::ConstantInt*>(chosen_min)->getSExtValue(),
+                                                    static_cast<llvm::ConstantInt*>(chosen_max)->getSExtValue());
   llvm::BasicBlock* add_ok{nullptr};
   llvm::BasicBlock* add_fail{nullptr};
   if (need_overflow_check) {
@@ -3107,7 +3093,7 @@ llvm::Value* Executor::codegenAdd(const Analyzer::BinOper* bin_oper,
 }
 
 llvm::Value* Executor::codegenSub(const Analyzer::BinOper* bin_oper,
-				  llvm::Value* lhs_lv,
+                                  llvm::Value* lhs_lv,
                                   llvm::Value* rhs_lv,
                                   const std::string& null_typename,
                                   const std::string& null_check_suffix,
@@ -3118,8 +3104,8 @@ llvm::Value* Executor::codegenSub(const Analyzer::BinOper* bin_oper,
   llvm::Value* chosen_min{nullptr};
   std::tie(chosen_max, chosen_min) = inlineIntMaxMin(ti.get_size(), true);
   auto need_overflow_check = !checkExpressionRanges(bin_oper,
-						    static_cast<llvm::ConstantInt*>(chosen_min)->getSExtValue(),
-						    static_cast<llvm::ConstantInt*>(chosen_max)->getSExtValue());
+                                                    static_cast<llvm::ConstantInt*>(chosen_min)->getSExtValue(),
+                                                    static_cast<llvm::ConstantInt*>(chosen_max)->getSExtValue());
   llvm::BasicBlock* sub_ok{nullptr};
   llvm::BasicBlock* sub_fail{nullptr};
   if (need_overflow_check) {
@@ -3150,7 +3136,7 @@ llvm::Value* Executor::codegenSub(const Analyzer::BinOper* bin_oper,
 }
 
 llvm::Value* Executor::codegenMul(const Analyzer::BinOper* bin_oper,
-				  llvm::Value* lhs_lv,
+                                  llvm::Value* lhs_lv,
                                   llvm::Value* rhs_lv,
                                   const std::string& null_typename,
                                   const std::string& null_check_suffix,
@@ -3161,8 +3147,8 @@ llvm::Value* Executor::codegenMul(const Analyzer::BinOper* bin_oper,
   llvm::Value* chosen_min{nullptr};
   std::tie(chosen_max, chosen_min) = inlineIntMaxMin(ti.get_size(), true);
   auto need_overflow_check = !checkExpressionRanges(bin_oper,
-						    static_cast<llvm::ConstantInt*>(chosen_min)->getSExtValue(),
-						    static_cast<llvm::ConstantInt*>(chosen_max)->getSExtValue());
+                                                    static_cast<llvm::ConstantInt*>(chosen_min)->getSExtValue(),
+                                                    static_cast<llvm::ConstantInt*>(chosen_max)->getSExtValue());
   llvm::BasicBlock* mul_ok{nullptr};
   llvm::BasicBlock* mul_fail{nullptr};
   if (need_overflow_check) {
