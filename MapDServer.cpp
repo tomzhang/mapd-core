@@ -41,6 +41,7 @@
 #include "Shared/mapd_shared_mutex.h"
 #include "Shared/measure.h"
 #include "Shared/scope.h"
+#include "Shared/StringTransform.h"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -2501,7 +2502,16 @@ class MapDHandler : virtual public MapDIf {
       }
 #endif  // HAVE_CALCITE
       try {
-        num_parse_errors = parser.parse(query_str, parse_trees, last_parsed);
+        // check for COPY TO stmt replace as required parser expects #~# markers
+        auto result = query_str;
+        {
+          //boost::regex copy_to{R"(COPY\s\((.*)\)\sTO\s(.*))", boost::regex::extended | boost::regex::icase};
+          boost::regex copy_to{R"(COPY\s*\(([^#])(.+)\)\s+TO\s)", boost::regex::extended | boost::regex::icase};
+          apply_shim(result, copy_to, [](std::string& result, const boost::smatch& what) {
+            result.replace(what.position(), what.length(), "COPY (#~#" + what[1]+what[2] + "#~#) TO  ");
+          });
+        }
+        num_parse_errors = parser.parse(result, parse_trees, last_parsed);
       } catch (std::exception& e) {
         TMapDException ex;
         ex.error_msg = std::string("Exception: ") + e.what();
