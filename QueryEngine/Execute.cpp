@@ -4005,14 +4005,14 @@ RowSetPtr Executor::executeSortPlan(const Planner::Sort* sort_plan,
 
 namespace {
 
-size_t compute_buffer_entry_guess(const std::vector<Fragmenter_Namespace::TableInfo>& query_infos) {
+size_t compute_buffer_entry_guess(const std::vector<InputTableInfo>& query_infos) {
   using Fragmenter_Namespace::FragmentInfo;
   size_t max_groups_buffer_entry_guess = 1;
   for (const auto& query_info : query_infos) {
-    CHECK(!query_info.fragments.empty());
+    CHECK(!query_info.info.fragments.empty());
     auto it =
-        std::max_element(query_info.fragments.begin(),
-                         query_info.fragments.end(),
+        std::max_element(query_info.info.fragments.begin(),
+                         query_info.info.fragments.end(),
                          [](const FragmentInfo& f1, const FragmentInfo& f2) { return f1.numTuples < f2.numTuples; });
     max_groups_buffer_entry_guess *= it->numTuples;
   }
@@ -4067,7 +4067,7 @@ bool is_sample_query(const RelAlgExecutionUnit& ra_exe_unit) {
 ResultPtr Executor::executeWorkUnit(int32_t* error_code,
                                     size_t& max_groups_buffer_entry_guess,
                                     const bool is_agg,
-                                    const std::vector<Fragmenter_Namespace::TableInfo>& query_infos,
+                                    const std::vector<InputTableInfo>& query_infos,
                                     const RelAlgExecutionUnit& ra_exe_unit,
                                     const CompilationOptions& co,
                                     const ExecutionOptions& options,
@@ -4152,7 +4152,8 @@ ResultPtr Executor::executeWorkUnit(int32_t* error_code,
     std::map<int, const TableFragments*> selected_tables_fragments;
     CHECK_EQ(query_infos.size(), (input_desc_count + ra_exe_unit.extra_input_descs.size()));
     for (size_t table_idx = 0; table_idx < input_desc_count; ++table_idx) {
-      selected_tables_fragments[ra_exe_unit.input_descs[table_idx].getTableId()] = &query_infos[table_idx].fragments;
+      selected_tables_fragments[ra_exe_unit.input_descs[table_idx].getTableId()] =
+          &query_infos[table_idx].info.fragments;
     }
     const QueryMemoryDescriptor& query_mem_desc = execution_dispatch.getQueryMemoryDescriptor();
     dispatchFragments(dispatch,
@@ -4253,7 +4254,7 @@ ExecutorDeviceType Executor::getDeviceTypeForTargets(const RelAlgExecutionUnit& 
 
 Executor::ExecutionDispatch::ExecutionDispatch(Executor* executor,
                                                const RelAlgExecutionUnit& ra_exe_unit,
-                                               const std::vector<Fragmenter_Namespace::TableInfo>& query_infos,
+                                               const std::vector<InputTableInfo>& query_infos,
                                                const Catalog_Namespace::Catalog& cat,
                                                const CompilationOptions& co,
                                                const size_t context_count,
@@ -4270,11 +4271,11 @@ Executor::ExecutionDispatch::ExecutionDispatch(Executor* executor,
       row_set_mem_owner_(row_set_mem_owner),
       error_code_(error_code),
       render_allocator_map_(render_allocator_map) {
-  all_frag_row_offsets_.resize(query_infos.front().fragments.size() + 1);
-  for (size_t i = 1; i <= query_infos.front().fragments.size(); ++i) {
-    all_frag_row_offsets_[i] = all_frag_row_offsets_[i - 1] + query_infos_.front().fragments[i - 1].numTuples;
+  all_frag_row_offsets_.resize(query_infos.front().info.fragments.size() + 1);
+  for (size_t i = 1; i <= query_infos.front().info.fragments.size(); ++i) {
+    all_frag_row_offsets_[i] = all_frag_row_offsets_[i - 1] + query_infos_.front().info.fragments[i - 1].numTuples;
   }
-  all_fragment_results_.reserve(query_infos_.front().fragments.size());
+  all_fragment_results_.reserve(query_infos_.front().info.fragments.size());
 }
 
 namespace {
@@ -4306,7 +4307,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
   const auto outer_it = frag_ids.find(outer_table_id);
   CHECK(outer_it != frag_ids.end());
   for (const auto frag_id : outer_it->second) {
-    const auto& outer_fragment = query_infos_.front().fragments[frag_id];
+    const auto& outer_fragment = query_infos_.front().info.fragments[frag_id];
     if (co_.device_type_ != ExecutorDeviceType::Hybrid) {
       chosen_device_id = outer_fragment.deviceIds[static_cast<int>(memory_level)];
     }
@@ -4320,7 +4321,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
         }
         CHECK(inner_it != frag_ids.end());
         for (const auto inner_frag_id : inner_it->second) {
-          const auto& inner_fragment = query_infos_[table_idx].fragments[inner_frag_id];
+          const auto& inner_fragment = query_infos_[table_idx].info.fragments[inner_frag_id];
           num_rows.push_back(inner_fragment.numTuples);
         }
       }
@@ -4342,7 +4343,8 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
     std::map<int, const TableFragments*> all_tables_fragments;
     for (size_t tab_idx = 0, tab_cnt = ra_exe_unit_.input_descs.size(); tab_idx < tab_cnt; ++tab_idx) {
       int table_id = ra_exe_unit_.input_descs[tab_idx].getTableId();
-      const auto& fragments = query_infos_[tab_idx].fragments;
+      CHECK_EQ(query_infos_[tab_idx].table_id, table_id);
+      const auto& fragments = query_infos_[tab_idx].info.fragments;
       auto it_ok = all_tables_fragments.insert(std::make_pair(table_id, &fragments));
       if (!it_ok.second) {
         std::lock_guard<std::mutex> lock(reduce_mutex);
@@ -4356,7 +4358,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
          tab_idx < tab_cnt;
          ++tab_idx) {
       int table_id = ra_exe_unit_.extra_input_descs[tab_idx].getTableId();
-      const auto& fragments = query_infos_[extra_tab_base + tab_idx].fragments;
+      const auto& fragments = query_infos_[extra_tab_base + tab_idx].info.fragments;
       all_tables_fragments.insert(std::make_pair(table_id, &fragments));
     }
     std::tie(col_buffers, iter_buffers) = executor_->fetchChunks(*this,
@@ -4934,7 +4936,8 @@ void Executor::dispatchFragments(const std::function<void(const ExecutorDeviceTy
   int64_t rowid_lookup_key{-1};
   const auto& ra_exe_unit = execution_dispatch.getExecutionUnit();
   CHECK(!ra_exe_unit.input_descs.empty());
-  const int outer_table_id = ra_exe_unit.input_descs.front().getTableId();
+  const auto& outer_table_desc = ra_exe_unit.input_descs.front();
+  const int outer_table_id = outer_table_desc.getTableId();
   auto it = selected_tables_fragments.find(outer_table_id);
   CHECK(it != selected_tables_fragments.end());
   const auto fragments = it->second;
@@ -4953,7 +4956,7 @@ void Executor::dispatchFragments(const std::function<void(const ExecutorDeviceTy
     for (size_t frag_id = 0; frag_id < fragments->size(); ++frag_id) {
       const auto& fragment = (*fragments)[frag_id];
       const auto skip_frag =
-          skipFragment(outer_table_id, fragment, ra_exe_unit.simple_quals, all_frag_row_offsets, frag_id);
+          skipFragment(outer_table_desc, fragment, ra_exe_unit.simple_quals, all_frag_row_offsets, frag_id);
       if (skip_frag.first) {
         continue;
       }
@@ -4982,7 +4985,8 @@ void Executor::dispatchFragments(const std::function<void(const ExecutorDeviceTy
   } else {
     for (size_t i = 0; i < fragments->size(); ++i) {
       const auto& fragment = (*fragments)[i];
-      const auto skip_frag = skipFragment(outer_table_id, fragment, ra_exe_unit.simple_quals, all_frag_row_offsets, i);
+      const auto skip_frag =
+          skipFragment(outer_table_desc, fragment, ra_exe_unit.simple_quals, all_frag_row_offsets, i);
       if (skip_frag.first) {
         continue;
       }
@@ -5820,13 +5824,13 @@ void verify_function_ir(const llvm::Function* func) {
 
 void Executor::nukeOldState(const bool allow_lazy_fetch,
                             const JoinInfo& join_info,
-                            const std::vector<Fragmenter_Namespace::TableInfo>& query_infos) {
+                            const std::vector<InputTableInfo>& query_infos) {
   cgen_state_.reset(new CgenState(query_infos));
   plan_state_.reset(new PlanState(allow_lazy_fetch, join_info, this));
 }
 
 Executor::CompilationResult Executor::compileWorkUnit(const bool render_output,
-                                                      const std::vector<Fragmenter_Namespace::TableInfo>& query_infos,
+                                                      const std::vector<InputTableInfo>& query_infos,
                                                       const RelAlgExecutionUnit& ra_exe_unit,
                                                       const CompilationOptions& co,
                                                       const ExecutionOptions& eo,
@@ -6112,7 +6116,7 @@ void Executor::allocateInnerScansIterators(const std::vector<InputDescriptor>& i
 }
 
 Executor::JoinInfo Executor::chooseJoinType(const std::list<std::shared_ptr<Analyzer::Expr>>& join_quals,
-                                            const std::vector<Fragmenter_Namespace::TableInfo>& query_infos,
+                                            const std::vector<InputTableInfo>& query_infos,
                                             const std::list<std::shared_ptr<const InputColDescriptor>>& input_col_descs,
                                             const ExecutorDeviceType device_type) {
   CHECK(device_type != ExecutorDeviceType::Hybrid);
@@ -6844,11 +6848,16 @@ int Executor::getLocalColumnId(const Analyzer::ColumnVar* col_var, const bool fe
   return it->second;
 }
 
-std::pair<bool, int64_t> Executor::skipFragment(const int table_id,
+std::pair<bool, int64_t> Executor::skipFragment(const InputDescriptor& table_desc,
                                                 const Fragmenter_Namespace::FragmentInfo& fragment,
                                                 const std::list<std::shared_ptr<Analyzer::Expr>>& simple_quals,
                                                 const std::vector<uint64_t>& all_frag_row_offsets,
                                                 const size_t frag_idx) {
+  const int table_id = table_desc.getTableId();
+  if (table_desc.getSourceType() == InputSourceType::RESULT &&
+      boost::get<IterTabPtr>(&get_temporary_table(temporary_tables_, table_id))) {
+    return {false, -1};
+  }
   for (const auto simple_qual : simple_quals) {
     const auto comp_expr = std::dynamic_pointer_cast<const Analyzer::BinOper>(simple_qual);
     if (!comp_expr) {
