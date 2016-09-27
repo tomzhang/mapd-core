@@ -4,6 +4,7 @@ PROJECT(mapd2)
 
 set(MAPD_VERSION_RAW "1.2.9dev")
 set(MAPD_IMMERSE_URL "http://builds.mapd.com/frontend/mapd2-dashboard-v1-latest-release.zip")
+set(MAPD_IMMERSEv2_URL "http://builds.mapd.com/frontend/mapd2-dashboard-v2-latest-release.zip")
 string(TIMESTAMP MAPD_BUILD_DATE "%Y%m%d")
 
 if($ENV{BUILD_NUMBER})
@@ -331,6 +332,9 @@ target_link_libraries (initdb Shared Catalog Fragmenter Chunk SqliteConnector Da
 set(CPACK_PACKAGE_VENDOR "MapD Technologies, Inc.")
 
 # Frontend
+if (ENABLE_LICENSING_AWS)
+  set(MAPD_IMMERSE_URL ${MAPD_IMMERSEv2_URL})
+endif()
 option(MAPD2_FRONTEND_DOWNLOAD "Download mapd2-frontend for packaging" OFF)
 set(MAPD_IMMERSE_URL ${MAPD_IMMERSE_URL} CACHE STRING "URL to bundled frontend")
 if(MAPD2_FRONTEND_DOWNLOAD)
