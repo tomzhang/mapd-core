@@ -4,7 +4,8 @@ PROJECT(mapd2)
 
 set(MAPD_VERSION_RAW "1.2.9dev")
 set(MAPD_IMMERSE_URL "http://builds.mapd.com/frontend/mapd2-dashboard-v1-latest-release.zip")
-set(MAPD_IMMERSEv2_URL "http://builds.mapd.com/frontend/mapd2-dashboard-v2-latest-release.zip")
+set(MAPD_IMMERSEV2_URL "http://builds.mapd.com/frontend/mapd2-dashboard-v2-latest-release.zip")
+option(MAPD_USE_IMMERSEV2 "Only bundle Immerse v2" OFF)
 string(TIMESTAMP MAPD_BUILD_DATE "%Y%m%d")
 
 if($ENV{BUILD_NUMBER})
@@ -206,6 +207,7 @@ if (ENABLE_LICENSING_AWS)
   add_subdirectory(ThirdParty/cpr/cpr)
   include_directories(ThirdParty/cpr/cpr/include)
   set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-aws")
+  set(MAPD_USE_IMMERSEV2 ON FORCE)
 endif()
 
 ADD_SUBDIRECTORY    (Catalog)
@@ -336,8 +338,9 @@ target_link_libraries (initdb Shared Catalog Fragmenter Chunk SqliteConnector Da
 set(CPACK_PACKAGE_VENDOR "MapD Technologies, Inc.")
 
 # Frontend
-if (ENABLE_LICENSING_AWS)
-  set(MAPD_IMMERSE_URL ${MAPD_IMMERSEv2_URL})
+if (MAPD_USE_IMMERSEV2)
+  set(MAPD_IMMERSE_URL ${MAPD_IMMERSEV2_URL})
+  set(MAPD_PACKAGE_FLAGS "${MAPD_PACKAGE_FLAGS}-v2")
 endif()
 option(MAPD2_FRONTEND_DOWNLOAD "Download mapd2-frontend for packaging" OFF)
 set(MAPD_IMMERSE_URL ${MAPD_IMMERSE_URL} CACHE STRING "URL to bundled frontend")
