@@ -418,6 +418,7 @@ class Executor {
                                    std::vector<llvm::Value*>,
                                    const Analyzer::Expr*,
                                    const CompilationOptions&);
+  llvm::Value* codegenLogicalShortCircuit(const Analyzer::BinOper*, const CompilationOptions&);
   llvm::Value* codegenLogical(const Analyzer::BinOper*, const CompilationOptions&);
   llvm::Value* toBool(llvm::Value*);
   llvm::Value* codegenArith(const Analyzer::BinOper*, const CompilationOptions&);
