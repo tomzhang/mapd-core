@@ -1095,7 +1095,7 @@ class MapDHandler : virtual public MapDIf {
         CHECK_EQ("polys", json_str(field(data_desc, "format")));
         if (data_desc.HasMember("factsKey")) {
           query_str = build_poly_render_query(render_config);
-        } else {
+        } else if (data_desc.HasMember("polysKey")) {
           query_str = transform_to_poly_render_query(query_str, render_config);
         }
       }
@@ -2136,7 +2136,6 @@ int main(int argc, char** argv) {
     std::cerr << "License validation failed, please contact support@mapd.com: " << e.what() << std::endl;
     return 2;
   }
-
 
   const auto log_path = boost::filesystem::path(base_path) / "mapd_log";
   (void)boost::filesystem::create_directory(log_path);
