@@ -778,7 +778,7 @@ std::pair<int32_t, int64_t> QueryRenderManager::getIdAt(size_t x, size_t y, size
   // the ids as unsigned ints, and there isn't a way to specify the
   // clear value for secondary buffers, we need to account for that
   // offset here
-  return std::make_pair(tableId - 1, rowId - 1);
+  return std::make_pair(tableId - 1, static_cast<int64_t>(rowId) - 1);
 }
 
 }  // namespace QueryRenderer
