@@ -711,16 +711,15 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   return _renderToPngInternal(compressionLevel);
 }
 
-void QueryRenderManager::runRenderRequest(TRenderResult& _return,
-                                          int userId,
-                                          int widgetId,
-                                          const std::string& jsonStr,
-                                          Executor* executor,
-                                          RenderInfo* renderInfo,
-                                          QueryExecCB queryExecFunc,
-                                          int compressionLevel,
-                                          bool doHitTest,
-                                          bool doDepthTest) {
+std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(int userId,
+                                                                               int widgetId,
+                                                                               const std::string& jsonStr,
+                                                                               Executor* executor,
+                                                                               RenderInfo* renderInfo,
+                                                                               QueryExecCB queryExecFunc,
+                                                                               int compressionLevel,
+                                                                               bool doHitTest,
+                                                                               bool doDepthTest) {
   auto renderTimerPtr = std::make_shared<RenderQueryExecuteTimer>();
   std::lock_guard<std::mutex> render_lock(_renderMtx);
 
@@ -755,12 +754,13 @@ void QueryRenderManager::runRenderRequest(TRenderResult& _return,
     // the time spent in the callback function and return that
     // as part of the _configureRenderInternal func or something
     // and subtract that from the total time here.
-    _return.execution_time_ms = renderTimerPtr->execution_time_ms;
-    _return.render_time_ms = render_time_ms - renderTimerPtr->execution_time_ms - renderTimerPtr->queue_time_ms;
-
-    _return.image = std::string(pngdata.pngDataPtr.get(), pngdata.pngSize);
 
     _activeItr->renderer->unsetQueryExecutionParams();
+
+    auto executionTime = renderTimerPtr->execution_time_ms;
+    auto renderTime = render_time_ms - renderTimerPtr->execution_time_ms - renderTimerPtr->queue_time_ms;
+
+    return std::make_tuple(std::string(pngdata.pngDataPtr.get(), pngdata.pngSize), executionTime, renderTime);
   } catch (const std::exception& e) {
     _activeItr->renderer->unsetQueryExecutionParams();
     throw e;

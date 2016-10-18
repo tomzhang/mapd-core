@@ -1254,8 +1254,10 @@ class MapDHandler : virtual public MapDIf {
 #ifdef HAVE_RENDERING
       const auto session_id = session_info_ptr->get_session_id();
       std::unique_ptr<RenderInfo> render_info(new RenderInfo(session_id, widget_id));
-      render_manager_->runRenderRequest(
-          _return,
+
+      std::string png_img_str;
+      int64_t total_execution_time, total_render_time;
+      std::tie(png_img_str, total_execution_time, total_render_time) = render_manager_->runRenderRequest(
           session_id,
           widget_id,
           vega_json,
@@ -1346,8 +1348,10 @@ class MapDHandler : virtual public MapDIf {
           compressionLevel,
           true);
 
+      _return.execution_time_ms = total_execution_time;
+      _return.render_time_ms = total_render_time;
+      _return.image = png_img_str;
 #endif // HAVE_RENDERING
-
     });
     LOG(INFO) << "Total: " << _return.total_time_ms << " (ms), Total Execution: " << _return.execution_time_ms
               << " (ms), Total Render: " << _return.render_time_ms << " (ms)";
