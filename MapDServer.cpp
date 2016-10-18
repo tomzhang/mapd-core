@@ -1302,61 +1302,41 @@ class MapDHandler : virtual public MapDIf {
               }
             }
 
-            try {
   #ifdef HAVE_RAVM
-              std::string query_ra;
-              _return.execution_time_ms +=
-                  measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
-              auto usedTables = execute_render_rel_alg(render_timer,
-                                                       query_ra,
-                                                       query,
-                                                       *session_info_ptr,
-                                                       executor,
-                                                       dataObj,
-                                                       render_info.get(),
-                                                       is_poly_query);
+            std::string query_ra;
+            _return.execution_time_ms +=
+                measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
+            auto usedTables = execute_render_rel_alg(
+                render_timer, query_ra, query, *session_info_ptr, executor, dataObj, render_info.get(), is_poly_query);
   #else
     #ifdef HAVE_CALCITE
-              ParserWrapper pw{query_str};
-              if (pw.is_select_explain || pw.is_other_explain || pw.is_ddl || pw.is_update_dml) {
-                TMapDException ex;
-                ex.error_msg = "Can only render SELECT statements.";
-                LOG(ERROR) << ex.error_msg;
-                throw ex;
-              }
-              auto root_plan = parse_to_plan(query_str, *session_info_ptr);
-    #else
-              auto root_plan = parse_to_plan_legacy(query_str, *session_info_ptr, "render");
-    #endif  // HAVE_CALCITE
-              CHECK(root_plan);
-              std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
-
-              auto usedTables = execute_render_root_plan(render_timer,
-                                                         root_plan,
-                                                         query,
-                                                         *session_info_ptr,
-                                                         executor,
-                                                         dataObj,
-                                                         render_info.get(),
-                                                         is_poly_query);
-  #endif  // HAVE_RAVM
-
-              if (is_poly_query) {
-                usedTables.erase(std::remove_if(usedTables.begin(), usedTables.end(), [&cat](const auto& item) {
-                                   return !is_poly_table(item.first, cat);
-                                 }),
-                                 usedTables.end());
-              } else if (render_info->render_allocator_map_ptr && render_info->result_query_data_layout) {
-                render_info->render_allocator_map_ptr->setDataLayout(render_info->result_query_data_layout);
-              }
-
-              return std::make_pair(std::move(usedTables), render_info->result_query_data_layout);
-            } catch (std::exception& e) {
-              TMapDException ex;
-              ex.error_msg = std::string("Exception: ") + e.what();
-              LOG(ERROR) << ex.error_msg;
+            ParserWrapper pw{query_str};
+            if (pw.is_select_explain || pw.is_other_explain || pw.is_ddl || pw.is_update_dml) {
+              std::runtime_error ex("Can only render SELECT statements.");
+              LOG(ERROR) << ex.what();
               throw ex;
             }
+            auto root_plan = parse_to_plan(query_str, *session_info_ptr);
+    #else
+            auto root_plan = parse_to_plan_legacy(query_str, *session_info_ptr, "render");
+    #endif  // HAVE_CALCITE
+            CHECK(root_plan);
+            std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
+
+            auto usedTables = execute_render_root_plan(
+                render_timer, root_plan, query, *session_info_ptr, executor, dataObj, render_info.get(), is_poly_query);
+  #endif  // HAVE_RAVM
+
+            if (is_poly_query) {
+              usedTables.erase(std::remove_if(usedTables.begin(), usedTables.end(), [&cat](const auto& item) {
+                                 return !is_poly_table(item.first, cat);
+                               }),
+                               usedTables.end());
+            } else if (render_info->render_allocator_map_ptr && render_info->result_query_data_layout) {
+              render_info->render_allocator_map_ptr->setDataLayout(render_info->result_query_data_layout);
+            }
+
+            return std::make_pair(std::move(usedTables), render_info->result_query_data_layout);
           },
           compressionLevel,
           true);

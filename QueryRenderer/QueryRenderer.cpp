@@ -14,8 +14,6 @@
 
 #include <Rendering/Renderer/GL/Resources/GLTexture2dArray.h>
 
-#include <gen-cpp/mapd_types.h>
-
 #include <png.h>
 #include <vector>
 #include <thread>
@@ -519,7 +517,7 @@ void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdat
   } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
-  } catch (const TMapDException& e) {
+  } catch (const std::exception& e) {
     _clearAll(true);
     throw e;
   }
@@ -534,7 +532,7 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
   } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
-  } catch (const TMapDException& e) {
+  } catch (const std::exception& e) {
     _clearAll(true);
     throw e;
   }
@@ -544,26 +542,13 @@ void QueryRenderer::updateResultsPostQuery(Executor* executor) {
   try {
     // now update the query result buffers
     _ctx->executor_ = executor;
-
-    // std::vector<GpuId> gpuIds;
-    // auto qrmGpuCache = _ctx->getRootGpuCache();
-    // CHECK(qrmGpuCache);
-    // auto qrmPerGpuData = qrmGpuCache->perGpuData;
-    // CHECK(qrmPerGpuData);
-    // for (const auto& kv : *qrmPerGpuData) {
-    //   if (kv->queryResultBufferPtr->getNumUsedBytes() > 0) {
-    //     gpuIds.push_back(kv->gpuId);
-    //   }
-
-    //   // TODO(croot): check whether poly data was generated?
-    // }
   } catch (const ::Rendering::OutOfGpuMemoryError& e) {
     _clearAll();
     throw e;
   } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
-  } catch (const TMapDException& e) {
+  } catch (const std::exception& e) {
     _clearAll(true);
     throw e;
   }
@@ -575,6 +560,12 @@ void QueryRenderer::setQueryExecutionParams(Executor* executor,
   _ctx->executor_ = executor;
   _ctx->execFunc_ = execFunc;
   _ctx->renderTimer_ = renderTimer;
+}
+
+void QueryRenderer::unsetQueryExecutionParams() {
+  _ctx->executor_ = nullptr;
+  _ctx->execFunc_ = nullptr;
+  _ctx->renderTimer_ = nullptr;
 }
 
 void QueryRenderer::_update() {
@@ -1011,7 +1002,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
   } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
-  } catch (const TMapDException& e) {
+  } catch (const std::exception& e) {
     _clearAll(true);
     throw e;
   }
@@ -1119,7 +1110,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
-  } catch (const TMapDException& e) {
+  } catch (const std::exception& e) {
     _clearAll(true);
     throw e;
   }
@@ -1263,7 +1254,7 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
   } catch (const ::Rendering::RenderError& e) {
     _clearAll(true);
     throw e;
-  } catch (const TMapDException& e) {
+  } catch (const std::exception& e) {
     _clearAll(true);
     throw e;
   }

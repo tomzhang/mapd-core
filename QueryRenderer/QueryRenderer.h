@@ -61,7 +61,7 @@ class QueryRenderer {
   void setQueryExecutionParams(Executor* executor,
                                QueryExecCB execFunc,
                                std::shared_ptr<RenderQueryExecuteTimer>& renderTimer);
-  // void activateGpus(const std::vector<GpuId>& gpusToActivate = {});
+  void unsetQueryExecutionParams();
 
   void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);

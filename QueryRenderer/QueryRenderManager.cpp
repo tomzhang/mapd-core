@@ -735,29 +735,36 @@ void QueryRenderManager::runRenderRequest(TRenderResult& _return,
 
   _activeItr->renderer->setQueryExecutionParams(executor, queryExecFunc, renderTimerPtr);
 
-  _configureRenderInternal(jsonStr);
+  try {
+    _configureRenderInternal(jsonStr);
 
-  CHECK(renderInfo);
+    CHECK(renderInfo);
 
-  if (renderInfo->render_allocator_map_ptr) {
-    // unmap any used buffers from cuda back to opengl
-    renderInfo->render_allocator_map_ptr->prepForRendering(nullptr);
+    if (renderInfo->render_allocator_map_ptr) {
+      // unmap any used buffers from cuda back to opengl
+      renderInfo->render_allocator_map_ptr->prepForRendering(nullptr);
+    }
+
+    const auto pngdata = _renderToPngInternal(compressionLevel);
+
+    int64_t render_time_ms = timer_stop(clock_begin);
+
+    // Note: this time includes query queue time
+
+    // TODO(croot): perhasp the best way to measure this time is to return
+    // the time spent in the callback function and return that
+    // as part of the _configureRenderInternal func or something
+    // and subtract that from the total time here.
+    _return.execution_time_ms = renderTimerPtr->execution_time_ms;
+    _return.render_time_ms = render_time_ms - renderTimerPtr->execution_time_ms - renderTimerPtr->queue_time_ms;
+
+    _return.image = std::string(pngdata.pngDataPtr.get(), pngdata.pngSize);
+
+    _activeItr->renderer->unsetQueryExecutionParams();
+  } catch (const std::exception& e) {
+    _activeItr->renderer->unsetQueryExecutionParams();
+    throw e;
   }
-
-  const auto pngdata = _renderToPngInternal(compressionLevel);
-
-  int64_t render_time_ms = timer_stop(clock_begin);
-
-  // Note: this time includes query queue time
-
-  // TODO(croot): perhasp the best way to measure this time is to return
-  // the time spent in the callback function and return that
-  // as part of the _configureRenderInternal func or something
-  // and subtract that from the total time here.
-  _return.execution_time_ms = renderTimerPtr->execution_time_ms;
-  _return.render_time_ms = render_time_ms - renderTimerPtr->execution_time_ms - renderTimerPtr->queue_time_ms;
-
-  _return.image = std::string(pngdata.pngDataPtr.get(), pngdata.pngSize);
 }
 
 std::pair<int32_t, int64_t> QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {
