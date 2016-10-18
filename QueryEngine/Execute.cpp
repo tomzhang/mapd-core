@@ -708,7 +708,8 @@ size_t get_rowid_idx(const std::vector<TargetMetaInfo>& row_shape) {
 
 }  // namespace
 
-ResultRows Executor::renderPolygons(const ResultRows& rows,
+ResultRows Executor::renderPolygons(const std::string& queryStr,
+                                    const ResultRows& rows,
                                     const std::vector<TargetMetaInfo>& row_shape,
                                     const Catalog_Namespace::SessionInfo& session,
                                     const int render_widget_id,
@@ -826,7 +827,8 @@ ResultRows Executor::renderPolygons(const ResultRows& rows,
                polyByteData.numDataBytes);
 
   // set the buffers as renderable
-  render_manager_->setPolyTableReadyForRender(polyTableName, gpuId, data_query_result.poly_render_data_layout);
+  render_manager_->setPolyTableReadyForRender(
+      polyTableName, queryStr, gpuId, data_query_result.poly_render_data_layout);
 
   if (!render_config_json || !render_config_json->length() || *render_config_json == "NONE") {
     int64_t render_time_ms = timer_stop(clock_begin);

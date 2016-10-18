@@ -82,6 +82,7 @@ class QueryRenderManager {
 
   int getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const;
   bool hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const;
+  bool hasPolyTableCache(const std::string& polyTableName, const std::string& sqlStr, const size_t gpuIdx) const;
   PolyTableDataInfo getPolyTableCacheDataInfo(const std::string& polyTableName, const size_t gpuIdx) const;
   void createPolyTableCache(const std::string& polyTableName,
                             const size_t gpuIdx,
@@ -95,6 +96,7 @@ class QueryRenderManager {
                                           const PolyTableByteData* initTableData = nullptr);
 
   void setPolyTableReadyForRender(const std::string& polyTableName,
+                                  const std::string& queryStr,
                                   size_t gpuIdx,
                                   const QueryDataLayoutShPtr& uniformLayoutPtr,
                                   const QueryDataLayoutShPtr& vertLayoutPtr = nullptr);

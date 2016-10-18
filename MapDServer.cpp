@@ -1181,7 +1181,7 @@ class MapDHandler : virtual public MapDIf {
         std::string query_ra;
         _return.execution_time_ms +=
             measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
-        render_rel_alg(_return, query_ra, *session_info_ptr, render_type);
+        render_rel_alg(_return, query_ra, query_str_in, *session_info_ptr, render_type);
 #else
 #ifdef HAVE_CALCITE
         ParserWrapper pw{query_str};
@@ -1197,7 +1197,7 @@ class MapDHandler : virtual public MapDIf {
 #endif  // HAVE_CALCITE
         CHECK(root_plan);
         std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
-        render_root_plan(_return, root_plan, *session_info_ptr, render_type);
+        render_root_plan(_return, root_plan, query_str_in, *session_info_ptr, render_type);
 #endif  // HAVE_RAVM
       } catch (std::exception& e) {
         TMapDException ex;
@@ -1307,8 +1307,14 @@ class MapDHandler : virtual public MapDIf {
               std::string query_ra;
               _return.execution_time_ms +=
                   measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
-              auto usedTables = execute_render_rel_alg(
-                  render_timer, query_ra, *session_info_ptr, executor, dataObj, render_info.get(), is_poly_query);
+              auto usedTables = execute_render_rel_alg(render_timer,
+                                                       query_ra,
+                                                       query,
+                                                       *session_info_ptr,
+                                                       executor,
+                                                       dataObj,
+                                                       render_info.get(),
+                                                       is_poly_query);
   #else
     #ifdef HAVE_CALCITE
               ParserWrapper pw{query_str};
@@ -1325,8 +1331,14 @@ class MapDHandler : virtual public MapDIf {
               CHECK(root_plan);
               std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
 
-              auto usedTables = execute_render_root_plan(
-                  render_timer, root_plan, *session_info_ptr, executor, dataObj, render_info.get(), is_poly_query);
+              auto usedTables = execute_render_root_plan(render_timer,
+                                                         root_plan,
+                                                         query,
+                                                         *session_info_ptr,
+                                                         executor,
+                                                         dataObj,
+                                                         render_info.get(),
+                                                         is_poly_query);
   #endif  // HAVE_RAVM
 
               if (is_poly_query) {
@@ -1732,6 +1744,7 @@ class MapDHandler : virtual public MapDIf {
   std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>
   execute_render_root_plan(QueryRenderer::RenderQueryExecuteTimer& render_timer,
                            Planner::RootPlan* root_plan,
+                           const std::string& query_str,
                            const Catalog_Namespace::SessionInfo& session_info,
                            Executor* executor,
                            const rapidjson::Value* data_desc,
@@ -1760,7 +1773,7 @@ class MapDHandler : virtual public MapDIf {
       CHECK(plan);
       const auto& targets = plan->get_targetlist();
       auto rendered_results =
-          executor->renderPolygons(results, getTargetMetaInfo(targets), session_info, 1, *data_desc);
+          executor->renderPolygons(query_str, results, getTargetMetaInfo(targets), session_info, 1, *data_desc);
       render_timer.queue_time_ms += rendered_results.getQueueTime();
       render_timer.render_time_ms += rendered_results.getRenderTime();
     } else {
@@ -1777,6 +1790,7 @@ class MapDHandler : virtual public MapDIf {
 
   void render_root_plan(TRenderResult& _return,
                         Planner::RootPlan* root_plan,
+                        const std::string& query_str,
                         const Catalog_Namespace::SessionInfo& session_info,
                         const std::string& render_type) {
     rapidjson::Document render_config;
@@ -1813,8 +1827,8 @@ class MapDHandler : virtual public MapDIf {
       const auto plan = root_plan->get_plan();
       CHECK(plan);
       const auto& targets = plan->get_targetlist();
-      auto rendered_results =
-          executor->renderPolygons(results, getTargetMetaInfo(targets), session_info, 1, *poly_data_desc, &render_type);
+      auto rendered_results = executor->renderPolygons(
+          query_str, results, getTargetMetaInfo(targets), session_info, 1, *poly_data_desc, &render_type);
       _return.execution_time_ms =
           timer_stop(clock_begin) - rendered_results.getQueueTime() - rendered_results.getRenderTime();
       _return.render_time_ms = rendered_results.getRenderTime();
@@ -1836,6 +1850,7 @@ class MapDHandler : virtual public MapDIf {
   std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>
   execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& render_timer,
                          const std::string& query_ra,
+                         const std::string& query_str,
                          const Catalog_Namespace::SessionInfo& session_info,
                          Executor* executor,
                          const rapidjson::Value* data_desc,
@@ -1865,7 +1880,7 @@ class MapDHandler : virtual public MapDIf {
 
     if (is_poly_query) {
       auto rendered_results =
-          executor->renderPolygons(results, exe_result.getTargetsMeta(), session_info, 1, *data_desc);
+          executor->renderPolygons(query_str, results, exe_result.getTargetsMeta(), session_info, 1, *data_desc);
       render_timer.render_time_ms += rendered_results.getRenderTime();
       render_timer.queue_time_ms += rendered_results.getQueueTime();
     } else {
@@ -1887,6 +1902,7 @@ class MapDHandler : virtual public MapDIf {
 
   void render_rel_alg(TRenderResult& _return,
                       const std::string& query_ra,
+                      const std::string& query_str,
                       const Catalog_Namespace::SessionInfo& session_info,
                       const std::string& render_type) {
     const auto& cat = session_info.get_catalog();
@@ -1924,7 +1940,7 @@ class MapDHandler : virtual public MapDIf {
     if (poly_data_desc) {
 #ifdef HAVE_RENDERING
       auto rendered_results = executor->renderPolygons(
-          results, exe_result.getTargetsMeta(), session_info, 1, *poly_data_desc, &render_type);
+          query_str, results, exe_result.getTargetsMeta(), session_info, 1, *poly_data_desc, &render_type);
       _return.execution_time_ms =
           timer_stop(clock_begin) - rendered_results.getQueueTime() - rendered_results.getRenderTime();
       _return.render_time_ms = rendered_results.getRenderTime();

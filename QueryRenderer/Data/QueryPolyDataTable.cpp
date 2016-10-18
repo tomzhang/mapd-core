@@ -521,6 +521,12 @@ void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj, 
     _factsTableName = "";
   }
 
+  if (!executeQuery) {
+    auto rootCache = _ctx->getRootGpuCache();
+    CHECK(rootCache);
+    executeQuery = rootCache->hasPolyTableCache(_tableName, _sqlQueryStr);
+  }
+
   if (executeQuery) {
     // TODO(croot): validate the query here?
     // sql changed, re-run the query
@@ -543,7 +549,7 @@ void SqlQueryPolyDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& 
     RUNTIME_EX_ASSERT(itr != polyCacheMap.end(),
                       std::string(*this) + ": cache does not exist for poly table " + _tableName);
 
-    BaseQueryPolyDataTable::operator=(itr->second);
+    BaseQueryPolyDataTable::operator=(itr->second.second);
   }
 
   _justInitialized = isInitializing;
@@ -554,7 +560,12 @@ void SqlQueryPolyDataTableJSON::_initGpuResources(const RootCacheShPtr& qrmGpuCa
   // the query has changed -- which is currently handled in the _updateFromJSONObj method
   // but what if the tables themselves have changed? Should re-run query in that case
   // here.
-  // _runQueryAndInitResources(qrmGpuCache, false);
+
+  auto rootCache = _ctx->getRootGpuCache();
+  CHECK(rootCache);
+  if (!rootCache->hasPolyTableCache(_tableName, _sqlQueryStr)) {
+    _runQueryAndInitResources(qrmGpuCache, false);
+  }
 }
 
 template <typename T>

@@ -503,12 +503,14 @@ int QueryRenderManager::getPolyDataBufferAlignmentBytes(const size_t gpuIdx) con
 
 bool QueryRenderManager::hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const {
   std::lock_guard<std::mutex> render_lock(_polyMtx);
-  auto itr = _gpuCache->polyCacheMap.find(polyTableName);
-  if (itr == _gpuCache->polyCacheMap.end()) {
-    return false;
-  }
+  return _gpuCache->hasPolyTableCache(polyTableName, gpuIdx);
+}
 
-  return itr->second.usesGpu(gpuIdx);
+bool QueryRenderManager::hasPolyTableCache(const std::string& polyTableName,
+                                           const std::string& sqlStr,
+                                           const size_t gpuIdx) const {
+  std::lock_guard<std::mutex> render_lock(_polyMtx);
+  return _gpuCache->hasPolyTableCache(polyTableName, sqlStr, gpuIdx);
 }
 
 PolyTableDataInfo QueryRenderManager::getPolyTableCacheDataInfo(const std::string& polyTableName,
@@ -518,7 +520,7 @@ PolyTableDataInfo QueryRenderManager::getPolyTableCacheDataInfo(const std::strin
   RUNTIME_EX_ASSERT(itr != _gpuCache->polyCacheMap.end(),
                     "Cannot get poly table cache info for poly table " + polyTableName + ". The cache does not exist.");
 
-  return itr->second.getPolyBufferData(gpuIdx);
+  return itr->second.second.getPolyBufferData(gpuIdx);
 }
 
 void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
@@ -534,12 +536,13 @@ void QueryRenderManager::createPolyTableCache(const std::string& polyTableName,
     auto itr = _gpuCache->polyCacheMap.find(polyTableName);
 
     if (itr == _gpuCache->polyCacheMap.end()) {
-      auto insertItr = _gpuCache->polyCacheMap.emplace(
-          std::piecewise_construct, std::forward_as_tuple(polyTableName), std::forward_as_tuple(_gpuCache));
+      auto insertItr = _gpuCache->polyCacheMap.emplace(std::piecewise_construct,
+                                                       std::forward_as_tuple(polyTableName),
+                                                       std::forward_as_tuple(_gpuCache->buildSqlHash(""), _gpuCache));
       itr = insertItr.first;
     }
 
-    itr->second.allocBuffers(gpuIdx, initTableData, vertLayoutPtr);
+    itr->second.second.allocBuffers(gpuIdx, initTableData, vertLayoutPtr);
   } catch (const ::Rendering::RenderError& e) {
     _gpuCache->polyCacheMap.erase(polyTableName);
     throw e;
@@ -589,31 +592,27 @@ PolyCudaHandles QueryRenderManager::getPolyTableCudaHandles(const std::string& p
 
   if (initTableData) {
     try {
-      itr->second.allocBuffers(gpuIdx, *initTableData);
+      itr->second.second.allocBuffers(gpuIdx, *initTableData);
     } catch (const ::Rendering::RenderError& e) {
       _gpuCache->polyCacheMap.erase(polyTableName);
       throw e;
     }
   }
 
-  return itr->second.getCudaHandlesPreQuery(gpuIdx);
+  // reset the query str
+  itr->second.first = _gpuCache->buildSqlHash("");
+  return itr->second.second.getCudaHandlesPreQuery(gpuIdx);
 #else
   CHECK(false) << "Cuda is not activated. Cannot get cuda handle.";
 #endif  // HAVE_CUDA
 }
 
-// PolyCudaHandles QueryRenderManager::getPolyCudaHandles(const std::string& polyTableName,
-//                                                        const size_t gpuIdx,
-//                                                        const PolyTableByteData& initTableData) {
-//   CHECK(false) << "getPolyCudaHandles() not implemented yet";
-// }
-
 void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTableName,
+                                                    const std::string& queryStr,
                                                     size_t gpuIdx,
                                                     const QueryDataLayoutShPtr& uniformLayoutPtr,
                                                     const QueryDataLayoutShPtr& vertLayoutPtr) {
 #ifdef HAVE_CUDA
-
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_polyMtx);
 
@@ -628,7 +627,8 @@ void QueryRenderManager::setPolyTableReadyForRender(const std::string& polyTable
                         ". There are only " + std::to_string(inOrder.size()) + " gpus available.");
 
   ActiveRendererGuard activeRendererGuard(inOrder[gpuIdx].get());
-  itr->second.updatePostQuery(gpuIdx, vertLayoutPtr, uniformLayoutPtr);
+  itr->second.second.updatePostQuery(gpuIdx, vertLayoutPtr, uniformLayoutPtr);
+  itr->second.first = _gpuCache->buildSqlHash(queryStr);
 #else
   CHECK(false) << "Cuda is not activated. Cannot set cuda handle bytes.";
 #endif  // HAVE_CUDA
