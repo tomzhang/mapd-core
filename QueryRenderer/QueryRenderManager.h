@@ -80,13 +80,20 @@ class QueryRenderManager {
   void setCudaHandleUsedBytes(size_t gpuIdx, size_t numUsedBytes, const QueryDataLayoutShPtr& vertLayoutPtr);
 
   int getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const;
-  bool hasPolyTableCache(const std::string& polyTableName, const size_t gpuIdx) const;
-  bool hasPolyTableCache(const std::string& polyTableName, const std::string& sqlStr, const size_t gpuIdx) const;
+  bool hasPolyTableGpuCache(const std::string& polyTableName, const size_t gpuIdx) const;
+  bool hasPolyTableGpuCache(const std::string& polyTableName, const std::string& sqlStr, const size_t gpuIdx) const;
+  PolyTableByteData getPolyTableCacheByteInfo(const std::string& polyTableName, const size_t gpuIdx) const;
   PolyTableDataInfo getPolyTableCacheDataInfo(const std::string& polyTableName, const size_t gpuIdx) const;
   void createPolyTableCache(const std::string& polyTableName,
                             const size_t gpuIdx,
                             const PolyTableByteData& initTableData,
-                            const QueryDataLayoutShPtr& vertLayoutPtr);
+                            const QueryDataLayoutShPtr& vertLayoutPtr,
+                            const PolyRowDataShPtr& rowDataPtr = nullptr);
+  void updatePolyTableCache(const std::string& polyTableName,
+                            const size_t gpuIdx,
+                            const PolyTableByteData& initTableData,
+                            const QueryDataLayoutShPtr& vertLayoutPtr = nullptr,
+                            const PolyRowDataShPtr& rowDataPtr = nullptr);
   void deletePolyTableCache(const std::string& polyTableName);
   void deleteAllPolyTableCaches();
 
@@ -98,6 +105,7 @@ class QueryRenderManager {
                                   const std::string& queryStr,
                                   size_t gpuIdx,
                                   const QueryDataLayoutShPtr& uniformLayoutPtr,
+                                  const PolyRowDataShPtr& rowDataPtr = nullptr,
                                   const QueryDataLayoutShPtr& vertLayoutPtr = nullptr);
 
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, Executor* executor = nullptr);
@@ -116,7 +124,12 @@ class QueryRenderManager {
                                                              bool doDepthTest = false);
 
   // get the id at a specific pixel
-  std::pair<int32_t, int64_t> getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
+  std::tuple<int32_t, int64_t, std::string> getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
+
+  bool isPolyQueryCache(const TableId tableId) const;
+  std::string getQueryForQueryCache(const TableId tableId) const;
+  std::pair<TableId, std::string> getPrimaryQueryCacheTableInfo(const TableId tableId) const;
+  std::pair<const ResultRows*, const std::vector<TargetMetaInfo>*> getQueryCacheResults(const TableId tableId) const;
 
  private:
   static const UserWidgetPair _emptyUserWidget;

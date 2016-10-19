@@ -13,7 +13,7 @@ const std::string LineTemplate_Frag::source =
     "\n"
     "layout(location = 0) out vec4 finalColor;\n"
     "layout(location = 1) out uint finalId;\n"
-    "layout(location = 2) out uint finalTableId;\n"
+    "layout(location = 2) out int finalTableId;\n"
     "\n"
     "uniform int uTableId;\n"
     "#define usePerVertId <usePerVertId>\n"

@@ -74,6 +74,22 @@ void GLShaderBlockLayout::endAddingAttrs() {
     static const size_t byteAlignment = 4 * sizeof(float);
     size_t offset;
     if ((offset = _itemByteSize % byteAlignment) != 0) {
+      // TODO(croot) - this shouldn't happen here. The re-alignment
+      // should be done per attr and needs to match the offset that
+      // would result from a glGetActiveUniformsiv(programId, 1, &attrIdx, GL_UNIFORM_OFFSET, &attrOffset)
+      // call. Would adding dummy attrs in such a case make sense? If so, here's some code
+      // that would do that.
+      //
+      // auto bytesLeft = byteAlignment - offset;
+      // RUNTIME_EX_ASSERT(bytesLeft % 4 == 0,
+      //                   "Cannot re-align GLShaderBlockLayout. There are currently " + std::to_string(_itemByteSize) +
+      //                       " bytes in the layout and " + std::to_string(bytesLeft) +
+      //                       " bytes are needed to re-align, but the bytes left need to be a multiple of 4.");
+      // static const std::string dummyPrefix = "_blocklayout_dummy";
+      // for (size_t i = 0; i < bytesLeft / 4; ++i) {
+      //   this->addAttribute<float>(dummyPrefix + std::to_string(i));
+      // }
+
       _itemByteSize += byteAlignment - offset;
     }
   }

@@ -67,6 +67,8 @@ class QueryRenderer {
   PngData renderToPng(int compressionLevel = -1);
 
   TableIdRowIdPair getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
+  std::string getVegaTableNameWithTableId(const TableId tableId) const;
+  QueryDataTableBaseType getVegaTableTypeWithTableId(const TableId tableId) const;
 
   QueryRendererContext* getContext() { return _ctx.get(); }
 
@@ -92,13 +94,14 @@ class QueryRenderer {
   std::shared_ptr<QueryRendererContext> _ctx;
 
   GpuId _pboGpu;
-  QueryIdMapPixelBufferShPtr _pbo1;  // need a pbo for each of the id buffers
-  QueryIdMapPixelBufferShPtr _pbo2;  // 2 id buffers - one for the row id, the other for table id
+  QueryIdMapPixelBufferUIntShPtr _pbo1;  // need a pbo for each of the id buffers
+  QueryIdMapPixelBufferIntShPtr _pbo2;   // 2 id buffers - one for the row id, the other for table id
 
   typedef ::Rendering::Objects::Array2d<unsigned int> Array2dui;
+  typedef ::Rendering::Objects::Array2d<int> Array2di;
   bool _idPixelsDirty;
   std::shared_ptr<Array2dui> _idPixels;
-  std::shared_ptr<Array2dui> _id2Pixels;
+  std::shared_ptr<Array2di> _id2Pixels;
 
   void _clear(bool preserveDimensions = false);
   void _clearGpuResources();

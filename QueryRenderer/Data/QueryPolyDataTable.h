@@ -19,10 +19,12 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   ::Rendering::GL::Resources::GLUniformBufferShPtr getGLUniformBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr getGLIndirectDrawVertexBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr getGLIndirectDrawIndexBuffer(const GpuId& gpuId) const;
+  const PolyRowDataShPtr getRowDataPtr(const GpuId& gpuId) const;
 
   bool usesGpu(const GpuId& gpuId) const { return (_perGpuData.find(gpuId) != _perGpuData.end()); }
   std::set<GpuId> getUsedGpuIds() const final;
 
+  PolyTableByteData getPolyBufferByteData(const GpuId& gpuId) const;
   PolyTableDataInfo getPolyBufferData(const GpuId& gpuId) const;
 
   BaseQueryPolyDataTable& operator=(const BaseQueryPolyDataTable& rhs);
@@ -34,31 +36,47 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
     QueryUniformBufferShPtr ubo;
     QueryIndirectVboShPtr indvbo;
     QueryIndirectIboShPtr indibo;
+    PolyRowDataShPtr rowDataPtr;
 
     PerGpuData() : BasePerGpuData(), vbo(nullptr), ibo(nullptr), ubo(nullptr), indvbo(nullptr), indibo(nullptr) {}
     explicit PerGpuData(const RootPerGpuDataShPtr& rootData,
-                        const QueryVertexBufferShPtr& vbo = nullptr,
-                        const QueryIndexBufferShPtr& ibo = nullptr,
-                        const QueryUniformBufferShPtr& ubo = nullptr,
-                        const QueryIndirectVboShPtr& indvbo = nullptr,
-                        const QueryIndirectIboShPtr& indibo = nullptr)
-        : BasePerGpuData(rootData), vbo(vbo), ibo(ibo), ubo(ubo), indvbo(indvbo), indibo(indibo) {}
+                        const decltype(vbo)& vbo = nullptr,
+                        const decltype(ibo)& ibo = nullptr,
+                        const decltype(ubo)& ubo = nullptr,
+                        const decltype(indvbo)& indvbo = nullptr,
+                        const decltype(indibo)& indibo = nullptr,
+                        const decltype(rowDataPtr)& rowDataPtr = nullptr)
+        : BasePerGpuData(rootData),
+          vbo(vbo),
+          ibo(ibo),
+          ubo(ubo),
+          indvbo(indvbo),
+          indibo(indibo),
+          rowDataPtr(rowDataPtr) {}
     explicit PerGpuData(const BasePerGpuData& data,
-                        const QueryVertexBufferShPtr& vbo = nullptr,
-                        const QueryIndexBufferShPtr& ibo = nullptr,
-                        const QueryUniformBufferShPtr& ubo = nullptr,
-                        const QueryIndirectVboShPtr& indvbo = nullptr,
-                        const QueryIndirectIboShPtr& indibo = nullptr)
-        : BasePerGpuData(data), vbo(vbo), ibo(ibo), ubo(ubo), indvbo(indvbo), indibo(indibo) {}
+                        const decltype(vbo)& vbo = nullptr,
+                        const decltype(ibo)& ibo = nullptr,
+                        const decltype(ubo)& ubo = nullptr,
+                        const decltype(indvbo)& indvbo = nullptr,
+                        const decltype(indibo)& indibo = nullptr,
+                        const decltype(rowDataPtr)& rowDataPtr = nullptr)
+        : BasePerGpuData(data), vbo(vbo), ibo(ibo), ubo(ubo), indvbo(indvbo), indibo(indibo), rowDataPtr(rowDataPtr) {}
     PerGpuData(const PerGpuData& data)
-        : BasePerGpuData(data), vbo(data.vbo), ibo(data.ibo), ubo(data.ubo), indvbo(data.indvbo), indibo(data.indibo) {}
+        : BasePerGpuData(data),
+          vbo(data.vbo),
+          ibo(data.ibo),
+          ubo(data.ubo),
+          indvbo(data.indvbo),
+          indibo(data.indibo),
+          rowDataPtr(data.rowDataPtr) {}
     PerGpuData(PerGpuData&& data)
         : BasePerGpuData(std::move(data)),
           vbo(std::move(data.vbo)),
           ibo(std::move(data.ibo)),
           ubo(std::move(data.ubo)),
           indvbo(std::move(data.indvbo)),
-          indibo(std::move(data.indibo)) {}
+          indibo(std::move(data.indibo)),
+          rowDataPtr(std::move(data.rowDataPtr)) {}
 
     ~PerGpuData() {
       // need to make active to properly delete gpu resources
@@ -109,6 +127,7 @@ class SqlQueryPolyDataTableCache : public BaseQueryPolyDataTable {
   void allocBuffers(const GpuId& gpuId,
                     const PolyTableByteData& initData,
                     const QueryDataLayoutShPtr& vertLayoutPtr = nullptr,
+                    const PolyRowDataShPtr& rowDataPtr = nullptr,
                     const QueryDataLayoutShPtr& uniformLayoutPtr = nullptr);
 
   void reset();
@@ -119,7 +138,8 @@ class SqlQueryPolyDataTableCache : public BaseQueryPolyDataTable {
 
   void updatePostQuery(const GpuId& gpuId,
                        const QueryDataLayoutShPtr& vertLayoutPtr,
-                       const QueryDataLayoutShPtr& uniformLayoutPtr);
+                       const QueryDataLayoutShPtr& uniformLayoutPtr,
+                       const PolyRowDataShPtr& rowDataPtr);
 
   friend class QueryRenderManager;
 };
@@ -136,6 +156,7 @@ class SqlQueryPolyDataTableJSON : public SqlQueryPolyDataTableCache, public Base
 
  private:
   bool _justInitialized;
+  std::string _sqlQueryStrOverride;
   std::string _polysKey;
   std::string _factsKey;
   std::string _aggExpr;
@@ -228,6 +249,7 @@ class PolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDataTableJS
   std::vector<unsigned int> _createIBOData();
   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> _createLineDrawData();
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> _createPolyDrawData();
+  PolyRowDataShPtr _createRowData();
 
   void _initGpuResources(const RootCacheShPtr& qrmGpuCache) final;
 };

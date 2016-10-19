@@ -402,29 +402,11 @@ void QueryFramebuffer::blitToFramebuffer(QueryFramebuffer& dstFboPtr,
   // }
 }
 
-void QueryFramebuffer::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo, const FboColorBuffer idBufferType) {
+void QueryFramebuffer::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo) {
   RUNTIME_EX_ASSERT(pbo != nullptr, "Pbo is empty. Cannot copy pixels to an undefined pbo.");
 
-  ::Rendering::GL::Resources::GLTexture2d* idTexToUse;
-  GLenum attachmentToUse;
-
-  switch (idBufferType) {
-    case FboColorBuffer::ID_BUFFER:
-      idTexToUse = _idTex1.get();
-      attachmentToUse = GL_COLOR_ATTACHMENT1;
-      break;
-    case FboColorBuffer::ID2_BUFFER:
-      idTexToUse = _idTex2.get();
-      attachmentToUse = GL_COLOR_ATTACHMENT2;
-      break;
-    default:
-      THROW_RUNTIME_EX("QueryFramebuffer:readIdBuffer: Unsupported id buffer type " +
-                       std::to_string(static_cast<int>(idBufferType)));
-      break;
-  }
-
   RUNTIME_EX_ASSERT(
-      idTexToUse != nullptr,
+      _idTex1 != nullptr,
       "QueryFramebuffer: The framebuffer was not setup for an ID map. Cannot copy ID map to pixel buffer object.");
 
   size_t myWidth = getWidth();
@@ -444,7 +426,36 @@ void QueryFramebuffer::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo, const 
 
   GLRenderer* renderer = _fbo->getGLRenderer();
   renderer->bindWritePixelBuffer(pbo->getPixelBuffer2d());
-  _fbo->copyPixelsToBoundPixelBuffer(attachmentToUse, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT);
+  _fbo->copyPixelsToBoundPixelBuffer(
+      GL_COLOR_ATTACHMENT1, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT);
+  renderer->bindWritePixelBuffer(nullptr);
+}
+
+void QueryFramebuffer::copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo) {
+  RUNTIME_EX_ASSERT(pbo != nullptr, "Pbo is empty. Cannot copy pixels to an undefined pbo.");
+
+  RUNTIME_EX_ASSERT(
+      _idTex2 != nullptr,
+      "QueryFramebuffer: The framebuffer was not setup for an ID map. Cannot copy ID map to pixel buffer object.");
+
+  size_t myWidth = getWidth();
+  size_t myHeight = getHeight();
+
+  size_t pboWidth = pbo->getWidth();
+  size_t pboHeight = pbo->getHeight();
+
+  RUNTIME_EX_ASSERT(pboWidth <= myWidth && pboHeight <= myHeight,
+                    "The pbo for the idmap is too big for the framebuffer. It is " + std::to_string(pboWidth) + "x" +
+                        std::to_string(pboHeight) + " and the fbo is " + std::to_string(myWidth) + "x" +
+                        std::to_string(myHeight) + ". The pbo size needs to be <= the fbo size.");
+
+  // TODO(croot): should we initialize the buffer to something? Like all 0s beforehand?
+  // If so, see glClearBufferData()/glClearBufferSubData()
+  CHECK(myWidth > 0 && myHeight > 0);
+
+  GLRenderer* renderer = _fbo->getGLRenderer();
+  renderer->bindWritePixelBuffer(pbo->getPixelBuffer2d());
+  _fbo->copyPixelsToBoundPixelBuffer(GL_COLOR_ATTACHMENT2, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_INT);
   renderer->bindWritePixelBuffer(nullptr);
 }
 
@@ -469,7 +480,7 @@ GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rs
       // 2) use a second texture - since we already need a 2nd texture for the table id, and that probably only
       //    needs 8-16 bits, we could create a full 32-bit texture and use the remaining bits to pack
       //    more bits for the main id buffer.
-      return rsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, numSamples);
+      return rsrcMgr->createTexture2d(width, height, GL_R32I, GL_RED_INTEGER, GL_INT, numSamples);
     default:
       CHECK(false);
   }

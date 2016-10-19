@@ -26,6 +26,7 @@ class GLLayoutManagerBuffer : public GLBaseBuffer {
 
   int getNumBufferLayouts() const { return _layoutMap.size(); }
   bool hasBufferLayout(const GLBufferLayoutShPtr& layoutPtr) const;
+  bool hasBufferLayoutAtOffset(const size_t offsetBytes) const;
   void addBufferLayout(const GLBufferLayoutShPtr& layoutPtr, const size_t numBytes, const size_t offsetBytes = 0);
   void replaceBufferLayoutAtOffset(const GLBufferLayoutShPtr& newLayoutPtr,
                                    const size_t numBytes,
@@ -132,7 +133,7 @@ class GLLayoutBuffer : public GLLayoutManagerBuffer {
     // Now do the actual buffering
     GLBaseBuffer::bufferData(data, numBytes);
 
-    _deleteBufferLayoutsExcept(layoutPtr);
+    _deleteBufferLayoutsExcept(layoutPtr != nullptr ? layoutPtr : getBufferLayoutAtOffset(0));
 
     if (layoutPtr) {
       // add the layout, or update it if it is alread

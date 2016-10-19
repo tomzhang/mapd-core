@@ -110,9 +110,14 @@ std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx,
   return _implPtr->readIdBuffer(startx, starty, width, height, idBufferType);
 }
 
-void QueryRenderCompositor::copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
+void QueryRenderCompositor::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo) {
   CHECK(_implPtr);
-  return _implPtr->copyIdBufferToPbo(pbo);
+  return _implPtr->copyRowIdBufferToPbo(pbo);
+}
+
+void QueryRenderCompositor::copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo) {
+  CHECK(_implPtr);
+  return _implPtr->copyTableIdBufferToPbo(pbo);
 }
 
 void QueryRenderCompositor::readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer) {

@@ -13,7 +13,7 @@ const std::string PolyTemplate_Frag::source =
     "\n"
     "layout(location = 0) out vec4 color;\n"
     "layout(location = 1) out uint id;\n"
-    "layout(location = 2) out uint tableId;\n"
+    "layout(location = 2) out int tableId;\n"
     "\n"
     "uniform int uTableId;\n"
     "flat in uint fPrimitiveId;\n"

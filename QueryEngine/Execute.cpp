@@ -687,13 +687,13 @@ int64_t Executor::getRowidForPixel(const int64_t x,
   // DEPRECATED
   set_render_widget(render_manager_, session_id, render_widget_id);
 
-  auto pixelIds = render_manager_->getIdAt(x, y, pixelRadius);
+  auto pixelData = render_manager_->getIdAt(x, y, pixelRadius);
 
   // NOTE: the table id of the above call should be -1,
   // indicating the use of the old APIs
-  CHECK(pixelIds.first == -1);
+  CHECK(std::get<0>(pixelData) == -1);
 
-  return pixelIds.second;
+  return std::get<1>(pixelData);
 }
 
 namespace {
@@ -719,7 +719,9 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
                                     const Catalog_Namespace::SessionInfo& session,
                                     const int render_widget_id,
                                     const rapidjson::Value& data_desc,
-                                    const std::string* render_config_json) {
+                                    const std::string* render_config_json,
+                                    const bool is_projection_query,
+                                    const std::string& poly_table_name) {
 #ifdef HAVE_CUDA
   // capture the lock acquistion time
   auto clock_begin = timer_start();
@@ -733,38 +735,41 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
   const int gpuId = 0;
   session.get_catalog().get_dataMgr().cudaMgr_->setContext(gpuId);
 
-  const auto polyTableName = json_str(field(data_desc, "dbTableName"));
-  const auto shape_col_group = json_str(field(data_desc, "shapeColGroup"));
+  std::string polyTableName = poly_table_name;
+  if (data_desc.HasMember("dbTableName")) {
+    polyTableName = json_str(field(data_desc, "dbTableName"));
+  }
+  CHECK(polyTableName.size());
+
+  std::string shape_col_group = "mapd";
+  if (data_desc.HasMember("shapeColGroup")) {
+    shape_col_group = json_str(field(data_desc, "shapeColGroup"));
+  }
 
   // initialize the poly rendering data
   const auto& cat = session.get_catalog();
   const auto td = cat.getMetadataForTable(polyTableName);
   CHECK(td);  // TODO(alex): throw exception instead
 
-  // setup the verts - 2 squares and 2 triangles
-  // NOTE: the first 3 verts of each polygon are repeated at the end of
-  // its vertex list in order to get all the adjacent data
-  // need for the custom line-drawing shader to draw a closed line.
-  const auto verts = getShapeVertices(session, td, shape_col_group);
-
-  // setup the tri tesselation by index (must be unsigned int)
-  const auto indices = getShapeIndices(session, td, shape_col_group);
+  QueryRenderer::PolyRowDataShPtr rowData;
 
   // setup the struct for stroke/outline rendering -- 4 items
   // first argument is number of verts in poly, second argument is the
   // start vertex index/offset of the poly.
-  auto lineDrawData = getShapeLineDrawData(session, td, shape_col_group);
+  auto lineDrawData = getShapeLineDrawData(session, td, shape_col_group, rowData);
 
   // setup the struct for filled polygon rendering -- 4 items
   // Firt argument is number of indices to render the polygon. This number / 3 == number of triangles.
   // Second argument is the index/offset of the start index.
   // Third argument is the vertex index/offset of the start vertex for the poly
-  auto polyDrawData = getShapePolyDrawData(session, td, shape_col_group);
+  auto polyDrawData = getShapePolyDrawData(session, td, shape_col_group, rowData);
 
   const auto rowid_idx = get_rowid_idx(row_shape);
 
-  auto data_query_result = getPolyRenderDataTemplate(row_shape, polyDrawData.size(), gpuId);
+  auto data_query_result =
+      getPolyRenderDataTemplate(row_shape, polyDrawData.size(), gpuId, rowid_idx, is_projection_query);
 
+  size_t rowidx = 0;
   while (true) {
     const auto crt_row = rows.getNextRow(false, false);
     if (crt_row.empty()) {
@@ -784,7 +789,14 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
         lineDrawData.data[i].instanceCount = 1;
       }
     }
-    setPolyRenderDataEntry(data_query_result, crt_row, row_shape, *rowid_ptr, data_query_result.align_bytes);
+    setPolyRenderDataEntry(data_query_result,
+                           crt_row,
+                           row_shape,
+                           *rowid_ptr,
+                           rowidx++,
+                           rowid_idx,
+                           data_query_result.align_bytes,
+                           is_projection_query);
   }
 
   // build a struct specifying the number of bytes needed for each buffer used
@@ -795,31 +807,62 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
   // 4) poly draw struct (for filled polys)
   // 5) extra rendering data / rowids
   ::QueryRenderer::PolyTableByteData polyByteData(
-      {verts.size() * sizeof(double),
-       indices.size() * sizeof(unsigned int),
+      {0,
+       0,
        lineDrawData.data.size() * sizeof(::Rendering::GL::Resources::IndirectDrawVertexData),
        polyDrawData.size() * sizeof(::Rendering::GL::Resources::IndirectDrawIndexData),
        data_query_result.num_data_bytes});
 
-  if (!render_manager_->hasPolyTableCache(polyTableName, gpuId)) {
+  ::QueryRenderer::PolyCudaHandles polyData;
+
+  if (!render_manager_->hasPolyTableGpuCache(polyTableName, gpuId)) {
     // setup the layout for the cached vertex buffer.
     // Since we're caching, this layout should never change, hence only necessary at
     // cache creation
+
+    // setup the verts - 2 squares and 2 triangles
+    // NOTE: the first 3 verts of each polygon are repeated at the end of
+    // its vertex list in order to get all the adjacent data
+    // need for the custom line-drawing shader to draw a closed line.
+    const auto verts = getShapeVertices(session, td, shape_col_group, rowData);
+
+    // setup the tri tesselation by index (must be unsigned int)
+    const auto indices = getShapeIndices(session, td, shape_col_group, rowData);
+
+    polyByteData.numVertBytes = verts.size() * sizeof(double);
+    polyByteData.numIndexBytes = indices.size() * sizeof(unsigned int);
+
     std::shared_ptr<::QueryRenderer::QueryDataLayout> vertLayout(new ::QueryRenderer::QueryDataLayout(
         {"x", "y"},
         {::QueryRenderer::QueryDataLayout::AttrType::DOUBLE, ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE},
         {{}}));
 
     // now create the cache
-    render_manager_->createPolyTableCache(polyTableName, gpuId, polyByteData, vertLayout);
+    render_manager_->createPolyTableCache(polyTableName, gpuId, polyByteData, vertLayout, rowData);
+
+    // get cuda handles for each of the 5 buffers for poly rendering
+    polyData = render_manager_->getPolyTableCudaHandles(polyTableName, gpuId);
+
+    // using simple cuda driver calls to push data to buffers
+    cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.verts.handle), &verts[0], polyByteData.numVertBytes);
+    cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.polyIndices.handle), &indices[0], polyByteData.numIndexBytes);
+  } else {
+    // TODO(croot): we need to reset the cache if the poly table has been modified in any way
+
+    auto cachedByteData = render_manager_->getPolyTableCacheByteInfo(polyTableName, gpuId);
+    if (cachedByteData.numLineLoopBytes != polyByteData.numLineLoopBytes ||
+        cachedByteData.numPolyBytes != polyByteData.numPolyBytes ||
+        cachedByteData.numDataBytes != polyByteData.numDataBytes) {
+      // TODO(croot): improve this API
+      polyByteData.numVertBytes = cachedByteData.numVertBytes;
+      polyByteData.numIndexBytes = cachedByteData.numIndexBytes;
+      render_manager_->updatePolyTableCache(polyTableName, gpuId, polyByteData, nullptr, rowData);
+    }
+
+    // get cuda handles for each of the 5 buffers for poly rendering
+    polyData = render_manager_->getPolyTableCudaHandles(polyTableName, gpuId);
   }
 
-  // get cuda handles for each of the 5 buffers for poly rendering
-  ::QueryRenderer::PolyCudaHandles polyData = render_manager_->getPolyTableCudaHandles(polyTableName, gpuId);
-
-  // using simple cuda driver calls to push data to buffers
-  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.verts.handle), &verts[0], polyByteData.numVertBytes);
-  cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.polyIndices.handle), &indices[0], polyByteData.numIndexBytes);
   if (!lineDrawData.data.empty()) {
     cuMemcpyHtoD(reinterpret_cast<CUdeviceptr>(polyData.lineDrawStruct.handle),
                  &lineDrawData.data[0],
@@ -895,12 +938,20 @@ ChunkWithMetaInfo get_poly_shapes_chunk(const Catalog_Namespace::Catalog& cat,
 
 std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionInfo& session,
                                                const TableDescriptor* td,
-                                               const std::string& shape_col_group) {
+                                               const std::string& shape_col_group,
+                                               QueryRenderer::PolyRowDataShPtr& rowDataPtr) {
   const auto& cat = session.get_catalog();
   const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_coords");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
+
+  if (!rowDataPtr) {
+    rowDataPtr.reset(new QueryRenderer::PolyRowData(row_count));
+  } else {
+    CHECK(rowDataPtr->size() == row_count);
+  }
+
   std::vector<double> geo_coords;
   for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
     ArrayDatum ad;
@@ -909,6 +960,8 @@ std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionI
     CHECK(!is_end);
     CHECK(ad.pointer);
     const auto num_elems = ad.length / sizeof(double);  // TODO(alex): support float as well
+    (*rowDataPtr)[row_pos].numVerts = num_elems / 2;    // Verts are packed, [x0,y0,x1,y1,...]
+    (*rowDataPtr)[row_pos].startVertIdx = geo_coords.size() / 2;
     const auto double_buff = reinterpret_cast<const double*>(ad.pointer);
     for (size_t i = 0; i < num_elems; ++i) {
       geo_coords.push_back(double_buff[i]);
@@ -919,12 +972,20 @@ std::vector<double> Executor::getShapeVertices(const Catalog_Namespace::SessionI
 
 std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::SessionInfo& session,
                                                 const TableDescriptor* td,
-                                                const std::string& shape_col_group) {
+                                                const std::string& shape_col_group,
+                                                QueryRenderer::PolyRowDataShPtr& rowDataPtr) {
   const auto& cat = session.get_catalog();
   const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_indices");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
+
+  if (!rowDataPtr) {
+    rowDataPtr.reset(new QueryRenderer::PolyRowData(row_count));
+  } else {
+    CHECK(rowDataPtr->size() == row_count);
+  }
+
   std::vector<unsigned> geo_indices;
   for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
     ArrayDatum ad;
@@ -933,6 +994,8 @@ std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::Session
     CHECK(!is_end);
     CHECK(ad.pointer);
     const auto num_elems = ad.length / sizeof(uint32_t);  // TODO(alex): support other integer sizes as well
+    (*rowDataPtr)[row_pos].numIndices = num_elems;
+    (*rowDataPtr)[row_pos].startIndIdx = geo_indices.size();
     const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
     for (size_t i = 0; i < num_elems; ++i) {
       geo_indices.push_back(ui32_buff[i]);
@@ -943,12 +1006,20 @@ std::vector<unsigned> Executor::getShapeIndices(const Catalog_Namespace::Session
 
 Executor::LineDrawData Executor::getShapeLineDrawData(const Catalog_Namespace::SessionInfo& session,
                                                       const TableDescriptor* td,
-                                                      const std::string& shape_col_group) {
+                                                      const std::string& shape_col_group,
+                                                      QueryRenderer::PolyRowDataShPtr& rowDataPtr) {
   const auto& cat = session.get_catalog();
   const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_linedrawinfo");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
+
+  if (!rowDataPtr) {
+    rowDataPtr.reset(new QueryRenderer::PolyRowData(row_count));
+  } else {
+    CHECK(rowDataPtr->size() == row_count);
+  }
+
   std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> geo_linedrawinfo;
   std::vector<size_t> offsets(1);
   for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
@@ -960,7 +1031,9 @@ Executor::LineDrawData Executor::getShapeLineDrawData(const Catalog_Namespace::S
     const auto num_elems = ad.length / sizeof(uint32_t);  // TODO(alex): support other integer sizes as well
     CHECK_EQ(size_t(0), num_elems % 4);
     const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
+    (*rowDataPtr)[row_pos].numLineLoops = 0;
     for (size_t i = 0; i < num_elems; i += 4) {
+      (*rowDataPtr)[row_pos].numLineLoops++;
       geo_linedrawinfo.push_back(::Rendering::GL::Resources::IndirectDrawVertexData(ui32_buff[i], ui32_buff[i + 2], 0));
     }
     offsets.push_back(geo_linedrawinfo.size());
@@ -971,12 +1044,20 @@ Executor::LineDrawData Executor::getShapeLineDrawData(const Catalog_Namespace::S
 std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShapePolyDrawData(
     const Catalog_Namespace::SessionInfo& session,
     const TableDescriptor* td,
-    const std::string& shape_col_group) {
+    const std::string& shape_col_group,
+    QueryRenderer::PolyRowDataShPtr& rowDataPtr) {
   const auto& cat = session.get_catalog();
   const auto chunk_with_meta = get_poly_shapes_chunk(cat, td, shape_col_group + "_geo_polydrawinfo");
   CHECK(chunk_with_meta.chunk);
   auto chunk_iter = chunk_with_meta.chunk->begin_iterator(chunk_with_meta.meta);
   const auto row_count = chunk_with_meta.meta.numElements;
+
+  if (!rowDataPtr) {
+    rowDataPtr.reset(new QueryRenderer::PolyRowData(row_count));
+  } else {
+    CHECK(rowDataPtr->size() == row_count);
+  }
+
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> geo_polydrawinfo;
   for (size_t row_pos = 0; row_pos < row_count; ++row_pos) {
     ArrayDatum ad;
@@ -987,6 +1068,7 @@ std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> Executor::getShap
     const auto num_elems = ad.length / sizeof(uint32_t);  // TODO(alex): support other integer sizes as well
     CHECK_EQ(size_t(5), num_elems);
     const auto ui32_buff = reinterpret_cast<const uint32_t*>(ad.pointer);
+    (*rowDataPtr)[row_pos].numPolys = 1;
     geo_polydrawinfo.push_back(
         ::Rendering::GL::Resources::IndirectDrawIndexData(ui32_buff[0], ui32_buff[2], ui32_buff[3], 0));
   }
@@ -1009,7 +1091,9 @@ size_t get_data_row_size(const std::vector<TargetMetaInfo>& row_shape) {
 // TODO(alex): We can cache this template based on the row shape.
 Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const std::vector<TargetMetaInfo>& row_shape,
                                                                         const size_t entry_count,
-                                                                        const size_t gpuId) {
+                                                                        const size_t gpuId,
+                                                                        const size_t rowid_idx,
+                                                                        const bool is_projection_query) {
   // the rendering/rowid data is put in a special "uniform" buffer. This buffer
   // has specific byte alignment rules. As long as we're dealing with
   // basic types here (and not arrays or structs), then the only rule we need
@@ -1029,9 +1113,18 @@ Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const st
 
   std::vector<std::string> attr_names;
   std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types;
-  for (const auto& target_meta_info : row_shape) {
+  for (size_t i = 0; i < row_shape.size(); ++i) {
+    const auto& target_meta_info = row_shape[i];
     attr_names.push_back(target_meta_info.get_resname());
-    attr_types.push_back(sql_type_to_render_type(target_meta_info.get_type_info()));
+    if (!is_projection_query && i == rowid_idx) {
+      // Adding the row index as our rowid in these cases, not the rowid of
+      // the actual poly
+
+      // TODO(croot): can we ever have more than max(size_t) rows?
+      attr_types.push_back(::QueryRenderer::QueryDataLayout::AttrType::UINT64);
+    } else {
+      attr_types.push_back(sql_type_to_render_type(target_meta_info.get_type_info()));
+    }
   }
 
   auto query_data_layout = new ::QueryRenderer::QueryDataLayout(attr_names, attr_types, {{}});
@@ -1045,17 +1138,29 @@ Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const st
 void Executor::setPolyRenderDataEntry(Executor::PolyRenderDataQueryResult& render_data,
                                       const std::vector<TargetValue>& row,
                                       const std::vector<TargetMetaInfo>& row_shape,
-                                      const size_t idx,
-                                      const size_t align_bytes) {
+                                      const size_t polyidx,
+                                      const size_t rowidx,
+                                      const size_t rowid_idx,
+                                      const size_t align_bytes,
+                                      const bool is_projection_query) {
   CHECK_EQ(row.size(), row_shape.size());
-  auto offset = idx * align_bytes;
+  auto startoffset = polyidx * align_bytes;
+  auto offset = startoffset;
   for (size_t col_idx = 0; col_idx < row_shape.size(); ++col_idx) {
     const auto tv = row[col_idx];
     const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
     const auto i64_ptr = boost::get<int64_t>(scalar_tv);
+
+    // TODO(croot): get attr offset per row from the layout
+    // and use here
     if (i64_ptr) {
-      std::memcpy(render_data.data.get() + offset, i64_ptr, sizeof(int64_t));
-      offset += sizeof(int64_t);
+      if (!is_projection_query && col_idx == rowid_idx) {
+        std::memcpy(render_data.data.get() + offset, &rowidx, sizeof(decltype(rowidx)));
+        offset += sizeof(decltype(rowidx));
+      } else {
+        std::memcpy(render_data.data.get() + offset, i64_ptr, sizeof(int64_t));
+        offset += sizeof(int64_t);
+      }
       continue;
     }
     const auto float_ptr = boost::get<float>(scalar_tv);
@@ -1070,6 +1175,8 @@ void Executor::setPolyRenderDataEntry(Executor::PolyRenderDataQueryResult& rende
     std::memcpy(render_data.data.get() + offset, double_ptr, sizeof(double));
     offset += sizeof(double);
   }
+
+  CHECK(offset - startoffset < align_bytes);
 }
 
 int32_t Executor::getStringId(const std::string& table_name,

@@ -49,6 +49,7 @@ class QueryRendererContext {
 
   const RapidJSONUtils::JsonCachePtr& getJsonCachePtr() { return _jsonCache; }
 
+  RootCacheShPtr getRootGpuCache() { return _qrmGpuCache.lock(); }
   const RootCacheShPtr getRootGpuCache() const { return _qrmGpuCache.lock(); }
 
   bool hasDataTable(const std::string& tableName) const;

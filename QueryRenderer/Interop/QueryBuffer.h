@@ -40,12 +40,25 @@ struct PolyTableByteData {
   // PolyTableByteData() : numVertBytes(0), numIndexBytes(0), numLineLoopBytes(0), numPolyBytes(0), numDataBytes(0) {}
 };
 
+struct PolyRowDataItem {
+  size_t numVerts;
+  size_t numIndices;
+  size_t startVertIdx;
+  size_t startIndIdx;
+  size_t numLineLoops;
+  size_t numPolys;
+};
+
+typedef std::vector<PolyRowDataItem> PolyRowData;
+typedef std::shared_ptr<PolyRowData> PolyRowDataShPtr;
+
 struct PolyTableDataInfo {
   size_t numVerts;
   size_t numTris;
   size_t numLineLoops;
   size_t numPolys;
   size_t numDataBytes;
+  PolyRowDataShPtr rowDataPtr;
 
   PolyTableDataInfo() : numVerts(0), numTris(0), numLineLoops(0), numPolys(0), numDataBytes(0) {}
 };

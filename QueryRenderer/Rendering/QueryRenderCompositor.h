@@ -87,9 +87,14 @@ class QueryRenderCompositorImpl {
     _framebufferPtr->readIdBuffer(startx, starty, width, height, idBuffer);
   }
 
-  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo) {
+  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo) {
     CHECK(_framebufferPtr);
-    _framebufferPtr->copyIdBufferToPbo(pbo);
+    _framebufferPtr->copyRowIdBufferToPbo(pbo);
+  }
+
+  void copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo) {
+    CHECK(_framebufferPtr);
+    _framebufferPtr->copyTableIdBufferToPbo(pbo);
   }
 
   virtual ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
@@ -161,7 +166,8 @@ class QueryRenderCompositor {
                                              const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
 
   void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
-  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo);
+  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo);
+  void copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo);
 
   ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
                                                                   FboColorBuffer texType);

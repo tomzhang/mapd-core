@@ -19,6 +19,7 @@
 #include <thread>
 #include <cstring>
 #include "rapidjson/error/en.h"
+#include <boost/algorithm/string/join.hpp>
 
 // #include <Shared/measure.h>
 // #include <iostream>
@@ -487,7 +488,7 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
     }
 
     if (!_id2Pixels) {
-      _id2Pixels.reset(new Array2dui(width, height));
+      _id2Pixels.reset(new Array2di(width, height));
     } else {
       _id2Pixels->resize(width, height);
     }
@@ -592,8 +593,8 @@ void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int h
 
     auto widthToUse = (width < 0 ? _ctx->getWidth() : width);
     auto heightToUse = (height < 0 ? _ctx->getHeight() : height);
-    _pbo1 = (*qrmItr)->getInactiveIdMapPbo(widthToUse, heightToUse);
-    _pbo2 = (*qrmItr)->getInactiveIdMapPbo(widthToUse, heightToUse);
+    _pbo1 = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+    _pbo2 = (*qrmItr)->getInactiveTableIdMapPbo(widthToUse, heightToUse);
 
     _pboGpu = (*qrmItr)->gpuId;
 
@@ -616,14 +617,15 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
         (*itr)->makeActiveOnCurrentThread();
 
         if (_pbo1) {
-          (*itr)->setIdMapPboInactive(_pbo1);
+          (*itr)->setRowIdMapPboInactive(_pbo1);
         }
 
         if (_pbo2) {
-          (*itr)->setIdMapPboInactive(_pbo2);
+          (*itr)->setTableIdMapPboInactive(_pbo2);
         }
 
-        _pbo1 = _pbo2 = nullptr;
+        _pbo1 = nullptr;
+        _pbo2 = nullptr;
         _pboGpu = EMPTY_GPUID;
 
         if (makeContextInactive) {
@@ -938,8 +940,8 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
 
         if (_ctx->doHitTest()) {
           CHECK(_idPixels && _id2Pixels && _pbo1 && _pbo2 && usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
-          usedFramebuffer->copyIdBufferToPbo(_pbo1, FboColorBuffer::ID_BUFFER);
-          usedFramebuffer->copyIdBufferToPbo(_pbo2, FboColorBuffer::ID2_BUFFER);
+          usedFramebuffer->copyRowIdBufferToPbo(_pbo1);
+          usedFramebuffer->copyTableIdBufferToPbo(_pbo2);
 
           // time_ms = timer_stop(clock_begin);
           // std::cerr << "\t\t\tCROOT - pbo idmap copy: " << time_ms << "ms" << std::endl;
@@ -978,8 +980,8 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
           auto renderer = usedFramebuffer->getRenderer();
           renderer->makeActiveOnCurrentThread();
 
-          usedFramebuffer->copyIdBufferToPbo(_pbo1, FboColorBuffer::ID_BUFFER);
-          usedFramebuffer->copyIdBufferToPbo(_pbo2, FboColorBuffer::ID2_BUFFER);
+          usedFramebuffer->copyRowIdBufferToPbo(_pbo1);
+          usedFramebuffer->copyTableIdBufferToPbo(_pbo2);
 
           // time_ms = timer_stop(clock_begin);
           // std::cerr << "\t\t\tCROOT - compositor pbo idmap copy : " << time_ms << "ms" << std::endl;
@@ -1133,7 +1135,7 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
 
         if (_idPixelsDirty) {
           unsigned int* rawIds = _idPixels->getDataPtr();
-          unsigned int* rawIds2 = _id2Pixels->getDataPtr();
+          int* rawIds2 = _id2Pixels->getDataPtr();
 
           auto qrmGpuCache = _ctx->getRootGpuCache();
           auto qrmPerGpuData = qrmGpuCache->perGpuData;
@@ -1172,7 +1174,7 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
 
           const Array2df& kernel = itr->second;
           Array2dui ids(pixelRadius2xPlus1, pixelRadius2xPlus1);
-          Array2dui ids2(pixelRadius2xPlus1, pixelRadius2xPlus1);
+          Array2di ids2(pixelRadius2xPlus1, pixelRadius2xPlus1);
 
           ids.copyFromPixelCenter(*_idPixels,
                                   x,
@@ -1258,6 +1260,64 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
     _clearAll(true);
     throw std::runtime_error(e.what());
   }
+}
+
+std::string QueryRenderer::getVegaTableNameWithTableId(const TableId tableId) const {
+  if (tableId == NonProjectionRenderQueryCacheMap::emptyTableId) {
+    return "";
+  }
+
+  // TODO(croot): improve the performance here with a different data structure
+  // for the data objects that is query-able by table id?
+  // I don't expect the number of tables in a vega to be very many, so just iterating
+  // over them all shouldn't be a big deal for now.
+  std::vector<std::string> vega_table_names;
+  vega_table_names.reserve(_ctx->_dataTableMap.size());
+  std::for_each(_ctx->_dataTableMap.begin(), _ctx->_dataTableMap.end(), [&](const auto& dataTablePtr) {
+    auto sqlTablePtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(dataTablePtr);
+    if (sqlTablePtr && sqlTablePtr->getTableId() == tableId) {
+      vega_table_names.push_back(dataTablePtr->getName());
+    }
+  });
+
+  RUNTIME_EX_ASSERT(vega_table_names.size() <= 1,
+                    "There are more than 1 tables in the vega with the same table id: " + std::to_string(tableId) +
+                        ". The vega tables are: " + boost::algorithm::join(vega_table_names, ","));
+
+  return (vega_table_names.size() ? vega_table_names[0] : "");
+}
+
+QueryDataTableBaseType QueryRenderer::getVegaTableTypeWithTableId(const TableId tableId) const {
+  RUNTIME_EX_ASSERT(tableId != NonProjectionRenderQueryCacheMap::emptyTableId,
+                    "TableId " + std::to_string(tableId) + " is not a valid table id.");
+
+  // TODO(croot): improve the performance here with a different data structure
+  // for the data objects that is query-able by table id?
+  // I don't expect the number of tables in a vega to be very many, so just iterating
+  // over them all shouldn't be a big deal for now.
+  QueryDataTableBaseType baseType = QueryDataTableBaseType::UNSUPPORTED;
+  std::for_each(_ctx->_dataTableMap.begin(), _ctx->_dataTableMap.end(), [&](const auto& dataTablePtr) {
+    auto sqlTablePtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(dataTablePtr);
+    if (sqlTablePtr && sqlTablePtr->getTableId() == tableId) {
+      auto baseTablePtr = std::dynamic_pointer_cast<BaseQueryDataTable>(dataTablePtr);
+      CHECK(baseTablePtr);
+      if (baseType == QueryDataTableBaseType::UNSUPPORTED) {
+        baseType = baseTablePtr->getBaseType();
+      } else {
+        RUNTIME_EX_ASSERT(baseTablePtr->getBaseType() == baseType,
+                          to_string(_ctx->getUserWidgetIds()) +
+                              ": There is more than 1 table in the vega with the same table id, but the tables have "
+                              "differing table types. Cannot distinguish the table type for table id " +
+                              std::to_string(tableId));
+      }
+    }
+  });
+
+  RUNTIME_EX_ASSERT(baseType != QueryDataTableBaseType::UNSUPPORTED,
+                    to_string(_ctx->getUserWidgetIds()) + ": The table id " + std::to_string(tableId) +
+                        " is not used by any of the vega tables.");
+
+  return baseType;
 }
 
 }  // namespace QueryRenderer

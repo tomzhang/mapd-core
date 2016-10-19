@@ -287,7 +287,9 @@ class Executor {
                             const Catalog_Namespace::SessionInfo& session,
                             const int render_widget_id,
                             const rapidjson::Value& data_desc,
-                            const std::string* render_config_json = nullptr);
+                            const std::string* render_config_json = nullptr,
+                            const bool is_projection_query = true,
+                            const std::string& poly_table_name = "");
 
 #ifdef HAVE_RENDERING
   int32_t getStringId(const std::string& table_name,
@@ -297,11 +299,13 @@ class Executor {
 
   std::vector<double> getShapeVertices(const Catalog_Namespace::SessionInfo& session,
                                        const TableDescriptor* td,
-                                       const std::string& shape_col_group);
+                                       const std::string& shape_col_group,
+                                       QueryRenderer::PolyRowDataShPtr& rowDataPtr);
 
   std::vector<unsigned> getShapeIndices(const Catalog_Namespace::SessionInfo& session,
                                         const TableDescriptor* td,
-                                        const std::string& shape_col_group);
+                                        const std::string& shape_col_group,
+                                        QueryRenderer::PolyRowDataShPtr& rowDataPtr);
 
   struct LineDrawData {
     std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> data;
@@ -310,12 +314,14 @@ class Executor {
 
   LineDrawData getShapeLineDrawData(const Catalog_Namespace::SessionInfo& session,
                                     const TableDescriptor* td,
-                                    const std::string& shape_col_group);
+                                    const std::string& shape_col_group,
+                                    QueryRenderer::PolyRowDataShPtr& rowDataPtr);
 
   std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> getShapePolyDrawData(
       const Catalog_Namespace::SessionInfo& session,
       const TableDescriptor* td,
-      const std::string& shape_col_group);
+      const std::string& shape_col_group,
+      QueryRenderer::PolyRowDataShPtr& rowDataPtr);
 
   struct PolyRenderDataQueryResult {
     std::shared_ptr<::QueryRenderer::QueryDataLayout> poly_render_data_layout;
@@ -326,13 +332,18 @@ class Executor {
 
   PolyRenderDataQueryResult getPolyRenderDataTemplate(const std::vector<TargetMetaInfo>& row_shape,
                                                       const size_t entry_count,
-                                                      const size_t gpuId);
+                                                      const size_t gpuId,
+                                                      const size_t rowid_idx,
+                                                      const bool is_projection_query);
 
   void setPolyRenderDataEntry(PolyRenderDataQueryResult& render_data,
                               const std::vector<TargetValue>& row,
                               const std::vector<TargetMetaInfo>& row_shape,
-                              const size_t idx,
-                              const size_t align_bytes);
+                              const size_t polyidx,
+                              const size_t rowidx,
+                              const size_t rowid_idx,
+                              const size_t align_bytes,
+                              const bool is_projection_query);
 
 #endif  // HAVE_RENDERING
 

@@ -2,6 +2,8 @@
 #define QUERYRENDERER_TYPES_H_
 
 #include <Catalog/TableDescriptor.h>
+#include <QueryEngine/ResultRows.h>
+#include <QueryEngine/TargetMetaInfo.h>
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 #include <memory>
@@ -45,6 +47,7 @@ typedef std::function<void(RefEventType, const RefObjShPtr&)> RefEventCallback;
 typedef uint32_t RefCallbackId;
 
 typedef size_t GpuId;
+typedef decltype(TableDescriptor::tableId) TableId;
 
 struct PngData;
 
@@ -73,14 +76,20 @@ typedef std::shared_ptr<QueryRendererContext> QueryRendererContextShPtr;
 struct RootCache;
 typedef std::shared_ptr<RootCache> RootCacheShPtr;
 
-typedef std::pair<decltype(TableDescriptor::tableId), uint32_t> TableIdRowIdPair;
-typedef std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)> TableIdNamePair;
-typedef std::function<
-    std::pair<std::vector<TableIdNamePair>, std::shared_ptr<QueryDataLayout>>(RenderQueryExecuteTimer&,
-                                                                              Executor*,
-                                                                              const std::string&,
-                                                                              const rapidjson::Value*,
-                                                                              bool)> QueryExecCB;
+struct NonProjectionRenderQueryCache;
+typedef std::shared_ptr<NonProjectionRenderQueryCache> NPRQueryCacheShPtr;
+
+typedef std::pair<TableId, uint32_t> TableIdRowIdPair;
+typedef std::pair<TableId, decltype(TableDescriptor::tableName)> TableIdNamePair;
+typedef std::function<std::tuple<ResultRows,
+                                 std::vector<TargetMetaInfo>,
+                                 int64_t,
+                                 std::vector<TableIdNamePair>,
+                                 std::shared_ptr<QueryDataLayout>>(RenderQueryExecuteTimer&,
+                                                                   Executor*,
+                                                                   const std::string&,
+                                                                   const rapidjson::Value*,
+                                                                   bool)> QueryExecCB;
 
 std::string to_string(const UserWidgetIdPair& value);
 std::string to_string(const RefType refType);

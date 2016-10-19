@@ -938,6 +938,12 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
       RUNTIME_EX_ASSERT(blockItr != _uniformBlockAttrs.end(),
                         "Could not find uniform block " + dotSepNames[0] + " in shader.");
 
+      // TODO(croot): appropriately handle the offset of the uniform in blocks
+      // and verify that attrs added to a GLShaderBlockLayout have the same
+      // offset after adding. One approach.
+      // GLint attrOffset;
+      // MAPD_CHECK_GL_ERROR(glGetActiveUniformsiv(_programId, 1, &i, GL_UNIFORM_OFFSET, &attrOffset));
+
       // TODO(croot): it turns out adding attrs to the block in their location order is
       // not the right order the attrs are defined in the block
       // we may need to parse the block in the src line-by-line to get the right order

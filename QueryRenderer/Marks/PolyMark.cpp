@@ -642,8 +642,9 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
   CHECK(polyTable);
 
   ::Rendering::GL::Resources::GLUniformBufferShPtr ubo;
+  PolyRowDataShPtr rowDataPtr;
 
-  PropMap_by_Name& uboPropLookup = _uboProps.get<BaseMark::PropertyName>();
+  // PropMap_by_Name& uboPropLookup = _uboProps.get<BaseMark::PropertyName>();
 
   if (itr->second.shaderPtr) {
     CHECK(itr->second.vaoPtr);
@@ -682,6 +683,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
   if (itr->second.strokeShaderPtr) {
     // reset the ubo to null and re-grab if there are stroke-related props in it
     ubo = nullptr;
+    rowDataPtr = nullptr;
 
     CHECK(itr->second.strokeVaoPtr);
 
@@ -700,25 +702,32 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
     renderer->bindVertexArray(itr->second.strokeVaoPtr);
     _bindUniformProperties(itr->second.strokeShaderPtr.get(), _usedStrokeProps);
 
-    if (_uboProps.size() && (uboPropLookup.find("strokeColor") != uboPropLookup.end() ||
-                             uboPropLookup.find("strokeWidth") != uboPropLookup.end())) {
+    if (_uboProps.size()) {
       // the same ubo should be used for all ubo props, so only need to grab
       // from first one
       ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
 
       renderer->bindUniformBuffer(ubo);
+
+      rowDataPtr = polyTable->getRowDataPtr(gpuId);
     }
 
     ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr indvbo =
         polyTable->getGLIndirectDrawVertexBuffer(gpuId);
-    CHECK(indvbo && (!ubo || indvbo->numItems() == ubo->numItems()));
+
+    CHECK(indvbo && (!ubo || (rowDataPtr && ubo->numItems() == rowDataPtr->size())));
 
     renderer->bindIndirectDrawBuffer(indvbo);
 
     if (ubo) {
-      for (size_t i = 0; i < indvbo->numItems(); ++i) {
+      size_t startLineLoopIdx = 0;
+      for (size_t i = 0; i < rowDataPtr->size(); ++i) {
+        auto& rowData = (*rowDataPtr)[i];
         itr->second.strokeShaderPtr->bindUniformBufferToBlock("LineData", ubo, i);
-        renderer->drawIndirectVertexBuffers(GL_LINE_STRIP_ADJACENCY, i, 1);
+        for (size_t j = 0; j < rowData.numLineLoops; ++j) {
+          renderer->drawIndirectVertexBuffers(GL_LINE_STRIP_ADJACENCY, startLineLoopIdx + j, 1);
+        }
+        startLineLoopIdx += rowData.numLineLoops;
       }
     } else {
       renderer->drawIndirectVertexBuffers(GL_LINE_STRIP_ADJACENCY);

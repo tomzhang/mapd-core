@@ -67,8 +67,8 @@ class QueryFramebuffer {
 
   void blitToFramebuffer(QueryFramebuffer& dstFboPtr, size_t startx, size_t starty, size_t width, size_t height);
 
-  void copyIdBufferToPbo(QueryIdMapPixelBufferShPtr& pbo,
-                         const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
+  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo);
+  void copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo);
 
   size_t getWidth() const;
   size_t getHeight() const;

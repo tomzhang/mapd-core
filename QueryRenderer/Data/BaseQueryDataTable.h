@@ -65,16 +65,16 @@ class BaseQueryDataTableJSON : public JSONRefObject {
 
 class BaseQueryDataTableSQL {
  public:
-  BaseQueryDataTableSQL(const std::string& tableName = "", const std::string& sqlQueryStr = "")
-      : _tableId(-1), _tableName(tableName), _sqlQueryStr(sqlQueryStr) {}
+  BaseQueryDataTableSQL(const std::string& tableName = "", const std::string& sqlQueryStr = "");
   virtual ~BaseQueryDataTableSQL() {}
 
-  int32_t getTableId() const { return _tableId; }
+  int32_t getTableId() const;
   std::string getTableName() const { return _tableName; }
   std::string getSqlQueryStr() const { return _sqlQueryStr; }
 
  protected:
-  int32_t _tableId;
+  NPRQueryCacheShPtr _queryCachePtr;
+  TableId _tableId;
   std::string _tableName;
   std::string _sqlQueryStr;
 
@@ -99,7 +99,7 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
     return BaseQueryDataTableJSON::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
   }
 
-  bool _executeQuery(const rapidjson::Value* dataObj = nullptr);
+  bool _executeQuery(const rapidjson::Value* dataObj = nullptr, const std::string& sqlQueryOverride = "");
   virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 
   QueryDataLayoutShPtr _queryDataLayoutPtr;

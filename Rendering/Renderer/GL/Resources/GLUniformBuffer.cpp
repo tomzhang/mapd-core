@@ -15,7 +15,7 @@ static size_t calcNumBytesPerItem(size_t bytesInBlock, size_t alignmentBytes, si
     }
   }
 
-  return bytesInBlock;
+  return numItems * alignmentBytes;
 }
 
 GLUniformBuffer::GLUniformBuffer(const RendererWkPtr& rendererPtr,

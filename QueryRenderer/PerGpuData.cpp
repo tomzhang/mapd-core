@@ -105,14 +105,24 @@ GpuId RootPerGpuData::getCompositorGpuId() {
   return renderer->getGpuId();
 }
 
-QueryIdMapPixelBufferShPtr RootPerGpuData::getInactiveIdMapPbo(size_t width, size_t height) {
-  CHECK(pboPoolPtr);
-  return pboPoolPtr->getInactiveIdMapPbo(width, height);
+QueryIdMapPixelBufferUIntShPtr RootPerGpuData::getInactiveRowIdMapPbo(size_t width, size_t height) {
+  CHECK(pboPoolUIntPtr);
+  return pboPoolUIntPtr->getInactiveIdMapPbo(width, height);
 }
 
-void RootPerGpuData::setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
-  CHECK(pboPoolPtr);
-  pboPoolPtr->setIdMapPboInactive(pbo);
+void RootPerGpuData::setRowIdMapPboInactive(QueryIdMapPixelBufferUIntShPtr& pbo) {
+  CHECK(pboPoolUIntPtr);
+  pboPoolUIntPtr->setIdMapPboInactive(pbo);
+}
+
+QueryIdMapPixelBufferIntShPtr RootPerGpuData::getInactiveTableIdMapPbo(size_t width, size_t height) {
+  CHECK(pboPoolIntPtr);
+  return pboPoolIntPtr->getInactiveIdMapPbo(width, height);
+}
+
+void RootPerGpuData::setTableIdMapPboInactive(QueryIdMapPixelBufferIntShPtr& pbo) {
+  CHECK(pboPoolIntPtr);
+  pboPoolIntPtr->setIdMapPboInactive(pbo);
 }
 
 QueryAccumTxPoolUqPtr& RootPerGpuData::getAccumTxPool() {
@@ -194,16 +204,29 @@ GpuId BasePerGpuData::getCompositorGpuId() {
   return renderer->getGpuId();
 }
 
-QueryIdMapPixelBufferShPtr BasePerGpuData::getInactiveIdMapPbo(size_t width, size_t height) {
+QueryIdMapPixelBufferUIntShPtr BasePerGpuData::getInactiveRowIdMapPbo(size_t width, size_t height) {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
-  return qrmGpuDataShPtr->getInactiveIdMapPbo(width, height);
+  return qrmGpuDataShPtr->getInactiveRowIdMapPbo(width, height);
 }
 
-void BasePerGpuData::setIdMapPboInactive(QueryIdMapPixelBufferShPtr& pbo) {
+void BasePerGpuData::setRowIdMapPboInactive(QueryIdMapPixelBufferUIntShPtr& pbo) {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   if (qrmGpuDataShPtr) {
-    qrmGpuDataShPtr->setIdMapPboInactive(pbo);
+    qrmGpuDataShPtr->setRowIdMapPboInactive(pbo);
+  }
+}
+
+QueryIdMapPixelBufferIntShPtr BasePerGpuData::getInactiveTableIdMapPbo(size_t width, size_t height) {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  CHECK(qrmGpuDataShPtr);
+  return qrmGpuDataShPtr->getInactiveTableIdMapPbo(width, height);
+}
+
+void BasePerGpuData::setTableIdMapPboInactive(QueryIdMapPixelBufferIntShPtr& pbo) {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  if (qrmGpuDataShPtr) {
+    qrmGpuDataShPtr->setTableIdMapPboInactive(pbo);
   }
 }
 

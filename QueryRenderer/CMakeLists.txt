@@ -8,7 +8,7 @@ set(QUERY_RENDERER_LIBS ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARIES} 
 
 set(QUERY_RENDERER_INCLUDE_DIRS ${Boost_INCLUDE_DIR} ${GL_INCLUDE_DIR} ${PNG_INCLUDE_DIR} ${CUDA_INCLUDE_DIR} ${Glog_INCLUDE_DIR} ThirdParty/rapidjson)
 
-set(QUERY_RENDERER_SOURCES PngData.cpp QueryDataLayout.cpp QueryRenderManager.cpp QueryRenderer.cpp QueryRendererContext.cpp Types.cpp PerGpuData.cpp)
+set(QUERY_RENDERER_SOURCES PngData.cpp QueryDataLayout.cpp QueryRenderManager.cpp QueryRenderer.cpp QueryRendererContext.cpp Types.cpp PerGpuData.cpp RootCache.cpp)
 
 list(APPEND QUERY_RENDERER_SOURCES Data/BaseQueryDataTable.cpp Data/QueryDataTable.cpp Data/QueryPolyDataTable.cpp Data/Utils.cpp Data/Types.cpp)
 
@@ -16,7 +16,7 @@ list(APPEND QUERY_RENDERER_SOURCES Interop/QueryBuffer.cpp)
 
 list(APPEND QUERY_RENDERER_SOURCES Marks/BaseMark.cpp Marks/PointMark.cpp Marks/PolyMark.cpp Marks/RenderProperty.cpp Marks/Utils.cpp Marks/Enums.cpp)
 
-list(APPEND QUERY_RENDERER_SOURCES Rendering/QueryAccumTxPool.cpp Rendering/QueryFramebuffer.cpp Rendering/QueryIdMapPboPool.cpp Rendering/QueryIdMapPixelBuffer.cpp Rendering/QueryRenderCompositor.cpp Rendering/QueryRenderSMAAPass.cpp)
+list(APPEND QUERY_RENDERER_SOURCES Rendering/QueryAccumTxPool.cpp Rendering/QueryFramebuffer.cpp Rendering/QueryIdMapPixelBuffer.cpp Rendering/QueryRenderCompositor.cpp Rendering/QueryRenderSMAAPass.cpp)
 
 if (_MAPDGL_X11)
   list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${X11_X11_INCLUDE_PATH}")

@@ -354,7 +354,6 @@ void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferShPtr>& b
   }
   auto unusedGpus = _initUnusedGpus(bufferMap);
 
-  CHECK(_prntMark->numGpus() == bufferMap.size());
   initGpuResources(_ctx.get(), usedGpus, unusedGpus);
   CHECK(bufferMap.size() == _perGpuData.size());
 

@@ -53,6 +53,10 @@ bool GLLayoutManagerBuffer::hasBufferLayout(const GLBufferLayoutShPtr& layoutPtr
   return ptrLookup.find(layoutPtr) != ptrLookup.end();
 }
 
+bool GLLayoutManagerBuffer::hasBufferLayoutAtOffset(const size_t offsetBytes) const {
+  return _layoutMap.find(offsetBytes) != _layoutMap.end();
+}
+
 void GLLayoutManagerBuffer::addBufferLayout(const GLBufferLayoutShPtr& layoutPtr,
                                             const size_t numBytes,
                                             const size_t offsetBytes) {
@@ -311,7 +315,7 @@ void GLLayoutManagerBuffer::_updateBufferLayouts(const GLBufferLayoutShPtr& layo
 void GLLayoutManagerBuffer::_deleteBufferLayoutsExcept(const GLBufferLayoutShPtr& layout) {
   if (!layout || !hasBufferLayout(layout)) {
     deleteAllBufferLayouts();
-  } else {
+  } else if (_layoutMap.size() > 1) {
     // TODO(croot): this is hacky -- may need to revisit
     // Attempting to clear all other layouts except 1.
     // Easiest/fastest way is to clear out all the

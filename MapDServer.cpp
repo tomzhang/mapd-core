@@ -64,6 +64,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <regex>
 
 #ifdef HAVE_RENDERING
 #include "QueryRenderer/QueryRenderManager.h"
@@ -83,6 +84,7 @@ using boost::shared_ptr;
 namespace {
 
 std::shared_ptr<const rapidjson::Value> get_poly_render_data(rapidjson::Document& render_config) {
+  // DEPRECATED, can be removed when MapDHandler::render() is removed
   const auto& data_descs = field(render_config, "data");
   CHECK(data_descs.IsArray());
   CHECK_EQ(unsigned(1), data_descs.Size());
@@ -98,6 +100,7 @@ std::shared_ptr<const rapidjson::Value> get_poly_render_data(rapidjson::Document
 }
 
 std::string build_poly_render_query(const rapidjson::Value& data_desc) {
+  // DEPRECATED, can be removed when MapDHandler::render() is removed
   CHECK_EQ("polys", json_str(field(data_desc, "format")));
   const auto polyTableName = json_str(field(data_desc, "dbTableName"));
   const auto factsTableName = json_str(field(data_desc, "factsTableName"));
@@ -111,6 +114,7 @@ std::string build_poly_render_query(const rapidjson::Value& data_desc) {
 }
 
 std::string transform_to_poly_render_query(const std::string& query_str, const rapidjson::Value& data_desc) {
+  // DEPRECATED, can be removed when MapDHandler::render() is removed
   CHECK_EQ("polys", json_str(field(data_desc, "format")));
   auto result = query_str;
   {
@@ -734,53 +738,313 @@ class MapDHandler : virtual public MapDIf {
       throw ex;
     }
 #ifdef HAVE_RENDERING
-    std::lock_guard<std::mutex> render_lock(render_mutex_);
-    mapd_lock_guard<mapd_shared_mutex> write_lock(sessions_mutex_);
-    auto session_it = get_session_it(session);
-    auto session_info_ptr = session_it->second.get();
-    auto& cat = session_info_ptr->get_catalog();
-    auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
-    CHECK(executor && render_manager_);
-    CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
-    set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-    ScopeGuard restore_device_type =
-        [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
+    try {
+      std::lock_guard<std::mutex> render_lock(render_mutex_);
+      mapd_lock_guard<mapd_shared_mutex> write_lock(sessions_mutex_);
+      auto session_it = get_session_it(session);
+      auto session_info_ptr = session_it->second.get();
+      auto& cat = session_info_ptr->get_catalog();
+      auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
+      CHECK(executor && render_manager_);
+      CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
+      set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
+      ScopeGuard restore_device_type =
+          [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
 
-    render_manager_->setActiveUserWidget(session_info_ptr->get_session_id(), widget_id);
+      _return.pixel = pixel;
 
-    int32_t table_id;
-    int64_t row_id;
-    std::tie(table_id, row_id) = render_manager_->getIdAt(pixel.x, pixel.y, pixelRadius);
-
-    _return.pixel = pixel;
-    _return.table_id = table_id;
-    _return.row_id = row_id;
-
-    if (table_id >= 0 && row_id >= 0) {
-      if (is_poly_table(table_id, cat)) {
-        // TODO(croot): hit-testing poly tables?
+      if (!render_manager_->hasUserWidget(session_info_ptr->get_session_id(), widget_id)) {
+        _return.table_id = -1;
+        _return.row_id = -1;
+        _return.vega_table_name = "";
         return;
       }
 
-      auto td = cat.getMetadataForTable(table_id);
-      CHECK(td) << "Table doesn't exist for table_id: " << table_id;
+      render_manager_->setActiveUserWidget(session_info_ptr->get_session_id(), widget_id);
 
-      auto table_name = td->tableName;
-      auto itr = table_col_names.find(table_name);
-      if (itr == table_col_names.end()) {
-        return;
+      int32_t table_id;
+      int64_t row_id;
+      std::string vega_table_name;
+      std::tie(table_id, row_id, vega_table_name) = render_manager_->getIdAt(pixel.x, pixel.y, pixelRadius);
+
+      _return.vega_table_name = vega_table_name;
+      _return.table_id = table_id;
+      _return.row_id = row_id;
+
+      // NOTE: -1 for table_id or row_id indicates nothing was hit
+      // Table ids < -1 are for cached non-projection queries.
+      // Table ids >= 0 are for projection queries and actually
+      // reference database table ids.
+      if (table_id != -1 && row_id >= 0) {
+        TQueryResult ret;
+        ret.row_set.is_columnar = column_format;
+
+        std::string table_name;
+        bool isCache = (table_id < 0);  // Table ids < -1 indicate rendered non-projection queries.
+                                        // The results of these queries may be cached, and if not
+                                        // cached, then the queries will be re-run here.
+
+        if (isCache) {
+          // Query is a non-projection query and may be cached.
+          auto total_time = measure<>::execution([&]() {
+            auto cache_table_id = table_id;
+
+            // retrieve the table_id and table_name of the primary table from the query
+            std::tie(table_id, table_name) = render_manager_->getPrimaryQueryCacheTableInfo(cache_table_id);
+
+            auto itr = table_col_names.find(vega_table_name);
+            if (itr == table_col_names.end() || itr->second.empty()) {
+              return;
+            }
+
+#if defined(HAVE_CALCITE) && defined(HAVE_RAVM)
+            ExecutionResult result{
+                ResultRows({}, {}, nullptr, nullptr, {}, session_info_ptr->get_executor_device_type()), {}};
+#endif
+            const ResultRows* resultRowPtr;
+            const std::vector<TargetMetaInfo>* resultRowShapePtr;
+            std::tie(resultRowPtr, resultRowShapePtr) = render_manager_->getQueryCacheResults(cache_table_id);
+
+            if (!resultRowShapePtr->size()) {
+              // cached results don't exist for the query. The cache may have been cleared or the query itself
+              // may be fast enough to run per-hit-test.
+              // Rerun query here.
+              std::string query_str = render_manager_->getQueryForQueryCache(cache_table_id);
+#if defined(HAVE_CALCITE) && defined(HAVE_RAVM)
+              ParserWrapper pw{query_str};
+              if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
+                std::string query_ra = parse_to_ra(query_str, *session_info_ptr);
+
+                RelAlgExecutor ra_executor(executor.get(), cat);
+                rapidjson::Document query_ast;
+                query_ast.Parse(query_ra.c_str());
+                CHECK(!query_ast.HasParseError());
+                CHECK(query_ast.IsObject());
+                const auto ra = ra_interpret(query_ast, cat);
+                auto ed_list = get_execution_descriptors(ra.get());
+                result = ra_executor.executeRelAlgSeq(
+                    ed_list,
+                    {session_info_ptr->get_executor_device_type(), true, ExecutorOptLevel::Default},
+                    {false, allow_multifrag_, false, allow_loop_joins_, g_enable_watchdog},
+                    nullptr);
+
+                resultRowPtr = &(result.getRows());
+                resultRowShapePtr = &(result.getTargetsMeta());
+
+                // TODO(croot): if the query takes too long here, should we add the results to
+                // the cache? If so, an API in QueryRenderManager to add query results
+                // to its cache would need to be authored.
+              }
+#else
+              throw std::runtime_error(
+                  "Running non-projection queries to resolve hit-testing is only supported on a Calcite/RAVM build.");
+#endif  // HAVE_CALCITE && HAVE_RAVM
+            }
+
+            std::regex projectAsRegex("\\s*(\\w+)\\s+as\\s+(\\w+)\\s*",
+                                      std::regex_constants::ECMAScript | std::regex_constants::icase);
+            std::regex funcProjectAsRegex("\\s*(\\w+\\s*\\(.*\\))\\s+as\\s+(\\w+)\\s*",
+                                          std::regex_constants::ECMAScript | std::regex_constants::icase);
+            std::smatch projectAsMatch;
+
+            size_t i;
+            int backref_rowid_idx = -1;
+            TColumnType col_info;
+            TRow trow;
+            std::vector<std::pair<std::string, size_t>> unusedProjIdx;
+            bool isPolyCache = render_manager_->isPolyQueryCache(cache_table_id);
+
+            // iterate through the columns requested by the user, and look for
+            // it in the generated results (results are either cached or generated
+            // by the above query)
+            // If the particular column is not found, then keep those as we'll
+            // run a final query to get those columns for a specific rowid of
+            // the original table
+            for (size_t idx = 0; idx < itr->second.size(); ++idx) {
+              // support the different ways columns can be projected, such as
+              // AS and Functions/Expressions
+              // For example, "conv_4326_900913_x(lon) as x" is a legal
+              // column projection, and we need to support it here.
+              // TODO(croot): may need to properly support expressions
+              std::string colName = itr->second[idx];
+              if (std::regex_match(colName, projectAsMatch, projectAsRegex)) {
+                colName = projectAsMatch[1];
+              } else if (std::regex_match(colName, projectAsMatch, funcProjectAsRegex)) {
+                colName = projectAsMatch[2];
+              }
+
+              // iterate through results to see if we've already generated results
+              // for this particular column.
+              for (i = 0; i < resultRowShapePtr->size(); ++i) {
+                // TODO(croot): do I need to ignore case or not?
+                if (backref_rowid_idx < 0 && (*resultRowShapePtr)[i].get_resname() == "rowid") {
+                  // found rowid in the results -- need this to be able to actually
+                  // backrefence the true rowid of a particular table
+                  backref_rowid_idx = static_cast<int>(i);
+                }
+
+                if ((*resultRowShapePtr)[i].get_resname() == colName) {
+                  // found the column
+                  break;
+                }
+              }
+
+              if (i != resultRowShapePtr->size()) {
+                // Found the colum in the generated results, so convert it
+                // into the return format expected
+
+                if (ret.row_set.row_desc.empty()) {
+                  ret.row_set.row_desc.resize(itr->second.size());
+                }
+                auto target = (*resultRowShapePtr)[i];
+                col_info.col_name = (projectAsMatch.empty() ? target.get_resname() : projectAsMatch[2]);
+                if (col_info.col_name.empty()) {
+                  col_info.col_name = "result_" + std::to_string(idx + 1);
+                }
+                const auto& target_ti = target.get_type_info();
+                col_info.col_type.type = type_to_thrift(target_ti);
+                col_info.col_type.encoding = encoding_to_thrift(target_ti);
+                col_info.col_type.nullable = !target_ti.get_notnull();
+                col_info.col_type.is_array = target_ti.get_type() == kARRAY;
+                ret.row_set.row_desc[idx] = col_info;
+
+                if (column_format) {
+                  if (ret.row_set.columns.empty()) {
+                    ret.row_set.columns.resize(itr->second.size());
+                  }
+                  const auto col_val = resultRowPtr->getRowAt(row_id, i, true);
+                  TColumn tcol;
+                  value_to_thrift_column(col_val, (*resultRowShapePtr)[i].get_type_info(), tcol);
+                  ret.row_set.columns[idx] = tcol;
+                } else {
+                  if (trow.cols.empty()) {
+                    trow.cols.resize(itr->second.size());
+                  }
+                  const auto col_val = resultRowPtr->getRowAt(row_id, i, true);
+                  trow.cols[idx] = value_to_thrift(col_val, (*resultRowShapePtr)[i].get_type_info());
+                }
+              } else if (isPolyCache) {
+                unusedProjIdx.push_back(std::make_pair(itr->second[idx], idx));
+              } else {
+                throw std::runtime_error("get_result_row_for_pixel(): cannot find column " + colName +
+                                         " in query cache.");
+              }
+            }
+
+            // Run a final request to generate results of the columns that weren't found
+            // in the original render query.
+            // Requires a rowid column of a referenc-able table for backreferencing.
+            // TODO(croot): only support poly tables right now, but extend to anything else
+            // as long as the original table is back-referencable.
+            if (isPolyCache) {
+              CHECK(is_poly_table(table_id, cat)) << "Table: " << table_id << " is not a poly table";
+
+              if (unusedProjIdx.size()) {
+                auto poly_row_id = row_id;
+                if (!ret.row_set.row_desc.empty()) {
+                  // rowid hasn't been found yet, look for it
+                  if (backref_rowid_idx < 0) {
+                    for (i = 0; i < resultRowShapePtr->size(); ++i) {
+                      // TODO(croot): do I need to ignore case or not?
+                      if ((*resultRowShapePtr)[i].get_resname() == "rowid") {
+                        backref_rowid_idx = i;
+                        break;
+                      }
+                    }
+                  }
+
+                  // need a rowid
+                  // TODO(croot): throw error
+                  CHECK(backref_rowid_idx >= 0) << "A rowid is currently required for poly-table rendering";
+
+                  // get the true row id of the primary table
+                  const auto col_val = resultRowPtr->getRowAt(row_id, backref_rowid_idx, true);
+                  const auto scalar_val = boost::get<ScalarTargetValue>(&col_val);
+                  CHECK(scalar_val) << "\"rowid\" is not a scalar column";
+                  const auto int_val = boost::get<int64_t>(scalar_val);
+                  CHECK(int_val) << "\"rowid\" must be an integer";
+                  poly_row_id = *int_val;
+                }
+
+                // Compile final query to retrieve extra columns
+                // TODO(alex): fix potential SQL injection issues?
+                std::string projection = "";
+                std::for_each(unusedProjIdx.begin(),
+                              unusedProjIdx.end(),
+                              [&projection](const std::pair<std::string, size_t>& item) {
+                  if (!projection.empty()) {
+                    projection += ", ";
+                  }
+                  projection += item.first;
+                });
+
+                // TODO(croot): what about non-projection queries?
+                // TODO(croot): what about poly tables?
+                const auto query_str = "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " +
+                                       std::to_string(poly_row_id) + ";";
+                TQueryResult tmpResult;
+                sql_execute_impl(tmpResult, *session_info_ptr, query_str, column_format, nonce);
+
+                CHECK(tmpResult.row_set.row_desc.size() == unusedProjIdx.size() &&
+                      (column_format || tmpResult.row_set.rows.size() == 1));
+
+                // convert query results into the appropriate return struct
+                if (ret.row_set.row_desc.empty()) {
+                  ret = std::move(tmpResult);
+                } else {
+                  for (i = 0; i < unusedProjIdx.size(); ++i) {
+                    auto idx = unusedProjIdx[i].second;
+                    ret.row_set.row_desc[idx] = tmpResult.row_set.row_desc[i];
+
+                    if (column_format) {
+                      CHECK(!ret.row_set.columns.empty());
+                      ret.row_set.columns[idx] = tmpResult.row_set.columns[i];
+                    } else {
+                      // NOTE: already checked that the number of rows in tmp result is 1
+                      CHECK(!trow.cols.empty());
+                      trow.cols[idx] = tmpResult.row_set.rows[0].cols[i];
+                    }
+                  }
+                }
+              }
+            }
+
+            if (!trow.cols.empty()) {
+              ret.row_set.rows.push_back(trow);
+            }
+          });
+          LOG(INFO) << "Resolving hit test for non-projection query. Total: " << total_time << " (ms)";
+        } else {
+          auto td = cat.getMetadataForTable(table_id);
+          CHECK(td) << "Table doesn't exist for table_id: " << table_id;
+          CHECK(!isCache || td->tableName == table_name) << "Table names don't match for table_id " << table_id << ", "
+                                                         << table_name << " != " << td->tableName;
+
+          if (!table_name.size()) {
+            table_name = td->tableName;
+          }
+
+          auto itr = table_col_names.find(vega_table_name);
+          if (itr == table_col_names.end()) {
+            return;
+          }
+
+          // TODO(alex): fix potential SQL injection issues?
+          auto projection = boost::algorithm::join(itr->second, ", ");
+
+          // TODO(croot): what about non-projection queries?
+          // TODO(croot): what about poly tables?
+          const auto query_str =
+              "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(row_id) + ";";
+          sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce);
+        }
+        _return.row_set = ret.row_set;
       }
-
-      // TODO(alex): fix potential SQL injection issues?
-      const auto projection = boost::algorithm::join(itr->second, ", ");
-
-      // TODO(croot): what about non-projection queries?
-      // TODO(croot): what about poly tables?
-      const auto query_str =
-          "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(row_id) + ";";
-      TQueryResult ret;
-      sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce);
-      _return.row_set = ret.row_set;
+    } catch (std::exception& e) {
+      TMapDException ex;
+      ex.error_msg = std::string("Exception: ") + e.what();
+      LOG(ERROR) << ex.error_msg;
+      throw ex;
     }
 #endif  // HAVE_RENDERING
   }
@@ -1209,10 +1473,13 @@ class MapDHandler : virtual public MapDIf {
       rapidjson::Document render_config;
       render_config.Parse(render_type.c_str());
       auto poly_data_desc = get_poly_render_data(render_config);
+      bool is_projection_query = true;
       if (poly_data_desc) {
         if (poly_data_desc->HasMember("factsKey")) {
+          is_projection_query = false;
           query_str = build_poly_render_query(*poly_data_desc);
         } else if (poly_data_desc->HasMember("polysKey")) {
+          is_projection_query = false;
           query_str = transform_to_poly_render_query(query_str, *poly_data_desc);
         }
       }
@@ -1225,7 +1492,7 @@ class MapDHandler : virtual public MapDIf {
         std::string query_ra;
         _return.execution_time_ms +=
             measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
-        render_rel_alg(_return, query_ra, query_str_in, *session_info_ptr, render_type);
+        render_rel_alg(_return, query_ra, query_str_in, *session_info_ptr, render_type, is_projection_query);
 #else
 #ifdef HAVE_CALCITE
         ParserWrapper pw{query_str};
@@ -1241,7 +1508,7 @@ class MapDHandler : virtual public MapDIf {
 #endif  // HAVE_CALCITE
         CHECK(root_plan);
         std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
-        render_root_plan(_return, root_plan, query_str_in, *session_info_ptr, render_type);
+        render_root_plan(_return, root_plan, query_str_in, *session_info_ptr, render_type, is_projection_query);
 #endif  // HAVE_RAVM
       } catch (std::exception& e) {
         TMapDException ex;
@@ -1316,12 +1583,6 @@ class MapDHandler : virtual public MapDIf {
               if (is_poly_query) {
                 render_info->do_render = false;  // do not perform the render post query
                                                  // For polys, we call an explicit executor->renderPolygons()
-                CHECK(dataObj);
-                if (dataObj->HasMember("factsKey")) {
-                  query_str = build_poly_render_query(*dataObj);
-                } else if (dataObj->HasMember("polysKey")) {
-                  query_str = transform_to_poly_render_query(query_str, *dataObj);
-                }
               } else {
                 render_info->do_render = true;
                 if (!render_info->render_allocator_map_ptr) {
@@ -1353,14 +1614,14 @@ class MapDHandler : virtual public MapDIf {
               std::string query_ra;
               _return.execution_time_ms +=
                   measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
-              auto usedTables = execute_render_rel_alg(render_timer,
-                                                       query_ra,
-                                                       query,
-                                                       *session_info_ptr,
-                                                       executor,
-                                                       dataObj,
-                                                       render_info.get(),
-                                                       is_poly_query);
+              auto rtnData = execute_render_rel_alg(render_timer,
+                                                    query_ra,
+                                                    query_str,
+                                                    *session_info_ptr,
+                                                    executor,
+                                                    dataObj,
+                                                    render_info.get(),
+                                                    is_poly_query);
   #else
     #ifdef HAVE_CALCITE
               ParserWrapper pw{query_str};
@@ -1376,26 +1637,29 @@ class MapDHandler : virtual public MapDIf {
               CHECK(root_plan);
               std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
 
-              auto usedTables = execute_render_root_plan(render_timer,
-                                                         root_plan,
-                                                         query,
-                                                         *session_info_ptr,
-                                                         executor,
-                                                         dataObj,
-                                                         render_info.get(),
-                                                         is_poly_query);
+              auto rtnData = execute_render_root_plan(render_timer,
+                                                      root_plan,
+                                                      query_str,
+                                                      *session_info_ptr,
+                                                      executor,
+                                                      dataObj,
+                                                      render_info.get(),
+                                                      is_poly_query);
   #endif  // HAVE_RAVM
 
+              auto& usedTables = std::get<3>(rtnData);
+              CHECK(usedTables.size() > 0);
+
               if (is_poly_query) {
-                usedTables.erase(std::remove_if(usedTables.begin(), usedTables.end(), [&cat](const auto& item) {
-                                   return !is_poly_table(item.first, cat);
-                                 }),
-                                 usedTables.end());
               } else if (render_info->render_allocator_map_ptr && render_info->result_query_data_layout) {
                 render_info->render_allocator_map_ptr->setDataLayout(render_info->result_query_data_layout);
               }
 
-              return std::make_pair(std::move(usedTables), render_info->result_query_data_layout);
+              return std::make_tuple(std::move(std::get<0>(rtnData)),
+                                     std::move(std::get<1>(rtnData)),
+                                     std::get<2>(rtnData),
+                                     std::move(usedTables),
+                                     render_info->result_query_data_layout);
             },
             compressionLevel,
             true);
@@ -1794,7 +2058,10 @@ class MapDHandler : virtual public MapDIf {
   }
 
 #ifdef HAVE_RENDERING
-  std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>
+  std::tuple<ResultRows,
+             std::vector<TargetMetaInfo>,
+             int64_t,
+             std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
   execute_render_root_plan(QueryRenderer::RenderQueryExecuteTimer& render_timer,
                            Planner::RootPlan* root_plan,
                            const std::string& query_str,
@@ -1817,27 +2084,45 @@ class MapDHandler : virtual public MapDIf {
                                      false,
                                      render_info);
 
+    auto plan = root_plan->get_plan();
+    CHECK(plan);
+    const auto& targets = plan->get_targetlist();
+    auto targetMetaInfo = getTargetMetaInfo(targets);
+
     // reduce execution time by the time spent during queue waiting
-    render_timer.execution_time_ms += timer_stop(clock_begin) - results.getQueueTime();
+    int64_t execute_time_ms = timer_stop(clock_begin) - results.getQueueTime();
     render_timer.queue_time_ms += results.getQueueTime();
 
+    auto tableId = root_plan->get_result_table_id();
+    auto tableName = session_info.get_catalog().getMetadataForTable(tableId)->tableName;
+
+    bool is_projection_query = true;
+    while (plan) {
+      if (dynamic_cast<const Planner::AggPlan*>(plan) || dynamic_cast<const Planner::Join*>(plan)) {
+        is_projection_query = false;
+        break;
+      }
+      plan = plan->get_child_plan();
+    }
+
     if (is_poly_query) {
-      const auto plan = root_plan->get_plan();
-      CHECK(plan);
-      const auto& targets = plan->get_targetlist();
-      auto rendered_results =
-          executor->renderPolygons(query_str, results, getTargetMetaInfo(targets), session_info, 1, *data_desc);
+      auto rendered_results = executor->renderPolygons(
+          query_str, results, targetMetaInfo, session_info, 1, *data_desc, nullptr, is_projection_query, tableName);
       render_timer.queue_time_ms += rendered_results.getQueueTime();
       render_timer.render_time_ms += rendered_results.getRenderTime();
     } else {
       // reduce execution time by time spend rendering
-      render_timer.execution_time_ms -= results.getRenderTime();
+      execute_time_ms -= results.getRenderTime();
       render_timer.render_time_ms += results.getRenderTime();
     }
 
-    return std::vector<std::pair<decltype(TableDescriptor::tableId), std::string>>(
-        {std::make_pair(root_plan->get_result_table_id(),
-                        session_info.get_catalog().getMetadataForTable(root_plan->get_result_table_id())->tableName)});
+    render_timer.execution_time_ms += execute_time_ms;
+
+    return std::make_tuple(
+        std::move(results),
+        std::move(targetMetaInfo),
+        execute_time_ms,
+        std::vector<std::pair<decltype(TableDescriptor::tableId), std::string>>({std::make_pair(tableId, tableName)}));
   }
 #endif  // HAVE_RENDERING
 
@@ -1845,7 +2130,8 @@ class MapDHandler : virtual public MapDIf {
                         Planner::RootPlan* root_plan,
                         const std::string& query_str,
                         const Catalog_Namespace::SessionInfo& session_info,
-                        const std::string& render_type) {
+                        const std::string& render_type,
+                        const bool is_projection_query) {
     rapidjson::Document render_config;
     render_config.Parse(render_type.c_str());
 
@@ -1880,8 +2166,14 @@ class MapDHandler : virtual public MapDIf {
       const auto plan = root_plan->get_plan();
       CHECK(plan);
       const auto& targets = plan->get_targetlist();
-      auto rendered_results = executor->renderPolygons(
-          query_str, results, getTargetMetaInfo(targets), session_info, 1, *poly_data_desc, &render_type);
+      auto rendered_results = executor->renderPolygons(query_str,
+                                                       results,
+                                                       getTargetMetaInfo(targets),
+                                                       session_info,
+                                                       1,
+                                                       *poly_data_desc,
+                                                       &render_type,
+                                                       is_projection_query);
       _return.execution_time_ms =
           timer_stop(clock_begin) - rendered_results.getQueueTime() - rendered_results.getRenderTime();
       _return.render_time_ms = rendered_results.getRenderTime();
@@ -1900,7 +2192,10 @@ class MapDHandler : virtual public MapDIf {
 #ifdef HAVE_RAVM
 
 #ifdef HAVE_RENDERING
-  std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>
+  std::tuple<ResultRows,
+             std::vector<TargetMetaInfo>,
+             int64_t,
+             std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
   execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& render_timer,
                          const std::string& query_ra,
                          const std::string& query_str,
@@ -1928,19 +2223,8 @@ class MapDHandler : virtual public MapDIf {
     const auto& results = exe_result.getRows();
 
     // reduce execution time by the time spent during queue waiting
-    render_timer.execution_time_ms += timer_stop(clock_begin) - results.getQueueTime();
+    int64_t execute_time_ms = timer_stop(clock_begin) - results.getQueueTime();
     render_timer.queue_time_ms += results.getQueueTime();
-
-    if (is_poly_query) {
-      auto rendered_results =
-          executor->renderPolygons(query_str, results, exe_result.getTargetsMeta(), session_info, 1, *data_desc);
-      render_timer.render_time_ms += rendered_results.getRenderTime();
-      render_timer.queue_time_ms += rendered_results.getQueueTime();
-    } else {
-      // reduce execution time by time spend rendering
-      render_timer.execution_time_ms -= results.getRenderTime();
-      render_timer.render_time_ms += results.getRenderTime();
-    }
 
     auto tables = RelAlgExecutor::getScanTableNamesInRelAlgSeq(ed_list);
     std::vector<std::pair<decltype(TableDescriptor::tableId), std::string>> rtn(tables.size());
@@ -1949,7 +2233,33 @@ class MapDHandler : virtual public MapDIf {
       rtn[cnt++] = std::make_pair(cat.getMetadataForTable(tableName)->tableId, std::move(tableName));
     }
 
-    return rtn;
+    if (is_poly_query) {
+      CHECK(is_poly_table(rtn[0].first, cat))
+          << "Table: " << rtn[0].second << ", id: " << rtn[0].first
+          << " is not a poly table but the query is part of a poly render query. sql: " << query_str;
+
+      // TODO(croot): is the number of tables in a query enough to determine if its a projection query
+      // or not?
+      auto rendered_results = executor->renderPolygons(query_str,
+                                                       results,
+                                                       exe_result.getTargetsMeta(),
+                                                       session_info,
+                                                       1,
+                                                       *data_desc,
+                                                       nullptr,
+                                                       tables.size() == 1,
+                                                       rtn[0].second);
+      render_timer.render_time_ms += rendered_results.getRenderTime();
+      render_timer.queue_time_ms += rendered_results.getQueueTime();
+    } else {
+      // reduce execution time by time spend rendering
+      execute_time_ms -= results.getRenderTime();
+      render_timer.render_time_ms += results.getRenderTime();
+    }
+
+    render_timer.execution_time_ms += execute_time_ms;
+
+    return std::make_tuple(std::move(results), std::move(exe_result.getTargetsMeta()), execute_time_ms, rtn);
   }
 #endif  // HAVE_RENDERING
 
@@ -1957,7 +2267,8 @@ class MapDHandler : virtual public MapDIf {
                       const std::string& query_ra,
                       const std::string& query_str,
                       const Catalog_Namespace::SessionInfo& session_info,
-                      const std::string& render_type) {
+                      const std::string& render_type,
+                      const bool is_projection_query) {
     const auto& cat = session_info.get_catalog();
     auto executor = Executor::getExecutor(cat.get_currentDB().dbId,
                                           jit_debug_ ? "/tmp" : "",
@@ -1992,8 +2303,14 @@ class MapDHandler : virtual public MapDIf {
     const auto& results = exe_result.getRows();
     if (poly_data_desc) {
 #ifdef HAVE_RENDERING
-      auto rendered_results = executor->renderPolygons(
-          query_str, results, exe_result.getTargetsMeta(), session_info, 1, *poly_data_desc, &render_type);
+      auto rendered_results = executor->renderPolygons(query_str,
+                                                       results,
+                                                       exe_result.getTargetsMeta(),
+                                                       session_info,
+                                                       1,
+                                                       *poly_data_desc,
+                                                       &render_type,
+                                                       is_projection_query);
       _return.execution_time_ms =
           timer_stop(clock_begin) - rendered_results.getQueueTime() - rendered_results.getRenderTime();
       _return.render_time_ms = rendered_results.getRenderTime();
