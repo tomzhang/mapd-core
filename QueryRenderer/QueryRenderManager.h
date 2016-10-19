@@ -11,7 +11,6 @@
 #include "RootCache.h"
 #include <Rendering/Types.h>
 #include <CudaMgr/CudaMgr.h>
-#include <gen-cpp/mapd_types.h>
 #include <Catalog/TableDescriptor.h>
 
 #include "rapidjson/document.h"
