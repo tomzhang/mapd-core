@@ -763,7 +763,7 @@ std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(i
     return std::make_tuple(std::string(pngdata.pngDataPtr.get(), pngdata.pngSize), executionTime, renderTime);
   } catch (const std::exception& e) {
     _activeItr->renderer->unsetQueryExecutionParams();
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 

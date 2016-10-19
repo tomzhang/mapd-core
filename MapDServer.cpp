@@ -1252,105 +1252,124 @@ class MapDHandler : virtual public MapDIf {
 #endif
 
 #ifdef HAVE_RENDERING
-      const auto session_id = session_info_ptr->get_session_id();
-      std::unique_ptr<RenderInfo> render_info(new RenderInfo(session_id, widget_id));
+      try {
+        const auto session_id = session_info_ptr->get_session_id();
+        std::unique_ptr<RenderInfo> render_info(new RenderInfo(session_id, widget_id));
 
-      std::string png_img_str;
-      int64_t total_execution_time, total_render_time;
-      std::tie(png_img_str, total_execution_time, total_render_time) = render_manager_->runRenderRequest(
-          session_id,
-          widget_id,
-          vega_json,
-          executor.get(),
-          render_info.get(),
-          [&](QueryRenderer::RenderQueryExecuteTimer& render_timer,
-              Executor* executor,
-              const std::string& query,
-              const rapidjson::Value* dataObj,
-              bool is_poly_query = false) {
-            std::string query_str = query;
+        std::string png_img_str;
+        int64_t total_execution_time, total_render_time;
+        std::tie(png_img_str, total_execution_time, total_render_time) = render_manager_->runRenderRequest(
+            session_id,
+            widget_id,
+            vega_json,
+            executor.get(),
+            render_info.get(),
+            [&](QueryRenderer::RenderQueryExecuteTimer& render_timer,
+                Executor* executor,
+                const std::string& query,
+                const rapidjson::Value* dataObj,
+                bool is_poly_query = false) {
+              std::string query_str = query;
 
-            // reset any layouts from prior executions
-            render_info->result_query_data_layout = nullptr;
+              // reset any layouts from prior executions
+              render_info->result_query_data_layout = nullptr;
 
-            if (is_poly_query) {
-              render_info->do_render = false;  // do not perform the render post query
-                                               // For polys, we call an explicit executor->renderPolygons()
-              CHECK(dataObj);
-              if (dataObj->HasMember("factsKey")) {
-                query_str = build_poly_render_query(*dataObj);
-              } else if (dataObj->HasMember("polysKey")) {
-                query_str = transform_to_poly_render_query(query_str, *dataObj);
-              }
-            } else {
-              render_info->do_render = true;
-              if (!render_info->render_allocator_map_ptr) {
-                const auto& catalog = session_info_ptr->get_catalog();
-
-                // NOTE: the following code calculating block_size_x &
-                // grid_size_x was copied from Executor::blockSize() &
-                // Executor::gridSize() respectively.
-                // Had to pull that code out as the Executor might not
-                // have been properly initialized with a catalog yet,
-                // which is required
-                CHECK(catalog.get_dataMgr().cudaMgr_);
-                const auto& dev_props = catalog.get_dataMgr().cudaMgr_->deviceProperties;
-
-                if (!block_size_x) {
-                  block_size_x = dev_props.front().maxThreadsPerBlock;
+              if (is_poly_query) {
+                render_info->do_render = false;  // do not perform the render post query
+                                                 // For polys, we call an explicit executor->renderPolygons()
+                CHECK(dataObj);
+                if (dataObj->HasMember("factsKey")) {
+                  query_str = build_poly_render_query(*dataObj);
+                } else if (dataObj->HasMember("polysKey")) {
+                  query_str = transform_to_poly_render_query(query_str, *dataObj);
                 }
+              } else {
+                render_info->do_render = true;
+                if (!render_info->render_allocator_map_ptr) {
+                  const auto& catalog = session_info_ptr->get_catalog();
 
-                if (!grid_size_x) {
-                  grid_size_x = 2 * dev_props.front().numMPs;
+                  // NOTE: the following code calculating block_size_x &
+                  // grid_size_x was copied from Executor::blockSize() &
+                  // Executor::gridSize() respectively.
+                  // Had to pull that code out as the Executor might not
+                  // have been properly initialized with a catalog yet,
+                  // which is required
+                  CHECK(catalog.get_dataMgr().cudaMgr_);
+                  const auto& dev_props = catalog.get_dataMgr().cudaMgr_->deviceProperties;
+
+                  if (!block_size_x) {
+                    block_size_x = dev_props.front().maxThreadsPerBlock;
+                  }
+
+                  if (!grid_size_x) {
+                    grid_size_x = 2 * dev_props.front().numMPs;
+                  }
+
+                  render_info->render_allocator_map_ptr.reset(new RenderAllocatorMap(
+                      catalog.get_dataMgr().cudaMgr_, render_manager_.get(), block_size_x, grid_size_x));
                 }
-
-                render_info->render_allocator_map_ptr.reset(new RenderAllocatorMap(
-                    catalog.get_dataMgr().cudaMgr_, render_manager_.get(), block_size_x, grid_size_x));
               }
-            }
 
   #ifdef HAVE_RAVM
-            std::string query_ra;
-            _return.execution_time_ms +=
-                measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
-            auto usedTables = execute_render_rel_alg(
-                render_timer, query_ra, query, *session_info_ptr, executor, dataObj, render_info.get(), is_poly_query);
+              std::string query_ra;
+              _return.execution_time_ms +=
+                  measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
+              auto usedTables = execute_render_rel_alg(render_timer,
+                                                       query_ra,
+                                                       query,
+                                                       *session_info_ptr,
+                                                       executor,
+                                                       dataObj,
+                                                       render_info.get(),
+                                                       is_poly_query);
   #else
     #ifdef HAVE_CALCITE
-            ParserWrapper pw{query_str};
-            if (pw.is_select_explain || pw.is_other_explain || pw.is_ddl || pw.is_update_dml) {
-              std::runtime_error ex("Can only render SELECT statements.");
-              LOG(ERROR) << ex.what();
-              throw ex;
-            }
-            auto root_plan = parse_to_plan(query_str, *session_info_ptr);
+              ParserWrapper pw{query_str};
+              if (pw.is_select_explain || pw.is_other_explain || pw.is_ddl || pw.is_update_dml) {
+                std::runtime_error ex("Can only render SELECT statements.");
+                LOG(ERROR) << ex.what();
+                throw ex;
+              }
+              auto root_plan = parse_to_plan(query_str, *session_info_ptr);
     #else
-            auto root_plan = parse_to_plan_legacy(query_str, *session_info_ptr, "render");
+              auto root_plan = parse_to_plan_legacy(query_str, *session_info_ptr, "render");
     #endif  // HAVE_CALCITE
-            CHECK(root_plan);
-            std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
+              CHECK(root_plan);
+              std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
 
-            auto usedTables = execute_render_root_plan(
-                render_timer, root_plan, query, *session_info_ptr, executor, dataObj, render_info.get(), is_poly_query);
+              auto usedTables = execute_render_root_plan(render_timer,
+                                                         root_plan,
+                                                         query,
+                                                         *session_info_ptr,
+                                                         executor,
+                                                         dataObj,
+                                                         render_info.get(),
+                                                         is_poly_query);
   #endif  // HAVE_RAVM
 
-            if (is_poly_query) {
-              usedTables.erase(std::remove_if(usedTables.begin(), usedTables.end(), [&cat](const auto& item) {
-                                 return !is_poly_table(item.first, cat);
-                               }),
-                               usedTables.end());
-            } else if (render_info->render_allocator_map_ptr && render_info->result_query_data_layout) {
-              render_info->render_allocator_map_ptr->setDataLayout(render_info->result_query_data_layout);
-            }
+              if (is_poly_query) {
+                usedTables.erase(std::remove_if(usedTables.begin(), usedTables.end(), [&cat](const auto& item) {
+                                   return !is_poly_table(item.first, cat);
+                                 }),
+                                 usedTables.end());
+              } else if (render_info->render_allocator_map_ptr && render_info->result_query_data_layout) {
+                render_info->render_allocator_map_ptr->setDataLayout(render_info->result_query_data_layout);
+              }
 
-            return std::make_pair(std::move(usedTables), render_info->result_query_data_layout);
-          },
-          compressionLevel,
-          true);
+              return std::make_pair(std::move(usedTables), render_info->result_query_data_layout);
+            },
+            compressionLevel,
+            true);
 
-      _return.execution_time_ms = total_execution_time;
-      _return.render_time_ms = total_render_time;
-      _return.image = png_img_str;
+        _return.execution_time_ms = total_execution_time;
+        _return.render_time_ms = total_render_time;
+        _return.image = png_img_str;
+      } catch (std::exception& e) {
+        TMapDException ex;
+        ex.error_msg = std::string("Exception: ") + e.what();
+        LOG(ERROR) << ex.error_msg;
+        throw ex;
+      }
 #endif // HAVE_RENDERING
     });
     LOG(INFO) << "Total: " << _return.total_time_ms << " (ms), Total Execution: " << _return.execution_time_ms

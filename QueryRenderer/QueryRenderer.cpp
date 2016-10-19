@@ -519,7 +519,7 @@ void QueryRenderer::setJSONConfig(const std::string& configJSON, bool forceUpdat
     throw e;
   } catch (const std::exception& e) {
     _clearAll(true);
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 
@@ -534,7 +534,7 @@ void QueryRenderer::setJSONDocument(const std::shared_ptr<rapidjson::Document>& 
     throw e;
   } catch (const std::exception& e) {
     _clearAll(true);
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 
@@ -550,7 +550,7 @@ void QueryRenderer::updateResultsPostQuery(Executor* executor) {
     throw e;
   } catch (const std::exception& e) {
     _clearAll(true);
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 
@@ -1004,7 +1004,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
     throw e;
   } catch (const std::exception& e) {
     _clearAll(true);
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 
@@ -1112,7 +1112,7 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
     throw e;
   } catch (const std::exception& e) {
     _clearAll(true);
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 
@@ -1256,7 +1256,7 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
     throw e;
   } catch (const std::exception& e) {
     _clearAll(true);
-    throw e;
+    throw std::runtime_error(e.what());
   }
 }
 
