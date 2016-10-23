@@ -4702,6 +4702,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
                                                                          compilation_result.query_mem_desc.sortOnGpu(),
                                                                          render_allocator_map_);
   } catch (const OutOfHostMemory& e) {
+    std::lock_guard<std::mutex> lock(reduce_mutex);
     LOG(ERROR) << e.what();
     *error_code_ = ERR_OUT_OF_CPU_MEM;
     return;
@@ -4724,6 +4725,7 @@ void Executor::ExecutionDispatch::run(const ExecutorDeviceType chosen_device_typ
                                                                        compilation_result.query_mem_desc.sortOnGpu(),
                                                                        render_allocator_map_);
       } catch (const OutOfHostMemory& e) {
+        std::lock_guard<std::mutex> lock(reduce_mutex);
         LOG(ERROR) << e.what();
         *error_code_ = ERR_OUT_OF_CPU_MEM;
         return;
