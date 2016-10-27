@@ -57,7 +57,12 @@ const std::string QuantitativeScaleTemplate_vert::source =
     "}\n"
     "\n"
     "subroutine(QuantTransformFunc_<name>) domainType_<name> sqrtTransform_<name>(in domainType_<name> val) {\n"
+    "#if domainType_<name> == double\n"
+    "    return sqrt(val);\n"
+    // TODO(croot): handle 64-bit ints
+    "#else\n"
     "    return domainType_<name>(sqrt(float(val)));\n"
+    "#endif\n"
     "}\n"
     "\n"
     "rangeType_<name> getQuantitativeScale_<name>(in domainType_<name> domainVal) {\n"
@@ -121,13 +126,23 @@ const std::string QuantitativeScaleTemplate_vert::source =
     "        val2 = uDomains_<name>[idx2];\n"
     "      #endif\n"
     "\n"
+    "#if domainType_<name> == double\n"
+    "      double t = (transformedVal - val1) / (val2 - val1);\n"
+    // TODO(croot): handle 64-bit ints
+    "#else\n"
     "      float t = (float(transformedVal) - float(val1)) / (float(val2) - float(val1));\n"
+    "#endif\n"
     "\n"
     "      #if useClamp_<name> == 1\n"
     "        t = clamp(t, 0.0, 1.0);\n"
     "      #endif\n"
     "\n"
+    "#if domainType_<name> == double\n"
+    "      return rangeType_<name>(mix(double(uRanges_<name>[idx1]), double(uRanges_<name>[idx2]), t));\n"
+    // TODO(croot): handle 64-bit ints
+    "#else\n"
     "      return mix(uRanges_<name>[idx1], uRanges_<name>[idx2], t);\n"
+    "#endif\n"
     "    #endif // doAccum_QuantitativeScale_<name>\n"
     "}\n";
 
