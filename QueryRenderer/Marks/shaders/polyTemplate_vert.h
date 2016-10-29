@@ -72,7 +72,7 @@ const std::string PolyTemplate_Vert::source =
     "void main() {\n"
     "  gl_Position = vec4(float(getx(x)), float(gety(y)), 0.5, 1.0);\n"
     "\n"
-    "  #if usePerVertColor == 1 || useUfillColor\n"
+    "  #if usePerVertColor == 1 || useUfillColor == 1\n"
     "  fColor = getfillColor(fillColor);\n"
     "  #elif useUniformBuffer == 1\n"
     "  fColor = getfillColor(polyData.<fillColor>);\n"

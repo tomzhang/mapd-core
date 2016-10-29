@@ -656,7 +656,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
     renderer->bindVertexArray(itr->second.vaoPtr);
     _bindUniformProperties(itr->second.shaderPtr.get(), _usedProps);
 
-    if (_uboProps.size() && uboPropLookup.find("fillColor") != uboPropLookup.end()) {
+    if (_uboProps.size()) {
       // the same ubo should be used for all ubo props, so only need to grab
       // from first one
       ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
