@@ -498,11 +498,14 @@ void PolyMark::_updateShader() {
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
     if (doFill) {
-      itr.second.shaderPtr = rsrcMgr->createShader(polyShaders[0], polyShaders[1]);
+      itr.second.shaderPtr = rsrcMgr->createShader(BaseMark::_addBaseTypeDefinesToShaderSrc(polyShaders[0]),
+                                                   BaseMark::_addBaseTypeDefinesToShaderSrc(polyShaders[1]));
     }
 
     if (doStroke) {
-      itr.second.strokeShaderPtr = rsrcMgr->createShader(lineShaders[0], lineShaders[1], lineShaders[2]);
+      itr.second.strokeShaderPtr = rsrcMgr->createShader(BaseMark::_addBaseTypeDefinesToShaderSrc(lineShaders[0]),
+                                                         BaseMark::_addBaseTypeDefinesToShaderSrc(lineShaders[1]),
+                                                         BaseMark::_addBaseTypeDefinesToShaderSrc(lineShaders[2]));
     }
 
     // TODO(croot): should check the shader block layout attached

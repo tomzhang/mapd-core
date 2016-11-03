@@ -2,6 +2,7 @@
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 #include "../Scales/Utils.h"
 #include "../Utils/ShaderUtils.h"
+#include <regex>
 
 namespace QueryRenderer {
 
@@ -160,6 +161,24 @@ void BaseMark::_updateShader(std::string& vertSrc, std::string& fragSrc) {
 
     boost::replace_range(fragSrc, funcRange, accumSrc);
   }
+}
+
+std::string BaseMark::_addBaseTypeDefinesToShaderSrc(const std::string& shaderSrc) {
+  // add the type defines at the head of vert shaders
+  RUNTIME_EX_ASSERT(GLRenderer::getCurrentThreadRenderer(),
+                    "A renderer needs to be active to call BaseTypeGL::getTypeDefinesMacroForShader()");
+
+  std::regex versionRegex("#version\\s+\\d+\\s+core\\s*");
+  std::smatch versionMatch;
+
+  size_t idx = 0;
+  if (std::regex_search(shaderSrc, versionMatch, versionRegex)) {
+    idx = versionMatch.position() + versionMatch.length();
+  }
+
+  std::string rtn = shaderSrc;
+  rtn.insert(idx, ::Rendering::GL::BaseTypeGL::getTypeDefinesMacroForShader());
+  return rtn;
 }
 
 void BaseMark::_buildVertexArrayObjectFromProperties() {

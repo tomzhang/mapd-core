@@ -141,6 +141,7 @@ class BaseMark {
   virtual std::set<BaseRenderProperty*> _getUsedProps() = 0;
   void _updateProps(const std::set<BaseRenderProperty*>& usedProps, bool force = false);
   void _updateShader(std::string& vertSrc, std::string& fragSrc);
+  static std::string _addBaseTypeDefinesToShaderSrc(const std::string& shaderSrc);
 
  private:
   void _buildVertexArrayObjectFromProperties();

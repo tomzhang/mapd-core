@@ -326,7 +326,9 @@ void PointMark::_updateShader() {
     currRenderer = dynamic_cast<GLRenderer*>(qrmGpuData->rendererPtr.get());
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
-    itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+
+    itr.second.shaderPtr = rsrcMgr->createShader(BaseMark::_addBaseTypeDefinesToShaderSrc(vertSrc),
+                                                 BaseMark::_addBaseTypeDefinesToShaderSrc(fragSrc));
 
     // TODO(croot): should I make make the current thread
     // have an inactive renderer?

@@ -312,14 +312,17 @@ class Scale : public BaseScale {
                       std::string(*this) + " getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
 
     std::string shaderCode = scaleVertexShaderSource[static_cast<int>(scaleShader)];
+
     std::ostringstream ss;
 
     if (!ignoreDomain) {
       boost::replace_first(shaderCode, "<domainType>", _domainTypeGL->glslType());
+      boost::replace_all(shaderCode, "<domainTypeEnum>", std::to_string(_domainTypeGL->glslGLType()));
     }
 
     if (!ignoreRange) {
       boost::replace_first(shaderCode, "<rangeType>", _rangeTypeGL->glslType());
+      boost::replace_all(shaderCode, "<rangeTypeEnum>", std::to_string(_rangeTypeGL->glslGLType()));
     }
 
     ss << _domainPtr.size();

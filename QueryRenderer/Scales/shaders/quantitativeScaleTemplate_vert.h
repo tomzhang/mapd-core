@@ -2,15 +2,23 @@
 #define QUANTITATIVESCALETEMPLATE_VERT_H_
 
 #include <string>
+#include <Rendering/Renderer/GL/TypeGL.h>
 
 namespace QueryRenderer {
 struct QuantitativeScaleTemplate_vert {
   static const std::string source;
 };
 
+// Before using this shader source, it should be prepended by
+// the string that is returned from
+// ::Rendering::GL::BaseTypeGL::getTypeDefinesMacroForShader()
+// That can't be done here as GL hasn't been initialized yet
+// and it can only be used after GL is initialized.
 const std::string QuantitativeScaleTemplate_vert::source =
     "#define domainType_<name> <domainType>\n"
+    "#define domainTypeEnum_<name> <domainTypeEnum>\n"
     "#define rangeType_<name> <rangeType>\n"
+    "#define rangeTypeEnum_<name> <rangeTypeEnum>\n"
     "\n"
     "#define numDomains_<name> <numDomains>\n"
     "#define numRanges_<name> <numRanges>\n"
@@ -126,7 +134,7 @@ const std::string QuantitativeScaleTemplate_vert::source =
     "        val2 = uDomains_<name>[idx2];\n"
     "      #endif\n"
     "\n"
-    "#if domainType_<name> == double\n"
+    "#if domainTypeEnum_<name> == DOUBLE\n"
     "      double t = (transformedVal - val1) / (val2 - val1);\n"
     // TODO(croot): handle 64-bit ints
     "#else\n"
@@ -137,12 +145,18 @@ const std::string QuantitativeScaleTemplate_vert::source =
     "        t = clamp(t, 0.0, 1.0);\n"
     "      #endif\n"
     "\n"
-    "#if domainType_<name> == double\n"
-    "      return rangeType_<name>(mix(double(uRanges_<name>[idx1]), double(uRanges_<name>[idx2]), t));\n"
+    "#if domainTypeEnum_<name> == DOUBLE\n"
+    "  #if rangeType_<name> == DOUBLE || rangeType_<name> == DOUBLE_VEC2 || rangeType_<name> == DOUBLE_VEC3 "
+    "|| rangeType_<name> == "
+    "DOUBLE_VEC4\n"
+    "      return mix(uRanges_<name>[idx1], uRanges_<name>[idx2], t);\n"
+    "  #else\n"
+    "      return mix(uRanges_<name>[idx1], uRanges_<name>[idx2], float(t));\n"
+    "  #endif\n"
     // TODO(croot): handle 64-bit ints
     "#else\n"
     "      return mix(uRanges_<name>[idx1], uRanges_<name>[idx2], t);\n"
-    "#endif\n"
+    "#endif // if domainTypeEnum_<name> == DOUBLE\n"
     "    #endif // doAccum_QuantitativeScale_<name>\n"
     "}\n";
 

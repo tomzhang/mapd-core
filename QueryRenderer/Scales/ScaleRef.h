@@ -137,10 +137,12 @@ class ScaleRef : public BaseScaleRef {
 
     if (coerceDomain) {
       boost::replace_first(shaderCode, "<domainType>", _coercedDomainData->getTypeGL()->glslType());
+      boost::replace_all(shaderCode, "<domainTypeEnum>", std::to_string(_coercedDomainData->getTypeGL()->glslGLType()));
     }
 
     if (coerceRange) {
       boost::replace_first(shaderCode, "<rangeType>", _coercedRangeData->getTypeGL()->glslType());
+      boost::replace_all(shaderCode, "<rangeTypeEnum>", std::to_string(_coercedRangeData->getTypeGL()->glslGLType()));
     }
 
     return shaderCode;
