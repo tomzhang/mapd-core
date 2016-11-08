@@ -358,6 +358,10 @@ void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferShPtr>& b
   initGpuResources(_ctx.get(), usedGpus, unusedGpus);
   CHECK(bufferMap.size() == _perGpuData.size());
 
+  if (!bufferMap.size()) {
+    return;
+  }
+
   ::Rendering::GL::Resources::GLResourceType rsrcType = bufferMap.begin()->second->getGLResourceType();
 
   switch (rsrcType) {

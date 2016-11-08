@@ -147,7 +147,10 @@ SqlQueryDataTableJSON::SqlQueryDataTableJSON(const QueryRendererContextShPtr& ct
 bool SqlQueryDataTableJSON::hasAttribute(const std::string& attrName) {
   // all vbos should have the same set of columns, so only need to check the first one.
   auto itr = _perGpuData.begin();
-  CHECK(itr != _perGpuData.end());
+
+  if (itr == _perGpuData.end()) {
+    return false;
+  }
 
   // TODO(croot): throw a warning/error if the vbo isn't initialized?
   return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName) : false);
@@ -163,7 +166,9 @@ QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuI
                     "Cannot get the data buffer for " + attrName + " in table " + getTableName() +
                         ". The table's vbo has not been initialized yet.");
 
-  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName, getQueryDataLayout()),
+  auto layout = getQueryDataLayout();
+  CHECK(layout);
+  RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName, layout),
                     _printInfo(true) + ": attribute \"" + attrName + "\" does not exist in VBO.");
 
   return itr->second.vbo;
@@ -236,9 +241,9 @@ QueryDataLayoutShPtr SqlQueryDataTableJSON::getQueryDataLayout() const {
     return rtn;
   }
 
-  // keeping the following for backwards compatibility
-  RUNTIME_EX_ASSERT(!_perGpuData.empty(),
-                    _printInfo(true) + ": Cannot get query data layout. The data has no buffers defined.");
+  if (_perGpuData.empty()) {
+    return nullptr;
+  }
 
   auto itr = _perGpuData.begin();
 

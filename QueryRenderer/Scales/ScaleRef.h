@@ -334,12 +334,18 @@ class ScaleRef : public BaseScaleRef {
         std::string(*this) + ": The render property \"" + _getRndrPropName() +
             "\" is missing a column name to reference in the data. Cannot numerically convert a string column.");
 
-    QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getQueryDataLayout();
-    CHECK(queryDataLayoutPtr != nullptr);
-
     std::vector<std::string>& vec = domainData->getVectorDataRef();
     _coercedDomainData.reset(
         new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
+
+    QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getQueryDataLayout();
+    if (!queryDataLayoutPtr) {
+      // We can run into a scenario where there still exists a referenced data ptr, but that
+      // data ptr has nothing in it. We handle that case by just returning here, but this
+      // scale ref should/will not do anything in the future (like init a shader or bind uniforms)
+      // We can reach here and ultimately not render thanks to a scale update in QueryRenderer::_initFromJSON
+      return;
+    }
 
     std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorDataRef();
     for (size_t i = 0; i < vec.size(); ++i) {

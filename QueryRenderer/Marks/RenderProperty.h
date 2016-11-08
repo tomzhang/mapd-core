@@ -333,8 +333,19 @@ class RenderProperty : public BaseRenderProperty {
   }
 
   bool _initTypeFromBuffer() {
+    bool rtn = false;
     auto itr = _perGpuData.begin();
-    CHECK(itr != _perGpuData.end());
+    if (itr == _perGpuData.end()) {
+      // there's nothing in the data ptr
+      if (_inType || _outType) {
+        rtn = true;
+      }
+
+      _inType = nullptr;
+      _outType = nullptr;
+
+      return rtn;
+    }
 
     QueryBufferShPtr bufToUse = (itr->second.vbo ? std::dynamic_pointer_cast<QueryBuffer>(itr->second.vbo)
                                                  : std::dynamic_pointer_cast<QueryBuffer>(itr->second.ubo));
@@ -347,7 +358,6 @@ class RenderProperty : public BaseRenderProperty {
     ::Rendering::GL::TypeGLShPtr vboType =
         bufToUse->getAttributeTypeGL(_vboAttrName, (dataPtr ? dataPtr->getQueryDataLayout() : nullptr));
 
-    bool rtn = false;
     if (_flexibleType) {
       if (!_inType || !_outType || *_inType != *vboType || *_outType != *vboType) {
         rtn = true;

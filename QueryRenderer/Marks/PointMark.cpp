@@ -390,6 +390,7 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
         auto queryResultBuffer = dynamic_cast<QueryResultVertexBuffer*>(vboPtr.get());
         if (queryResultBuffer) {
           auto queryDataLayoutPtr = queryResultBuffer->getQueryDataLayout();
+          CHECK(queryDataLayoutPtr);
           activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(queryDataLayoutPtr->invalidKey));
         }
       }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
