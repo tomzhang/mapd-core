@@ -2320,7 +2320,7 @@ int main(int argc, char** argv) {
 #else
   bool enable_rendering = false;
 #endif  // HAVE_RENDERING
-  bool enable_watchdog = false;
+  bool enable_watchdog = true;
 
   size_t cpu_buffer_mem_bytes = 0;  // 0 will cause DataMgr to auto set this based on available memory
   size_t render_mem_bytes = 500000000;
@@ -2367,9 +2367,6 @@ int main(int argc, char** argv) {
                      po::value<size_t>(&render_mem_bytes)->default_value(render_mem_bytes),
                      "Size of memory reserved for rendering [bytes]");
 #endif  // HAVE_RENDERING
-  desc.add_options()("enable-watchdog",
-                     po::bool_switch(&enable_watchdog)->default_value(enable_watchdog)->implicit_value(true),
-                     "Enable watchdog");
   desc.add_options()("num-gpus", po::value<int>(&num_gpus)->default_value(num_gpus), "Number of gpus to use");
   desc.add_options()("start-gpu", po::value<int>(&start_gpu)->default_value(start_gpu), "First gpu to use");
   desc.add_options()("version,v", "Print Release Version Number");
@@ -2400,6 +2397,9 @@ int main(int argc, char** argv) {
   desc_adv.add_options()("num-reader-threads",
                          po::value<size_t>(&num_reader_threads)->default_value(num_reader_threads),
                          "Number of reader threads to use");
+  desc_adv.add_options()("enable-watchdog",
+                         po::bool_switch(&enable_watchdog)->default_value(enable_watchdog)->implicit_value(true),
+                         "Enable watchdog");
 
   po::positional_options_description positionalOptions;
   positionalOptions.add("data", 1);
