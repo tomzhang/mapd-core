@@ -21,4 +21,4 @@ WORKDIR /mapd
 
 EXPOSE 9092
 
-CMD /mapd/startmapd --data /mapd-storage/data --config /mapd-storage/mapd.conf
+CMD /mapd/startmapd --non-interactive --data /mapd-storage/data --config /mapd-storage/mapd.conf
