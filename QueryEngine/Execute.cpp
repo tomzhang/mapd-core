@@ -2047,7 +2047,7 @@ llvm::Value* Executor::fragRowOff() const {
   for (auto arg_it = cgen_state_->row_func_->arg_begin(); arg_it != cgen_state_->row_func_->arg_end(); ++arg_it) {
     if (arg_it->getType()->isIntegerTy()) {
       ++arg_it;
-      return arg_it;
+      return &*arg_it;
     }
   }
   abort();
@@ -2058,7 +2058,7 @@ llvm::Value* Executor::rowsPerScan() const {
     if (arg_it->getType()->isIntegerTy()) {
       ++arg_it;
       ++arg_it;
-      return arg_it;
+      return &*arg_it;
     }
   }
   abort();
@@ -2078,7 +2078,7 @@ llvm::Value* getLiteralBuffArg(llvm::Function* row_func) {
     ++arg_it;
   }
   CHECK(arg_it != row_func->arg_end());
-  return arg_it;
+  return &*arg_it;
 }
 
 }  // namespace
@@ -6133,7 +6133,7 @@ std::vector<llvm::Value*> generate_column_heads_load(const int num_columns,
   auto max_col_local_id = num_columns - 1;
   auto& fetch_bb = query_func->front();
   llvm::IRBuilder<> fetch_ir_builder(&fetch_bb);
-  fetch_ir_builder.SetInsertPoint(fetch_bb.begin());
+  fetch_ir_builder.SetInsertPoint(&*fetch_bb.begin());
   auto& in_arg_list = query_func->getArgumentList();
   CHECK_GE(in_arg_list.size(), size_t(4));
   auto& byte_stream_arg = in_arg_list.front();
@@ -6547,7 +6547,7 @@ void Executor::createErrorCheckControlFlow(llvm::Function* query_func) {
         auto new_bb = bb_it->splitBasicBlock(next_inst_it);
         auto& br_instr = bb_it->back();
         llvm::IRBuilder<> ir_builder(&br_instr);
-        llvm::Value* err_lv = inst_it;
+        llvm::Value* err_lv = &*inst_it;
         auto& error_code_arg = query_func->getArgumentList().back();
         CHECK(error_code_arg.getName() == "error_code");
         err_lv = ir_builder.CreateCall(cgen_state_->module_->getFunction("record_error_code"),
@@ -7111,7 +7111,9 @@ std::string Executor::generatePTX(const std::string& cuda_llir) const {
 
     nvptx_target_machine_->addPassesToEmitFile(ptxgen_pm, formatted_os, llvm::TargetMachine::CGFT_AssemblyFile);
     ptxgen_pm.run(*module);
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 5
     formatted_os.flush();
+#endif
   }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 5
