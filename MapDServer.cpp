@@ -1,4 +1,5 @@
 #include "MapDServer.h"
+#include "LeafHostInfo.h"
 #include "gen-cpp/MapD.h"
 #ifdef HAVE_PROFILER
 #include <gperftools/heap-profiler.h>
@@ -194,7 +195,8 @@ std::string image_from_rendered_rows(const ResultRows& rendered_results) {
 
 class MapDHandler : virtual public MapDIf {
  public:
-  MapDHandler(const std::string& base_data_path,
+  MapDHandler(const std::vector<LeafHostInfo>& leaves,
+              const std::string& base_data_path,
               const std::string& executor_device,
               const bool allow_multifrag,
               const bool jit_debug,
@@ -215,7 +217,8 @@ class MapDHandler : virtual public MapDIf {
               const int /* calcite_port */,
               const bool /* legacy_syntax */)
 #endif  // HAVE_CALCITE
-      : base_data_path_(base_data_path),
+      : leaves_(leaves),
+        base_data_path_(base_data_path),
         random_gen_(std::random_device{}()),
         session_id_dist_(0, INT32_MAX),
         jit_debug_(jit_debug),
@@ -2598,6 +2601,7 @@ class MapDHandler : virtual public MapDIf {
   std::map<TSessionId, std::shared_ptr<Catalog_Namespace::SessionInfo>> sessions_;
   std::map<std::string, std::shared_ptr<Catalog_Namespace::Catalog>> cat_map_;
 
+  const std::vector<LeafHostInfo> leaves_;
   const std::string base_data_path_;
   boost::filesystem::path import_path_;
   ExecutorDeviceType executor_device_type_;
@@ -2653,6 +2657,7 @@ int main(int argc, char** argv) {
   std::string base_path;
   std::string device("gpu");
   std::string config_file("mapd.conf");
+  std::string cluster_file("cluster.conf");
   bool flush_log = false;
   bool jit_debug = false;
   bool allow_multifrag = true;
@@ -2679,6 +2684,7 @@ int main(int argc, char** argv) {
   po::options_description desc("Options");
   desc.add_options()("help,h", "Print help messages");
   desc.add_options()("config", po::value<std::string>(&config_file), "Path to mapd.conf");
+  desc.add_options()("cluster", po::value<std::string>(&cluster_file), "Path to cluster.conf");
   desc.add_options()(
       "data", po::value<std::string>(&base_path)->required()->default_value("data"), "Directory path to MapD catalogs");
   desc.add_options()("cpu", "Run on CPU only");
@@ -2754,6 +2760,8 @@ int main(int argc, char** argv) {
 
   po::variables_map vm;
 
+  std::vector<LeafHostInfo> leaves;
+
   try {
     po::store(po::command_line_parser(argc, argv).options(desc_all).positional(positionalOptions).run(), vm);
     po::notify(vm);
@@ -2763,6 +2771,10 @@ int main(int argc, char** argv) {
       po::store(po::parse_config_file(settings_file, desc_all, true), vm);
       po::notify(vm);
       settings_file.close();
+    }
+
+    if (vm.count("cluster")) {
+      leaves = LeafHostInfo::parseClusterConfig(cluster_file);
     }
 
     if (vm.count("help")) {
@@ -2899,7 +2911,8 @@ int main(int argc, char** argv) {
   // on shutdown
   register_signal_handler();
 
-  shared_ptr<MapDHandler> handler(new MapDHandler(base_path,
+  shared_ptr<MapDHandler> handler(new MapDHandler(leaves,
+                                                  base_path,
                                                   device,
                                                   allow_multifrag,
                                                   jit_debug,
