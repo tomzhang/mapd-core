@@ -639,7 +639,7 @@ void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj, 
   }
 
   if (executeQuery) {
-    if (!_polysKey.empty()) {
+    if (_hasExecutableSql() && !_polysKey.empty()) {
       if (!_factsKey.empty()) {
         _sqlQueryStrOverride =
             build_poly_render_query(_tableName, _factsTableName, _filterExpr, _aggExpr, _factsKey, _polysKey);

@@ -99,6 +99,7 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
     return BaseQueryDataTableJSON::_printInfo() + ", " + BaseQueryDataTableSQL::_printInfo();
   }
 
+  bool _hasExecutableSql() const;
   bool _executeQuery(const rapidjson::Value* dataObj = nullptr, const std::string& sqlQueryOverride = "");
   virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
 

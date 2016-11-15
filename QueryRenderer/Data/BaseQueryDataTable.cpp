@@ -79,6 +79,10 @@ void BaseQueryDataTableSQLJSON::_updateFromJSONObj(const rapidjson::Value& obj, 
   _jsonPath = objPath;
 }
 
+bool BaseQueryDataTableSQLJSON::_hasExecutableSql() const {
+  return (_sqlQueryStr.length() && _sqlQueryStr != "select x, y from tweets;");
+}
+
 bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, const std::string& sqlQueryOverride) {
   // now execute the query
   // TODO(croot): should this be a lazy load? The only time executing here could
@@ -88,7 +92,7 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
 
   // NOTE: "select x, y from tweets;" was a placeholder sql in the vega
   // Need to check for that for backwards compatibility.
-  if (_sqlQueryStr.length() && _sqlQueryStr != "select x, y from tweets;") {
+  if (_hasExecutableSql()) {
     auto executor = _ctx->getExecutor();
 
     if (executor) {
