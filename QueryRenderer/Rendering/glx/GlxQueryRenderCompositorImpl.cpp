@@ -104,7 +104,7 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
 
   if (doHitTest()) {
     _idTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
-    _id2TextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
+    _id2TextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32I, numSamples, sampleProps);
   }
 }
 

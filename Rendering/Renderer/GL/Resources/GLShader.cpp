@@ -715,14 +715,30 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     // case GL_SAMPLER_2D_SHADOW:
     // case GL_SAMPLER_2D_ARRAY_SHADOW:
 
-    // case GL_INT_SAMPLER_2D:
-    // case GL_INT_IMAGE_2D:
-    // case GL_INT_IMAGE_2D_ARRAY:
-    // case GL_INT_SAMPLER_2D_ARRAY:
-    // case GL_INT_SAMPLER_2D_MULTISAMPLE:
-    // case GL_INT_IMAGE_2D_MULTISAMPLE:
-    // case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
-    // case GL_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
+    case GL_INT_SAMPLER_2D:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
+      break;
+    case GL_INT_IMAGE_2D:
+      // TODO(croot): need to un-hardcode the GL_RG32I/GL_READ_WRITE/multisample/binding attrs
+      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32I, GL_READ_WRITE, false, 0);
+      break;
+    case GL_INT_SAMPLER_2D_ARRAY:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
+      break;
+    case GL_INT_IMAGE_2D_ARRAY:
+      // TODO(croot): need to un-hardcode the GL_RG32I/GL_READ_WRITE/multisample/binding attrs
+      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32I, GL_READ_WRITE, false, 0);
+      break;
+    case GL_INT_SAMPLER_2D_MULTISAMPLE:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
+      break;
+    case GL_INT_IMAGE_2D_MULTISAMPLE:
+      break;
+    case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
+      break;
+    case GL_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
+      break;
 
     case GL_UNSIGNED_INT_SAMPLER_2D:
       rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
