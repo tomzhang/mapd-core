@@ -234,7 +234,7 @@ void GLLayoutManagerBuffer::_updateBufferLayouts(const GLBufferLayoutShPtr& layo
 
   auto itr = ptrLookup.find(layoutPtr);
   BufferLayoutMapByOffset::iterator offsetItr;
-  bool success;
+  bool success = false;
   BoundLayoutData oldData;
   if (itr != ptrLookup.end()) {
     // first project into a offsetBytes iterator
@@ -273,10 +273,6 @@ void GLLayoutManagerBuffer::_updateBufferLayouts(const GLBufferLayoutShPtr& layo
     RUNTIME_EX_ASSERT(success,
                       "Cannot successfully add layout to vbo. Another layout is already bound to the byte offset: " +
                           std::to_string(offsetBytes) + ".");
-
-    // auto myRsrc = getSharedResourceFromTypePtr(this);
-    // CHECK(myRsrc && myRsrc.get() == this);
-    // layoutPtr->addBuffer(myRsrc);
 
     if (replLayout) {
       _layoutReplacedCB(oldData, *offsetItr);
