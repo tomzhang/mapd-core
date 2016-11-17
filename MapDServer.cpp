@@ -1,5 +1,5 @@
 #include "MapDServer.h"
-#include "LeafHostInfo.h"
+#include "LeafAggregator.h"
 #include "gen-cpp/MapD.h"
 #ifdef HAVE_PROFILER
 #include <gperftools/heap-profiler.h>
@@ -217,7 +217,7 @@ class MapDHandler : virtual public MapDIf {
               const int /* calcite_port */,
               const bool /* legacy_syntax */)
 #endif  // HAVE_CALCITE
-      : leaves_(leaves),
+      : leaf_aggregator_(leaves),
         base_data_path_(base_data_path),
         random_gen_(std::random_device{}()),
         session_id_dist_(0, INT32_MAX),
@@ -381,12 +381,21 @@ class MapDHandler : virtual public MapDIf {
     } else
       sessions_[session].reset(
           new Catalog_Namespace::SessionInfo(cat_it->second, user_meta, executor_device_type_, session));
+    if (leaf_aggregator_.leafCount() > 0) {
+      const auto parent_session_info_ptr = sessions_[session];
+      CHECK(parent_session_info_ptr);
+      leaf_aggregator_.connect(*parent_session_info_ptr, user, passwd, dbname);
+      return session;
+    }
     LOG(INFO) << "User " << user << " connected to database " << dbname << std::endl;
     return session;
   }
 
   void disconnect(const TSessionId session) override {
     mapd_lock_guard<mapd_shared_mutex> write_lock(sessions_mutex_);
+    if (leaf_aggregator_.leafCount() > 0) {
+      leaf_aggregator_.disconnect(session);
+    }
     auto session_it = get_session_it(session);
     const auto dbname = session_it->second->get_catalog().get_currentDB().dbName;
     LOG(INFO) << "User " << session_it->second->get_currentUser().userName << " disconnected from database " << dbname
@@ -552,7 +561,11 @@ class MapDHandler : virtual public MapDIf {
       render_lock.reset(new std::lock_guard<std::mutex>(render_mutex_));
     }
     const auto session_info = get_session(session);
-    sql_execute_impl(_return, session_info, query_str, column_format, nonce);
+    if (leaf_aggregator_.leafCount() > 0) {
+      leaf_aggregator_.execute(_return, session_info, query_str, column_format, nonce);
+    } else {
+      sql_execute_impl(_return, session_info, query_str, column_format, nonce);
+    }
   }
 
   void sql_validate(TTableDescriptor& _return, const TSessionId session, const std::string& query_str) override {
@@ -2632,7 +2645,7 @@ class MapDHandler : virtual public MapDIf {
   std::map<TSessionId, std::shared_ptr<Catalog_Namespace::SessionInfo>> sessions_;
   std::map<std::string, std::shared_ptr<Catalog_Namespace::Catalog>> cat_map_;
 
-  const std::vector<LeafHostInfo> leaves_;
+  LeafAggregator leaf_aggregator_;
   const std::string base_data_path_;
   boost::filesystem::path import_path_;
   ExecutorDeviceType executor_device_type_;

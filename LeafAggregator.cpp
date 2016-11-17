@@ -17,6 +17,7 @@ LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
   for (const auto& leaf : leaves) {
     const auto socket = boost::make_shared<TSocket>(leaf.getHost(), leaf.getPort());
     const auto transport = boost::make_shared<TBufferedTransport>(socket);
+    transport->open();
     const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
     leaves_.emplace_back(new MapDClient(protocol));
   }
@@ -40,13 +41,17 @@ std::string serialize_result_set(const ResultSet* result_set) {
 }  // namespace
 
 void LeafAggregator::execute(TQueryResult& _return,
-                             const Catalog_Namespace::SessionInfo& session_info,
+                             const Catalog_Namespace::SessionInfo& parent_session_info,
                              const std::string& query_str,
                              const bool column_format,
                              const std::string& nonce) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  const auto& leaf_session_ids = session_it->second;
+  CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
     pending_queries_[leaf_idx] =
-        leaves_[leaf_idx]->start_query(session_info.get_session_id(), query_str, column_format, nonce);
+        leaves_[leaf_idx]->start_query(leaf_session_ids[leaf_idx], query_str, column_format, nonce);
   }
   bool execution_finished = false;
   TMergeType::type merge_type = TMergeType::REDUCE;
@@ -95,9 +100,49 @@ void LeafAggregator::execute(TQueryResult& _return,
   CHECK(false);
 }
 
+void LeafAggregator::connect(const Catalog_Namespace::SessionInfo& parent_session_info,
+                             const std::string& user,
+                             const std::string& passwd,
+                             const std::string& dbname) {
+  mapd_lock_guard<mapd_shared_mutex> write_lock(leaf_sessions_mutex_);
+  std::vector<TSessionId> leaf_session_ids;
+  for (const auto& leaf : leaves_) {
+    leaf_session_ids.push_back(leaf->connect(user, passwd, dbname));
+  }
+  const auto it_ok = leaf_sessions_.emplace(parent_session_info.get_session_id(), leaf_session_ids);
+  CHECK(it_ok.second);
+}
+
+void LeafAggregator::disconnect(const TSessionId session) {
+  mapd_lock_guard<mapd_shared_mutex> write_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(session);
+  const auto& leaf_session_ids = session_it->second;
+  CHECK_EQ(leaves_.size(), leaf_session_ids.size());
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    const auto& leaf = leaves_[leaf_idx];
+    leaf->disconnect(leaf_session_ids[leaf_idx]);
+  }
+  leaf_sessions_.erase(session);
+}
+
+size_t LeafAggregator::leafCount() const {
+  return leaves_.size();
+}
+
 void LeafAggregator::broadcastResultSet(const ResultSet* result_set) const {
   const auto serialized_result_set = serialize_result_set(result_set);
   for (const auto& leaf : leaves_) {
     leaf->broadcast_serialized_rows(serialized_result_set);
   }
+}
+
+LeafAggregator::SessionMap::iterator LeafAggregator::getSessionIterator(const TSessionId session) {
+  auto session_it = leaf_sessions_.find(session);
+  if (session_it == leaf_sessions_.end()) {
+    TMapDException ex;
+    ex.error_msg = "Session not valid.";
+    LOG(ERROR) << ex.error_msg;
+    throw ex;
+  }
+  return session_it;
 }

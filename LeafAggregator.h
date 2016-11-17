@@ -2,7 +2,7 @@
 #define LEAFAGGREGATOR_H
 
 #include "LeafHostInfo.h"
-
+#include "Shared/mapd_shared_mutex.h"
 #include "gen-cpp/mapd_types.h"
 
 #include <cstdint>
@@ -21,16 +21,31 @@ class LeafAggregator {
   LeafAggregator(const std::vector<LeafHostInfo>& leaves);
 
   void execute(TQueryResult& _return,
-               const Catalog_Namespace::SessionInfo& session_info,
+               const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& query_str,
                const bool column_format,
                const std::string& nonce);
 
+  void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
+               const std::string& user,
+               const std::string& passwd,
+               const std::string& dbname);
+
+  void disconnect(const TSessionId session);
+
+  size_t leafCount() const;
+
  private:
   void broadcastResultSet(const ResultSet*) const;
 
+  typedef std::map<TSessionId, std::vector<TSessionId>> SessionMap;
+
+  SessionMap::iterator getSessionIterator(const TSessionId session);
+
   std::vector<std::unique_ptr<MapDClient>> leaves_;
   std::vector<int64_t> pending_queries_;  // pending query id (per leaf), 0 for no pending query
+  SessionMap leaf_sessions_;              // map from aggregator session to leaf sessions
+  mapd_shared_mutex leaf_sessions_mutex_;
 };
 
 #endif  // LEAFAGGREGATOR_H
