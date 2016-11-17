@@ -275,6 +275,8 @@ class RenderProperty : public BaseRenderProperty {
       _setShaderDirty();
     }
 
+    CHECK(_inType);
+
     if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
       _scaleConfigPtr.reset(new ScaleRef<unsigned int, T>(_ctx, scalePtr, this));
     } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {

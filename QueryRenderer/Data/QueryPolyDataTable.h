@@ -15,6 +15,7 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
       : BaseQueryDataTable(type, QueryDataTableBaseType::POLY) {}
   virtual ~BaseQueryPolyDataTable() {}
 
+  ::Rendering::GL::Resources::GLVertexBufferShPtr getGLVertexBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLIndexBufferShPtr getGLIndexBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLUniformBufferShPtr getGLUniformBuffer(const GpuId& gpuId) const;
   ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr getGLIndirectDrawVertexBuffer(const GpuId& gpuId) const;

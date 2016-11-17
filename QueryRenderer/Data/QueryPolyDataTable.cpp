@@ -26,6 +26,7 @@ using ::Rendering::GL::Resources::GLSequentialBufferLayout;
 using ::Rendering::GL::Resources::ShaderBlockLayoutType;
 using ::Rendering::GL::Resources::GLShaderBlockLayout;
 using ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr;
+using ::Rendering::GL::Resources::GLVertexBufferShPtr;
 using ::Rendering::GL::Resources::GLIndexBufferShPtr;
 using ::Rendering::GL::Resources::GLUniformBufferShPtr;
 using ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr;
@@ -97,6 +98,14 @@ std::string transform_to_poly_render_query(const std::string& query_str,
 
 std::string BaseQueryPolyDataTable::xcoordName = "x";
 std::string BaseQueryPolyDataTable::ycoordName = "y";
+
+GLVertexBufferShPtr BaseQueryPolyDataTable::getGLVertexBuffer(const GpuId& gpuId) const {
+  auto itr = _perGpuData.find(gpuId);
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                    _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
+
+  return (itr->second.vbo ? itr->second.vbo->getGLVertexBufferPtr() : nullptr);
+}
 
 GLIndexBufferShPtr BaseQueryPolyDataTable::getGLIndexBuffer(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
@@ -1629,8 +1638,8 @@ std::tuple<GLShaderBlockLayoutShPtr, std::unique_ptr<char[]>, size_t> PolyDataTa
         break;
     }
 
-    columnData[idx] = std::make_pair(std::move((*itr)->getTypelessColumnData()),
-                                     blockLayoutPtr->getAttributeByteOffset((*itr)->columnName));
+    columnData[idx] =
+        std::make_pair((*itr)->getTypelessColumnData(), blockLayoutPtr->getAttributeByteOffset((*itr)->columnName));
 
     idx++;
   }
