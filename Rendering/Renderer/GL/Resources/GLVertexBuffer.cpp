@@ -79,6 +79,8 @@ void GLVertexBuffer::debugPrintData(void* data, const GLBufferLayoutShPtr& layou
   // way is to supply a list of idxs to debug or somehow provide an
   // iterator to iterate through.
 
+  RUNTIME_EX_ASSERT(layoutPtr, "A layout is needed to properly print data");
+
   auto layoutData = getBufferLayoutData(layoutPtr);
   auto offset = layoutData.second;
 
@@ -92,7 +94,7 @@ void GLVertexBuffer::debugPrintData(void* data, const GLBufferLayoutShPtr& layou
                         " extends beyond the number of vertices in the layout-defined buffer " +
                         std::to_string(numVertices(layoutPtr)));
 
-  auto bufidx = offset + idx / bytesPerVertex;
+  auto bufidx = offset + idx * bytesPerVertex;
   std::cout << "[" << idx << "]:" << std::endl;
   for (decltype(numAttrs) i = 0; i < numAttrs; ++i) {
     auto attrinfo = (*layoutPtr)[i];

@@ -65,7 +65,7 @@ const std::string QuantitativeScaleTemplate_vert::source =
     "}\n"
     "\n"
     "subroutine(QuantTransformFunc_<name>) domainType_<name> sqrtTransform_<name>(in domainType_<name> val) {\n"
-    "#if domainType_<name> == double\n"
+    "#if domainTypeEnum_<name> == DOUBLE\n"
     "    return sqrt(val);\n"
     // TODO(croot): handle 64-bit ints
     "#else\n"
