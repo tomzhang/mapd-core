@@ -7139,9 +7139,7 @@ void Executor::initializeNVPTXBackend() const {
                                                           "sm_30",
                                                           "",
                                                           llvm::TargetOptions(),
-                                                          llvm::Reloc::Default,
-                                                          llvm::CodeModel::Default,
-                                                          llvm::CodeGenOpt::Aggressive));
+                                                          llvm::Reloc::Static));
 }
 
 int8_t Executor::warpSize() const {
