@@ -16,6 +16,7 @@ enum class AccumulatorType : uint8_t {
 };
 
 class BaseScaleDomainRangeData;
+typedef std::shared_ptr<BaseScaleDomainRangeData> ScaleDomainRangeDataShPtr;
 
 class BaseScale;
 typedef std::shared_ptr<BaseScale> ScaleShPtr;

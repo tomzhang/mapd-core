@@ -160,6 +160,18 @@ class BaseScale : public JSONRefObject {
 
   bool hasNumAccumulatorValsChanged() const { return _numAccumulatorValsChanged; }
 
+  struct OverrideData {
+    ScaleDomainRangeDataShPtr dataPtr;
+    QueryDataTableSqlShPtr dataTablePtr;
+
+    void reset() {
+      dataPtr = nullptr;
+      dataTablePtr = nullptr;
+    }
+  };
+
+  OverrideData _domainOverrideData;
+
  private:
   struct PerGpuData : BasePerGpuData {
     std::vector<::Rendering::GL::Resources::GLTexture2dShPtr> accumulatorTexPtrArray;
@@ -224,6 +236,11 @@ class BaseScale : public JSONRefObject {
   ::Rendering::GL::Resources::GLShaderShPtr _buildAccumulatorShader(::Rendering::GL::GLResourceManagerShPtr& rsrcMgr,
                                                                     size_t numTextures);
 
+  void _setDomainOverride(const ScaleDomainRangeDataShPtr& domainOverridePtr,
+                          const QueryDataTableSqlShPtr& domainOverrideTablePtr);
+  bool _hasDomainOverride() const;
+  std::string _getDomainOverrideTableName() const;
+
   void _clearResources();
 
   friend class QueryRendererContext;
@@ -258,7 +275,13 @@ class Scale : public BaseScale {
 
   virtual ~Scale() {}
 
-  BaseScaleDomainRangeData* getDomainData() { return &_domainPtr; };
+  BaseScaleDomainRangeData* getDomainData() {
+    if (_domainOverrideData.dataPtr) {
+      return _domainOverrideData.dataPtr.get();
+    }
+    return &_domainPtr;
+  };
+
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
@@ -287,6 +310,36 @@ class Scale : public BaseScale {
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
       const std::string& extraSuffix) const {
+    auto overridePtr = _domainOverrideData.dataPtr;
+    if (overridePtr) {
+      auto uintDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<unsigned int>>(overridePtr);
+      if (uintDomain) {
+        return _getDomainTypeUniforms<unsigned int>(extraSuffix, uintDomain.get());
+      }
+      auto intDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<int>>(overridePtr);
+      if (intDomain) {
+        return _getDomainTypeUniforms<int>(extraSuffix, intDomain.get());
+      }
+      auto floatDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<float>>(overridePtr);
+      if (floatDomain) {
+        return _getDomainTypeUniforms<float>(extraSuffix, floatDomain.get());
+      }
+      auto doubleDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<double>>(overridePtr);
+      if (doubleDomain) {
+        return _getDomainTypeUniforms<double>(extraSuffix, doubleDomain.get());
+      }
+      auto stringDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<std::string>>(overridePtr);
+      if (stringDomain) {
+        return _getDomainTypeUniforms<std::string>(extraSuffix, stringDomain.get());
+      }
+      auto colorDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>(overridePtr);
+      if (colorDomain) {
+        return _getDomainTypeUniforms<::Rendering::Objects::ColorRGBA>(extraSuffix, colorDomain.get());
+      }
+
+      THROW_RUNTIME_EX("Override domain type not supported.");
+    }
+
     return _getDomainTypeUniforms<DomainType>(extraSuffix, &_domainPtr);
   }
 
@@ -308,6 +361,7 @@ class Scale : public BaseScale {
                            bool ignoreRange,
                            bool ignoreAccum,
                            const BaseScale::ScaleShaderType scaleShader) {
+    CHECK(!_domainOverrideData.dataPtr || _domainOverrideData.dataPtr->size() == _domainPtr.size());
     RUNTIME_EX_ASSERT(_domainPtr.size() > 0 && _rangePtr.size() > 0,
                       std::string(*this) + " getGLSLCode(): domain/range of scale \"" + _name + "\" has no value.");
 
@@ -316,8 +370,14 @@ class Scale : public BaseScale {
     std::ostringstream ss;
 
     if (!ignoreDomain) {
-      boost::replace_first(shaderCode, "<domainType>", _domainTypeGL->glslType());
-      boost::replace_all(shaderCode, "<domainTypeEnum>", std::to_string(_domainTypeGL->glslGLType()));
+      auto typeGLToUse = _domainTypeGL;
+      if (_domainOverrideData.dataPtr) {
+        typeGLToUse = _domainOverrideData.dataPtr->getTypeGL();
+      }
+
+      CHECK(typeGLToUse);
+      boost::replace_first(shaderCode, "<domainType>", typeGLToUse->glslType());
+      boost::replace_all(shaderCode, "<domainTypeEnum>", std::to_string(typeGLToUse->glslGLType()));
     }
 
     if (!ignoreRange) {
@@ -358,6 +418,10 @@ class Scale : public BaseScale {
       _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged, rangeValConvert);
 
       rtn = hasDomainDataChanged() || hasRangeDataChanged();
+
+      if (hasDomainDataChanged()) {
+        _domainOverrideData.reset();
+      }
 
       // TODO(croot): expose "nullValue" as a constant somewhere;
       std::string nullstr = "nullValue";
@@ -423,10 +487,63 @@ class Scale : public BaseScale {
                                bool ignoreAccum,
                                bool ignoreNull = false) {
     if (!ignoreDomain) {
-      activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, _domainPtr.getVectorDataRef());
+      auto overridePtr = _domainOverrideData.dataPtr;
+      if (overridePtr) {
+        auto uintDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<unsigned int>>(overridePtr);
+        if (uintDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, uintDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix, uintDomain->getNullValue());
+          }
+        }
+        auto intDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<int>>(overridePtr);
+        if (intDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, intDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix, intDomain->getNullValue());
+          }
+        }
+        auto floatDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<float>>(overridePtr);
+        if (floatDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, floatDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              floatDomain->getNullValue());
+          }
+        }
+        auto doubleDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<double>>(overridePtr);
+        if (doubleDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, doubleDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              doubleDomain->getNullValue());
+          }
+        }
+        auto stringDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<std::string>>(overridePtr);
+        if (stringDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, stringDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              stringDomain->getNullValue());
+          }
+        }
+        auto colorDomain =
+            std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>(overridePtr);
+        if (colorDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, colorDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              colorDomain->getNullValue());
+          }
+        }
 
-      if (_useNullVal) {
-        activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix, _domainPtr.getNullValue());
+        THROW_RUNTIME_EX("Override domain type not supported.");
+      } else {
+        activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, _domainPtr.getVectorDataRef());
+
+        if (_useNullVal) {
+          activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix, _domainPtr.getNullValue());
+        }
       }
     }
 
@@ -562,8 +679,8 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
   bool _updateQuantitativeFromJSONObj(const rapidjson::Value& obj,
                                       const rapidjson::Pointer& objPath,
                                       std::function<void(DomainType&)> domainValConvert = [](DomainType& domainVal) {
-    return;
-  }) {
+                                        return;
+                                      }) {
     bool updated = this->_updateFromJSONObj(obj, objPath, domainValConvert);
 
     if (updated) {
@@ -908,6 +1025,8 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
       this->_bindUniformsToRenderer(activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum);
     }
 
+    // TODO(croot): do I need to worry about any domain overrides here?
+    // I don't believe I do, since string domains would not be used in quantize scales
     double diff = this->_domainPtr.getDifference(this->_rangePtr.size());
     activeShader->setUniformAttribute<double>("quantizeDiff", diff);
   }

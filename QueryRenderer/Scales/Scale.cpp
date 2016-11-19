@@ -66,8 +66,7 @@ BaseScale::BaseScale(const rapidjson::Value& obj,
       _maxDensity(0),
       _findMaxDensity(false),
       _findStdDev(false),
-      _justBuilt(false) {
-}
+      _justBuilt(false) {}
 
 BaseScale::~BaseScale() {
   _clearResources();
@@ -607,6 +606,24 @@ void BaseScale::_initGpuResources(QueryRendererContext* ctx, bool initializing) 
   // TODO(croot): should scales have an update function much like a mark
   // that's called in QueryRendererContext::update?
   _accumTypeChanged = _numAccumulatorValsChanged = _numAccumulatorTxtsChanged = false;
+}
+
+void BaseScale::_setDomainOverride(const ScaleDomainRangeDataShPtr& domainOverridePtr,
+                                   const QueryDataTableSqlShPtr& domainOverrideTablePtr) {
+  _domainOverrideData.dataPtr = domainOverridePtr;
+  _domainOverrideData.dataTablePtr = domainOverrideTablePtr;
+}
+
+bool BaseScale::_hasDomainOverride() const {
+  return _domainOverrideData.dataPtr != nullptr;
+}
+
+std::string BaseScale::_getDomainOverrideTableName() const {
+  auto tablePtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(_domainOverrideData.dataTablePtr);
+  if (tablePtr) {
+    return tablePtr->getTableName();
+  }
+  return "";
 }
 
 void BaseScale::_clearResources() {

@@ -60,7 +60,8 @@ class BaseScaleRef {
   const QueryDataTableShPtr& _getDataTablePtr();
   std::string _getDataColumnName();
   std::string _getRndrPropName();
-  void _initScalePtr();
+
+  void _initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr);
   void _deleteScalePtr();
 
   QueryRendererContextShPtr _ctx;
@@ -71,7 +72,7 @@ class BaseScaleRef {
 };
 
 template <class T, class TT>
-void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
+void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
   std::vector<TT>& srcVec = srcData->getVectorDataRef();
 
   destData.reset(new ScaleDomainRangeData<T>(srcData->getName(), srcVec.size(), srcData->useString()));
@@ -82,20 +83,20 @@ void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData, 
 }
 
 template <class T>
-void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<T>>& destData,
+void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<T>>& destData,
                             ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>* srcData) {
   THROW_RUNTIME_EX("Cannot convert a color (" + std::string(*srcData) + ") to a numeric value (" +
                    std::string(*destData) + ").");
 }
 
 template <class TT>
-void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>& destData,
+void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>& destData,
                             ScaleDomainRangeData<TT>* srcData) {
   THROW_RUNTIME_EX("Cannot convert a numeric value (" + std::string(*srcData) + ") to a color (" +
                    std::string(*destData) + ").");
 }
 
-void convertDomainRangeData(std::unique_ptr<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>& destData,
+void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>& destData,
                             ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>* srcData);
 
 template <typename DomainType, typename RangeType>
@@ -104,6 +105,7 @@ class ScaleRef : public BaseScaleRef {
   ScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp)
       : BaseScaleRef(ctx, scalePtr, rndrProp), _coercedDomainData(nullptr), _coercedRangeData(nullptr), _sorted(false) {
     _updateDomainRange(true, true);
+    _initScalePtr(_coercedDomainData);
   }
 
   ~ScaleRef() {}
@@ -158,7 +160,7 @@ class ScaleRef : public BaseScaleRef {
 
     // if we get to this point, that means the scale is going to be used by a mark.
     // So we'll initialize any gpu resources the scale may use now.
-    _initScalePtr();
+    _initScalePtr(_coercedDomainData);
   }
 
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
@@ -205,8 +207,8 @@ class ScaleRef : public BaseScaleRef {
   }
 
  private:
-  std::unique_ptr<ScaleDomainRangeData<DomainType>> _coercedDomainData;
-  std::unique_ptr<ScaleDomainRangeData<RangeType>> _coercedRangeData;
+  std::shared_ptr<ScaleDomainRangeData<DomainType>> _coercedDomainData;
+  std::shared_ptr<ScaleDomainRangeData<RangeType>> _coercedRangeData;
   bool _sorted;
 
   void _updateDomainRange(bool updateDomain, bool updateRange, bool force = false) {
@@ -388,8 +390,9 @@ class ScaleRef : public BaseScaleRef {
 
     std::sort(sortVec.begin(),
               sortVec.end(),
-              [](const std::pair<DomainType, RangeType>& a,
-                 const std::pair<DomainType, RangeType>& b) { return a.first < b.first; });
+              [](const std::pair<DomainType, RangeType>& a, const std::pair<DomainType, RangeType>& b) {
+                return a.first < b.first;
+              });
 
     for (i = 0; i < numItems; ++i) {
       domainVec[i] = sortVec[i].first;
