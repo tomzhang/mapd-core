@@ -44,6 +44,7 @@ const std::string OrdinalScaleTemplate_vert::source =
     "    int idx = -1;\n"
     "    rangeType_<name> val = uDefault_<name>;\n"
     "    if (isNullValFunc_<name>(category)) {\n"
+    "        idx = numDomains_<name> + 1;\n"
     "        val = nullRangeVal_<name>;\n"
     "    } else {\n"
     "    #if numDomains_<name> == 1 || numRanges_<name> == 1\n"

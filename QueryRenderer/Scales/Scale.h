@@ -449,14 +449,6 @@ class Scale : public BaseScale {
       if (_allowsAccumulator) {
         bool accumUpdated = _updateAccumulatorFromJSONObj(obj, objPath);
 
-        // TODO(croot): Properly handle null values in accumulations.
-        // This would require adding the null value to the accumulation arrays
-        // for ordinal and quantize scales. If we properly handle that case,
-        // then remove the following LOG_IF warning.
-        LOG_IF(WARNING, accumUpdated && hasAccumulator() && _useNullVal)
-            << "Render scale " << std::string(*this)
-            << ", accumulation scale with null values defined may have unwanted results";
-
         rtn = rtn || accumUpdated;
 
         QueryDataType dtype = getDomainDataType();
@@ -577,11 +569,10 @@ class Scale : public BaseScale {
 
   ScaleDomainRangeData<DomainType> _domainPtr;
   ScaleDomainRangeData<RangeType> _rangePtr;
-
- private:
   RangeType _nullVal;
   bool _useNullVal;
 
+ private:
   void _pushDomainItem(const rapidjson::Value& obj);
   void _pushRangeItem(const rapidjson::Value& obj);
 
@@ -712,7 +703,8 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
     }
 
     if (this->hasAccumulator()) {
-      this->_setNumAccumulatorVals(this->_rangePtr.size());
+      // null values will be accumulated separately, where appropriate
+      this->_setNumAccumulatorVals(this->_rangePtr.size() + (this->_useNullVal ? 1 : 0));
     }
 
     this->_jsonPath = objPath;
@@ -730,7 +722,11 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
     RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
                       "Colors are currently the only supported accumulation range types.");
 
-    auto& data = this->_rangePtr.getVectorDataRef();
+    auto data = this->_rangePtr.getVectorData();
+    if (this->_useNullVal) {
+      data.push_back(this->_nullVal);
+    }
+
     CHECK(static_cast<int>(data.size()) == this->getNumAccumulatorValues());
     shaderPtr->setUniformAttribute(attrName, data, checkFullSize);
   }
@@ -958,7 +954,8 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
 
     // add an additional accumulator for "defaults"
     if (this->hasAccumulator()) {
-      this->_setNumAccumulatorVals(this->_rangePtr.size() + 1);
+      // null values will be accumulated separately, where appropriate
+      this->_setNumAccumulatorVals(this->_rangePtr.size() + 1 + (this->_useNullVal ? 1 : 0));
     }
 
     return rtn;
@@ -993,6 +990,13 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
 
     auto data = this->_rangePtr.getVectorData();
     data.push_back(_defaultVal);
+
+    // nulls will be last here. The ordinal scale shader accounds for this by doing a
+    // and the default val by doing a numDomains_<name> + 1
+    if (this->_useNullVal) {
+      data.push_back(this->_nullVal);
+    }
+
     CHECK(static_cast<int>(data.size()) == this->getNumAccumulatorValues());
     shaderPtr->setUniformAttribute(attrName, data, checkFullSize);
   }
@@ -1045,7 +1049,8 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
     this->_jsonPath = objPath;
 
     if (this->hasAccumulator()) {
-      this->_setNumAccumulatorVals(this->_rangePtr.size());
+      // null values will be accumulated separately, where appropriate
+      this->_setNumAccumulatorVals(this->_rangePtr.size() + (this->_useNullVal ? 1 : 0));
     }
 
     return rtn;
@@ -1060,7 +1065,10 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
     RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
                       "Colors are currently the only supported accumulation range types.");
 
-    auto& data = this->_rangePtr.getVectorDataRef();
+    auto data = this->_rangePtr.getVectorData();
+    if (this->_useNullVal) {
+      data.push_back(this->_nullVal);
+    }
     CHECK(static_cast<int>(data.size()) == this->getNumAccumulatorValues());
     shaderPtr->setUniformAttribute(attrName, data, checkFullSize);
   }

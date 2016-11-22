@@ -50,6 +50,7 @@ const std::string QuantizeScaleTemplate_vert::source =
     "    int idx = -1;\n"
     "    rangeType_<name> val = vec4(0,0,0,0);\n"
     "    if (isNullValFunc_<name>(category)) {\n"
+    "        idx = numRanges_<name>;\n"
     "        val = nullRangeVal_<name>;\n"
     "    } else {\n"
     "\n"
@@ -66,7 +67,6 @@ const std::string QuantizeScaleTemplate_vert::source =
     "\n"
     "    #if doAccum_QuantizeScale_<name> == 1\n"
     "    if (idx < 0) {\n"
-    // TODO(croot): add null values to accumulations?
     "        idx = 0;\n"
     "    }\n"
     "    accumIdx = idx;\n"
