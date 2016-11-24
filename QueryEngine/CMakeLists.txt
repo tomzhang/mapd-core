@@ -27,6 +27,7 @@ set(query_engine_source_files
     OutputBufferInitialization.cpp
     QueryRewrite.cpp
     QueryTemplateGenerator.cpp
+    PendingExecutionClosure.cpp
     RelAlgAbstractInterpreter.cpp
     RelAlgExecutionDescriptor.cpp
     RelAlgExecutor.cpp
