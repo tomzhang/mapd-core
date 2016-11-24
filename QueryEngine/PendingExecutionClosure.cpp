@@ -15,8 +15,9 @@ PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const R
                                                          const Catalog_Namespace::Catalog& cat,
                                                          const RelAlgExecutionOptions& rel_alg_eo) {
   std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
-  const auto it_ok = pending_queries_.emplace(
-      pending_query_next_id_, new PendingExecutionClosure(ra, pending_query_next_id_, executor, cat, rel_alg_eo));
+  const auto it_ok = pending_queries_.emplace(pending_query_next_id_,
+                                              std::unique_ptr<PendingExecutionClosure>(new PendingExecutionClosure(
+                                                  ra, pending_query_next_id_, executor, cat, rel_alg_eo)));
   ++pending_query_next_id_;
   CHECK(it_ok.second);
   return (*it_ok.first).second.get();
