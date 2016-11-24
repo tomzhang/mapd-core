@@ -663,8 +663,9 @@ class MapDHandler : virtual public MapDIf {
     CHECK(executor);
     CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
     set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-    ScopeGuard restore_device_type =
-        [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
+    ScopeGuard restore_device_type = [this, session_info_ptr] {
+      set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU);
+    };
     for (const auto& pixel : pixels) {
       const auto rowid = executor->getRowidForPixel(
           pixel.x, pixel.y, session_info_ptr->get_session_id(), 1);  // TODO(alex): de-hardcode user widget
@@ -714,8 +715,9 @@ class MapDHandler : virtual public MapDIf {
     CHECK(executor);
     CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
     set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-    ScopeGuard restore_device_type =
-        [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
+    ScopeGuard restore_device_type = [this, session_info_ptr] {
+      set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU);
+    };
     const auto rowid = executor->getRowidForPixel(
         pixel.x, pixel.y, session_info_ptr->get_session_id(), 1, pixelRadius);  // TODO(alex): de-hardcode user widget
 
@@ -760,8 +762,9 @@ class MapDHandler : virtual public MapDIf {
       CHECK(executor && render_manager_);
       CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
       set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-      ScopeGuard restore_device_type =
-          [this, session_info_ptr] { set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU); };
+      ScopeGuard restore_device_type = [this, session_info_ptr] {
+        set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU);
+      };
 
       _return.pixel = pixel;
 
@@ -979,11 +982,11 @@ class MapDHandler : virtual public MapDIf {
                 std::for_each(unusedProjIdx.begin(),
                               unusedProjIdx.end(),
                               [&projection](const std::pair<std::string, size_t>& item) {
-                  if (!projection.empty()) {
-                    projection += ", ";
-                  }
-                  projection += item.first;
-                });
+                                if (!projection.empty()) {
+                                  projection += ", ";
+                                }
+                                projection += item.first;
+                              });
 
                 // TODO(croot): what about non-projection queries?
                 // TODO(croot): what about poly tables?
@@ -1642,7 +1645,7 @@ class MapDHandler : virtual public MapDIf {
                 }
               }
 
-  #ifdef HAVE_RAVM
+#ifdef HAVE_RAVM
               std::string query_ra;
               _return.execution_time_ms +=
                   measure<>::execution([&]() { query_ra = parse_to_ra(query_str, *session_info_ptr); });
@@ -1654,8 +1657,8 @@ class MapDHandler : virtual public MapDIf {
                                                     dataObj,
                                                     render_info.get(),
                                                     is_poly_query);
-  #else
-    #ifdef HAVE_CALCITE
+#else
+#ifdef HAVE_CALCITE
               ParserWrapper pw{query_str};
               if (pw.is_select_explain || pw.is_other_explain || pw.is_ddl || pw.is_update_dml) {
                 std::runtime_error ex("Can only render SELECT statements.");
@@ -1663,9 +1666,9 @@ class MapDHandler : virtual public MapDIf {
                 throw ex;
               }
               auto root_plan = parse_to_plan(query_str, *session_info_ptr);
-    #else
+#else
               auto root_plan = parse_to_plan_legacy(query_str, *session_info_ptr, "render");
-    #endif  // HAVE_CALCITE
+#endif  // HAVE_CALCITE
               CHECK(root_plan);
               std::unique_ptr<Planner::RootPlan> plan_ptr(root_plan);  // make sure it's deleted
 
@@ -1677,7 +1680,7 @@ class MapDHandler : virtual public MapDIf {
                                                       dataObj,
                                                       render_info.get(),
                                                       is_poly_query);
-  #endif  // HAVE_RAVM
+#endif  // HAVE_RAVM
 
               auto& usedTables = std::get<3>(rtnData);
               CHECK(usedTables.size() > 0);
@@ -1705,7 +1708,7 @@ class MapDHandler : virtual public MapDIf {
         LOG(ERROR) << ex.error_msg;
         throw ex;
       }
-#endif // HAVE_RENDERING
+#endif  // HAVE_RENDERING
     });
     LOG(INFO) << "Total: " << _return.total_time_ms << " (ms), Total Execution: " << _return.execution_time_ms
               << " (ms), Total Render: " << _return.render_time_ms << " (ms)";
@@ -2821,13 +2824,17 @@ int main(int argc, char** argv) {
 
     if (vm.count("help")) {
       std::cout << "Usage: mapd_server <catalog path> [<database name>] [--cpu|--gpu|--hybrid] [-p <port "
-                   "number>] [--http-port <http port number>] [--flush-log] [--version|-v]" << std::endl << std::endl;
+                   "number>] [--http-port <http port number>] [--flush-log] [--version|-v]"
+                << std::endl
+                << std::endl;
       std::cout << desc << std::endl;
       return 0;
     }
     if (vm.count("help-advanced")) {
       std::cout << "Usage: mapd_server <catalog path> [<database name>] [--cpu|--gpu|--hybrid] [-p <port "
-                   "number>] [--http-port <http port number>] [--flush-log] [--version|-v]" << std::endl << std::endl;
+                   "number>] [--http-port <http port number>] [--flush-log] [--version|-v]"
+                << std::endl
+                << std::endl;
       std::cout << desc_all << std::endl;
       return 0;
     }
