@@ -833,7 +833,8 @@ class MapDHandler : virtual public MapDIf {
               if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
                 std::string query_ra = parse_to_ra(query_str, *session_info_ptr);
                 CompilationOptions co = {session_info_ptr->get_executor_device_type(), true, ExecutorOptLevel::Default};
-                ExecutionOptions eo = {false, allow_multifrag_, false, allow_loop_joins_, g_enable_watchdog, jit_debug};
+                ExecutionOptions eo = {
+                    false, allow_multifrag_, false, allow_loop_joins_, g_enable_watchdog, jit_debug_};
                 const auto ra = deserialize_ra_dag(query_ra, cat, co, eo);
                 auto ed_list = get_execution_descriptors(ra.get());
                 RelAlgExecutor ra_executor(executor.get(), cat);
