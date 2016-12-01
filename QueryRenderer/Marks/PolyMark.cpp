@@ -21,8 +21,8 @@ PolyMark::PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPat
       y(this, "y", ctx),
       // z(this, "z", ctx),
 
-      fillColor(this, "fillColor", ctx),
-      strokeColor(this, "strokeColor", ctx),
+      fillColor(this, "fillColor", ctx, true, false),
+      strokeColor(this, "strokeColor", ctx, true, false),
       strokeWidth(this, "strokeWidth", ctx),
       lineJoin(this,
                "lineJoin",
@@ -49,8 +49,7 @@ PolyMark::PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPat
   _updateShader();
 }
 
-PolyMark::~PolyMark() {
-}
+PolyMark::~PolyMark() {}
 
 std::set<BaseRenderProperty*> PolyMark::_getUsedProps() {
   std::set<BaseRenderProperty*> rtn = {
@@ -150,11 +149,13 @@ void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rap
 
     if (!_ctx->isJSONCacheUpToDate(_fillColorJsonPath, mitr->value)) {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
-      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsString()),
-                        RapidJSONUtils::getJsonParseErrorStr(
-                            _ctx->getUserWidgetIds(),
-                            mitr->value,
-                            "\"" + fillColorProp + "\" mark property must be a scale/data reference or a string."));
+      RUNTIME_EX_ASSERT(
+          (mitr->value.IsObject() || mitr->value.IsString() || mitr->value.IsInt() || mitr->value.IsUint()),
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(),
+              mitr->value,
+              "\"" + fillColorProp +
+                  "\" mark property must be a scale/data reference, a string, or packed into a 32-bit int/uint."));
       fillColor.initializeFromJSONObj(mitr->value, _fillColorJsonPath, _dataPtr);
     } else {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
@@ -230,11 +231,13 @@ void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rap
     if ((mitr = propObj.FindMember(strokeColorProp.c_str())) != propObj.MemberEnd()) {
       if (!_ctx->isJSONCacheUpToDate(_strokeColorJsonPath, mitr->value)) {
         _strokeColorJsonPath = _propertiesJsonPath.Append(strokeColorProp.c_str(), strokeColorProp.length());
-        RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsString()),
-                          RapidJSONUtils::getJsonParseErrorStr(
-                              _ctx->getUserWidgetIds(),
-                              mitr->value,
-                              "\"" + strokeColorProp + "\" mark property must be a scale/data reference or a string."));
+        RUNTIME_EX_ASSERT(
+            (mitr->value.IsObject() || mitr->value.IsString() || mitr->value.IsInt() || mitr->value.IsUint()),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(),
+                mitr->value,
+                "\"" + strokeColorProp +
+                    "\" mark property must be a scale/data reference, a string, or packed into a 32-bit int/uint."));
         strokeColor.initializeFromJSONObj(mitr->value, _strokeColorJsonPath, _dataPtr);
       } else {
         _strokeColorJsonPath = _propertiesJsonPath.Append(strokeColorProp.c_str(), strokeColorProp.length());

@@ -4,6 +4,73 @@
 namespace Rendering {
 namespace GL {
 
+std::string gl_type_to_string(const int glType) {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    switch (glType) {
+      case GL_UNSIGNED_INT64_NV:
+        return "GL_UNSIGNED_INT64_NV";
+      case GL_UNSIGNED_INT64_VEC2_NV:
+        return "GL_UNSIGNED_INT64_VEC2_NV";
+      case GL_UNSIGNED_INT64_VEC3_NV:
+        return "GL_UNSIGNED_INT64_VEC3_NV";
+      case GL_UNSIGNED_INT64_VEC4_NV:
+        return "GL_UNSIGNED_INT64_VEC4_NV";
+      case GL_INT64_NV:
+        return "GL_INT64_NV";
+      case GL_INT64_VEC2_NV:
+        return "GL_INT64_VEC2_NV";
+      case GL_INT64_VEC3_NV:
+        return "GL_INT64_VEC3_NV";
+      case GL_INT64_VEC4_NV:
+        return "GL_INT64_VEC4_NV";
+    }
+  }
+  switch (glType) {
+    case GL_BOOL:
+      return "GL_BOOL";
+    case GL_BOOL_VEC2:
+      return "GL_BOOL_VEC2";
+    case GL_BOOL_VEC3:
+      return "GL_BOOL_VEC3";
+    case GL_BOOL_VEC4:
+      return "GL_BOOL_VEC4";
+    case GL_INT:
+      return "GL_INT";
+    case GL_INT_VEC2:
+      return "GL_INT_VEC2";
+    case GL_INT_VEC3:
+      return "GL_INT_VEC3";
+    case GL_INT_VEC4:
+      return "GL_INT_VEC4";
+    case GL_FLOAT:
+      return "GL_FLOAT";
+    case GL_FLOAT_VEC2:
+      return "GL_FLOAT_VEC2";
+    case GL_FLOAT_VEC3:
+      return "GL_FLOAT_VEC3";
+    case GL_FLOAT_VEC4:
+      return "GL_FLOAT_VEC4";
+    case GL_DOUBLE:
+      return "GL_DOUBLE";
+    case GL_DOUBLE_VEC2:
+      return "GL_DOUBLE_VEC2";
+    case GL_DOUBLE_VEC3:
+      return "GL_DOUBLE_VEC3";
+    case GL_DOUBLE_VEC4:
+      return "GL_DOUBLE_VEC4";
+    case GL_UNSIGNED_INT:
+      return "GL_UNSIGNED_INT";
+    case GL_UNSIGNED_INT_VEC2:
+      return "GL_UNSIGNED_INT_VEC2";
+    case GL_UNSIGNED_INT_VEC3:
+      return "GL_UNSIGNED_INT_VEC3";
+    case GL_UNSIGNED_INT_VEC4:
+      return "GL_UNSIGNED_INT_VEC4";
+  }
+
+  return "undefined gl type: " + std::to_string(glType);
+}
+
 std::string BaseTypeGL::getTypeDefinesMacroForShader() {
   // creates all the macros for the GL types to be used
   // in shaders that need pre-processing of types in #if/#elif
@@ -24,9 +91,6 @@ std::string BaseTypeGL::getTypeDefinesMacroForShader() {
       "\n"
       "#define BOOL_VEC4 " +
       std::to_string(GL_BOOL_VEC4) +
-      "\n"
-      "#define UNSIGNED_INT " +
-      std::to_string(GL_UNSIGNED_INT) +
       "\n"
       "#define INT " +
       std::to_string(GL_INT) +

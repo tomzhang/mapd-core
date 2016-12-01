@@ -8,9 +8,12 @@
 #include <memory>
 #include <functional>
 #include <cstdint>
+#include <sstream>
 
 namespace Rendering {
 namespace GL {
+
+std::string gl_type_to_string(const int glType);
 
 struct BaseTypeGL {
   static std::string getTypeDefinesMacroForShader();
@@ -40,6 +43,13 @@ struct BaseTypeGL {
   inline friend bool operator!=(const BaseTypeGL& lhs, const BaseTypeGL& rhs) {
     return (lhs.numComponents() != rhs.numComponents() || lhs.numBytes() != rhs.numBytes() ||
             lhs.baseGLType() != rhs.baseGLType());
+  }
+
+  operator std::string() const {
+    std::ostringstream s;
+    s << "<GL type: " << gl_type_to_string(baseGLType()) << ", Num components: " << numComponents()
+      << ", Num bytes: " << numBytes() << ">";
+    return s.str();
   }
 };
 

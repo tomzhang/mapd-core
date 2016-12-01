@@ -198,7 +198,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
   static T getDataValueFromJSONObj(const rapidjson::Value& obj) { return RapidJSONUtils::getNumValFromJSONObj<T>(obj); }
 
-  operator std::string() const { return "ScaleDomainRangeData<T>(name: " + _name + ")"; }
+  operator std::string() const { return "ScaleDomainRangeData<" + std::string(typeid(T).name()) + ">(" + _name + ")"; }
 
  private:
   std::shared_ptr<std::vector<T>> _vectorPtr;

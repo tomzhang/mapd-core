@@ -32,14 +32,13 @@ PointMark::PointMark(const rapidjson::Value& obj,
       // hit testing is asked for, but the input sql data doesn't
       // have an id.
       id(this, "id", ctx, false),
-      fillColor(this, "fillColor", ctx, true, true, true) {
+      fillColor(this, "fillColor", ctx, true, false, true) {
   _initPropertiesFromJSONObj(obj, objPath);
   _jsonPath = objPath;
   _updateShader();
 }
 
-PointMark::~PointMark() {
-}
+PointMark::~PointMark() {}
 
 std::set<BaseRenderProperty*> PointMark::_getUsedProps() {
   std::set<BaseRenderProperty*> rtn = {&x, &y, &size, &fillColor};  // TODO(croot) add z
@@ -157,11 +156,13 @@ void PointMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const ra
 
     if (!_ctx->isJSONCacheUpToDate(_fillColorJsonPath, mitr->value)) {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());
-      RUNTIME_EX_ASSERT((mitr->value.IsObject() || mitr->value.IsString()),
-                        RapidJSONUtils::getJsonParseErrorStr(
-                            _ctx->getUserWidgetIds(),
-                            mitr->value,
-                            "\"" + fillColorProp + "\" mark property must be a scale/data reference or a string."));
+      RUNTIME_EX_ASSERT(
+          (mitr->value.IsObject() || mitr->value.IsString()) || mitr->value.IsInt() || mitr->value.IsUint(),
+          RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                               mitr->value,
+                                               "\"" + fillColorProp + "\" mark property must be a scale/data "
+                                                                      "reference, a string, or a color packed "
+                                                                      "into a 32-bit int/uint."));
       fillColor.initializeFromJSONObj(mitr->value, _fillColorJsonPath, _dataPtr);
     } else {
       _fillColorJsonPath = _propertiesJsonPath.Append(fillColorProp.c_str(), fillColorProp.length());

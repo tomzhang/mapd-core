@@ -142,7 +142,6 @@ class BaseRenderProperty {
   ::Rendering::GL::TypeGLShPtr _inType;
   ::Rendering::GL::TypeGLShPtr _outType;
 
-  // ScaleShPtr _scaleConfigPtr;
   ScaleRefShPtr _scaleConfigPtr;
 
   bool _flexibleType;
@@ -157,8 +156,8 @@ class BaseRenderProperty {
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
-  virtual bool _initTypeFromBuffer() = 0;
-  virtual void _verifyScale() = 0;
+  virtual bool _initTypeFromBuffer(const bool hasScale = false) = 0;
+  virtual void _validateScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) = 0;
   virtual void _updateScalePtr(const ScaleShPtr& scalePtr);
 
@@ -178,6 +177,7 @@ class BaseRenderProperty {
   std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
   std::set<GpuId> _initUnusedGpus(const std::set<GpuId>& usedGpus);
   void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
+  bool _internalInitFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr, const bool hasScale);
 
   friend class BaseScaleRef;
 };
@@ -334,7 +334,7 @@ class RenderProperty : public BaseRenderProperty {
     initializeValue(val);
   }
 
-  bool _initTypeFromBuffer() {
+  bool _initTypeFromBuffer(const bool hasScale = false) final {
     bool rtn = false;
     auto itr = _perGpuData.begin();
     if (itr == _perGpuData.end()) {
@@ -357,29 +357,37 @@ class RenderProperty : public BaseRenderProperty {
                           _name + "\".");
 
     auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
-    ::Rendering::GL::TypeGLShPtr vboType =
-        bufToUse->getAttributeTypeGL(_vboAttrName, (dataPtr ? dataPtr->getQueryDataLayout() : nullptr));
+    auto vboType = bufToUse->getAttributeTypeGL(_vboAttrName, (dataPtr ? dataPtr->getQueryDataLayout() : nullptr));
 
-    if (_flexibleType) {
-      if (!_inType || !_outType || *_inType != *vboType || *_outType != *vboType) {
+    if (!_flexibleType && (!_useScale || !hasScale)) {
+      // if _flexibleType is false, then the render property is rigid,
+      // meaning it cannot accept certain types. So validate the type of the attribute
+      // in the vbo is appropriate. If validations succeeds, then make sure the
+      // in/out types match the vbo
+      _validateType(vboType);
+    } else {
+      if (!_outType || *_outType != *vboType) {
         rtn = true;
       }
-      _inType = vboType;
       _outType = vboType;
-    } else {
-      // the render property is rigid, meaning it cannot accept
-      // different types. So verify that the type of the attribute
-      // in the vbo is appropriate.
-      RUNTIME_EX_ASSERT((*_outType) == (*vboType),
-                        std::string(*this) +
-                            ": The vertex buffer type does not match the output type for mark property \"" + _name +
-                            "\".");
     }
+
+    if (!rtn && (!_inType || !_outType || *_inType != *vboType)) {
+      rtn = true;
+    }
+    _inType = vboType;
 
     return rtn;
   }
 
-  void _verifyScale() {}
+  void _validateType(const ::Rendering::GL::TypeGLShPtr& type) {
+    RUNTIME_EX_ASSERT((*_outType) == (*type),
+                      std::string(*this) + ": The vertex buffer type " + (type ? std::string(*type) : "\"null\"") +
+                          " does not match the output type " + (type ? std::string(*_outType) : "\"null\"") +
+                          " for mark property \"" + _name + "\".");
+  }
+
+  void _validateScale() {}
 
   void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) {
     auto scalePtr = std::dynamic_pointer_cast<BaseScale>(refObjPtr);
@@ -444,7 +452,10 @@ void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_initValueFromJSONObj(c
 // void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_initTypeFromVbo();
 
 template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_verifyScale();
+void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type);
+
+template <>
+void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_validateScale();
 
 class EnumRenderProperty : public RenderProperty<int> {
  public:

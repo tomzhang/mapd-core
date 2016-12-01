@@ -22,7 +22,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
                                                const rapidjson::Pointer& objPath,
                                                const QueryDataTableShPtr& dataPtr) {
   if (obj.IsObject()) {
-    rapidjson::Value::ConstMemberIterator mitr;
+    rapidjson::Value::ConstMemberIterator mitr, scalemitr;
 
     // TODO(croot): move the following prop strings to a const somewhere
     std::string fieldProp = "field";
@@ -30,6 +30,23 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     std::string scaleProp = "scale";
 
     bool hasData = false;
+    bool hasScale = false, updateScale = false;
+
+    if ((scalemitr = obj.FindMember(scaleProp.c_str())) != obj.MemberEnd()) {
+      if (!_ctx->isJSONCacheUpToDate(_scaleJsonPath, scalemitr->value)) {
+        RUNTIME_EX_ASSERT(
+            _useScale,
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(), obj, "render property \"" + _name + "\" does not support scale references."));
+        updateScale = true;
+      }
+
+      _scaleJsonPath = objPath.Append(scaleProp.c_str(), scaleProp.length());
+      hasScale = true;
+    } else {
+      // need to clear out the _scaleJsonPath
+      _scaleJsonPath = rapidjson::Pointer();
+    }
 
     if ((mitr = obj.FindMember(fieldProp.c_str())) != obj.MemberEnd()) {
       // need to clear out the value path
@@ -50,7 +67,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
           _unsubscribeFromDataEvent();
         }
 
-        initializeFromData(mitr->value.GetString(), dataPtr);
+        _internalInitFromData(mitr->value.GetString(), dataPtr, hasScale);
 
         if (dataPtrChanged) {
           // setup callbacks for data updates
@@ -80,19 +97,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     } else {
     }
 
-    if ((mitr = obj.FindMember(scaleProp.c_str())) != obj.MemberEnd()) {
-      if (!_ctx->isJSONCacheUpToDate(_scaleJsonPath, mitr->value)) {
-        RUNTIME_EX_ASSERT(
-            _useScale,
-            RapidJSONUtils::getJsonParseErrorStr(
-                _ctx->getUserWidgetIds(), obj, "render property \"" + _name + "\" does not support scale references."));
-
-        _initScaleFromJSONObj(mitr->value);
-        _verifyScale();
-      }
-
-      _scaleJsonPath = objPath.Append(scaleProp.c_str(), scaleProp.length());
-    } else {
+    if (!hasScale) {
       // need some value source, either by "field" or by "value" if there's no scale reference
       RUNTIME_EX_ASSERT(hasData,
                         RapidJSONUtils::getJsonParseErrorStr(
@@ -110,10 +115,11 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       // 2) mark a local dirty flag and leave it up to the mark to traverse
       //    all its render properties looking for the dirty flag.
 
-      // need to clear out the _scaleJsonPath
-      _scaleJsonPath = rapidjson::Pointer();
-
       _scaleConfigPtr = nullptr;
+    } else if (updateScale) {
+      // initialize according to the scale
+      _initScaleFromJSONObj(scalemitr->value);
+      _validateScale();
     }
 
     _initFromJSONObj(obj);
@@ -133,6 +139,12 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 }
 
 bool BaseRenderProperty::initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr) {
+  return _internalInitFromData(attrName, dataPtr, false);
+}
+
+bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
+                                               const QueryDataTableShPtr& dataPtr,
+                                               const bool hasScale) {
   RUNTIME_EX_ASSERT(dataPtr != nullptr,
                     std::string(*this) + ": Cannot initialize mark property " + _name +
                         " from data. A valid data reference hasn't been initialized.");
@@ -143,7 +155,7 @@ bool BaseRenderProperty::initializeFromData(const std::string& attrName, const Q
   _initBuffers(_dataPtr->getAttributeDataBuffers(attrName));
   _vboInitType = VboInitType::FROM_DATAREF;
 
-  auto changed = _initTypeFromBuffer();
+  auto changed = _initTypeFromBuffer(hasScale);
   if (changed) {
     _prntMark->setPropsDirty();
   }
@@ -398,7 +410,7 @@ void BaseRenderProperty::_dataRefUpdateCB(RefEventType refEventType, const RefOb
     // pass thru to the REPLACE code
     case RefEventType::REPLACE:
       CHECK(_vboAttrName.size());
-      if (initializeFromData(_vboAttrName, dataPtr)) {
+      if (_internalInitFromData(_vboAttrName, dataPtr, _scaleConfigPtr != nullptr)) {
         _setShaderDirty();
       }
       break;
@@ -467,8 +479,8 @@ RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
       _mult(),
       _offset(),
       _uniformVal() {
-  _inType.reset(new ::Rendering::GL::TypeGL<float, 4>());
-  _outType.reset(new ::Rendering::GL::TypeGL<float, 4>());
+  _inType = ColorRGBA::getTypeGLPtr();
+  _outType = ColorRGBA::getTypeGLPtr();
 }
 
 template <>
@@ -480,8 +492,8 @@ void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
   // TODO(croot): make thread safe
 
   if (_vboInitType != VboInitType::FROM_VALUE) {
-    _inType.reset(new ::Rendering::GL::TypeGL<float, 4>());
-    _outType.reset(new ::Rendering::GL::TypeGL<float, 4>());
+    _inType = ColorRGBA::getTypeGLPtr();
+    _outType = ColorRGBA::getTypeGLPtr();
 
     for (auto& itr : _perGpuData) {
       itr.second.vbo = nullptr;
@@ -500,7 +512,7 @@ template <>
 void RenderProperty<ColorRGBA, 1>::bindUniformToRenderer(GLShader* activeShader,
                                                          const std::string& uniformAttrName) const {
   // TODO(croot): deal with numComponents here by using a vector instead?
-  activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArray());
+  activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArrayRef());
 }
 
 template <>
@@ -510,17 +522,33 @@ void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj)
 
 template <>
 void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj) {
-  RUNTIME_EX_ASSERT(obj.IsString(),
-                    RapidJSONUtils::getJsonParseErrorStr(
-                        _ctx->getUserWidgetIds(), obj, "value for color property \"" + _name + "\" must be a string."));
+  bool isstr;
+  RUNTIME_EX_ASSERT(
+      (isstr = obj.IsString()) || obj.IsInt() || obj.IsUint(),
+      RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(),
+          obj,
+          "value for color property \"" + _name + "\" must be a string or a color packed into an int/uint."));
 
-  ColorRGBA color(obj.GetString());
+  ColorRGBA color;
+  if (isstr) {
+    color.initFromCSSString(obj.GetString());
+  } else {
+    color.initFromPackedUInt(RapidJSONUtils::getNumValFromJSONObj<uint32_t>(obj));
+  }
 
   initializeValue(color);
 }
 
 template <>
-void RenderProperty<ColorRGBA, 1>::_verifyScale() {
+void RenderProperty<ColorRGBA, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type) {
+  RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(type),
+                    std::string(*this) + ": The vertex buffer type " + (type ? std::string(*type) : "\"null\"") +
+                        " is not a valid color type for mark property \"" + _name + "\".");
+}
+
+template <>
+void RenderProperty<ColorRGBA, 1>::_validateScale() {
   RUNTIME_EX_ASSERT(_scaleConfigPtr != nullptr,
                     std::string(*this) + ": Cannot verify scale for mark property \"" + _name +
                         "\". Scale reference is uninitialized.");
@@ -528,9 +556,10 @@ void RenderProperty<ColorRGBA, 1>::_verifyScale() {
   TypeGLShPtr vboType = _scaleConfigPtr->getRangeTypeGL();
 
   // colors need to be a specific type
-  RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(vboType),
-                    std::string(*this) + ": Vertex buffer to use for mark property \"" + _name +
-                        "\" is not an appropriate type for colors.");
+  RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(vboType, true),
+                    std::string(*this) + ": The scale \"" + _scaleConfigPtr->getName() + "\" has a range type of " +
+                        (vboType ? std::string(*vboType) : "\"null\"") +
+                        " which is not a valid color type for mark property \"" + _name + "\".");
 }
 
 void EnumRenderProperty::_initValueFromJSONObj(const rapidjson::Value& obj) {

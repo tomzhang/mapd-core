@@ -41,21 +41,39 @@ ShaderUtils::str_itr_range ShaderUtils::getGLSLFunctionBounds(std::string& codeS
 }
 
 void ShaderUtils::setRenderPropertyTypeInShaderSrc(const BaseRenderProperty& prop, std::string& shaderSrc) {
-  std::ostringstream in_ss, out_ss;
-
   std::string inname = prop.getInGLSLName();
-  std::string intype = prop.getInGLSLType();
+  {
+    std::string intype = prop.getInGLSLType();
+    std::ostringstream in_ss;
+    in_ss << "<" << inname << "Type"
+          << ">";
+    boost::replace_first(shaderSrc, in_ss.str(), intype);
+  }
 
-  in_ss << "<" << inname << "Type"
-        << ">";
-  boost::replace_first(shaderSrc, in_ss.str(), intype);
+  {
+    auto& inGLType = prop.getInTypeGL();
+    std::ostringstream in_ss;
+    in_ss << "<" << inname << "Enum"
+          << ">";
+    boost::replace_first(shaderSrc, in_ss.str(), std::to_string(inGLType->glslGLType()));
+  }
 
   std::string outname = prop.getOutGLSLName();
-  std::string outtype = prop.getOutGLSLType();
+  {
+    std::string outtype = prop.getOutGLSLType();
+    std::ostringstream out_ss;
+    out_ss << "<" << outname << "Type"
+           << ">";
+    boost::replace_first(shaderSrc, out_ss.str(), outtype);
+  }
 
-  out_ss << "<" << outname << "Type"
-         << ">";
-  boost::replace_first(shaderSrc, out_ss.str(), outtype);
+  {
+    auto& outGLType = prop.getOutTypeGL();
+    std::ostringstream out_ss;
+    out_ss << "<" << outname << "Enum"
+           << ">";
+    boost::replace_first(shaderSrc, out_ss.str(), std::to_string(outGLType->glslGLType()));
+  }
 }
 
 void ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(const BaseRenderProperty& prop,

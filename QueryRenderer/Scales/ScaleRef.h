@@ -85,15 +85,15 @@ void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<T>>& destData, 
 template <class T>
 void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<T>>& destData,
                             ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>* srcData) {
-  THROW_RUNTIME_EX("Cannot convert a color (" + std::string(*srcData) + ") to a numeric value (" +
-                   std::string(*destData) + ").");
+  THROW_RUNTIME_EX("Cannot convert a color (" + std::string(*srcData) + ") to a numeric value" +
+                   (destData ? " (" + std::string(*destData) + ")." : "."));
 }
 
 template <class TT>
 void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>& destData,
                             ScaleDomainRangeData<TT>* srcData) {
-  THROW_RUNTIME_EX("Cannot convert a numeric value (" + std::string(*srcData) + ") to a color (" +
-                   std::string(*destData) + ").");
+  THROW_RUNTIME_EX("Cannot convert a numeric value (" + std::string(*srcData) + ") to a color" +
+                   (destData ? " (" + std::string(*destData) + ")." : "."));
 }
 
 void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>& destData,

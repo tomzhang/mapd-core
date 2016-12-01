@@ -236,6 +236,25 @@ ColorRGBA& ColorRGBA::initFromCSSString(const std::string& colorStr) {
   return *this;
 }
 
+ColorRGBA& ColorRGBA::initFromPackedUInt(const uint32_t packedVal) {
+  for (size_t idx = 0, cnt = _colorArray.size() - 1; idx < _colorArray.size(); ++idx, cnt--) {
+    _colorArray[idx] = convertToColorChannel(static_cast<uint8_t>((packedVal >> (cnt * sizeof(uint8_t) * 8)) & 0xFF));
+  }
+  return *this;
+}
+
+uint32_t ColorRGBA::getPackedColor() const {
+  uint32_t rtn(0);
+
+  int cnt = 0;
+  auto itr = _colorArray.rbegin();
+  for (; itr != _colorArray.rend(); ++itr, ++cnt) {
+    rtn |= (static_cast<decltype(rtn)>(*itr * 255.0) << (cnt * sizeof(decltype(rtn)) * 8));
+  }
+
+  return rtn;
+}
+
 bool ColorRGBA::isColorString(const std::string& colorStr) {
   std::unordered_map<std::string, std::string>::const_iterator itr;
 

@@ -23,7 +23,7 @@ const TypeGLShPtr& ScaleDomainRangeData<ColorRGBA>::getTypeGL() {
   // i.e. this is already defined in BufferLayout.h, so let's find a
   // good way to consolidate these definitions
   if (!_cachedTypeGL) {
-    _cachedTypeGL.reset(new ::Rendering::GL::TypeGL<float, 4>());
+    _cachedTypeGL = ColorRGBA::getTypeGLPtr();
   }
   return _cachedTypeGL;
 }
