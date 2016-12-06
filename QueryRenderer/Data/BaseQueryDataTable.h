@@ -60,7 +60,10 @@ class BaseQueryDataTableJSON : public JSONRefObject {
   std::string _printInfo() const;
 
  private:
-  virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
+  virtual bool _isInternalCacheUpToDate() { return true; }
+  virtual void _updateFromJSONObj(const rapidjson::Value& obj,
+                                  const rapidjson::Pointer& objPath,
+                                  const bool force = false) = 0;
 };
 
 class BaseQueryDataTableSQL {
@@ -101,7 +104,9 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
 
   bool _hasExecutableSql() const;
   bool _executeQuery(const rapidjson::Value* dataObj = nullptr, const std::string& sqlQueryOverride = "");
-  virtual void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath);
+  virtual void _updateFromJSONObj(const rapidjson::Value& obj,
+                                  const rapidjson::Pointer& objPath,
+                                  const bool force = false);
 
   QueryDataLayoutShPtr _queryDataLayoutPtr;
 

@@ -7,16 +7,16 @@ BaseQueryDataTableJSON::BaseQueryDataTableJSON(const QueryRendererContextShPtr& 
                                                const std::string& name,
                                                const rapidjson::Value& obj,
                                                const rapidjson::Pointer& objPath)
-    : JSONRefObject(RefType::DATA, name, objPath), _ctx(ctx) {
-}
+    : JSONRefObject(RefType::DATA, name, objPath), _ctx(ctx) {}
 
 bool BaseQueryDataTableJSON::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  if (_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
+  bool cacheUpToDate = true;
+  if (_ctx->isJSONCacheUpToDate(_jsonPath, obj) && (cacheUpToDate = _isInternalCacheUpToDate())) {
     _jsonPath = objPath;
     return false;
   }
 
-  _updateFromJSONObj(obj, objPath);
+  _updateFromJSONObj(obj, objPath, !cacheUpToDate);
 
   _jsonPath = objPath;
 
@@ -29,8 +29,7 @@ std::string BaseQueryDataTableJSON::_printInfo() const {
 }
 
 BaseQueryDataTableSQL::BaseQueryDataTableSQL(const std::string& tableName, const std::string& sqlQueryStr)
-    : _tableId(NonProjectionRenderQueryCacheMap::emptyTableId), _tableName(tableName), _sqlQueryStr(sqlQueryStr) {
-}
+    : _tableId(NonProjectionRenderQueryCacheMap::emptyTableId), _tableName(tableName), _sqlQueryStr(sqlQueryStr) {}
 
 int32_t BaseQueryDataTableSQL::getTableId() const {
   return (_queryCachePtr ? _queryCachePtr->tableId : _tableId);
@@ -41,8 +40,7 @@ BaseQueryDataTableSQLJSON::BaseQueryDataTableSQLJSON(const QueryRendererContextS
                                                      const rapidjson::Value& obj,
                                                      const rapidjson::Pointer& objPath,
                                                      bool isPolyQuery)
-    : BaseQueryDataTableJSON(ctx, name, obj, objPath), BaseQueryDataTableSQL(), _isPolyQuery(isPolyQuery) {
-}
+    : BaseQueryDataTableJSON(ctx, name, obj, objPath), BaseQueryDataTableSQL(), _isPolyQuery(isPolyQuery) {}
 
 ::Rendering::GL::Resources::GLBufferLayoutShPtr BaseQueryDataTableSQLJSON::getGLBufferLayout() const {
   auto qlayout = getQueryDataLayout();
@@ -52,7 +50,9 @@ BaseQueryDataTableSQLJSON::BaseQueryDataTableSQLJSON(const QueryRendererContextS
   return nullptr;
 }
 
-void BaseQueryDataTableSQLJSON::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+void BaseQueryDataTableSQLJSON::_updateFromJSONObj(const rapidjson::Value& obj,
+                                                   const rapidjson::Pointer& objPath,
+                                                   const bool force) {
   rapidjson::Value::ConstMemberIterator itr;
 
   RUNTIME_EX_ASSERT(

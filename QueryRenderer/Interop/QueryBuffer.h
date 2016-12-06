@@ -173,6 +173,10 @@ class QueryLayoutBuffer : public QueryBuffer {
     return _getGLResource()->hasAttribute(attrName, (layoutPtr ? layoutPtr->getBufferLayout() : nullptr));
   }
 
+  bool hasBufferLayout(const QueryDataLayoutShPtr& layoutPtr) const {
+    return _getGLResource()->hasBufferLayout(layoutPtr->getBufferLayout());
+  }
+
   // size_t numItems() const {
   //   CHECK(_bufRsrc);
   //   return _getGLResource()->numItems();

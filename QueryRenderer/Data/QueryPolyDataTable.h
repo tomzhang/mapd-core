@@ -166,7 +166,9 @@ class SqlQueryPolyDataTableJSON : public SqlQueryPolyDataTableCache, public Base
 
   std::string _printInfo(bool useClassSuffix = false) const;
 
-  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+  void _updateFromJSONObj(const rapidjson::Value& obj,
+                          const rapidjson::Pointer& objPath,
+                          const bool force = false) final;
   void _runQueryAndInitResources(const RootCacheShPtr& qrmPerGpuDataPtr,
                                  bool isInitializing,
                                  const rapidjson::Value* dataObj = nullptr);
@@ -233,7 +235,9 @@ class PolyDataTable : public BaseQueryPolyDataTable, public BaseQueryDataTableJS
 
   ColumnMap _columns;
 
-  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+  void _updateFromJSONObj(const rapidjson::Value& obj,
+                          const rapidjson::Pointer& objPath,
+                          const bool force = false) final;
 
   void _buildPolyRowsFromJSONObj(const rapidjson::Value& obj);
   void _buildPolyDataFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool buildIdColumn);

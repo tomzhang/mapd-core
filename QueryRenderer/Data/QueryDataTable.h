@@ -128,7 +128,10 @@ class SqlQueryDataTableJSON : public BaseQueryDataTableVBO, public BaseQueryData
   std::map<GpuId, std::pair<size_t, bool>> _currBufOffsetBytes;
   bool _layoutOffsetChanged;
 
-  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+  bool _isInternalCacheUpToDate() final;
+  void _updateFromJSONObj(const rapidjson::Value& obj,
+                          const rapidjson::Pointer& objPath,
+                          const bool force = false) final;
   void _runQueryAndInitResources(const RootCacheShPtr& qrmPerGpuDataPtr,
                                  bool isInitializing,
                                  const rapidjson::Value* dataObj = nullptr);
@@ -306,7 +309,9 @@ class DataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableJSON {
 
   ColumnMap _columns;
 
-  void _updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final;
+  void _updateFromJSONObj(const rapidjson::Value& obj,
+                          const rapidjson::Pointer& objPath,
+                          const bool force = false) final;
   void _buildColumnsFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, bool buildIdColumn);
   void _populateColumnsFromJSONObj(const rapidjson::Value& obj);
   void _readDataFromFile(const std::string& filename);

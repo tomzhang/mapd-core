@@ -271,11 +271,29 @@ std::string SqlQueryDataTableJSON::_printInfo(bool useClassSuffix) const {
   return rtn;
 }
 
-void SqlQueryDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
-  auto currSql = _sqlQueryStr;
-  BaseQueryDataTableSQLJSON::_updateFromJSONObj(obj, objPath);
+bool SqlQueryDataTableJSON::_isInternalCacheUpToDate() {
+  if (_perGpuData.size()) {
+    if (!_queryDataLayoutPtr) {
+      return false;
+    }
 
-  if (currSql != _sqlQueryStr) {
+    for (auto itr = _perGpuData.begin(); itr != _perGpuData.end(); ++itr) {
+      if (!itr->second.vbo->hasBufferLayout(_queryDataLayoutPtr)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+void SqlQueryDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
+                                               const rapidjson::Pointer& objPath,
+                                               const bool force) {
+  auto currSql = _sqlQueryStr;
+  BaseQueryDataTableSQLJSON::_updateFromJSONObj(obj, objPath, force);
+
+  if (currSql != _sqlQueryStr || force || !_isInternalCacheUpToDate()) {
     // sql changed, re-run the query
     _runQueryAndInitResources(_ctx->getRootGpuCache(), true, &obj);
   }
@@ -745,7 +763,7 @@ std::map<GpuId, QueryBufferShPtr> DataTable::getAttributeDataBuffers(const std::
   return rtn;
 }
 
-void DataTable::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+void DataTable::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath, const bool force) {
   THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
       _ctx->getUserWidgetIds(), obj, "Updating a JSON-embedded data table is not yet supported."));
 }

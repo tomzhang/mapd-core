@@ -531,10 +531,12 @@ std::string SqlQueryPolyDataTableJSON::_printInfo(bool useClassSuffix) const {
   return rtn;
 }
 
-void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
+                                                   const rapidjson::Pointer& objPath,
+                                                   const bool force) {
   auto currSql = _sqlQueryStr;
   auto currTable = _tableName;
-  BaseQueryDataTableSQLJSON::_updateFromJSONObj(obj, objPath);
+  BaseQueryDataTableSQLJSON::_updateFromJSONObj(obj, objPath, force);
 
   bool executeQuery = (currSql != _sqlQueryStr || currTable != _tableName);
 
@@ -932,8 +934,7 @@ static void buildPolygonFromJSONObj(const rapidjson::Value& xarray,
 }
 
 template <>
-void TDataColumn<PolyData2d<double>>::push_back(const std::string& val) {
-}
+void TDataColumn<PolyData2d<double>>::push_back(const std::string& val) {}
 
 template <>
 void TDataColumn<PolyData2d<double>>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
@@ -1205,8 +1206,7 @@ PolyDataTable::PolyDataTable(const QueryRendererContextShPtr& ctx,
   _initGpuResources(ctx->getRootGpuCache());
 }
 
-PolyDataTable::~PolyDataTable() {
-}
+PolyDataTable::~PolyDataTable() {}
 
 bool PolyDataTable::hasAttribute(const std::string& attrName) {
   if (attrName == xcoordName || attrName == ycoordName) {
@@ -1326,7 +1326,9 @@ PolyDataTable::operator std::string() const {
   return "PolyDataTable(" + BaseQueryPolyDataTable::_printInfo() + ") " + BaseQueryDataTableJSON::_printInfo();
 }
 
-void PolyDataTable::_updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
+void PolyDataTable::_updateFromJSONObj(const rapidjson::Value& obj,
+                                       const rapidjson::Pointer& objPath,
+                                       const bool force) {
   CHECK(false) << "PolyDataTable::_updateFromJSONObj() has yet to be implemented.";
 }
 
