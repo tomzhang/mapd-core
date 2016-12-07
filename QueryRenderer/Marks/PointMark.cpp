@@ -32,7 +32,7 @@ PointMark::PointMark(const rapidjson::Value& obj,
       // hit testing is asked for, but the input sql data doesn't
       // have an id.
       id(this, "id", ctx, false),
-      fillColor(this, "fillColor", ctx, true, false, true) {
+      fillColor(this, "fillColor", ctx) {
   _initPropertiesFromJSONObj(obj, objPath);
   _jsonPath = objPath;
   _updateShader();
@@ -430,6 +430,32 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
     if (dataPtr) {
       activeShader->setUniformAttribute("uTableId", dataPtr->getTableId());
     }
+  }
+
+  auto fillColorType = fillColor.getColorType();
+  auto unpackColor = fillColor.isColorPacked();
+  switch (fillColorType) {
+    case ::Rendering::Colors::ColorType::RGBA:
+      subroutines["transformColorToRGB"] = "transformRGBtoRGB";
+      if (unpackColor) {
+        subroutines["unpackColor"] = "unpackRGBAColor";
+      }
+      break;
+    case ::Rendering::Colors::ColorType::HSL:
+      subroutines["transformColorToRGB"] = "transformHSLtoRGB";
+      break;
+    case ::Rendering::Colors::ColorType::LAB:
+      subroutines["transformColorToRGB"] = "transformLABtoRGB";
+      if (unpackColor) {
+        subroutines["unpackColor"] = "unpackLABColor";
+      }
+      break;
+    case ::Rendering::Colors::ColorType::HCL:
+      subroutines["transformColorToRGB"] = "transformHCLtoRGB";
+      break;
+    default:
+      THROW_RUNTIME_EX(std::string(*this) + ": unsupported fill color type " +
+                       std::to_string(static_cast<int>(fillColorType)) + ". Cannot bind fill color uniform");
   }
 
   if (subroutines.size()) {

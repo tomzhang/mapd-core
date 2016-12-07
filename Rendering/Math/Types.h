@@ -1,8 +1,6 @@
 #ifndef RENDERING_MATH_TYPES_H
 #define RENDERING_MATH_TYPES_H
 
-#include <memory>
-
 namespace Rendering {
 
 namespace Math {

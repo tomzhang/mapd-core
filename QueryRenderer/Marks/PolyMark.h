@@ -26,10 +26,10 @@ class PolyMark : public BaseMark {
   // RenderProperty<float> z;
   // rapidjson::Pointer _zJsonPath;
 
-  RenderProperty<::Rendering::Objects::ColorRGBA> fillColor;
+  ColorRenderProperty fillColor;
   rapidjson::Pointer _fillColorJsonPath;
 
-  RenderProperty<::Rendering::Objects::ColorRGBA> strokeColor;
+  ColorRenderProperty strokeColor;
   rapidjson::Pointer _strokeColorJsonPath;
 
   RenderProperty<float> strokeWidth;
@@ -65,7 +65,8 @@ class PolyMark : public BaseMark {
                      ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) final;
 
   void _bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader,
-                              const std::set<BaseRenderProperty*>& props);
+                              const std::set<BaseRenderProperty*>& props,
+                              const bool isFillPass);
 
   void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
                                          const std::set<GpuId>& usedGpus,

@@ -1,12 +1,18 @@
 #include "Utils.h"
 #include "Scale.h"
 #include "../Utils/RapidJSONUtils.h"
-#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Colors/ColorRGBA.h>
+#include <Rendering/Colors/ColorHSL.h>
+#include <Rendering/Colors/ColorLAB.h>
+#include <Rendering/Colors/ColorHCL.h>
 #include <type_traits>
 
 namespace QueryRenderer {
 
-using ::Rendering::Objects::ColorRGBA;
+using ::Rendering::Colors::ColorRGBA;
+using ::Rendering::Colors::ColorHSL;
+using ::Rendering::Colors::ColorLAB;
+using ::Rendering::Colors::ColorHCL;
 
 static QueryDataType getDataTypeFromDataRefJSONObj(const rapidjson::Value& obj, const QueryRendererContextShPtr& ctx) {
   RUNTIME_EX_ASSERT(obj.IsObject(), RapidJSONUtils::getJsonParseErrorStr(obj, "data reference is not a JSON object."));
@@ -180,34 +186,35 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
 }
 
 template <typename DomainType, typename RangeType>
-ScaleShPtr createScalePtr(const rapidjson::Value& obj,
-                          const rapidjson::Pointer& objPath,
-                          const QueryRendererContextShPtr& ctx,
-                          const std::string& scaleName,
-                          ScaleType scaleType) {
+static ScaleShPtr createScalePtr(const rapidjson::Value& obj,
+                                 const rapidjson::Pointer& objPath,
+                                 const QueryRendererContextShPtr& ctx,
+                                 const std::string& scaleName,
+                                 const ScaleType scaleType,
+                                 const ScaleInterpType interpType = ScaleInterpType::UNDEFINED) {
   switch (scaleType) {
     case ScaleType::LINEAR:
-      return ScaleShPtr(new LinearScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
+      return ScaleShPtr(new LinearScale<DomainType, RangeType>(obj, objPath, ctx, scaleName, interpType));
     case ScaleType::LOG: {
       // TODO(croot): support float?
       // NOTE: DomainType should have been validated before hand
       bool isValid = std::is_same<DomainType, double>::value;
       CHECK(isValid);
-      return ScaleShPtr(new LogScale<double, RangeType>(obj, objPath, ctx, scaleName));
+      return ScaleShPtr(new LogScale<double, RangeType>(obj, objPath, ctx, scaleName, interpType));
     }
     case ScaleType::POW: {
       // TODO(croot): support float?
       // NOTE: DomainType should have been validated before hand
       bool isValid = std::is_same<DomainType, double>::value;
       CHECK(isValid);
-      return ScaleShPtr(new PowScale<double, RangeType>(obj, objPath, ctx, scaleName));
+      return ScaleShPtr(new PowScale<double, RangeType>(obj, objPath, ctx, scaleName, interpType));
     }
     case ScaleType::SQRT: {
       // TODO(croot): support float?
       // NOTE: DomainType should have been validated before hand
       bool isValid = std::is_same<DomainType, double>::value;
       CHECK(isValid);
-      return ScaleShPtr(new SqrtScale<double, RangeType>(obj, objPath, ctx, scaleName));
+      return ScaleShPtr(new SqrtScale<double, RangeType>(obj, objPath, ctx, scaleName, interpType));
     }
     case ScaleType::ORDINAL:
       return ScaleShPtr(new OrdinalScale<DomainType, RangeType>(obj, objPath, ctx, scaleName));
@@ -216,6 +223,99 @@ ScaleShPtr createScalePtr(const rapidjson::Value& obj,
     default:
       THROW_RUNTIME_EX(
           RapidJSONUtils::getJsonParseErrorStr(obj, "Scale type " + to_string(scaleType) + " is unsupported."));
+  }
+}
+
+static ::Rendering::Colors::ColorType getColorTypeFromScaleInterpType(const ScaleInterpType interpType) {
+  switch (interpType) {
+    case ScaleInterpType::InterpolateRgb:
+      return ::Rendering::Colors::ColorType::RGBA;
+    case ScaleInterpType::InterpolateHsl:
+    case ScaleInterpType::InterpolateHslLong:
+      return ::Rendering::Colors::ColorType::HSL;
+    case ScaleInterpType::InterpolateLab:
+      return ::Rendering::Colors::ColorType::LAB;
+    case ScaleInterpType::InterpolateHcl:
+    case ScaleInterpType::InterpolateHclLong:
+      return ::Rendering::Colors::ColorType::HCL;
+    default:
+      throw ::Rendering::RenderError("ScaleInterpType " + std::to_string(static_cast<int>(interpType)) +
+                                     " is not a valid color interpolator");
+  }
+
+  return ::Rendering::Colors::ColorType::RGBA;
+}
+
+std::pair<::Rendering::Colors::ColorType, ScaleInterpType> getScaleRangeColorTypeFromJSONObj(
+    const rapidjson::Value& obj) {
+  ::Rendering::Colors::ColorType colorType = ::Rendering::Colors::ColorType::RGBA;
+
+  CHECK(obj.IsObject());
+  auto itr = obj.FindMember("range");
+  CHECK(itr != obj.MemberEnd() && itr->value.IsArray() && itr->value.Size());
+  const rapidjson::Value& firstRangeItem = itr->value[0];
+
+  CHECK(firstRangeItem.IsString());
+
+  auto interpType = getScaleInterpTypeFromJSONObj(obj);
+  try {
+    colorType = getColorTypeFromScaleInterpType(interpType);
+  } catch (::Rendering::RenderError& err) {
+    colorType = ::Rendering::Colors::getColorTypeFromColorString(firstRangeItem.GetString());
+  }
+
+  return std::make_pair(colorType, interpType);
+}
+
+template <typename DomainType>
+static ScaleShPtr createRangeColorScalePtr(const rapidjson::Value& obj,
+                                           const rapidjson::Pointer& objPath,
+                                           const QueryRendererContextShPtr& ctx,
+                                           const std::string& scaleName,
+                                           ScaleType scaleType) {
+  ::Rendering::Colors::ColorType colorType;
+  ScaleInterpType interpType;
+  std::tie(colorType, interpType) = getScaleRangeColorTypeFromJSONObj(obj);
+
+  switch (colorType) {
+    case ::Rendering::Colors::ColorType::RGBA:
+      return createScalePtr<DomainType, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType, interpType);
+    case ::Rendering::Colors::ColorType::HSL:
+      return createScalePtr<DomainType, ColorHSL>(obj, objPath, ctx, scaleName, scaleType, interpType);
+    case ::Rendering::Colors::ColorType::LAB:
+      return createScalePtr<DomainType, ColorLAB>(obj, objPath, ctx, scaleName, scaleType, interpType);
+    case ::Rendering::Colors::ColorType::HCL:
+      return createScalePtr<DomainType, ColorHCL>(obj, objPath, ctx, scaleName, scaleType, interpType);
+    default:
+      THROW_RUNTIME_EX("Unsupported color type: " + std::to_string(static_cast<int>(colorType)) +
+                       ". Cannot create scale with color range.");
+  }
+}
+
+template <typename RangeType>
+static ScaleShPtr createDomainColorScalePtr(const rapidjson::Value& obj,
+                                            const rapidjson::Pointer& objPath,
+                                            const QueryRendererContextShPtr& ctx,
+                                            const std::string& scaleName,
+                                            ScaleType scaleType) {
+  rapidjson::Value::ConstMemberIterator itr = obj.FindMember("domain");
+  CHECK(itr != obj.MemberEnd() && itr->value.IsArray() && itr->value.Size());
+  const rapidjson::Value& firstItem = itr->value[0];
+
+  CHECK(firstItem.IsString());
+  auto colorType = ::Rendering::Colors::getColorTypeFromColorString(firstItem.GetString());
+  switch (colorType) {
+    case ::Rendering::Colors::ColorType::RGBA:
+      return createScalePtr<ColorRGBA, RangeType>(obj, objPath, ctx, scaleName, scaleType);
+    case ::Rendering::Colors::ColorType::HSL:
+      return createScalePtr<ColorHSL, RangeType>(obj, objPath, ctx, scaleName, scaleType);
+    case ::Rendering::Colors::ColorType::LAB:
+      return createScalePtr<ColorLAB, RangeType>(obj, objPath, ctx, scaleName, scaleType);
+    case ::Rendering::Colors::ColorType::HCL:
+      return createScalePtr<ColorHCL, RangeType>(obj, objPath, ctx, scaleName, scaleType);
+    default:
+      THROW_RUNTIME_EX("Unsupported color type: " + std::to_string(static_cast<int>(colorType)) +
+                       ". Cannot create scale with color range.");
   }
 }
 
@@ -267,7 +367,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::DOUBLE:
           return createScalePtr<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<unsigned int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -283,7 +383,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::DOUBLE:
           return createScalePtr<int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<int>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -299,7 +399,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::DOUBLE:
           return createScalePtr<float, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<float, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<float>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -315,7 +415,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::DOUBLE:
           return createScalePtr<double, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<double, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<double>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -323,15 +423,15 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
     case QueryDataType::COLOR:
       switch (rangeType) {
         case QueryDataType::UINT:
-          return createScalePtr<ColorRGBA, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
+          return createDomainColorScalePtr<unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::INT:
-          return createScalePtr<ColorRGBA, int>(obj, objPath, ctx, scaleName, scaleType);
+          return createDomainColorScalePtr<int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
-          return createScalePtr<ColorRGBA, float>(obj, objPath, ctx, scaleName, scaleType);
+          return createDomainColorScalePtr<float>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
-          return createScalePtr<ColorRGBA, double>(obj, objPath, ctx, scaleName, scaleType);
+          return createDomainColorScalePtr<double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<ColorRGBA, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -347,7 +447,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::DOUBLE:
           return createScalePtr<std::string, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<std::string, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<std::string>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -373,7 +473,7 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
         case QueryDataType::DOUBLE:
           return createScalePtr<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
-          return createScalePtr<unsigned int, ColorRGBA>(obj, objPath, ctx, scaleName, scaleType);
+          return createRangeColorScalePtr<unsigned int>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -477,18 +577,63 @@ QueryDataType convertTypeIdToDataType(const std::type_info& srcTypeId) {
     return QueryDataType::FLOAT;
   } else if (srcTypeId == typeid(double)) {
     return QueryDataType::DOUBLE;
-  } else if (srcTypeId == typeid(::Rendering::Objects::ColorRGBA)) {
+  } else if (srcTypeId == typeid(::Rendering::Colors::ColorRGBA)) {
+    return QueryDataType::COLOR;
+  } else if (srcTypeId == typeid(::Rendering::Colors::ColorHSL)) {
+    return QueryDataType::COLOR;
+  } else if (srcTypeId == typeid(::Rendering::Colors::ColorLAB)) {
+    return QueryDataType::COLOR;
+  } else if (srcTypeId == typeid(::Rendering::Colors::ColorHCL)) {
     return QueryDataType::COLOR;
   } else {
     THROW_RUNTIME_EX("Type id: " + std::string(srcTypeId.name()) + " cannot be converted to a QueryDataType");
   }
 }
 
-template <>
-Rendering::Objects::ColorRGBA convertType(const QueryDataType type, const boost::any& value) {
-  RUNTIME_EX_ASSERT(type == QueryDataType::COLOR, "Converting " + to_string(type) + " to a ColorRGBA is unsupported.");
+template <typename C0, typename C1, typename C2, typename C3>
+static C0 convertColorType(const QueryDataType type, const boost::any& value) {
+  RUNTIME_EX_ASSERT(type == QueryDataType::COLOR,
+                    "Converting " + to_string(type) + " to a " + std::string(typeid(C0).name()) + " is unsupported.");
 
-  return boost::any_cast<Rendering::Objects::ColorRGBA>(value);
+  C0 rtn;
+  try {
+    rtn = boost::any_cast<C0>(value);
+  } catch (const boost::bad_any_cast&) {
+    try {
+      auto c1 = boost::any_cast<C1>(value);
+      convertColor(c1, rtn);
+    } catch (const boost::bad_any_cast&) {
+      try {
+        auto c2 = boost::any_cast<C2>(value);
+        convertColor(c2, rtn);
+      } catch (const boost::bad_any_cast&) {
+        auto c3 = boost::any_cast<C3>(value);
+        convertColor(c3, rtn);
+      }
+    }
+  }
+
+  return rtn;
+}
+
+template <>
+ColorRGBA convertType(const QueryDataType type, const boost::any& value) {
+  return convertColorType<ColorRGBA, ColorHSL, ColorLAB, ColorHCL>(type, value);
+}
+
+template <>
+ColorHSL convertType(const QueryDataType type, const boost::any& value) {
+  return convertColorType<ColorHSL, ColorRGBA, ColorLAB, ColorHCL>(type, value);
+}
+
+template <>
+ColorLAB convertType(const QueryDataType type, const boost::any& value) {
+  return convertColorType<ColorLAB, ColorRGBA, ColorHSL, ColorHCL>(type, value);
+}
+
+template <>
+ColorHCL convertType(const QueryDataType type, const boost::any& value) {
+  return convertColorType<ColorHCL, ColorRGBA, ColorHSL, ColorLAB>(type, value);
 }
 
 }  // namespace QueryRenderer

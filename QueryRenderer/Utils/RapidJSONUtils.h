@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <boost/any.hpp>
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 

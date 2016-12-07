@@ -5,7 +5,6 @@ namespace Rendering {
 
 namespace Objects {
 
-class ColorRGBA;
 class Viewport;
 
 }  // namespace Objects

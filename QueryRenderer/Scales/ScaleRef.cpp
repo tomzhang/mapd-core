@@ -4,7 +4,10 @@
 
 namespace QueryRenderer {
 
-using ::Rendering::Objects::ColorRGBA;
+using ::Rendering::Colors::ColorRGBA;
+using ::Rendering::Colors::ColorHSL;
+using ::Rendering::Colors::ColorLAB;
+using ::Rendering::Colors::ColorHCL;
 
 BaseScaleRef::BaseScaleRef(const QueryRendererContextShPtr& ctx,
                            const ScaleShPtr& scalePtr,
@@ -172,17 +175,6 @@ AccumulatorType BaseScaleRef::getAccumulatorType() const {
 bool BaseScaleRef::hasAccumulator() const {
   _verifyScalePointer();
   return _scalePtr->hasAccumulator();
-}
-
-void convertDomainRangeData(std::shared_ptr<ScaleDomainRangeData<ColorRGBA>>& destData,
-                            ScaleDomainRangeData<ColorRGBA>* srcData) {
-  std::vector<ColorRGBA>& srcVec = srcData->getVectorDataRef();
-
-  destData.reset(new ScaleDomainRangeData<ColorRGBA>(srcData->getName(), srcVec.size(), srcData->useString()));
-  std::vector<ColorRGBA>& destVec = destData->getVectorDataRef();
-  for (size_t i = 0; i < srcVec.size(); ++i) {
-    destVec[i] = srcVec[i];
-  }
 }
 
 }  // namespace QueryRenderer

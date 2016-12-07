@@ -2,10 +2,21 @@
 #define QUERYRENDERER_SCALES_TYPES_H_
 
 #include <memory>
+#include <vector>
 
 namespace QueryRenderer {
 
 enum class ScaleType { LINEAR = 0, LOG, POW, SQRT, ORDINAL, QUANTIZE, UNDEFINED };
+enum class ScaleInterpType {
+  InterpolateRgb = 0,
+  InterpolateHsl,
+  InterpolateHslLong,
+  InterpolateLab,
+  InterpolateHcl,
+  InterpolateHclLong,
+  UNDEFINED
+};
+
 enum class AccumulatorType : uint8_t {
   MIN = 0x1,
   MAX = 0x2,
@@ -24,8 +35,10 @@ typedef std::shared_ptr<BaseScale> ScaleShPtr;
 class BaseScaleRef;
 typedef std::shared_ptr<BaseScaleRef> ScaleRefShPtr;
 
-std::string to_string(ScaleType scaleType);
-std::string to_string(AccumulatorType accumType);
+std::string to_string(const ScaleType scaleType);
+std::string to_string(const AccumulatorType accumType);
+std::string to_string(const ScaleInterpType interpType);
+std::vector<std::string> getScaleInterpTypes(const std::vector<ScaleInterpType>& interps = {});
 
 bool isQuantitativeScale(const ScaleType type);
 

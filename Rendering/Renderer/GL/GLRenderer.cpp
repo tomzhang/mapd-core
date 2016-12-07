@@ -1,7 +1,7 @@
 #include "GLRenderer.h"
 #include "GLResourceManager.h"
 #include "../../RenderError.h"
-#include "../../Objects/ColorRGBA.h"
+#include "../../Colors/ColorRGBA.h"
 #include "Resources/GLFramebuffer.h"
 #include "GLWindow.h"
 #include <thread>
@@ -11,7 +11,7 @@
 namespace Rendering {
 namespace GL {
 
-using Objects::ColorRGBA;
+using Colors::ColorRGBA;
 using Resources::GLResourceType;
 using Resources::GLResourceShPtr;
 using Resources::GLTexture2dShPtr;

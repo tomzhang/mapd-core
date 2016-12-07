@@ -80,8 +80,7 @@ QueryRenderer::QueryRenderer(int userId,
                              bool doDepthTest) noexcept
     : _ctx(new QueryRendererContext(userId, widgetId, qrmGpuCache, doHitTest, doDepthTest)),
       _pboGpu(EMPTY_GPUID),
-      _idPixelsDirty(false) {
-}
+      _idPixelsDirty(false) {}
 
 QueryRenderer::QueryRenderer(int userId,
                              int widgetId,
@@ -337,9 +336,13 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
             // One way to do this is store a map of all objects changing in-place in order to
             // validate.
             auto currScaleType = getScaleTypeFromJSONObj(*vitr);
+            QueryDataType rangeDataType;
             if (scalePtr->getType() != currScaleType ||
                 scalePtr->getDomainDataType() != getScaleDomainDataTypeFromJSONObj(*vitr, _ctx, currScaleType) ||
-                scalePtr->getRangeDataType() != getScaleRangeDataTypeFromJSONObj(*vitr, _ctx, currScaleType)) {
+                (rangeDataType = scalePtr->getRangeDataType()) !=
+                    getScaleRangeDataTypeFromJSONObj(*vitr, _ctx, currScaleType) ||
+                (rangeDataType == QueryDataType::COLOR &&
+                 getScaleRangeColorTypeFromJSONObj(*vitr).first != scalePtr->getRangeColorType())) {
               // completely new scale type, so destroy previous one and
               // build a new one from scratch.
 

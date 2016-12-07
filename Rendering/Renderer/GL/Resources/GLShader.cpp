@@ -141,8 +141,7 @@ struct Uniform4dAttr : UniformAttrInfo {
 };
 
 UniformSamplerAttr::UniformSamplerAttr(GLint t, GLint s, GLuint l, GLenum target, GLint startTxImgUnit)
-    : UniformAttrInfo(t, s, l), target(target), startTexImgUnit(startTxImgUnit) {
-}
+    : UniformAttrInfo(t, s, l), target(target), startTexImgUnit(startTxImgUnit) {}
 
 void UniformSamplerAttr::setAttr(const void* data, GLint attrSize) {
   CHECK(attrSize <= size);
@@ -191,8 +190,7 @@ UniformImageLoadStoreAttr::UniformImageLoadStoreAttr(GLint t,
       format(format),
       access(access),
       isMultisampled(isMultisampled),
-      startImgUnit(startImgUnit) {
-}
+      startImgUnit(startImgUnit) {}
 
 void UniformImageLoadStoreAttr::setAttr(const void* data, GLint attrSize) {
   setAttr(data, attrSize, false, 0);
@@ -250,8 +248,7 @@ UniformBlockAttrInfo::UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
       blockIndex(blockIndex),
       bufferSize(bufferSize),
       bufferBindingIndex(bufferBindingIndex),
-      blockLayoutPtr(new GLShaderBlockLayout(layoutType, shaderPtr, bufferSize)) {
-}
+      blockLayoutPtr(new GLShaderBlockLayout(layoutType, shaderPtr, bufferSize)) {}
 
 void UniformBlockAttrInfo::setBufferBinding(GLuint programId, GLint bindingIndex) {
   // TODO(croot): check that this binding index isn't in use elsewhere?
@@ -482,8 +479,7 @@ UniformSubroutineAttrInfo::UniformSubroutineAttrInfo(const std::string& subrouti
       subroutineName(subroutineName),
       index(index),
       shaderStage(shaderStage),
-      compatibleSubroutines(compatibleSubroutines) {
-}
+      compatibleSubroutines(compatibleSubroutines) {}
 
 void UniformSubroutineAttrInfo::setAttr(const void* data, GLint attrSize) {
   THROW_RUNTIME_EX("UniformSubroutineAttrInfo::setAttr() is not implemented yet.");
@@ -830,8 +826,7 @@ GLShader::GLShader(const RendererWkPtr& rendererPtr)
       _vertShaderId(0),
       _geomShaderId(0),
       _fragShaderId(0),
-      _programId(0) {
-}
+      _programId(0) {}
 
 GLShader::~GLShader() {
   cleanupResource();
@@ -1350,7 +1345,7 @@ void GLShader::setSubroutines(const std::unordered_map<std::string, std::string>
 
   RUNTIME_EX_ASSERT(subroutineVals.size() == cnt,
                     "setSubroutines() requires all subroutine uniform attributes to be set for the entire shader "
-                    "program. The user only supplied " +
+                    "program. The user supplied " +
                         std::to_string(subroutineVals.size()) + " subroutines to set but there are " +
                         std::to_string(cnt) + " uniform subroutines to set in the shader.");
 

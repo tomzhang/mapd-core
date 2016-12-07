@@ -8,7 +8,7 @@
 #include "rapidjson/pointer.h"
 
 #include <Rendering/RenderError.h>
-#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Colors/Types.h>
 
 #include <boost/any.hpp>
 
@@ -22,6 +22,9 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
 QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
                                                const QueryRendererContextShPtr& ctx,
                                                const ScaleType scaleType);
+std::pair<::Rendering::Colors::ColorType, ScaleInterpType> getScaleRangeColorTypeFromJSONObj(
+    const rapidjson::Value& obj);
+
 ScaleShPtr createScale(const rapidjson::Value& obj,
                        const rapidjson::Pointer& objPath,
                        const QueryRendererContextShPtr& ctx,
@@ -62,7 +65,16 @@ T convertType(const QueryDataType type, const boost::any& value) {
 }
 
 template <>
-Rendering::Objects::ColorRGBA convertType(const QueryDataType type, const boost::any& value);
+Rendering::Colors::ColorRGBA convertType(const QueryDataType type, const boost::any& value);
+
+template <>
+Rendering::Colors::ColorHSL convertType(const QueryDataType type, const boost::any& value);
+
+template <>
+Rendering::Colors::ColorLAB convertType(const QueryDataType type, const boost::any& value);
+
+template <>
+Rendering::Colors::ColorHCL convertType(const QueryDataType type, const boost::any& value);
 
 }  // namespace QueryRenderer
 

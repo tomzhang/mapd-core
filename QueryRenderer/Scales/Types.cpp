@@ -2,7 +2,7 @@
 
 namespace QueryRenderer {
 
-std::string to_string(ScaleType scaleType) {
+std::string to_string(const ScaleType scaleType) {
   switch (scaleType) {
     case ScaleType::LINEAR:
       return "LINEAR";
@@ -25,7 +25,7 @@ std::string to_string(ScaleType scaleType) {
   return "";
 }
 
-std::string to_string(AccumulatorType accumType) {
+std::string to_string(const AccumulatorType accumType) {
   switch (accumType) {
     case AccumulatorType::MIN:
       return "MIN";
@@ -44,6 +44,49 @@ std::string to_string(AccumulatorType accumType) {
   }
 
   return "";
+}
+
+std::string to_string(const ScaleInterpType interpType) {
+  switch (interpType) {
+    case ScaleInterpType::InterpolateRgb:
+      return "InterpolateRGB";
+    case ScaleInterpType::InterpolateHsl:
+      return "InterpolateHsl";
+    case ScaleInterpType::InterpolateHslLong:
+      return "InterpolateHslLong";
+    case ScaleInterpType::InterpolateLab:
+      return "InterpolateLab";
+    case ScaleInterpType::InterpolateHcl:
+      return "InterpolateHcl";
+    case ScaleInterpType::InterpolateHclLong:
+      return "InterpolateHclLong";
+    case ScaleInterpType::UNDEFINED:
+      return "UNDEFINED";
+    default:
+      return "scale interpolator type " + std::to_string(static_cast<int>(interpType)) + ">";
+  }
+  return "";
+}
+
+std::vector<std::string> getScaleInterpTypes(const std::vector<ScaleInterpType>& interps) {
+  int numInterpTypes = interps.size();
+  bool useArg = numInterpTypes > 0;
+  if (!useArg) {
+    numInterpTypes = static_cast<int>(ScaleInterpType::UNDEFINED) - 1;
+  }
+
+  std::vector<std::string> rtn(numInterpTypes);
+  if (useArg) {
+    int i = 0;
+    for (auto& interp : interps) {
+      rtn[i++] = to_string(interp);
+    }
+  } else {
+    for (int i = 0; i < numInterpTypes; ++i) {
+      rtn[i] = to_string(static_cast<ScaleInterpType>(i));
+    }
+  }
+  return rtn;
 }
 
 bool isQuantitativeScale(const ScaleType type) {

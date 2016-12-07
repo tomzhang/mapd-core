@@ -245,7 +245,7 @@ void PolyMark::_initPropertiesFromJSONObj(const rapidjson::Value& obj, const rap
     } else {
       // set default strokeColor to white
       // TODO(croot): expose strokeColor default as a static somewhere
-      strokeColor.initializeValue({255, 255, 255, 255});
+      strokeColor.initializeValue(::Rendering::Colors::ColorUnion(1.0f, 1.0f, 1.0f, 1.0f));
       _strokeColorJsonPath = rapidjson::Pointer();
     }
 
@@ -436,12 +436,12 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
 }
 
 bool PolyMark::_doFill() {
-  return (fillColor.hasVboPtr() || fillColor.hasUboPtr() || fillColor.getUniformValue().a() > 0);
+  return (fillColor.hasVboPtr() || fillColor.hasUboPtr() || fillColor.getUniformValue().opacity() > 0);
 }
 
 bool PolyMark::_doStroke() {
   return ((strokeWidth.hasVboPtr() || strokeWidth.hasUboPtr() || strokeWidth.getUniformValue() > 0) &&
-          (strokeColor.hasVboPtr() || strokeColor.hasUboPtr() || strokeColor.getUniformValue().a() > 0));
+          (strokeColor.hasVboPtr() || strokeColor.hasUboPtr() || strokeColor.getUniformValue().opacity() > 0));
 }
 
 void PolyMark::_updateShader() {
@@ -568,7 +568,8 @@ void PolyMark::_buildVAOData(const GpuId& gpuId,
 }
 
 void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader,
-                                      const std::set<BaseRenderProperty*>& props) {
+                                      const std::set<BaseRenderProperty*>& props,
+                                      const bool isFillPass) {
   std::unordered_map<std::string, std::string> subroutines;
 
   for (auto prop : _vboProps) {
@@ -606,6 +607,40 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
     if (dataPtr) {
       activeShader->setUniformAttribute("uTableId", dataPtr->getTableId());
     }
+  }
+
+  ::Rendering::Colors::ColorType colorType;
+  bool unpackColor;
+  if (isFillPass) {
+    colorType = fillColor.getColorType();
+    unpackColor = fillColor.isColorPacked();
+  } else {
+    colorType = strokeColor.getColorType();
+    unpackColor = strokeColor.isColorPacked();
+  }
+
+  switch (colorType) {
+    case ::Rendering::Colors::ColorType::RGBA:
+      subroutines["transformColorToRGB"] = "transformRGBtoRGB";
+      if (unpackColor) {
+        subroutines["unpackColor"] = "unpackRGBAColor";
+      }
+      break;
+    case ::Rendering::Colors::ColorType::HSL:
+      subroutines["transformColorToRGB"] = "transformHSLtoRGB";
+      break;
+    case ::Rendering::Colors::ColorType::LAB:
+      subroutines["transformColorToRGB"] = "transformLABtoRGB";
+      if (unpackColor) {
+        subroutines["unpackColor"] = "unpackLABColor";
+      }
+      break;
+    case ::Rendering::Colors::ColorType::HCL:
+      subroutines["transformColorToRGB"] = "transformHCLtoRGB";
+      break;
+    default:
+      THROW_RUNTIME_EX(std::string(*this) + ": unsupported fill color type " +
+                       std::to_string(static_cast<int>(colorType)) + ". Cannot bind fill color uniform");
   }
 
   if (subroutines.size()) {
@@ -657,7 +692,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 
     // NOTE: the ibo will be bound with the vao object
     renderer->bindVertexArray(itr->second.vaoPtr);
-    _bindUniformProperties(itr->second.shaderPtr.get(), _usedProps);
+    _bindUniformProperties(itr->second.shaderPtr.get(), _usedProps, true);
 
     if (_uboProps.size()) {
       // the same ubo should be used for all ubo props, so only need to grab
@@ -703,7 +738,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 
     // NOTE: the ibo will be bound with the vao object
     renderer->bindVertexArray(itr->second.strokeVaoPtr);
-    _bindUniformProperties(itr->second.strokeShaderPtr.get(), _usedStrokeProps);
+    _bindUniformProperties(itr->second.strokeShaderPtr.get(), _usedStrokeProps, false);
 
     if (_uboProps.size()) {
       // the same ubo should be used for all ubo props, so only need to grab

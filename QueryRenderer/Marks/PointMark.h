@@ -32,7 +32,7 @@ class PointMark : public BaseMark {
   RenderProperty<unsigned int> id;
   rapidjson::Pointer _idJsonPath;
 
-  RenderProperty<::Rendering::Objects::ColorRGBA> fillColor;
+  ColorRenderProperty fillColor;
   rapidjson::Pointer _fillColorJsonPath;
 
   std::set<BaseRenderProperty*> _getUsedProps() final;

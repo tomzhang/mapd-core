@@ -2,7 +2,7 @@
 #include "../QueryDataLayout.h"
 #include "../QueryRendererContext.h"
 
-#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Colors/ColorRGBA.h>
 #include <Rendering/Math/AABox.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
@@ -10,6 +10,7 @@
 
 #include <poly2tri/poly2tri.h>
 
+#include <boost/regex.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 
@@ -17,7 +18,7 @@
 
 namespace QueryRenderer {
 
-using ::Rendering::Objects::ColorRGBA;
+using ::Rendering::Colors::ColorRGBA;
 using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::Resources::GLBufferAttrType;
 using ::Rendering::GL::Resources::GLBufferLayoutShPtr;

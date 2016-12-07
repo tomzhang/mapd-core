@@ -1,6 +1,7 @@
 #include "QueryDataTable.h"
 #include "../QueryRenderer.h"
 #include "../QueryRendererContext.h"
+
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
 
 #include <QueryEngine/Execute.h>
@@ -12,7 +13,10 @@
 
 namespace QueryRenderer {
 
-using ::Rendering::Objects::ColorRGBA;
+using ::Rendering::Colors::ColorRGBA;
+using ::Rendering::Colors::ColorHSL;
+using ::Rendering::Colors::ColorLAB;
+using ::Rendering::Colors::ColorHCL;
 using ::Rendering::GL::Resources::GLBufferAttrType;
 using ::Rendering::GL::Resources::GLVertexBufferShPtr;
 
@@ -44,6 +48,21 @@ QueryDataType getDataTypeForType<double>() {
 
 template <>
 QueryDataType getDataTypeForType<ColorRGBA>() {
+  return QueryDataType::COLOR;
+}
+
+template <>
+QueryDataType getDataTypeForType<ColorHSL>() {
+  return QueryDataType::COLOR;
+}
+
+template <>
+QueryDataType getDataTypeForType<ColorLAB>() {
+  return QueryDataType::COLOR;
+}
+
+template <>
+QueryDataType getDataTypeForType<ColorHCL>() {
   return QueryDataType::COLOR;
 }
 
@@ -385,7 +404,25 @@ DataColumnUqPtr DataTable::createColorDataColumnFromRowMajorObj(const std::strin
       RapidJSONUtils::getJsonParseErrorStr(
           rowItem, "Cannot create color column \"" + columnName + "\". Colors must be defined as strings."));
 
-  return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+  auto colorType = ::Rendering::Colors::getColorTypeFromColorString(rowItem.GetString());
+  switch (colorType) {
+    case ::Rendering::Colors::ColorType::RGBA:
+      return DataColumnUqPtr(new TDataColumn<ColorRGBA>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+      break;
+    case ::Rendering::Colors::ColorType::HSL:
+      return DataColumnUqPtr(new TDataColumn<ColorHSL>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+      break;
+    case ::Rendering::Colors::ColorType::LAB:
+      return DataColumnUqPtr(new TDataColumn<ColorLAB>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+      break;
+    case ::Rendering::Colors::ColorType::HCL:
+      return DataColumnUqPtr(new TDataColumn<ColorHCL>(columnName, dataArray, DataColumn::InitType::ROW_MAJOR));
+      break;
+    default:
+      THROW_RUNTIME_EX("Color type " + std::to_string(static_cast<int>(colorType)) +
+                       " is not a supported data table column type");
+      break;
+  }
 }
 
 DataTable::DataTable(const QueryRendererContextShPtr& ctx,
@@ -523,9 +560,15 @@ void DataTable::_buildColumnsFromJSONObj(const rapidjson::Value& obj,
           _columns.push_back(createDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
         } else if (mitr2->value.IsString()) {
           std::string val = mitr2->value.GetString();
-          if (ColorRGBA::isColorString(val)) {
+          if (::Rendering::Colors::isColorString(val)) {
             _columns.push_back(
                 createColorDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
+          } else {
+            THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(),
+                mitr2->value,
+                "Currently only color strings are supported in embedded data tables. \"" + val +
+                    "\" is not a valid color string."));
           }
         } else if (mitr2->value.IsBool()) {
           _columns.push_back(createDataColumnFromRowMajorObj(mitr2->name.GetString(), mitr2->value, mitr1->value));
@@ -799,7 +842,104 @@ void TDataColumn<ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& da
                                                                "\" does not exist in row-major-defined data item " +
                                                                std::to_string(vitr - dataArrayObj.Begin())));
 
-    _columnDataPtr->push_back(color.initFromCSSString(mitr->value.GetString()));
+    color.initFromCSSString(mitr->value.GetString());
+    _columnDataPtr->push_back(color);
+  }
+}
+
+template <>
+void TDataColumn<ColorHSL>::push_back(const std::string& val) {
+  _columnDataPtr->push_back(ColorHSL(val));
+}
+
+template <>
+void TDataColumn<ColorHSL>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
+                    RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
+
+  rapidjson::Value::ConstValueIterator vitr;
+  rapidjson::Value::ConstMemberIterator mitr;
+
+  ColorHSL color;
+
+  for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
+    RUNTIME_EX_ASSERT(
+        vitr->IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
+                                             "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                                                 "in data array must be an object for row-major-defined data."));
+    RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
+                      RapidJSONUtils::getJsonParseErrorStr(*vitr,
+                                                           "column \"" + columnName +
+                                                               "\" does not exist in row-major-defined data item " +
+                                                               std::to_string(vitr - dataArrayObj.Begin())));
+
+    color.initFromCSSString(mitr->value.GetString());
+    _columnDataPtr->push_back(color);
+  }
+}
+
+template <>
+void TDataColumn<ColorLAB>::push_back(const std::string& val) {
+  _columnDataPtr->push_back(ColorLAB(val));
+}
+
+template <>
+void TDataColumn<ColorLAB>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
+                    RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
+
+  rapidjson::Value::ConstValueIterator vitr;
+  rapidjson::Value::ConstMemberIterator mitr;
+
+  ColorLAB color;
+
+  for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
+    RUNTIME_EX_ASSERT(
+        vitr->IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
+                                             "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                                                 "in data array must be an object for row-major-defined data."));
+    RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
+                      RapidJSONUtils::getJsonParseErrorStr(*vitr,
+                                                           "column \"" + columnName +
+                                                               "\" does not exist in row-major-defined data item " +
+                                                               std::to_string(vitr - dataArrayObj.Begin())));
+
+    color.initFromCSSString(mitr->value.GetString());
+    _columnDataPtr->push_back(color);
+  }
+}
+
+template <>
+void TDataColumn<ColorHCL>::push_back(const std::string& val) {
+  _columnDataPtr->push_back(ColorHCL(val));
+}
+
+template <>
+void TDataColumn<ColorHCL>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj) {
+  RUNTIME_EX_ASSERT(dataArrayObj.IsArray(),
+                    RapidJSONUtils::getJsonParseErrorStr(dataArrayObj, "Row-major data object is not an array."));
+
+  rapidjson::Value::ConstValueIterator vitr;
+  rapidjson::Value::ConstMemberIterator mitr;
+
+  ColorHCL color;
+
+  for (vitr = dataArrayObj.Begin(); vitr != dataArrayObj.End(); ++vitr) {
+    RUNTIME_EX_ASSERT(
+        vitr->IsObject(),
+        RapidJSONUtils::getJsonParseErrorStr(dataArrayObj,
+                                             "Item " + std::to_string(vitr - dataArrayObj.Begin()) +
+                                                 "in data array must be an object for row-major-defined data."));
+    RUNTIME_EX_ASSERT((mitr = vitr->FindMember(columnName.c_str())) != vitr->MemberEnd(),
+                      RapidJSONUtils::getJsonParseErrorStr(*vitr,
+                                                           "column \"" + columnName +
+                                                               "\" does not exist in row-major-defined data item " +
+                                                               std::to_string(vitr - dataArrayObj.Begin())));
+
+    color.initFromCSSString(mitr->value.GetString());
+    _columnDataPtr->push_back(color);
   }
 }
 

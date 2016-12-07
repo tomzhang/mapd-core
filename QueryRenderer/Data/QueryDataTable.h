@@ -5,7 +5,10 @@
 #include "BaseQueryDataTable.h"
 #include "../PerGpuData.h"
 #include "../Utils/RapidJSONUtils.h"
-#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Colors/ColorRGBA.h>
+#include <Rendering/Colors/ColorHSL.h>
+#include <Rendering/Colors/ColorLAB.h>
+#include <Rendering/Colors/ColorHCL.h>
 #include <Rendering/Renderer/GL/Resources/Types.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexBuffer.h>
 
@@ -38,7 +41,16 @@ template <>
 QueryDataType getDataTypeForType<double>();
 
 template <>
-QueryDataType getDataTypeForType<Rendering::Objects::ColorRGBA>();
+QueryDataType getDataTypeForType<Rendering::Colors::ColorRGBA>();
+
+template <>
+QueryDataType getDataTypeForType<Rendering::Colors::ColorHSL>();
+
+template <>
+QueryDataType getDataTypeForType<Rendering::Colors::ColorLAB>();
+
+template <>
+QueryDataType getDataTypeForType<Rendering::Colors::ColorHCL>();
 
 template <>
 QueryDataType getDataTypeForType<std::string>();
@@ -246,10 +258,28 @@ class TDataColumn : public DataColumn {
 };
 
 template <>
-void TDataColumn<::Rendering::Objects::ColorRGBA>::push_back(const std::string& val);
+void TDataColumn<::Rendering::Colors::ColorRGBA>::push_back(const std::string& val);
 
 template <>
-void TDataColumn<::Rendering::Objects::ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
+void TDataColumn<::Rendering::Colors::ColorRGBA>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
+
+template <>
+void TDataColumn<::Rendering::Colors::ColorHSL>::push_back(const std::string& val);
+
+template <>
+void TDataColumn<::Rendering::Colors::ColorHSL>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
+
+template <>
+void TDataColumn<::Rendering::Colors::ColorLAB>::push_back(const std::string& val);
+
+template <>
+void TDataColumn<::Rendering::Colors::ColorLAB>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
+
+template <>
+void TDataColumn<::Rendering::Colors::ColorHCL>::push_back(const std::string& val);
+
+template <>
+void TDataColumn<::Rendering::Colors::ColorHCL>::_initFromRowMajorJSONObj(const rapidjson::Value& dataArrayObj);
 
 class DataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableJSON {
  public:

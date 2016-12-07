@@ -55,7 +55,7 @@ class GLRenderer : public Renderer {
   template <typename T>
   std::vector<T> getAttrv(GLenum attrName);
 
-  void setClearColor(const Objects::ColorRGBA& color) final;
+  void setClearColor(const Colors::ColorRGBA& color) final;
   void setClearColor(float r, float g, float b, float a) final;
 
   void clearColor() final;

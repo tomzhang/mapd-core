@@ -19,11 +19,14 @@
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
 
+#include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/regex.hpp>
 #include <boost/any.hpp>
 
 namespace QueryRenderer {
+
+ScaleInterpType getScaleInterpTypeFromJSONObj(const rapidjson::Value& obj);
 
 class BaseScale : public JSONRefObject {
  public:
@@ -56,6 +59,7 @@ class BaseScale : public JSONRefObject {
 
   QueryDataType getDomainDataType() { return _domainDataType; }
   QueryDataType getRangeDataType() { return _rangeDataType; }
+  virtual ::Rendering::Colors::ColorType getRangeColorType() const = 0;
 
   const ::Rendering::GL::TypeGLShPtr& getDomainTypeGL();
   const ::Rendering::GL::TypeGLShPtr& getRangeTypeGL();
@@ -284,6 +288,8 @@ class Scale : public BaseScale {
 
   BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
 
+  ::Rendering::Colors::ColorType getRangeColorType() const final { return _getRangeColorTypeInternal(); }
+
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
       const std::string& extraSuffix,
       const ScaleDomainRangeData<int>* domainOverride) const {
@@ -332,9 +338,22 @@ class Scale : public BaseScale {
       if (stringDomain) {
         return _getDomainTypeUniforms<std::string>(extraSuffix, stringDomain.get());
       }
-      auto colorDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>(overridePtr);
-      if (colorDomain) {
-        return _getDomainTypeUniforms<::Rendering::Objects::ColorRGBA>(extraSuffix, colorDomain.get());
+      auto colorRGBADomain =
+          std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>>(overridePtr);
+      if (colorRGBADomain) {
+        return _getDomainTypeUniforms<::Rendering::Colors::ColorRGBA>(extraSuffix, colorRGBADomain.get());
+      }
+      auto colorHSLDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>>(overridePtr);
+      if (colorHSLDomain) {
+        return _getDomainTypeUniforms<::Rendering::Colors::ColorHSL>(extraSuffix, colorHSLDomain.get());
+      }
+      auto colorLABDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>>(overridePtr);
+      if (colorLABDomain) {
+        return _getDomainTypeUniforms<::Rendering::Colors::ColorLAB>(extraSuffix, colorLABDomain.get());
+      }
+      auto colorHCLDomain = std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>>(overridePtr);
+      if (colorHCLDomain) {
+        return _getDomainTypeUniforms<::Rendering::Colors::ColorHCL>(extraSuffix, colorHCLDomain.get());
       }
 
       THROW_RUNTIME_EX("Override domain type not supported.");
@@ -402,13 +421,16 @@ class Scale : public BaseScale {
     return shaderCode;
   }
 
-  bool _updateFromJSONObj(const rapidjson::Value& obj,
-                          const rapidjson::Pointer& objPath,
-                          std::function<void(DomainType&)> domainValConvert = [](DomainType& domainVal) { return; },
-                          std::function<void(RangeType&)> rangeValConvert = [](RangeType& rangeVal) { return; }) {
-    bool rtn = false;
+  std::pair<bool, bool> _updateFromJSONObj(
+      const rapidjson::Value& obj,
+      const rapidjson::Pointer& objPath,
+      std::function<void(DomainType&)> domainValConvert = [](DomainType& domainVal) { return; },
+      std::function<void(RangeType&)> rangeValConvert = [](RangeType& rangeVal) { return; }) {
+    bool domainRangeUpdated = false;
+    bool cacheUpdated = false;
 
     if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
+      cacheUpdated = true;
       RUNTIME_EX_ASSERT(
           obj.IsObject(),
           RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "scale items must be objects."));
@@ -417,7 +439,7 @@ class Scale : public BaseScale {
           obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged, domainValConvert);
       _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged, rangeValConvert);
 
-      rtn = hasDomainDataChanged() || hasRangeDataChanged();
+      domainRangeUpdated = hasDomainDataChanged() || hasRangeDataChanged();
 
       if (hasDomainDataChanged()) {
         _domainOverrideData.reset();
@@ -449,7 +471,7 @@ class Scale : public BaseScale {
       if (_allowsAccumulator) {
         bool accumUpdated = _updateAccumulatorFromJSONObj(obj, objPath);
 
-        rtn = rtn || accumUpdated;
+        domainRangeUpdated = domainRangeUpdated || accumUpdated;
 
         QueryDataType dtype = getDomainDataType();
         RUNTIME_EX_ASSERT(
@@ -468,7 +490,7 @@ class Scale : public BaseScale {
       _rangePtr.updateJSONPath(objPath);
     }
 
-    return rtn;
+    return std::make_pair(domainRangeUpdated, cacheUpdated);
   }
 
   void _bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
@@ -519,13 +541,47 @@ class Scale : public BaseScale {
                                               stringDomain->getNullValue());
           }
         }
-        auto colorDomain =
-            std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>>(overridePtr);
-        if (colorDomain) {
-          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix, colorDomain->getVectorDataRef());
+        auto colorRGBADomain =
+            std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>>(overridePtr);
+        if (colorRGBADomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix,
+                                            colorRGBADomain->getVectorDataRef());
           if (_useNullVal) {
             activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
-                                              colorDomain->getNullValue());
+                                              colorRGBADomain->getNullValue());
+          }
+        }
+
+        auto colorHSLDomain =
+            std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>>(overridePtr);
+        if (colorHSLDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix,
+                                            colorHSLDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              colorHSLDomain->getNullValue());
+          }
+        }
+
+        auto colorLABDomain =
+            std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>>(overridePtr);
+        if (colorLABDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix,
+                                            colorLABDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              colorLABDomain->getNullValue());
+          }
+        }
+
+        auto colorHCLDomain =
+            std::dynamic_pointer_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>>(overridePtr);
+        if (colorHCLDomain) {
+          activeShader->setUniformAttribute(getDomainGLSLUniformName() + extraSuffix,
+                                            colorHCLDomain->getVectorDataRef());
+          if (_useNullVal) {
+            activeShader->setUniformAttribute("nullDomainVal_" + this->_name + extraSuffix,
+                                              colorHCLDomain->getNullValue());
           }
         }
 
@@ -594,6 +650,16 @@ class Scale : public BaseScale {
 
     return rtn;
   }
+
+  template <typename Q = RangeType, typename std::enable_if<::Rendering::Colors::is_color<Q>::value>::type* = nullptr>
+  ::Rendering::Colors::ColorType _getRangeColorTypeInternal() const {
+    return ::Rendering::Colors::getColorType<Q>();
+  }
+
+  template <typename Q = RangeType, typename std::enable_if<std::is_arithmetic<Q>::value>::type* = nullptr>
+  ::Rendering::Colors::ColorType _getRangeColorTypeInternal() const {
+    THROW_RUNTIME_EX(std::string(*this) + " The range values are not color types.");
+  }
 };
 
 template <typename DomainType, typename RangeType>
@@ -603,10 +669,12 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
                     const rapidjson::Pointer& objPath,
                     const QueryRendererContextShPtr& ctx,
                     const std::string& name,
-                    const ScaleType scaleType)
+                    const ScaleType scaleType,
+                    const ScaleInterpType interpType = ScaleInterpType::UNDEFINED)
       : Scale<DomainType,
               RangeType>(obj, objPath, ctx, name, scaleType, true, static_cast<uint8_t>(AccumulatorType::DENSITY)),
-        _useClamp(false) {}
+        _useClamp(false),
+        _interpType(interpType) {}
 
   virtual ~QuantitativeScale() {}
 
@@ -629,7 +697,11 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
         activeShader, subroutineMap, extraSuffix, ignoreDomain, ignoreRange, ignoreAccum, doAccum);
 
     if (!doAccum) {
+      // TODO(croot): cache these name bindings so we're not building up these strings
+      // every time.
+
       std::string transformFunc;
+      std::string interpFunc;
       switch (this->_type) {
         case ScaleType::LINEAR:
           transformFunc = "passThruTransform";
@@ -647,9 +719,25 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
           THROW_RUNTIME_EX("ScaleType " + to_string(this->_type) + " does not have a supported glsl transform func.");
       }
 
+      switch (_interpType) {
+        case ScaleInterpType::InterpolateHsl:
+        case ScaleInterpType::InterpolateHcl:
+          interpFunc = "colorInterpHslHcl";
+          break;
+        case ScaleInterpType::InterpolateHslLong:
+        case ScaleInterpType::InterpolateHclLong:
+          interpFunc = "colorInterpHslHclLong";
+          break;
+        default:
+          interpFunc = "defaultInterp";
+          break;
+      }
+
       transformFunc += "_" + this->_name + extraSuffix;
+      interpFunc += "_" + this->_name + extraSuffix;
 
       subroutineMap["quantTransform_" + this->_name + extraSuffix] = transformFunc;
+      subroutineMap["quantInterp_" + this->_name + extraSuffix] = interpFunc;
     }
   }
 
@@ -672,9 +760,10 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
                                       std::function<void(DomainType&)> domainValConvert = [](DomainType& domainVal) {
                                         return;
                                       }) {
-    bool updated = this->_updateFromJSONObj(obj, objPath, domainValConvert);
+    bool drUpdated, cacheUpdated;
+    std::tie(drUpdated, cacheUpdated) = this->_updateFromJSONObj(obj, objPath, domainValConvert);
 
-    if (updated) {
+    if (drUpdated || cacheUpdated) {
       rapidjson::Value::ConstMemberIterator itr;
 
       // TODO(croot): move the "clamp" prop name into a const somewhere.
@@ -700,6 +789,20 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
       } else {
         _clampChanged = false;
       }
+
+      auto interpType = getScaleInterpTypeFromJSONObj(obj);
+      if (interpType != ScaleInterpType::UNDEFINED) {
+        RUNTIME_EX_ASSERT(
+            _validateInterpolator(interpType),
+            RapidJSONUtils::getJsonParseErrorStr(
+                this->_ctx->getUserWidgetIds(),
+                obj,
+                "the \"interpolator\" property has an invalid type " + to_string(interpType) + ". " +
+                    to_string(this->_type) + " scales with a range of type " + to_string(this->getRangeDataType()) +
+                    " only support the following interpolators: [" +
+                    boost::algorithm::join(getScaleInterpTypes(_getSupportedInterpolators()), ", ") + "]"));
+      }
+      _interpType = interpType;
     }
 
     if (this->hasAccumulator()) {
@@ -709,12 +812,56 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
 
     this->_jsonPath = objPath;
 
-    return updated;
+    return drUpdated;
   }
 
  private:
   bool _useClamp;
+  ScaleInterpType _interpType;
   bool _clampChanged;
+
+  bool _validateInterpolator(const ScaleInterpType interpType) {
+    auto interps = _getSupportedInterpolators();
+    for (auto& interp : interps) {
+      if (interp == interpType) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  template <typename Q = RangeType, typename std::enable_if<std::is_arithmetic<Q>::value>::type* = nullptr>
+  std::vector<ScaleInterpType> _getSupportedInterpolators() const {
+    return {};
+  }
+
+  template <typename Q = RangeType,
+            typename std::enable_if<
+                ::Rendering::Colors::is_specific_color<Q, ::Rendering::Colors::ColorRGBA>::value>::type* = nullptr>
+  std::vector<ScaleInterpType> _getSupportedInterpolators() const {
+    return {ScaleInterpType::InterpolateRgb};
+  }
+
+  template <typename Q = RangeType,
+            typename std::enable_if<
+                ::Rendering::Colors::is_specific_color<Q, ::Rendering::Colors::ColorHSL>::value>::type* = nullptr>
+  std::vector<ScaleInterpType> _getSupportedInterpolators() const {
+    return {ScaleInterpType::InterpolateHsl, ScaleInterpType::InterpolateHslLong};
+  }
+
+  template <typename Q = RangeType,
+            typename std::enable_if<
+                ::Rendering::Colors::is_specific_color<Q, ::Rendering::Colors::ColorLAB>::value>::type* = nullptr>
+  std::vector<ScaleInterpType> _getSupportedInterpolators() const {
+    return {ScaleInterpType::InterpolateLab};
+  }
+
+  template <typename Q = RangeType,
+            typename std::enable_if<
+                ::Rendering::Colors::is_specific_color<Q, ::Rendering::Colors::ColorHCL>::value>::type* = nullptr>
+  std::vector<ScaleInterpType> _getSupportedInterpolators() const {
+    return {ScaleInterpType::InterpolateHcl, ScaleInterpType::InterpolateHclLong};
+  }
 
   void bindAccumulatorColors(::Rendering::GL::Resources::GLShaderShPtr& shaderPtr,
                              const std::string& attrName,
@@ -738,8 +885,9 @@ class LinearScale : public QuantitativeScale<DomainType, RangeType> {
   LinearScale(const rapidjson::Value& obj,
               const rapidjson::Pointer& objPath,
               const QueryRendererContextShPtr& ctx,
-              const std::string& name = "")
-      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LINEAR) {
+              const std::string& name = "",
+              const ScaleInterpType interpType = ScaleInterpType::UNDEFINED)
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LINEAR, interpType) {
     updateFromJSONObj(obj, objPath);
   }
 
@@ -760,8 +908,9 @@ class LogScale : public QuantitativeScale<DomainType, RangeType> {
   LogScale(const rapidjson::Value& obj,
            const rapidjson::Pointer& objPath,
            const QueryRendererContextShPtr& ctx,
-           const std::string& name = "")
-      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LOG) {
+           const std::string& name = "",
+           const ScaleInterpType interpType = ScaleInterpType::UNDEFINED)
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::LOG, interpType) {
     updateFromJSONObj(obj, objPath);
   }
 
@@ -788,8 +937,9 @@ class PowScale : public QuantitativeScale<DomainType, RangeType> {
   PowScale(const rapidjson::Value& obj,
            const rapidjson::Pointer& objPath,
            const QueryRendererContextShPtr& ctx,
-           const std::string& name = "")
-      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::POW), _exponent(1.0) {
+           const std::string& name = "",
+           const ScaleInterpType interpType = ScaleInterpType::UNDEFINED)
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::POW, interpType), _exponent(1.0) {
     updateFromJSONObj(obj, objPath);
   }
 
@@ -852,8 +1002,9 @@ class SqrtScale : public QuantitativeScale<DomainType, RangeType> {
   SqrtScale(const rapidjson::Value& obj,
             const rapidjson::Pointer& objPath,
             const QueryRendererContextShPtr& ctx,
-            const std::string& name = "")
-      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::SQRT) {
+            const std::string& name = "",
+            const ScaleInterpType interpType = ScaleInterpType::UNDEFINED)
+      : QuantitativeScale<DomainType, RangeType>(obj, objPath, ctx, name, ScaleType::SQRT, interpType) {
     updateFromJSONObj(obj, objPath);
   }
 
@@ -926,7 +1077,7 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
   }
 
   bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
-    bool rtn = this->_updateFromJSONObj(obj, objPath);
+    bool rtn = this->_updateFromJSONObj(obj, objPath).first;
 
     if (!this->_ctx->isJSONCacheUpToDate(_defaultJsonPath, obj)) {
       // TODO(croot): expose "default" as a constant somewhere;
@@ -1045,7 +1196,7 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
   }
 
   bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) final {
-    bool rtn = this->_updateFromJSONObj(obj, objPath);
+    bool rtn = this->_updateFromJSONObj(obj, objPath).first;
     this->_jsonPath = objPath;
 
     if (this->hasAccumulator()) {

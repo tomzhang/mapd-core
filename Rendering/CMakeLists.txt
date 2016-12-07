@@ -6,7 +6,7 @@ set_property(CACHE RENDERER_TYPE PROPERTY STRINGS "OpenGL")
 
 
 set(RENDERING_SOURCES WindowManager.cpp Window.cpp Renderer.cpp Settings/BaseSettings.cpp Settings/IntSettings.cpp Settings/RendererSettings.cpp Settings/StrSettings.cpp Settings/WindowSettings.cpp)
-list(APPEND RENDERING_SOURCES Objects/ColorRGBA.cpp)
+list(APPEND RENDERING_SOURCES Colors/BaseColor4f.cpp Colors/ColorRGBA.cpp Colors/ColorHSL.cpp Colors/ColorLAB.cpp Colors/ColorHCL.cpp Colors/ColorUnion.cpp Colors/Utils.cpp Colors/Types.cpp)
 set(RENDERING_DEFS "" PARENT_SCOPE)
 set(RENDERING_INCLUDE_DIRS "")
 set(RENDERING_LIBS "")

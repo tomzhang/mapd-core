@@ -10,7 +10,7 @@
 #include "../QueryRenderManager.h"
 #include "../QueryRendererContext.h"
 
-#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Colors/ColorUnion.h>
 #include <Rendering/Renderer/GL/Resources/GLVertexArray.h>
 
 #include <set>
@@ -164,6 +164,7 @@ class BaseRenderProperty {
   void _dataRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr);
   void _clearDataPtr();
 
+  bool _checkAccumulator(const ScaleShPtr& scalePtr);
   void _setAccumulatorFromScale(const ScaleShPtr& scalePtr);
   void _clearAccumulatorFromScale(const ScaleShPtr& scalePtr);
   void _unsubscribeFromScaleEvent(const ScaleShPtr& scalePtr);
@@ -231,10 +232,12 @@ class RenderProperty : public BaseRenderProperty {
            _printInfo();
   }
 
+ protected:
+  T _uniformVal;
+
  private:
   T _mult;
   T _offset;
-  T _uniformVal;
 
   void _initScaleFromJSONObj(const rapidjson::Value& obj) {
     RUNTIME_EX_ASSERT(
@@ -263,12 +266,15 @@ class RenderProperty : public BaseRenderProperty {
     _updateScalePtr(scalePtr);
   }
 
-  void _updateScalePtr(const ScaleShPtr& scalePtr) {
-    bool scaleAccumulation = scalePtr->hasAccumulator();
-    RUNTIME_EX_ASSERT(_allowsAccumulatorScale || !scaleAccumulation,
-                      std::string(*this) + " The scale \"" + scalePtr->getName() +
-                          "\" is an accumulator scale but this mark property doesn't accept accumulator scales.");
+  void _setupScaleCB(const ScaleShPtr& scalePtr) {
+    // setup callbacks for scale updates
+    auto cb = std::bind(
+        &RenderProperty<T, numComponents>::_scaleRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
+    _scaleRefSubscriptionId = _ctx->subscribeToRefEvent(RefEventType::ALL, scalePtr, cb);
+  }
 
+  void _updateScalePtr(const ScaleShPtr& scalePtr) {
+    bool scaleAccumulation = _checkAccumulator(scalePtr);
     bool scaleDensityAccumulation = (scaleAccumulation && scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
 
     if (!_scaleConfigPtr) {
@@ -302,14 +308,10 @@ class RenderProperty : public BaseRenderProperty {
     }
 
     BaseRenderProperty::_updateScalePtr(scalePtr);
-
-    // setup callbacks for scale updates
-    auto cb = std::bind(
-        &RenderProperty<T, numComponents>::_scaleRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
-    _scaleRefSubscriptionId = _ctx->subscribeToRefEvent(RefEventType::ALL, scalePtr, cb);
+    _setupScaleCB(scalePtr);
   }
 
-  void _initFromJSONObj(const rapidjson::Value& obj) {
+  virtual void _initFromJSONObj(const rapidjson::Value& obj) {
     // this is internally called at the appropriate time from
     // the base class's initialization function, so there's
     // no need to check that obj is valid since that should've
@@ -423,7 +425,7 @@ class RenderProperty : public BaseRenderProperty {
 };
 
 template <>
-RenderProperty<::Rendering::Objects::ColorRGBA, 1>::RenderProperty(
+RenderProperty<::Rendering::Colors::ColorUnion, 1>::RenderProperty(
     BaseMark* prntMark,
     const std::string& name,
     const QueryRendererContextShPtr& ctx,
@@ -435,27 +437,43 @@ RenderProperty<::Rendering::Objects::ColorRGBA, 1>::RenderProperty(
     bool allowsAccumulatorScale);
 
 template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::initializeValue(const ::Rendering::Objects::ColorRGBA& val);
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::initializeValue(const ::Rendering::Colors::ColorUnion& val);
 
 template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::bindUniformToRenderer(
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::bindUniformToRenderer(
     ::Rendering::GL::Resources::GLShader* activeShader,
     const std::string& uniformAttrName) const;
 
 template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj);
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_updateScalePtr(const ScaleShPtr& scalePtr);
 
 template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj);
-
-// template <>
-// void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_initTypeFromVbo();
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type);
 
 template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type);
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_validateScale();
 
-template <>
-void RenderProperty<::Rendering::Objects::ColorRGBA, 1>::_validateScale();
+class ColorRenderProperty : public RenderProperty<::Rendering::Colors::ColorUnion> {
+ public:
+  ColorRenderProperty(BaseMark* prntMark,
+                      const std::string& name,
+                      const QueryRendererContextShPtr& ctx,
+                      bool useScale = true,
+                      bool allowsAccumulatorScale = true)
+      : RenderProperty<::Rendering::Colors::ColorUnion>(prntMark, name, ctx, useScale, false, allowsAccumulatorScale) {}
+
+  ~ColorRenderProperty() {}
+
+  ::Rendering::Colors::ColorType getColorType() const;
+  bool isColorPacked() const;
+
+ private:
+  enum class ColorInitType { FROM_STRING = 0, FROM_PACKED_UINT };
+  ColorInitType _colorInitType;
+
+  void _initFromJSONObj(const rapidjson::Value& obj) final;
+  void _initValueFromJSONObj(const rapidjson::Value& obj) final;
+};
 
 class EnumRenderProperty : public RenderProperty<int> {
  public:

@@ -16,6 +16,42 @@
 
 namespace QueryRenderer {
 
+ScaleInterpType getScaleInterpTypeFromJSONObj(const rapidjson::Value& obj) {
+  ScaleInterpType rtn = ScaleInterpType::UNDEFINED;
+  CHECK(obj.IsObject());
+  auto itr = obj.FindMember("interpolator");
+  if (itr == obj.MemberEnd()) {
+    return rtn;
+  }
+
+  RUNTIME_EX_ASSERT(itr->value.IsString(),
+                    RapidJSONUtils::getJsonParseErrorStr(
+                        itr->value,
+                        "Unsupported interpolator type. Scale interpolators must be one of the following strings: [" +
+                            boost::algorithm::join(getScaleInterpTypes(), ", ") + "]"));
+
+  auto strVal = std::string(itr->value.GetString());
+
+  static std::vector<std::regex> interpRegex;
+  if (!interpRegex.size()) {
+    auto interpStrings = getScaleInterpTypes();
+    for (auto& interpStr : interpStrings) {
+      interpRegex.emplace_back("^\\s*" + interpStr + "\\s*$", std::regex_constants::icase);
+    }
+  }
+
+  for (size_t i = 0; i < interpRegex.size(); ++i) {
+    if (std::regex_match(strVal, interpRegex[i])) {
+      return static_cast<ScaleInterpType>(i);
+    }
+  }
+
+  THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+      itr->value,
+      "Interpolator \"" + strVal + "\" is not a supported interpolator type. Supported validators are [" +
+          boost::algorithm::join(getScaleInterpTypes(), ", ") + "]"));
+}
+
 const std::vector<std::string> BaseScale::scaleVertexShaderSource = {
     QuantitativeScaleTemplate_vert::source,  // LINEAR, LOG, POW, SQRT
     OrdinalScaleTemplate_vert::source,       // ORDINAL

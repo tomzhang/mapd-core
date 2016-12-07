@@ -239,43 +239,123 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   }
 };
 
+/*
+ * RGBA specializations
+ */
 template <>
-double ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::getDifference(const double divisor) const;
+double ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>::getDifference(const double divisor) const;
 
+template <>
+const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>::getTypeGL();
+
+template <>
+::Rendering::Colors::ColorRGBA ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>::getDataValueFromJSONObj(
+    const rapidjson::Value& obj);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>::_setFromStringValue(const std::string& strVal,
+                                                                               ScaleType type);
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>::_updateVectorDataByType(
+    TDataColumn<::Rendering::Colors::ColorRGBA>* dataColumnPtr,
+    ScaleType type);
+
+/*
+ * HSL specializations
+ */
+template <>
+double ScaleDomainRangeData<::Rendering::Colors::ColorHSL>::getDifference(const double divisor) const;
+
+template <>
+const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<::Rendering::Colors::ColorHSL>::getTypeGL();
+
+template <>
+::Rendering::Colors::ColorHSL ScaleDomainRangeData<::Rendering::Colors::ColorHSL>::getDataValueFromJSONObj(
+    const rapidjson::Value& obj);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorHSL>::_setFromStringValue(const std::string& strVal,
+                                                                              ScaleType type);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorHSL>::_updateVectorDataByType(
+    TDataColumn<::Rendering::Colors::ColorHSL>* dataColumnPtr,
+    ScaleType type);
+
+/*
+ * LAB specializations
+ */
+template <>
+double ScaleDomainRangeData<::Rendering::Colors::ColorLAB>::getDifference(const double divisor) const;
+
+template <>
+const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<::Rendering::Colors::ColorLAB>::getTypeGL();
+
+template <>
+::Rendering::Colors::ColorLAB ScaleDomainRangeData<::Rendering::Colors::ColorLAB>::getDataValueFromJSONObj(
+    const rapidjson::Value& obj);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorLAB>::_setFromStringValue(const std::string& strVal,
+                                                                              ScaleType type);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorLAB>::_updateVectorDataByType(
+    TDataColumn<::Rendering::Colors::ColorLAB>* dataColumnPtr,
+    ScaleType type);
+
+/*
+ * HCL specializations
+ */
+template <>
+double ScaleDomainRangeData<::Rendering::Colors::ColorHCL>::getDifference(const double divisor) const;
+
+template <>
+const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<::Rendering::Colors::ColorHCL>::getTypeGL();
+
+template <>
+::Rendering::Colors::ColorHCL ScaleDomainRangeData<::Rendering::Colors::ColorHCL>::getDataValueFromJSONObj(
+    const rapidjson::Value& obj);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorHCL>::_setFromStringValue(const std::string& strVal,
+                                                                              ScaleType type);
+
+template <>
+void ScaleDomainRangeData<::Rendering::Colors::ColorHCL>::_updateVectorDataByType(
+    TDataColumn<::Rendering::Colors::ColorHCL>* dataColumnPtr,
+    ScaleType type);
+
+/*
+ * string specializations
+ */
 template <>
 double ScaleDomainRangeData<std::string>::getDifference(const double divisor) const;
-
-template <>
-const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::getTypeGL();
 
 template <>
 const ::Rendering::GL::TypeGLShPtr& ScaleDomainRangeData<std::string>::getTypeGL();
 
 template <>
-::Rendering::Objects::ColorRGBA ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::getDataValueFromJSONObj(
-    const rapidjson::Value& obj);
-
-template <>
 std::string ScaleDomainRangeData<std::string>::getDataValueFromJSONObj(const rapidjson::Value& obj);
-
-template <>
-void ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::_setFromStringValue(const std::string& strVal,
-                                                                                ScaleType type);
 
 template <>
 void ScaleDomainRangeData<std::string>::_setFromStringValue(const std::string& strVal, ScaleType type);
 
-template <>
-void ScaleDomainRangeData<::Rendering::Objects::ColorRGBA>::_updateVectorDataByType(
-    TDataColumn<::Rendering::Objects::ColorRGBA>* dataColumnPtr,
-    ScaleType type);
-
+/*
+ * int specializations
+ */
 template <>
 int ScaleDomainRangeData<int>::getNullValue();
 
+/*
+ * float specializations
+ */
 template <>
 float ScaleDomainRangeData<float>::getNullValue();
 
+/*
+ * double specializations
+ */
 template <>
 double ScaleDomainRangeData<double>::getNullValue();
 

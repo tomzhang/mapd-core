@@ -2,7 +2,7 @@
 #define RENDERING_RENDERER_H_
 
 #include "Types.h"
-#include "Objects/Types.h"
+#include "Colors/Types.h"
 #include "Settings/RendererSettings.h"
 #include <vector>
 
@@ -38,7 +38,7 @@ class Renderer {
     }
   }
 
-  virtual void setClearColor(const Objects::ColorRGBA& color) = 0;
+  virtual void setClearColor(const Colors::ColorRGBA& color) = 0;
   virtual void setClearColor(float r, float g, float b, float a) = 0;
 
   virtual void clearColor() = 0;

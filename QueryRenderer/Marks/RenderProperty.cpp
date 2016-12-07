@@ -5,12 +5,13 @@
 #include "../Data/QueryPolyDataTable.h"
 #include "../Scales/Scale.h"
 
-#include <Rendering/Objects/ColorRGBA.h>
 #include <Rendering/Renderer/GL/Resources/GLShader.h>
+
+#include <boost/algorithm/string/join.hpp>
 
 namespace QueryRenderer {
 
-using ::Rendering::Objects::ColorRGBA;
+using ::Rendering::Colors::ColorUnion;
 using ::Rendering::GL::Resources::GLShader;
 using ::Rendering::GL::TypeGLShPtr;
 
@@ -430,6 +431,14 @@ void BaseRenderProperty::_clearDataPtr() {
   _dataPtr = nullptr;
 }
 
+bool BaseRenderProperty::_checkAccumulator(const ScaleShPtr& scalePtr) {
+  bool scaleAccumulation = scalePtr->hasAccumulator();
+  RUNTIME_EX_ASSERT(_allowsAccumulatorScale || !scaleAccumulation,
+                    std::string(*this) + " The scale \"" + scalePtr->getName() +
+                        "\" is an accumulator scale but this mark property doesn't accept accumulator scales.");
+  return scaleAccumulation;
+}
+
 void BaseRenderProperty::_setAccumulatorFromScale(const ScaleShPtr& scalePtr) {
   if (scalePtr && scalePtr->hasAccumulator()) {
     // TODO(croot): what if there are two accumulator scales in the
@@ -469,22 +478,22 @@ void BaseRenderProperty::_updateScalePtr(const ScaleShPtr& scalePtr) {
 }
 
 template <>
-RenderProperty<ColorRGBA, 1>::RenderProperty(BaseMark* prntMark,
-                                             const std::string& name,
-                                             const QueryRendererContextShPtr& ctx,
-                                             bool useScale,
-                                             bool flexibleType,
-                                             bool allowsAccumulatorScale)
+RenderProperty<ColorUnion, 1>::RenderProperty(BaseMark* prntMark,
+                                              const std::string& name,
+                                              const QueryRendererContextShPtr& ctx,
+                                              bool useScale,
+                                              bool flexibleType,
+                                              bool allowsAccumulatorScale)
     : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType, allowsAccumulatorScale),
+      _uniformVal(),
       _mult(),
-      _offset(),
-      _uniformVal() {
-  _inType = ColorRGBA::getTypeGLPtr();
-  _outType = ColorRGBA::getTypeGLPtr();
+      _offset() {
+  _inType = ColorUnion::getTypeGLPtr();
+  _outType = ColorUnion::getTypeGLPtr();
 }
 
 template <>
-void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
+void RenderProperty<ColorUnion, 1>::initializeValue(const ColorUnion& val) {
   // TODO: combine all the different types into a utility file somewhere.
   // i.e. this is already defined in BufferLayout.h, so let's find a
   // good way to consolidate these definitions
@@ -492,8 +501,8 @@ void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
   // TODO(croot): make thread safe
 
   if (_vboInitType != VboInitType::FROM_VALUE) {
-    _inType = ColorRGBA::getTypeGLPtr();
-    _outType = ColorRGBA::getTypeGLPtr();
+    _inType = ColorUnion::getTypeGLPtr();
+    _outType = ColorUnion::getTypeGLPtr();
 
     for (auto& itr : _perGpuData) {
       itr.second.vbo = nullptr;
@@ -509,19 +518,85 @@ void RenderProperty<ColorRGBA, 1>::initializeValue(const ColorRGBA& val) {
 }
 
 template <>
-void RenderProperty<ColorRGBA, 1>::bindUniformToRenderer(GLShader* activeShader,
-                                                         const std::string& uniformAttrName) const {
+void RenderProperty<ColorUnion, 1>::bindUniformToRenderer(GLShader* activeShader,
+                                                          const std::string& uniformAttrName) const {
   // TODO(croot): deal with numComponents here by using a vector instead?
   activeShader->setUniformAttribute<std::array<float, 4>>(uniformAttrName, _uniformVal.getColorArrayRef());
 }
 
-template <>
-void RenderProperty<ColorRGBA, 1>::_initFromJSONObj(const rapidjson::Value& obj) {
+void ColorRenderProperty::_initFromJSONObj(const rapidjson::Value& obj) {
   // TODO: what about offsets / mults for colors?
+
+  // NOTE: this function is called by the base class during initialization, so we
+  // know at this point that obj is an json Object
+  rapidjson::Value::ConstMemberIterator mitr;
+
+  // TODO(croot): move the following prop strings to a const somewhere
+  std::string colorSpaceProp = "colorSpace";
+
+  if ((mitr = obj.FindMember(colorSpaceProp.c_str())) != obj.MemberEnd()) {
+    auto colorType = ::Rendering::Colors::ColorType::RGBA;
+
+    RUNTIME_EX_ASSERT(
+        mitr->value.IsString(),
+        RapidJSONUtils::getJsonParseErrorStr(
+            _ctx->getUserWidgetIds(), mitr->value, "\"" + colorSpaceProp + "\" color property must be a string"));
+
+    auto colorString = std::string(mitr->value.GetString());
+    try {
+      colorType = ::Rendering::Colors::getColorTypeFromColorPrefix(colorString);
+    } catch (::Rendering::RenderError& err) {
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(),
+          mitr->value,
+          "The string \"" + colorString + "\" is not a valid color space. The supported color spaces are: [" +
+              boost::algorithm::join(::Rendering::Colors::getAllColorPrefixes(), ",") + "]"));
+    }
+
+    if (_vboInitType == VboInitType::FROM_VALUE) {
+      if (_colorInitType == ColorInitType::FROM_PACKED_UINT) {
+        // re-initialize the color based on this new space
+        if (colorType != _uniformVal.getType()) {
+          auto packedColor = _uniformVal.getPackedColor();
+          try {
+            _uniformVal.initFromPackedUInt(packedColor, colorType);
+          } catch (::Rendering::RenderError& err) {
+            THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                                                  obj,
+                                                                  "The packed color " + std::to_string(packedColor) +
+                                                                      " is not a valid packed color. " +
+                                                                      err.getDetails()));
+          }
+        }
+      } else {
+        RUNTIME_EX_ASSERT(
+            _uniformVal.getType() == colorType,
+            RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
+                                                 obj,
+                                                 "The color space \"" + colorString + "\" does not match the " +
+                                                     ::Rendering::Colors::to_string(_uniformVal.getType()) +
+                                                     " color space defined by value"));
+      }
+    } else {
+      CHECK(_inType);
+
+      if (ColorUnion::isPackedTypeGL(_inType)) {
+        // verify that the color type is valid
+        RUNTIME_EX_ASSERT(
+            ColorUnion::isValidPackedType(colorType),
+            RapidJSONUtils::getJsonParseErrorStr(
+                _ctx->getUserWidgetIds(),
+                obj,
+                "The data attribute \"" + _vboAttrName + "\" is being used as a packed color, but the color space \"" +
+                    colorString + "\" is not a valid packed color type. The supported packed color types are [" +
+                    boost::algorithm::join(ColorUnion::getPackedColorPrefixes(), ",") + "]"));
+      }
+      _uniformVal.set(0.0f, 0.0f, 0.0f, 1.0f, colorType);
+    }
+  }
 }
 
-template <>
-void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value& obj) {
+void ColorRenderProperty::_initValueFromJSONObj(const rapidjson::Value& obj) {
   bool isstr;
   RUNTIME_EX_ASSERT(
       (isstr = obj.IsString()) || obj.IsInt() || obj.IsUint(),
@@ -530,25 +605,124 @@ void RenderProperty<ColorRGBA, 1>::_initValueFromJSONObj(const rapidjson::Value&
           obj,
           "value for color property \"" + _name + "\" must be a string or a color packed into an int/uint."));
 
-  ColorRGBA color;
+  ColorUnion color;
   if (isstr) {
-    color.initFromCSSString(obj.GetString());
+    try {
+      color.initFromCSSString(obj.GetString());
+    } catch (::Rendering::RenderError& err) {
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(),
+          obj,
+          "The string \"" + std::string(obj.GetString()) + "\" is not a valid color string."));
+    }
+
+    _colorInitType = ColorInitType::FROM_STRING;
   } else {
-    color.initFromPackedUInt(RapidJSONUtils::getNumValFromJSONObj<uint32_t>(obj));
+    auto num = RapidJSONUtils::getNumValFromJSONObj<uint32_t>(obj);
+    try {
+      color.initFromPackedUInt(num);
+    } catch (::Rendering::RenderError& err) {
+      THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+          _ctx->getUserWidgetIds(),
+          obj,
+          "The packed color " + std::to_string(num) + " is not a valid packed color. " + err.what()));
+    }
+    _colorInitType = ColorInitType::FROM_PACKED_UINT;
   }
 
   initializeValue(color);
 }
 
+template <typename T>
+static ScaleRefShPtr createColorScaleRef(const ::Rendering::Colors::ColorType colorType,
+                                         const QueryRendererContextShPtr& ctx,
+                                         const ScaleShPtr& scalePtr,
+                                         BaseRenderProperty* rndrProp) {
+  switch (colorType) {
+    case ::Rendering::Colors::ColorType::RGBA:
+      return ScaleRefShPtr(new ScaleRef<T, ::Rendering::Colors::ColorRGBA>(ctx, scalePtr, rndrProp));
+      break;
+    case ::Rendering::Colors::ColorType::HSL:
+      return ScaleRefShPtr(new ScaleRef<T, ::Rendering::Colors::ColorHSL>(ctx, scalePtr, rndrProp));
+      break;
+    case ::Rendering::Colors::ColorType::LAB:
+      return ScaleRefShPtr(new ScaleRef<T, ::Rendering::Colors::ColorLAB>(ctx, scalePtr, rndrProp));
+      break;
+    case ::Rendering::Colors::ColorType::HCL:
+      return ScaleRefShPtr(new ScaleRef<T, ::Rendering::Colors::ColorHCL>(ctx, scalePtr, rndrProp));
+      break;
+    default:
+      THROW_RUNTIME_EX("Unsupported color type: " + std::to_string(static_cast<int>(colorType)) +
+                       ". Cannot create a color scale ref.");
+  }
+
+  return nullptr;
+}
+
 template <>
-void RenderProperty<ColorRGBA, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type) {
-  RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(type),
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_updateScalePtr(const ScaleShPtr& scalePtr) {
+  bool scaleAccumulation = _checkAccumulator(scalePtr);
+  bool scaleDensityAccumulation = (scaleAccumulation && scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
+
+  if (!_scaleConfigPtr) {
+    _setShaderDirty();
+  }
+
+  CHECK(_inType);
+
+  auto* rangeData = scalePtr->getRangeData();
+
+  ::Rendering::Colors::ColorType colorType = ::Rendering::Colors::ColorType::RGBA;
+  if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>*>(rangeData)) {
+    colorType = ::Rendering::Colors::ColorType::RGBA;
+  } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>*>(rangeData)) {
+    colorType = ::Rendering::Colors::ColorType::HSL;
+  } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>*>(rangeData)) {
+    colorType = ::Rendering::Colors::ColorType::LAB;
+  } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>*>(rangeData)) {
+    colorType = ::Rendering::Colors::ColorType::HCL;
+  } else {
+    THROW_RUNTIME_EX(std::string(*this) +
+                     ": Trying to add a color scale with an unsupported color type for its range.");
+  }
+
+  if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
+    _scaleConfigPtr = createColorScaleRef<unsigned int>(colorType, _ctx, scalePtr, this);
+  } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
+    _scaleConfigPtr = createColorScaleRef<int>(colorType, _ctx, scalePtr, this);
+  } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
+    _scaleConfigPtr = createColorScaleRef<float>(colorType, _ctx, scalePtr, this);
+  } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
+    _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
+  } else {
+    RUNTIME_EX_ASSERT(scaleDensityAccumulation,
+                      std::string(*this) + ": Scale domain with shader type \"" +
+                          scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
+                          _inType->glslType() + "\" are not supported to work together.");
+
+    switch (scalePtr->getDomainDataType()) {
+      case QueryDataType::DOUBLE:
+        _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
+        break;
+      default:
+        THROW_RUNTIME_EX(std::string(*this) + ": Unsupported density accumulator scale with domain of type " +
+                         to_string(scalePtr->getDomainDataType()));
+    }
+  }
+
+  BaseRenderProperty::_updateScalePtr(scalePtr);
+  _setupScaleCB(scalePtr);
+}
+
+template <>
+void RenderProperty<ColorUnion, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type) {
+  RUNTIME_EX_ASSERT(_uniformVal.isValidTypeGL(type),
                     std::string(*this) + ": The vertex buffer type " + (type ? std::string(*type) : "\"null\"") +
                         " is not a valid color type for mark property \"" + _name + "\".");
 }
 
 template <>
-void RenderProperty<ColorRGBA, 1>::_validateScale() {
+void RenderProperty<ColorUnion, 1>::_validateScale() {
   RUNTIME_EX_ASSERT(_scaleConfigPtr != nullptr,
                     std::string(*this) + ": Cannot verify scale for mark property \"" + _name +
                         "\". Scale reference is uninitialized.");
@@ -556,10 +730,75 @@ void RenderProperty<ColorRGBA, 1>::_validateScale() {
   TypeGLShPtr vboType = _scaleConfigPtr->getRangeTypeGL();
 
   // colors need to be a specific type
-  RUNTIME_EX_ASSERT(ColorRGBA::isValidTypeGL(vboType, true),
+  RUNTIME_EX_ASSERT(_uniformVal.isValidTypeGL(vboType),
                     std::string(*this) + ": The scale \"" + _scaleConfigPtr->getName() + "\" has a range type of " +
                         (vboType ? std::string(*vboType) : "\"null\"") +
                         " which is not a valid color type for mark property \"" + _name + "\".");
+}
+
+::Rendering::Colors::ColorType ColorRenderProperty::getColorType() const {
+  if (_scaleConfigPtr) {
+    auto* rangeData = _scaleConfigPtr->getRangeData();
+
+    if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>*>(rangeData)) {
+      return ::Rendering::Colors::ColorType::RGBA;
+    } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>*>(rangeData)) {
+      return ::Rendering::Colors::ColorType::HSL;
+    } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>*>(rangeData)) {
+      return ::Rendering::Colors::ColorType::LAB;
+    } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>*>(rangeData)) {
+      return ::Rendering::Colors::ColorType::HCL;
+    } else {
+      THROW_RUNTIME_EX(std::string(*this) +
+                       ": Trying to add a color scale with an unsupported color type for its range.");
+    }
+  } else if (_dataPtr) {
+    auto embeddedData = std::dynamic_pointer_cast<DataTable>(_dataPtr);
+    if (embeddedData) {
+      auto column = embeddedData->getColumn(_vboAttrName);
+      if (std::dynamic_pointer_cast<TDataColumn<::Rendering::Colors::ColorRGBA>>(column)) {
+        return ::Rendering::Colors::ColorType::RGBA;
+      } else if (std::dynamic_pointer_cast<TDataColumn<::Rendering::Colors::ColorHSL>>(column)) {
+        return ::Rendering::Colors::ColorType::HSL;
+      } else if (std::dynamic_pointer_cast<TDataColumn<::Rendering::Colors::ColorLAB>>(column)) {
+        return ::Rendering::Colors::ColorType::LAB;
+      } else if (std::dynamic_pointer_cast<TDataColumn<::Rendering::Colors::ColorHCL>>(column)) {
+        return ::Rendering::Colors::ColorType::HCL;
+      } else if (std::dynamic_pointer_cast<TDataColumn<int>>(column) ||
+                 std::dynamic_pointer_cast<TDataColumn<unsigned int>>(column)) {
+        // The color is packed into an int here, so the type of the packed color will be determined
+        // by the uniform, which holds the type of the color
+        return _uniformVal.getType();
+      } else {
+        THROW_RUNTIME_EX(std::string(*this) +
+                         ": Trying to use a color embedded in the data with an unsupported color type.");
+      }
+    }
+
+    // NOTE: if a color is provided via a SQL query, it is defined by either a packed uint, or a
+    // vec4f. In either case, we don't know what color space this color is defined in. This is
+    // determined in Vega like so:
+    //
+    // fillColor: {
+    //     field: "color",    // the name of the attr from the resulting sql
+    //     colorSpace: "rgb"  // the space the color is defined in, in this case "rgb".
+    //                        // Can also be "hsl", "lab", or "hcl"
+    // },
+    //
+    // So the actual space will be determined in the _uniformVal that will be set to the
+    // appropriate space already.
+  }
+
+  return _uniformVal.getType();
+}
+
+bool ColorRenderProperty::isColorPacked() const {
+  if (_scaleConfigPtr) {
+    // TODO(croot): support packed colors in scales?
+    return false;
+  }
+  CHECK(_inType);
+  return ColorUnion::isPackedTypeGL(_inType);
 }
 
 void EnumRenderProperty::_initValueFromJSONObj(const rapidjson::Value& obj) {

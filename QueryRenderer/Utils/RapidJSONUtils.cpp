@@ -2,11 +2,9 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
-#include <Rendering/Objects/ColorRGBA.h>
+#include <Rendering/Colors/Utils.h>
 
 namespace QueryRenderer {
-
-using ::Rendering::Objects::ColorRGBA;
 
 std::string RapidJSONUtils::getPointerPath(const rapidjson::Pointer& ptr) {
   rapidjson::StringBuffer sb;
@@ -68,7 +66,7 @@ QueryDataType RapidJSONUtils::getDataTypeFromJSONObj(const rapidjson::Value& obj
       std::string val = obj.GetString();
       if (supportString) {
         rtn = QueryDataType::STRING;
-      } else if (ColorRGBA::isColorString(val)) {
+      } else if (::Rendering::Colors::isColorString(val)) {
         rtn = QueryDataType::COLOR;
       } else {
         THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj, "non-color strings are not a supported type."));
