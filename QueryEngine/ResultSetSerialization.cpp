@@ -193,8 +193,10 @@ std::string ResultSet::serialize() const {
   auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>();
   auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
   TSerializedRows serialized_rows;
-  const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
-  serialized_rows.buffer = std::string(storage_buffer, query_mem_desc_.getBufferSizeBytes(device_type_));
+  if (storage_) {
+    const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
+    serialized_rows.buffer = std::string(storage_buffer, query_mem_desc_.getBufferSizeBytes(device_type_));
+  }
   serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
   serialized_rows.targets = target_infos_to_thrift(targets_);
   serialized_rows.write(proto.get());
@@ -211,8 +213,10 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str) {
   const auto query_mem_desc = query_mem_desc_from_thrift(serialized_rows.descriptor);
   auto result_set =
       boost::make_unique<ResultSet>(target_infos, ExecutorDeviceType::CPU, query_mem_desc, nullptr, nullptr);
-  auto storage = result_set->allocateStorage();
-  auto storage_buff = storage->getUnderlyingBuffer();
-  memcpy(storage_buff, serialized_rows.buffer.data(), serialized_rows.buffer.size());
+  if (query_mem_desc.entry_count) {
+    auto storage = result_set->allocateStorage();
+    auto storage_buff = storage->getUnderlyingBuffer();
+    memcpy(storage_buff, serialized_rows.buffer.data(), serialized_rows.buffer.size());
+  }
   return std::move(result_set);
 }

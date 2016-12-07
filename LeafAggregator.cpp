@@ -1,8 +1,10 @@
 #include "LeafAggregator.h"
+#include "MapDServer.h"
 #include "Catalog/Catalog.h"
 #include "QueryEngine/ResultSet.h"
 #include "gen-cpp/MapD.h"
 #include <boost/make_shared.hpp>
+#include <boost/make_unique.hpp>
 #include <glog/logging.h>
 #include <thrift/transport/TSocket.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -24,27 +26,18 @@ LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
   pending_queries_.resize(leaves.size());
 }
 
-namespace {
-
-// placeholder, we'll implement it in the ResultSet module
-ResultSet* unserialize_result_set(const std::string& serialized_results) {
-  CHECK(false);
-  return nullptr;
+std::vector<TargetMetaInfo> target_meta_infos_from_thrift(const TRowDescriptor& row_desc) {
+  std::vector<TargetMetaInfo> target_meta_infos;
+  for (const auto& col : row_desc) {
+    target_meta_infos.emplace_back(col.col_name, type_info_from_thrift(col.col_type));
+  }
+  return target_meta_infos;
 }
 
-// placeholder, we'll implement it in the ResultSet module
-std::string serialize_result_set(const ResultSet* result_set) {
-  CHECK(false);
-  return "";
-}
-
-}  // namespace
-
-void LeafAggregator::execute(TQueryResult& _return,
-                             const Catalog_Namespace::SessionInfo& parent_session_info,
-                             const std::string& query_str,
-                             const bool column_format,
-                             const std::string& nonce) {
+AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                         const std::string& query_str,
+                                         const bool column_format,
+                                         const std::string& nonce) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   const auto& leaf_session_ids = session_it->second;
@@ -55,15 +48,20 @@ void LeafAggregator::execute(TQueryResult& _return,
   while (!execution_finished) {
     // new execution step
     std::vector<std::unique_ptr<ResultSet>> leaf_results;
+    TRowDescriptor row_desc;
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
       const auto& leaf = leaves_[leaf_idx];
       TStepResult step_result;
       leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_str, column_format, nonce);
-      leaf_results.emplace_back(unserialize_result_set(step_result.serialized_rows));
+      auto result_set = ResultSet::unserialize(step_result.serialized_rows);
+      if (!result_set->definitelyHasNoRows()) {
+        leaf_results.emplace_back(std::move(result_set));
+      }
       if (leaf_idx == 0) {
         execution_finished = step_result.execution_finished;
         merge_type = step_result.merge_type;
         sharded = step_result.sharded;
+        row_desc = step_result.row_desc;
       } else {
         // leaves move in lock-step
         CHECK_EQ(execution_finished, step_result.execution_finished);
@@ -71,13 +69,26 @@ void LeafAggregator::execute(TQueryResult& _return,
         CHECK_EQ(sharded, step_result.sharded);
       }
     }
+    QueryMemoryDescriptor empty_query_mem_desc{};
+    std::vector<TargetInfo> empty_target_infos;
+    auto empty_result_set = boost::make_unique<ResultSet>(
+        empty_target_infos, ExecutorDeviceType::CPU, empty_query_mem_desc, nullptr, nullptr);
     if (!sharded) {
-      CHECK(!leaf_results.empty());
-      broadcastResultSet(leaf_results.front().get());  // TODO(alex): avoid, most of the time should be possible
+      broadcastResultSet(leaf_results.empty()
+                             ? empty_result_set.get()
+                             : leaf_results.front().get());  // TODO(alex): avoid, most of the time should be possible
       continue;
     }
     if (merge_type == TMergeType::UNION) {
       CHECK(false);  // TODO(alex)
+      continue;
+    }
+    if (leaf_results.empty()) {
+      if (execution_finished) {
+        return {std::move(empty_result_set), {}};
+      } else {
+        broadcastResultSet(empty_result_set.get());
+      }
       continue;
     }
     std::vector<ResultSet*> leaf_results_ptrs;
@@ -87,13 +98,15 @@ void LeafAggregator::execute(TQueryResult& _return,
     ResultSetManager rs_manager;
     const auto reduced_rs = rs_manager.reduce(leaf_results_ptrs);
     if (execution_finished) {
-      // set results in _return
-      CHECK(false);
+      auto& rs_manager_rs = rs_manager.getOwnResultSet();
+      return {rs_manager_rs ? std::move(rs_manager_rs) : std::move(leaf_results.front()),
+              target_meta_infos_from_thrift(row_desc)};
     } else {
       broadcastResultSet(reduced_rs);
     }
   }
   CHECK(false);
+  return {nullptr, {}};
 }
 
 void LeafAggregator::connect(const Catalog_Namespace::SessionInfo& parent_session_info,
@@ -126,7 +139,7 @@ size_t LeafAggregator::leafCount() const {
 }
 
 void LeafAggregator::broadcastResultSet(const ResultSet* result_set) const {
-  const auto serialized_result_set = serialize_result_set(result_set);
+  const auto serialized_result_set = result_set->serialize();
   for (const auto& leaf : leaves_) {
     leaf->broadcast_serialized_rows(serialized_result_set);
   }

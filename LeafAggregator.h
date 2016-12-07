@@ -2,6 +2,7 @@
 #define LEAFAGGREGATOR_H
 
 #include "LeafHostInfo.h"
+#include "QueryEngine/TargetMetaInfo.h"
 #include "Shared/mapd_shared_mutex.h"
 #include "gen-cpp/mapd_types.h"
 
@@ -16,15 +17,19 @@ namespace Catalog_Namespace {
 class SessionInfo;
 }  // Catalog_Namespace
 
+struct AggregatedResult {
+  std::unique_ptr<ResultSet> rs;
+  const std::vector<TargetMetaInfo> targets_meta;
+};
+
 class LeafAggregator {
  public:
   LeafAggregator(const std::vector<LeafHostInfo>& leaves);
 
-  void execute(TQueryResult& _return,
-               const Catalog_Namespace::SessionInfo& parent_session_info,
-               const std::string& query_str,
-               const bool column_format,
-               const std::string& nonce);
+  AggregatedResult execute(const Catalog_Namespace::SessionInfo& parent_session_info,
+                           const std::string& query_str,
+                           const bool column_format,
+                           const std::string& nonce);
 
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,
