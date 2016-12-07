@@ -49,10 +49,6 @@ void LeafAggregator::execute(TQueryResult& _return,
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   const auto& leaf_session_ids = session_it->second;
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
-  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-    pending_queries_[leaf_idx] =
-        leaves_[leaf_idx]->start_query(leaf_session_ids[leaf_idx], query_str, column_format, nonce);
-  }
   bool execution_finished = false;
   TMergeType::type merge_type = TMergeType::REDUCE;
   bool sharded = true;
@@ -62,7 +58,7 @@ void LeafAggregator::execute(TQueryResult& _return,
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
       const auto& leaf = leaves_[leaf_idx];
       TStepResult step_result;
-      leaf->execute_step(step_result, pending_queries_[leaf_idx]);
+      leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_str, column_format, nonce);
       leaf_results.emplace_back(unserialize_result_set(step_result.serialized_rows));
       if (leaf_idx == 0) {
         execution_finished = step_result.execution_finished;
