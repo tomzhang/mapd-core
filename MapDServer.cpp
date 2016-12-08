@@ -1432,10 +1432,7 @@ class MapDHandler : virtual public MapDIf {
 
     TRow sample_row;
     for (auto row : sample_data) {
-      {
-        std::vector<TDatum> empty;
-        sample_row.cols.swap(empty);
-      }
+      sample_row.cols.clear();
       for (const auto& s : row) {
         TDatum td;
         td.val.str_val = s;
