@@ -1,6 +1,7 @@
 #include "LeafAggregator.h"
 #include "MapDServer.h"
 #include "Catalog/Catalog.h"
+#include "QueryEngine/RelAlgExecutor.h"
 #include "QueryEngine/ResultSet.h"
 #include "gen-cpp/MapD.h"
 #include <boost/make_shared.hpp>
@@ -35,7 +36,7 @@ std::vector<TargetMetaInfo> target_meta_infos_from_thrift(const TRowDescriptor& 
 }
 
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
-                                         const std::string& query_str,
+                                         const std::string& query_ra,
                                          const bool column_format,
                                          const std::string& nonce) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
@@ -43,36 +44,43 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   const auto& leaf_session_ids = session_it->second;
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   bool execution_finished = false;
+  unsigned node_id{0};
   TMergeType::type merge_type = TMergeType::REDUCE;
   bool sharded = true;
+  const auto& cat = parent_session_info.get_catalog();
+  auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, nullptr);
+  RelAlgExecutor ra_executor(executor.get(), cat);
   while (!execution_finished) {
     // new execution step
-    std::vector<std::unique_ptr<ResultSet>> leaf_results;
+    std::vector<std::shared_ptr<ResultSet>> leaf_results;
     TRowDescriptor row_desc;
+    std::vector<TargetInfo> target_infos;
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
       const auto& leaf = leaves_[leaf_idx];
       TStepResult step_result;
-      leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_str, column_format, nonce);
+      leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_ra, column_format, nonce);
       auto result_set = ResultSet::unserialize(step_result.serialized_rows);
+      target_infos = result_set->getTargetInfos();
       if (!result_set->definitelyHasNoRows()) {
-        leaf_results.emplace_back(std::move(result_set));
+        leaf_results.emplace_back(result_set.release());
       }
       if (leaf_idx == 0) {
         execution_finished = step_result.execution_finished;
         merge_type = step_result.merge_type;
         sharded = step_result.sharded;
         row_desc = step_result.row_desc;
+        node_id = step_result.node_id;
       } else {
         // leaves move in lock-step
         CHECK_EQ(execution_finished, step_result.execution_finished);
         CHECK_EQ(merge_type, step_result.merge_type);
         CHECK_EQ(sharded, step_result.sharded);
+        CHECK_EQ(node_id, step_result.node_id);
       }
     }
     QueryMemoryDescriptor empty_query_mem_desc{};
-    std::vector<TargetInfo> empty_target_infos;
-    auto empty_result_set = boost::make_unique<ResultSet>(
-        empty_target_infos, ExecutorDeviceType::CPU, empty_query_mem_desc, nullptr, nullptr);
+    auto empty_result_set =
+        std::make_shared<ResultSet>(target_infos, ExecutorDeviceType::CPU, empty_query_mem_desc, nullptr, nullptr);
     if (!sharded) {
       broadcastResultSet(leaf_results.empty()
                              ? empty_result_set.get()
@@ -83,26 +91,33 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       CHECK(false);  // TODO(alex)
       continue;
     }
-    if (leaf_results.empty()) {
-      if (execution_finished) {
-        return {std::move(empty_result_set), {}};
-      } else {
-        broadcastResultSet(empty_result_set.get());
-      }
-      continue;
-    }
     std::vector<ResultSet*> leaf_results_ptrs;
     for (auto& result : leaf_results) {
       leaf_results_ptrs.push_back(result.get());
     }
     ResultSetManager rs_manager;
-    const auto reduced_rs = rs_manager.reduce(leaf_results_ptrs);
-    if (execution_finished) {
-      auto& rs_manager_rs = rs_manager.getOwnResultSet();
-      return {rs_manager_rs ? std::move(rs_manager_rs) : std::move(leaf_results.front()),
-              target_meta_infos_from_thrift(row_desc)};
+    std::shared_ptr<ResultSet> reduced_rs;
+    if (!leaf_results_ptrs.empty()) {
+      rs_manager.reduce(leaf_results_ptrs);
+      auto rs_manager_rs = rs_manager.getOwnResultSet();
+      reduced_rs = rs_manager_rs ? rs_manager_rs : leaf_results.front();
     } else {
-      broadcastResultSet(reduced_rs);
+      reduced_rs = empty_result_set;
+    }
+    if (execution_finished) {
+      const auto target_meta_infos = target_meta_infos_from_thrift(row_desc);
+      AggregatedResult leaves_result{reduced_rs, target_meta_infos};
+      ra_executor.addLeafResult(node_id, leaves_result);
+      CompilationOptions co = {ExecutorDeviceType::CPU, true, ExecutorOptLevel::Default};
+      ExecutionOptions eo = {false, true, false, false, true, false};
+      const auto aggregated_result = ra_executor.executeRelAlgQuery(query_ra, co, eo, nullptr);
+      const auto& aggregated_result_rows = aggregated_result.getRows();
+      auto aggregated_rs =
+          aggregated_result_rows.definitelyHasNoRows() ? empty_result_set : aggregated_result_rows.getResultSet();
+      CHECK(aggregated_rs);
+      return {aggregated_rs, aggregated_result.getTargetsMeta()};
+    } else {
+      broadcastResultSet(reduced_rs.get());
     }
   }
   CHECK(false);

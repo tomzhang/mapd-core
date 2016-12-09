@@ -6,8 +6,14 @@
 #include "QueryRewrite.h"
 #include "RelAlgExecutionDescriptor.h"
 #include "SpeculativeTopN.h"
+#include "../LeafAggregator.h"
 
 #include <ctime>
+
+struct FirstStepExecutionResult {
+  ExecutionResult result;
+  const unsigned node_id;
+};
 
 class RelAlgExecutor {
  public:
@@ -18,10 +24,10 @@ class RelAlgExecutor {
                                      const ExecutionOptions& eo,
                                      RenderInfo* render_info);
 
-  ExecutionResult executeRelAlgQueryFirstStep(const std::string& query_ra,
-                                              const CompilationOptions& co,
-                                              const ExecutionOptions& eo,
-                                              RenderInfo* render_info);
+  FirstStepExecutionResult executeRelAlgQueryFirstStep(const std::string& query_ra,
+                                                       const CompilationOptions& co,
+                                                       const ExecutionOptions& eo,
+                                                       RenderInfo* render_info);
 
   ExecutionResult executeRelAlgSubQuery(const rapidjson::Value& query_ast,
                                         const CompilationOptions& co,
@@ -39,6 +45,11 @@ class RelAlgExecutor {
   std::vector<TargetMetaInfo> validateRelAlgSeq(const std::vector<RaExecutionDesc>&);
 
   const std::vector<std::string>& getScanTableNamesInRelAlgSeq() const;
+
+  void addLeafResult(const unsigned id, const AggregatedResult& result) {
+    const auto it_ok = leaf_results_.emplace(id, result);
+    CHECK(it_ok.second);
+  }
 
  private:
   ExecutionResult executeRelAlgSeq(std::vector<RaExecutionDesc>& ed_list,
@@ -159,6 +170,7 @@ class RelAlgExecutor {
   time_t now_;
   std::vector<std::shared_ptr<Analyzer::Expr>> target_exprs_owned_;  // TODO(alex): remove
   std::vector<std::string> table_names_;  // used by poly rendering only, lazily initialized by executeRelAlgQuery()
+  std::unordered_map<unsigned, AggregatedResult> leaf_results_;
   static SpeculativeTopNBlacklist speculative_topn_blacklist_;
   static const size_t max_groups_buffer_entry_default_guess{16384};
 };

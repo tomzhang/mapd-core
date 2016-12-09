@@ -18,7 +18,7 @@ class SessionInfo;
 }  // Catalog_Namespace
 
 struct AggregatedResult {
-  std::unique_ptr<ResultSet> rs;
+  std::shared_ptr<ResultSet> rs;
   const std::vector<TargetMetaInfo> targets_meta;
 };
 
