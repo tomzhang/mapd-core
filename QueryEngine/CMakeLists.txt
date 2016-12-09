@@ -37,6 +37,9 @@ set(query_engine_source_files
     ResultSet.cpp
     ResultSetIteration.cpp
     ResultSetReduction.cpp
+    ResultSetSerialization.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/serialized_result_set_constants.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/serialized_result_set_types.cpp
     ResultSetSort.cpp
     RuntimeFunctions.cpp
     RuntimeFunctions.bc
@@ -74,6 +77,17 @@ set(llvm_clangpp_cmd "${LLVM_BIN_DIR}/clang++")
 else ()
 set(llvm_clangpp_cmd clang++)
 endif (ENABLE_LLVM_DBG)
+
+add_custom_command(
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/serialized_result_set.thrift
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/serialized_result_set_types.cpp
+    COMMAND ${Thrift_EXECUTABLE}
+    ARGS -gen cpp -r -I ${CMAKE_SOURCE_DIR} -o ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/serialized_result_set.thrift)
+list(APPEND ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/serialized_result_set_constants.cpp GENERATED)
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/serialized_result_set_types.cpp GENERATED)
 
 add_custom_command(
     DEPENDS RuntimeFunctions.cpp RuntimeFunctions.h ${CMAKE_SOURCE_DIR}/Utils/StringLike.cpp GroupByRuntime.cpp
