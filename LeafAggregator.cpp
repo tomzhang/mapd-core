@@ -35,6 +35,7 @@ std::vector<TargetMetaInfo> target_meta_infos_from_thrift(const TRowDescriptor& 
   return target_meta_infos;
 }
 
+#ifdef HAVE_RAVM
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
                                          const std::string& query_ra,
                                          const bool column_format,
@@ -123,6 +124,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   CHECK(false);
   return {nullptr, {}};
 }
+#endif  // HAVE_RAVM
 
 void LeafAggregator::connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                              const std::string& user,
