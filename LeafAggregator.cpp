@@ -10,6 +10,7 @@
 #include <thrift/transport/TSocket.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
+#include <future>
 
 using apache::thrift::protocol::TBinaryProtocol;
 using apache::thrift::transport::TSocket;
@@ -57,9 +58,16 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     TRowDescriptor row_desc;
     std::vector<TargetInfo> target_infos;
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-      const auto& leaf = leaves_[leaf_idx];
       TStepResult step_result;
-      leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_ra, column_format, nonce);
+      std::vector<std::future<void>> leaf_futures;
+      leaf_futures.emplace_back(std::async(
+          std::launch::async, [&step_result, &leaf_session_ids, &nonce, &query_ra, column_format, leaf_idx, this] {
+            const auto& leaf = leaves_[leaf_idx];
+            leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_ra, column_format, nonce);
+          }));
+      for (auto& leaf_future : leaf_futures) {
+        leaf_future.get();
+      }
       auto result_set = ResultSet::unserialize(step_result.serialized_rows);
       target_infos = result_set->getTargetInfos();
       if (!result_set->definitelyHasNoRows()) {
