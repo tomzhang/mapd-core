@@ -118,7 +118,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       AggregatedResult leaves_result{reduced_rs, target_meta_infos};
       ra_executor.addLeafResult(node_id, leaves_result);
       CompilationOptions co = {ExecutorDeviceType::CPU, true, ExecutorOptLevel::Default};
-      ExecutionOptions eo = {false, true, false, false, true, false};
+      ExecutionOptions eo = {false, true, false, false, true, false, false};
       const auto aggregated_result = ra_executor.executeRelAlgQuery(query_ra, co, eo, nullptr);
       const auto& aggregated_result_rows = aggregated_result.getRows();
       auto aggregated_rs =
