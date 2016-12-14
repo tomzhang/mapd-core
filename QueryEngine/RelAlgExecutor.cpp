@@ -866,6 +866,8 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createSortInputWorkUnit(const RelSort* 
     sort_algorithm = SortAlgorithm::Default;
   }
   sort->setOutputMetainfo(source->getOutputMetainfo());
+  // NB: the `body` field of the returned `WorkUnit` needs to be the `source` node,
+  // not the `sort`. The aggregator needs the pre-sorted result from leaves.
   return {{source_exe_unit.input_descs,
            source_exe_unit.extra_input_descs,
            std::move(source_exe_unit.input_col_descs),
@@ -881,6 +883,7 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createSortInputWorkUnit(const RelSort* 
            nullptr,
            {sort_info.order_entries, sort_algorithm, limit, offset},
            scan_total_limit},
+          source,
           max_groups_buffer_entry_guess,
           std::move(source_work_unit.query_rewriter)};
 }
@@ -1015,8 +1018,13 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
   if (error_code == Executor::ERR_SPECULATIVE_TOP_OOM) {
     throw SpeculativeTopNFailed();
   }
-  return handleRetry(
-      error_code, {ra_exe_unit, max_groups_buffer_entry_guess}, targets_meta, is_agg, co, eo, queue_time_ms);
+  return handleRetry(error_code,
+                     {ra_exe_unit, work_unit.body, max_groups_buffer_entry_guess},
+                     targets_meta,
+                     is_agg,
+                     co,
+                     eo,
+                     queue_time_ms);
 }
 
 size_t RelAlgExecutor::getNDVEstimation(const WorkUnit& work_unit,
@@ -1384,7 +1392,10 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createCompoundWorkUnit(const RelCompoun
   const auto rewritten_exe_unit = query_rewriter->rewrite();
   const auto targets_meta = get_targets_meta(compound, rewritten_exe_unit.target_exprs);
   compound->setOutputMetainfo(targets_meta);
-  return {rewritten_exe_unit, max_groups_buffer_entry_default_guess, std::unique_ptr<QueryRewriter>(query_rewriter)};
+  return {rewritten_exe_unit,
+          compound,
+          max_groups_buffer_entry_default_guess,
+          std::unique_ptr<QueryRewriter>(query_rewriter)};
 }
 
 namespace {
@@ -1490,6 +1501,7 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createJoinWorkUnit(const RelJoin* join,
            nullptr,
            sort_info,
            0},
+          join,
           max_groups_buffer_entry_default_guess,
           nullptr};
 }
@@ -1556,6 +1568,7 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createAggregateWorkUnit(const RelAggreg
            nullptr,
            sort_info,
            0},
+          aggregate,
           max_groups_buffer_entry_default_guess,
           nullptr};
 }
@@ -1590,6 +1603,7 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createProjectWorkUnit(const RelProject*
            nullptr,
            sort_info,
            0},
+          project,
           max_groups_buffer_entry_default_guess,
           nullptr};
 }
@@ -1669,6 +1683,7 @@ RelAlgExecutor::WorkUnit RelAlgExecutor::createFilterWorkUnit(const RelFilter* f
            nullptr,
            sort_info,
            0},
+          filter,
           max_groups_buffer_entry_default_guess,
           nullptr};
 }
