@@ -87,15 +87,6 @@ void RelAlgExecutor::executeRelAlgStep(const size_t i,
     handleNop(body);
     return;
   }
-  auto it = leaf_results_.find(body->getId());
-  if (it != leaf_results_.end()) {
-    auto& aggregated_result = it->second;
-    ResultRows result_rows(aggregated_result.rs);
-    exec_desc.setResult(ExecutionResult(result_rows, aggregated_result.targets_meta));
-    addTemporaryTable(-body->getId(), exec_desc.getResult().getDataPtr());
-    body->setOutputMetainfo(aggregated_result.targets_meta);
-    return;
-  }
   const ExecutionOptions eo_work_unit{eo.output_columnar_hint,
                                       eo.allow_multifrag,
                                       eo.just_explain,
@@ -928,6 +919,16 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
                                                 const ExecutionOptions& eo,
                                                 RenderInfo* render_info,
                                                 const int64_t queue_time_ms) {
+  const auto body = work_unit.body;
+  CHECK(body);
+  auto it = leaf_results_.find(body->getId());
+  if (it != leaf_results_.end()) {
+    auto& aggregated_result = it->second;
+    ResultRows result_rows(aggregated_result.rs);
+    ExecutionResult result(result_rows, aggregated_result.targets_meta);
+    body->setOutputMetainfo(aggregated_result.targets_meta);
+    return result;
+  }
   int32_t error_code{0};
   if (render_info && render_info->do_render) {
     if (co.device_type_ != ExecutorDeviceType::GPU) {
