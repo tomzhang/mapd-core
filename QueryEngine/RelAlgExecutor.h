@@ -49,6 +49,8 @@ class RelAlgExecutor {
     CHECK(it_ok.second);
   }
 
+  Executor* getExecutor() const { return executor_; }
+
  private:
   ExecutionResult executeRelAlgSeq(std::vector<RaExecutionDesc>& ed_list,
                                    const CompilationOptions& co,
