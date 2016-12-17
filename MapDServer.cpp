@@ -286,7 +286,6 @@ class MapDHandler : virtual public MapDIf {
         break;
       case ExecutorDeviceType::Hybrid:
         LOG(INFO) << "Started in Hybrid mode" << std::endl;
-        break;
     }
 
 #ifdef HAVE_RENDERING
@@ -558,11 +557,6 @@ class MapDHandler : virtual public MapDIf {
                    const std::string& query_str,
                    const bool column_format,
                    const std::string& nonce) override {
-    std::unique_ptr<std::lock_guard<std::mutex>> render_lock;
-    ParserWrapper pw{query_str};
-    if (enable_rendering_ && !pw.is_ddl && !pw.is_update_dml) {
-      render_lock.reset(new std::lock_guard<std::mutex>(render_mutex_));
-    }
     const auto session_info = get_session(session);
     if (leaf_aggregator_.leafCount() > 0) {
 #ifdef HAVE_RAVM
@@ -580,7 +574,7 @@ class MapDHandler : virtual public MapDIf {
       CHECK(false);
 #endif  // HAVE_RAVM
     } else {
-      sql_execute_impl(_return, session_info, query_str, column_format, nonce);
+      sql_execute_impl(_return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
     }
   }
 
@@ -675,10 +669,7 @@ class MapDHandler : virtual public MapDIf {
     auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
     CHECK(executor);
     CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
-    set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-    ScopeGuard restore_device_type = [this, session_info_ptr] {
-      set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU);
-    };
+
     for (const auto& pixel : pixels) {
       const auto rowid = executor->getRowidForPixel(
           pixel.x, pixel.y, session_info_ptr->get_session_id(), 1);  // TODO(alex): de-hardcode user widget
@@ -692,7 +683,7 @@ class MapDHandler : virtual public MapDIf {
       const auto query_str =
           "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(rowid) + ";";
       TQueryResult ret;
-      sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce);
+      sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
       TPixelRows pixel_rows;
       pixel_rows.pixel = pixel;
       pixel_rows.row_set = ret.row_set;
@@ -720,17 +711,12 @@ class MapDHandler : virtual public MapDIf {
     }
 #ifdef HAVE_RENDERING
     std::lock_guard<std::mutex> render_lock(render_mutex_);
-    mapd_lock_guard<mapd_shared_mutex> write_lock(sessions_mutex_);
     auto session_it = get_session_it(session);
     auto session_info_ptr = session_it->second.get();
     auto& cat = session_info_ptr->get_catalog();
     auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
     CHECK(executor);
     CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
-    set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-    ScopeGuard restore_device_type = [this, session_info_ptr] {
-      set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU);
-    };
     const auto rowid = executor->getRowidForPixel(
         pixel.x, pixel.y, session_info_ptr->get_session_id(), 1, pixelRadius);  // TODO(alex): de-hardcode user widget
 
@@ -743,7 +729,7 @@ class MapDHandler : virtual public MapDIf {
       const auto query_str =
           "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(rowid) + ";";
       TQueryResult ret;
-      sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce);
+      sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
       _return.row_set = ret.row_set;
     }
 #endif  // HAVE_RENDERING
@@ -767,17 +753,12 @@ class MapDHandler : virtual public MapDIf {
 #ifdef HAVE_RENDERING
     try {
       std::lock_guard<std::mutex> render_lock(render_mutex_);
-      mapd_lock_guard<mapd_shared_mutex> write_lock(sessions_mutex_);
       auto session_it = get_session_it(session);
       auto session_info_ptr = session_it->second.get();
       auto& cat = session_info_ptr->get_catalog();
       auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, render_manager_.get());
       CHECK(executor && render_manager_);
       CHECK(ExecutorDeviceType::GPU == session_info_ptr->get_executor_device_type());
-      set_execution_mode_nolock(session_info_ptr, TExecuteMode::CPU);
-      ScopeGuard restore_device_type = [this, session_info_ptr] {
-        set_execution_mode_nolock(session_info_ptr, TExecuteMode::GPU);
-      };
 
       _return.pixel = pixel;
 
@@ -826,8 +807,7 @@ class MapDHandler : virtual public MapDIf {
             }
 
 #if defined(HAVE_CALCITE) && defined(HAVE_RAVM)
-            ExecutionResult result{
-                ResultRows({}, {}, nullptr, nullptr, {}, session_info_ptr->get_executor_device_type()), {}};
+            ExecutionResult result{ResultRows({}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU), {}};
 #endif
             const ResultRows* resultRowPtr;
             const std::vector<TargetMetaInfo>* resultRowShapePtr;
@@ -1003,7 +983,8 @@ class MapDHandler : virtual public MapDIf {
                 const auto query_str = "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " +
                                        std::to_string(poly_row_id) + ";";
                 TQueryResult tmpResult;
-                sql_execute_impl(tmpResult, *session_info_ptr, query_str, column_format, nonce);
+                sql_execute_impl(
+                    tmpResult, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
 
                 CHECK(tmpResult.row_set.row_desc.size() == unusedProjIdx.size() &&
                       (column_format || tmpResult.row_set.rows.size() == 1));
@@ -1056,7 +1037,7 @@ class MapDHandler : virtual public MapDIf {
           // TODO(croot): what about poly tables?
           const auto query_str =
               "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(row_id) + ";";
-          sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce);
+          sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
         }
         _return.row_set = ret.row_set;
       }
@@ -2474,11 +2455,11 @@ class MapDHandler : virtual public MapDIf {
                         const Catalog_Namespace::SessionInfo& session_info,
                         const std::string& query_str,
                         const bool column_format,
-                        const std::string& nonce) {
+                        const std::string& nonce,
+                        const ExecutorDeviceType executor_device_type) {
     _return.nonce = nonce;
     _return.execution_time_ms = 0;
     auto& cat = session_info.get_catalog();
-    auto executor_device_type = session_info.get_executor_device_type();
     LOG(INFO) << query_str;
     _return.total_time_ms = measure<>::execution([&]() {
       SQLParser parser;
