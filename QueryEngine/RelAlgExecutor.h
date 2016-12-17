@@ -43,8 +43,6 @@ class RelAlgExecutor {
     CHECK(it_ok.second);
   }
 
-  Executor* getExecutor() const { return executor_; }
-
   void registerSubquery(RexSubQuery* subquery) noexcept { subqueries_.push_back(subquery); }
 
  private:
