@@ -85,6 +85,15 @@ else (ENABLE_LLVM_DBG)
 set(llvm_config_cmd llvm-config)
 endif (ENABLE_LLVM_DBG)
 
+# address sanitizer
+option(ENABLE_ASAN "Enable address sanitizer" OFF)
+if(ENABLE_ASAN)
+  set(ASAN_FLAGS "-fsanitize=address -O1 -fno-omit-frame-pointer")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ASAN_FLAGS}")
+  add_definitions("-DRUN_ASAN")
+endif()
+
 set(llvm_config_inc_arg "--includedir")
 set(llvm_config_ld_arg "--ldflags")
 set(llvm_config_lib_arg "--libs")
@@ -188,15 +197,6 @@ else()
 endif()
 
 ADD_SUBDIRECTORY    (SqliteConnector)
-
-# address sanitizer
-option(ENABLE_ASAN "Enable address sanitizer" OFF)
-if(ENABLE_ASAN)
-  set(ASAN_FLAGS "-fsanitize=address -O1 -fno-omit-frame-pointer")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ASAN_FLAGS}")
-  add_definitions("-DRUN_ASAN")
-endif()
 
 set(MAPD_AWS_BILLINGPRODUCTS "" CACHE STRING "Comma-separated list of valid AWS BillingProducts")
 option(ENABLE_LICENSING_AWS "Enable licensing options for AWS Marketplace" OFF)
