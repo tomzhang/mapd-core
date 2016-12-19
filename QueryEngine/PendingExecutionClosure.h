@@ -24,16 +24,18 @@ struct RelAlgExecutionOptions {
 class PendingExecutionClosure {
  public:
   static PendingExecutionClosure* create(std::shared_ptr<const RelAlgNode> ra,
-                                         Executor* executor,
+                                         std::unique_ptr<RelAlgExecutor>& ra_executor,
                                          const Catalog_Namespace::Catalog& cat,
                                          const RelAlgExecutionOptions& rel_alg_eo);
 
   static bool executeNextStep(const int64_t query_id);
 
+  int64_t getId() const;
+
  private:
   PendingExecutionClosure(std::shared_ptr<const RelAlgNode> ra,
                           const int64_t id,
-                          Executor* executor,
+                          std::unique_ptr<RelAlgExecutor>& ra_executor,
                           const Catalog_Namespace::Catalog& cat,
                           const RelAlgExecutionOptions& rel_alg_eo);
 

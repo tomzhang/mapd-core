@@ -48,8 +48,7 @@ class LeafAggregator {
   SessionMap::iterator getSessionIterator(const TSessionId session);
 
   std::vector<std::unique_ptr<MapDClient>> leaves_;
-  std::vector<int64_t> pending_queries_;  // pending query id (per leaf), 0 for no pending query
-  SessionMap leaf_sessions_;              // map from aggregator session to leaf sessions
+  SessionMap leaf_sessions_;  // map from aggregator session to leaf sessions
   mapd_shared_mutex leaf_sessions_mutex_;
 };
 

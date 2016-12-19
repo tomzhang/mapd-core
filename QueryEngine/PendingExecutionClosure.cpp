@@ -2,22 +2,21 @@
 
 PendingExecutionClosure::PendingExecutionClosure(std::shared_ptr<const RelAlgNode> ra,
                                                  const int64_t id,
-                                                 Executor* executor,
+                                                 std::unique_ptr<RelAlgExecutor>& ra_executor,
                                                  const Catalog_Namespace::Catalog& cat,
                                                  const RelAlgExecutionOptions& rel_alg_eo)
-    : ra_(ra), id_(id), crt_ed_list_idx_(-1), rel_alg_eo_(rel_alg_eo) {
+    : ra_(ra), id_(id), crt_ed_list_idx_(-1), ra_executor_(std::move(ra_executor)), rel_alg_eo_(rel_alg_eo) {
   ed_list_ = get_execution_descriptors(ra.get());
-  ra_executor_.reset(new RelAlgExecutor(executor, cat));
 }
 
 PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const RelAlgNode> ra,
-                                                         Executor* executor,
+                                                         std::unique_ptr<RelAlgExecutor>& ra_executor,
                                                          const Catalog_Namespace::Catalog& cat,
                                                          const RelAlgExecutionOptions& rel_alg_eo) {
   std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
   const auto it_ok = pending_queries_.emplace(pending_query_next_id_,
                                               std::unique_ptr<PendingExecutionClosure>(new PendingExecutionClosure(
-                                                  ra, pending_query_next_id_, executor, cat, rel_alg_eo)));
+                                                  ra, pending_query_next_id_, ra_executor, cat, rel_alg_eo)));
   ++pending_query_next_id_;
   CHECK(it_ok.second);
   return (*it_ok.first).second.get();
@@ -38,6 +37,10 @@ bool PendingExecutionClosure::executeNextStep(const int64_t query_id) {
     pending_queries_.erase(closure->id_);
   }
   return done;
+}
+
+int64_t PendingExecutionClosure::getId() const {
+  return id_;
 }
 
 bool PendingExecutionClosure::executeNextStep() {

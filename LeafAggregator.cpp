@@ -25,7 +25,6 @@ LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
     const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
     leaves_.emplace_back(new MapDClient(protocol));
   }
-  pending_queries_.resize(leaves.size());
 }
 
 std::vector<TargetMetaInfo> target_meta_infos_from_thrift(const TRowDescriptor& row_desc) {
@@ -44,6 +43,11 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   const auto& leaf_session_ids = session_it->second;
+  std::vector<int64_t> pending_queries;
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    pending_queries.push_back(
+        leaves_[leaf_idx]->start_query(leaf_session_ids[leaf_idx], query_ra, column_format, nonce));
+  }
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   bool execution_finished = false;
   unsigned node_id{0};
