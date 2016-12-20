@@ -37,6 +37,19 @@ FirstStepExecutionResult PendingExecutionClosure::executeNextStep(const int64_t 
   return result;
 }
 
+void PendingExecutionClosure::setCurrentSubqueryResult(const int64_t query_id,
+                                                       const std::shared_ptr<const ExecutionResult> result) {
+  PendingExecutionClosure* closure{nullptr};
+  {
+    std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
+    const auto it = pending_queries_.find(query_id);
+    CHECK(it != pending_queries_.end());
+    closure = it->second.get();
+  }
+  CHECK(closure);
+  closure->setCurrentSubqueryResult(result);
+}
+
 int64_t PendingExecutionClosure::getId() const {
   return id_;
 }
@@ -53,6 +66,13 @@ FirstStepExecutionResult PendingExecutionClosure::executeNextStep() {
   }
   return ra_executor_->executeRelAlgQueryFirstStep(
       subqueries[crt_subquery_idx_]->getRelAlg(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info);
+}
+
+void PendingExecutionClosure::setCurrentSubqueryResult(const std::shared_ptr<const ExecutionResult> result) {
+  CHECK_GE(crt_subquery_idx_, 0);
+  const auto subqueries = ra_executor_->getSubqueries();
+  CHECK_LT(crt_subquery_idx_, static_cast<ssize_t>(subqueries.size()));
+  subqueries[crt_subquery_idx_]->setExecutionResult(result);
 }
 
 std::unordered_map<int64_t, std::unique_ptr<PendingExecutionClosure>> PendingExecutionClosure::pending_queries_;

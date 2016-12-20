@@ -30,6 +30,8 @@ class PendingExecutionClosure {
 
   static FirstStepExecutionResult executeNextStep(const int64_t query_id);
 
+  static void setCurrentSubqueryResult(const int64_t query_id, const std::shared_ptr<const ExecutionResult> result);
+
   int64_t getId() const;
 
  private:
@@ -40,6 +42,8 @@ class PendingExecutionClosure {
                           const RelAlgExecutionOptions& rel_alg_eo);
 
   FirstStepExecutionResult executeNextStep();
+
+  void setCurrentSubqueryResult(const std::shared_ptr<const ExecutionResult> result);
 
   const std::shared_ptr<const RelAlgNode> ra_;
   const int64_t id_;

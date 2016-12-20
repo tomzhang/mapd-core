@@ -41,7 +41,9 @@ class LeafAggregator {
   size_t leafCount() const;
 
  private:
-  void broadcastResultSet(const ResultSet*) const;
+  void broadcastResultSet(const ResultSet* result_set,
+                          const TRowDescriptor& row_desc,
+                          const std::vector<int64_t>& pending_queries) const;
 
   typedef std::map<TSessionId, std::vector<TSessionId>> SessionMap;
 

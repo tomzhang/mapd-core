@@ -27,14 +27,6 @@ LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
   }
 }
 
-std::vector<TargetMetaInfo> target_meta_infos_from_thrift(const TRowDescriptor& row_desc) {
-  std::vector<TargetMetaInfo> target_meta_infos;
-  for (const auto& col : row_desc) {
-    target_meta_infos.emplace_back(col.col_name, type_info_from_thrift(col.col_type));
-  }
-  return target_meta_infos;
-}
-
 #ifdef HAVE_RAVM
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
                                          const std::string& query_ra,
@@ -102,9 +94,9 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     auto empty_result_set =
         std::make_shared<ResultSet>(target_infos, ExecutorDeviceType::CPU, empty_query_mem_desc, nullptr, nullptr);
     if (!sharded) {
-      broadcastResultSet(leaf_results.empty()
-                             ? empty_result_set.get()
-                             : leaf_results.front().get());  // TODO(alex): avoid, most of the time should be possible
+      broadcastResultSet(leaf_results.empty() ? empty_result_set.get() : leaf_results.front().get(),
+                         row_desc,
+                         pending_queries);  // TODO(alex): avoid, most of the time should be possible
       continue;
     }
     if (merge_type == TMergeType::UNION) {
@@ -137,7 +129,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       CHECK(aggregated_rs);
       return {aggregated_rs, aggregated_result.getTargetsMeta()};
     } else {
-      broadcastResultSet(reduced_rs.get());
+      broadcastResultSet(reduced_rs.get(), row_desc, pending_queries);
     }
   }
   CHECK(false);
@@ -174,10 +166,22 @@ size_t LeafAggregator::leafCount() const {
   return leaves_.size();
 }
 
-void LeafAggregator::broadcastResultSet(const ResultSet* result_set) const {
+void LeafAggregator::broadcastResultSet(const ResultSet* result_set,
+                                        const TRowDescriptor& row_desc,
+                                        const std::vector<int64_t>& pending_queries) const {
+  CHECK_EQ(leaves_.size(), pending_queries.size());
   const auto serialized_result_set = result_set->serialize();
-  for (const auto& leaf : leaves_) {
-    leaf->broadcast_serialized_rows(serialized_result_set);
+  std::vector<std::future<void>> leaf_futures;
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    leaf_futures.emplace_back(
+        std::async(std::launch::async, [&pending_queries, &row_desc, &serialized_result_set, leaf_idx, this] {
+          const auto& leaf = leaves_[leaf_idx];
+          const auto query_id = pending_queries[leaf_idx];
+          leaf->broadcast_serialized_rows(serialized_result_set, row_desc, query_id);
+        }));
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.get();
   }
 }
 
