@@ -45,8 +45,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   const auto& leaf_session_ids = session_it->second;
   std::vector<int64_t> pending_queries;
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-    pending_queries.push_back(
-        leaves_[leaf_idx]->start_query(leaf_session_ids[leaf_idx], query_ra, column_format, nonce));
+    pending_queries.push_back(leaves_[leaf_idx]->start_query(leaf_session_ids[leaf_idx], query_ra));
   }
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   bool execution_finished = false;
@@ -65,9 +64,10 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       TStepResult step_result;
       std::vector<std::future<void>> leaf_futures;
       leaf_futures.emplace_back(std::async(
-          std::launch::async, [&step_result, &leaf_session_ids, &nonce, &query_ra, column_format, leaf_idx, this] {
+          std::launch::async,
+          [&step_result, &leaf_session_ids, &nonce, &pending_queries, &query_ra, column_format, leaf_idx, this] {
             const auto& leaf = leaves_[leaf_idx];
-            leaf->execute_first_step(step_result, leaf_session_ids[leaf_idx], query_ra, column_format, nonce);
+            leaf->execute_first_step(step_result, pending_queries[leaf_idx]);
           }));
       for (auto& leaf_future : leaf_futures) {
         leaf_future.get();

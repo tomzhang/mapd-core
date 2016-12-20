@@ -13,6 +13,7 @@
 struct FirstStepExecutionResult {
   ExecutionResult result;
   const unsigned node_id;
+  bool is_outermost_query;
 };
 
 class RelAlgExecutor {
@@ -24,17 +25,10 @@ class RelAlgExecutor {
                                      const ExecutionOptions& eo,
                                      RenderInfo* render_info);
 
-  FirstStepExecutionResult executeRelAlgQueryFirstStep(const std::string& query_ra,
+  FirstStepExecutionResult executeRelAlgQueryFirstStep(const RelAlgNode* ra,
                                                        const CompilationOptions& co,
                                                        const ExecutionOptions& eo,
                                                        RenderInfo* render_info);
-
-  void executeRelAlgStep(const size_t step_idx,
-                         std::vector<RaExecutionDesc>&,
-                         const CompilationOptions&,
-                         const ExecutionOptions&,
-                         RenderInfo*,
-                         const int64_t queue_time_ms);
 
   const std::vector<std::string>& getScanTableNamesInRelAlgSeq() const;
 
@@ -45,18 +39,27 @@ class RelAlgExecutor {
 
   void registerSubquery(RexSubQuery* subquery) noexcept { subqueries_.push_back(subquery); }
 
+  const std::vector<RexSubQuery*>& getSubqueries() const noexcept { return subqueries_; };
+
  private:
+  ExecutionResult executeRelAlgSubQuery(const RelAlgNode* subquery_ra,
+                                        const CompilationOptions& co,
+                                        const ExecutionOptions& eo,
+                                        RenderInfo* render_info,
+                                        const int64_t queue_time_ms);
+
   ExecutionResult executeRelAlgSeq(std::vector<RaExecutionDesc>& ed_list,
                                    const CompilationOptions& co,
                                    const ExecutionOptions& eo,
                                    RenderInfo* render_info,
                                    const int64_t queue_time_ms);
 
-  ExecutionResult executeRelAlgSubQuery(const RelAlgNode* subquery_ra,
-                                        const CompilationOptions& co,
-                                        const ExecutionOptions& eo,
-                                        RenderInfo* render_info,
-                                        const int64_t queue_time_ms);
+  void executeRelAlgStep(const size_t step_idx,
+                         std::vector<RaExecutionDesc>&,
+                         const CompilationOptions&,
+                         const ExecutionOptions&,
+                         RenderInfo*,
+                         const int64_t queue_time_ms);
 
   ExecutionResult executeCompound(const RelCompound*,
                                   const CompilationOptions&,

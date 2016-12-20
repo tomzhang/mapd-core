@@ -28,7 +28,7 @@ class PendingExecutionClosure {
                                          const Catalog_Namespace::Catalog& cat,
                                          const RelAlgExecutionOptions& rel_alg_eo);
 
-  static bool executeNextStep(const int64_t query_id);
+  static FirstStepExecutionResult executeNextStep(const int64_t query_id);
 
   int64_t getId() const;
 
@@ -39,12 +39,11 @@ class PendingExecutionClosure {
                           const Catalog_Namespace::Catalog& cat,
                           const RelAlgExecutionOptions& rel_alg_eo);
 
-  bool executeNextStep();
+  FirstStepExecutionResult executeNextStep();
 
   const std::shared_ptr<const RelAlgNode> ra_;
   const int64_t id_;
-  std::vector<RaExecutionDesc> ed_list_;
-  ssize_t crt_ed_list_idx_;
+  ssize_t crt_subquery_idx_;
   std::unique_ptr<RelAlgExecutor> ra_executor_;
   RelAlgExecutionOptions rel_alg_eo_;
 

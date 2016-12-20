@@ -5,9 +5,7 @@ PendingExecutionClosure::PendingExecutionClosure(std::shared_ptr<const RelAlgNod
                                                  std::unique_ptr<RelAlgExecutor>& ra_executor,
                                                  const Catalog_Namespace::Catalog& cat,
                                                  const RelAlgExecutionOptions& rel_alg_eo)
-    : ra_(ra), id_(id), crt_ed_list_idx_(-1), ra_executor_(std::move(ra_executor)), rel_alg_eo_(rel_alg_eo) {
-  ed_list_ = get_execution_descriptors(ra.get());
-}
+    : ra_(ra), id_(id), crt_subquery_idx_(-1), ra_executor_(std::move(ra_executor)), rel_alg_eo_(rel_alg_eo) {}
 
 PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const RelAlgNode> ra,
                                                          std::unique_ptr<RelAlgExecutor>& ra_executor,
@@ -22,7 +20,7 @@ PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const R
   return (*it_ok.first).second.get();
 }
 
-bool PendingExecutionClosure::executeNextStep(const int64_t query_id) {
+FirstStepExecutionResult PendingExecutionClosure::executeNextStep(const int64_t query_id) {
   PendingExecutionClosure* closure{nullptr};
   {
     std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
@@ -31,23 +29,30 @@ bool PendingExecutionClosure::executeNextStep(const int64_t query_id) {
     closure = it->second.get();
   }
   CHECK(closure);
-  const bool done = closure->executeNextStep();
-  if (done) {
+  const auto result = closure->executeNextStep();
+  if (result.is_outermost_query) {
     std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
     pending_queries_.erase(closure->id_);
   }
-  return done;
+  return result;
 }
 
 int64_t PendingExecutionClosure::getId() const {
   return id_;
 }
 
-bool PendingExecutionClosure::executeNextStep() {
-  ++crt_ed_list_idx_;
-  ra_executor_->executeRelAlgStep(
-      crt_ed_list_idx_, ed_list_, rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info, rel_alg_eo_.queue_time_ms);
-  return static_cast<size_t>(crt_ed_list_idx_ + 1) == ed_list_.size();  // done?
+FirstStepExecutionResult PendingExecutionClosure::executeNextStep() {
+  ++crt_subquery_idx_;
+  const auto subqueries = ra_executor_->getSubqueries();
+  if (crt_subquery_idx_ >= static_cast<ssize_t>(subqueries.size())) {
+    CHECK_EQ(static_cast<ssize_t>(subqueries.size()), crt_subquery_idx_);
+    auto result =
+        ra_executor_->executeRelAlgQueryFirstStep(ra_.get(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info);
+    result.is_outermost_query = true;
+    return result;
+  }
+  return ra_executor_->executeRelAlgQueryFirstStep(
+      subqueries[crt_subquery_idx_]->getRelAlg(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info);
 }
 
 std::unordered_map<int64_t, std::unique_ptr<PendingExecutionClosure>> PendingExecutionClosure::pending_queries_;
