@@ -35,6 +35,16 @@ class RelAlgExecutor {
                                                        const ExecutionOptions& eo,
                                                        RenderInfo* render_info);
 
+  ExecutionResult executeRelAlgSubQuery(const RelAlgNode* subquery_ra,
+                                        const CompilationOptions& co,
+                                        const ExecutionOptions& eo);
+
+  ExecutionResult executeRelAlgSeq(std::vector<RaExecutionDesc>& ed_list,
+                                   const CompilationOptions& co,
+                                   const ExecutionOptions& eo,
+                                   RenderInfo* render_info,
+                                   const int64_t queue_time_ms);
+
   const std::vector<std::string>& getScanTableNamesInRelAlgSeq() const;
 
   void addLeafResult(const unsigned id, const AggregatedResult& result) {
@@ -47,16 +57,6 @@ class RelAlgExecutor {
   const std::vector<RexSubQuery*>& getSubqueries() const noexcept { return subqueries_; };
 
  private:
-  ExecutionResult executeRelAlgSubQuery(const RelAlgNode* subquery_ra,
-                                        const CompilationOptions& co,
-                                        const ExecutionOptions& eo);
-
-  ExecutionResult executeRelAlgSeq(std::vector<RaExecutionDesc>& ed_list,
-                                   const CompilationOptions& co,
-                                   const ExecutionOptions& eo,
-                                   RenderInfo* render_info,
-                                   const int64_t queue_time_ms);
-
   void executeRelAlgStep(const size_t step_idx,
                          std::vector<RaExecutionDesc>&,
                          const CompilationOptions&,
