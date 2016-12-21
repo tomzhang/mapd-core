@@ -26,10 +26,7 @@ class LeafAggregator {
  public:
   LeafAggregator(const std::vector<LeafHostInfo>& leaves);
 
-  AggregatedResult execute(const Catalog_Namespace::SessionInfo& parent_session_info,
-                           const std::string& query_str,
-                           const bool column_format,
-                           const std::string& nonce);
+  AggregatedResult execute(const Catalog_Namespace::SessionInfo& parent_session_info, const std::string& query_ra);
 
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,

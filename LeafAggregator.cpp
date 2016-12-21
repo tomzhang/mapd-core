@@ -29,9 +29,7 @@ LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
 
 #ifdef HAVE_RAVM
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
-                                         const std::string& query_ra,
-                                         const bool column_format,
-                                         const std::string& nonce) {
+                                         const std::string& query_ra) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   const auto& leaf_session_ids = session_it->second;
