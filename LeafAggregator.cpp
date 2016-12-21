@@ -55,41 +55,48 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   const auto& cat = parent_session_info.get_catalog();
   auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, nullptr);
   RelAlgExecutor ra_executor(executor.get(), cat);
+  std::mutex leaves_mutex;
   while (!execution_finished) {
     // new execution step
     std::vector<std::shared_ptr<ResultSet>> leaf_results;
     TRowDescriptor row_desc;
     std::vector<TargetInfo> target_infos;
+    std::vector<std::future<void>> leaf_futures;
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-      TStepResult step_result;
-      std::vector<std::future<void>> leaf_futures;
-      leaf_futures.emplace_back(std::async(
-          std::launch::async,
-          [&step_result, &leaf_session_ids, &nonce, &pending_queries, &query_ra, column_format, leaf_idx, this] {
-            const auto& leaf = leaves_[leaf_idx];
-            leaf->execute_first_step(step_result, pending_queries[leaf_idx]);
-          }));
-      for (auto& leaf_future : leaf_futures) {
-        leaf_future.get();
-      }
-      auto result_set = ResultSet::unserialize(step_result.serialized_rows);
-      target_infos = result_set->getTargetInfos();
-      if (!result_set->definitelyHasNoRows()) {
-        leaf_results.emplace_back(result_set.release());
-      }
-      if (leaf_idx == 0) {
-        execution_finished = step_result.execution_finished;
-        merge_type = step_result.merge_type;
-        sharded = step_result.sharded;
-        row_desc = step_result.row_desc;
-        node_id = step_result.node_id;
-      } else {
-        // leaves move in lock-step
-        CHECK_EQ(execution_finished, step_result.execution_finished);
-        CHECK_EQ(merge_type, step_result.merge_type);
-        CHECK_EQ(sharded, step_result.sharded);
-        CHECK_EQ(node_id, step_result.node_id);
-      }
+      leaf_futures.emplace_back(std::async(std::launch::async,
+                                           [&execution_finished,
+                                            &leaf_results,
+                                            &leaf_session_ids,
+                                            &leaves_mutex,
+                                            &merge_type,
+                                            &node_id,
+                                            &pending_queries,
+                                            &query_ra,
+                                            &row_desc,
+                                            &sharded,
+                                            &target_infos,
+                                            leaf_idx,
+                                            this] {
+                                             TStepResult step_result;
+                                             const auto& leaf = leaves_[leaf_idx];
+                                             leaf->execute_first_step(step_result, pending_queries[leaf_idx]);
+                                             auto result_set = ResultSet::unserialize(step_result.serialized_rows);
+                                             std::lock_guard<std::mutex> lock(leaves_mutex);
+                                             target_infos = result_set->getTargetInfos();
+                                             if (!result_set->definitelyHasNoRows()) {
+                                               leaf_results.emplace_back(result_set.release());
+                                             }
+                                             if (leaf_idx == 0) {
+                                               execution_finished = step_result.execution_finished;
+                                               merge_type = step_result.merge_type;
+                                               sharded = step_result.sharded;
+                                               row_desc = step_result.row_desc;
+                                               node_id = step_result.node_id;
+                                             }
+                                           }));
+    }
+    for (auto& leaf_future : leaf_futures) {
+      leaf_future.get();
     }
     QueryMemoryDescriptor empty_query_mem_desc{};
     auto empty_result_set =
