@@ -51,7 +51,6 @@ bool input_is_replicated(const RelAlgNode* ra) {
   CHECK(ra);
   const auto inputs = get_dag_inputs(ra);
   CHECK(!inputs.empty());
-  // TODO(alex): warn / throw if neither REPLICATED nor SHARDED are specified
   if (inputs.front()->partitions == "REPLICATED") {
     return true;
   }
