@@ -117,6 +117,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       //    all its render properties looking for the dirty flag.
 
       _scaleConfigPtr = nullptr;
+      _scalePtr = nullptr;
     } else if (updateScale) {
       // initialize according to the scale
       _initScaleFromJSONObj(scalemitr->value);
@@ -134,6 +135,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     _vboAttrName = "";
 
     _scaleConfigPtr = nullptr;
+    _scalePtr = nullptr;
 
     _initValueFromJSONObj(obj);
   }
@@ -156,12 +158,18 @@ bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
   _initBuffers(_dataPtr->getAttributeDataBuffers(attrName));
   _vboInitType = VboInitType::FROM_DATAREF;
 
-  auto changed = _initTypeFromBuffer(hasScale);
-  if (changed) {
+  bool inchanged, outchanged;
+  std::tie(inchanged, outchanged) = _initTypeFromBuffer(hasScale);
+  if (inchanged || outchanged) {
+    if (inchanged && _scalePtr) {
+      // need to make sure our scale reference is properly
+      // adjusted for a possible new data type
+      _updateScalePtr(_scalePtr);
+    }
     _prntMark->setPropsDirty();
   }
 
-  return changed;
+  return inchanged || outchanged;
 }
 
 int BaseRenderProperty::size(const GpuId& gpuId) const {
@@ -254,8 +262,10 @@ const ::Rendering::GL::TypeGLShPtr& BaseRenderProperty::getInTypeGL() const {
 }
 
 std::string BaseRenderProperty::getOutGLSLType() const {
-  if (_scaleConfigPtr != nullptr) {
+  if (_scaleConfigPtr) {
     return _scaleConfigPtr->getRangeTypeGL()->glslType();
+  } else if (_scalePtr) {
+    return _scalePtr->getRangeTypeGL()->glslType();
   }
 
   RUNTIME_EX_ASSERT(
@@ -411,7 +421,7 @@ void BaseRenderProperty::_dataRefUpdateCB(RefEventType refEventType, const RefOb
     // pass thru to the REPLACE code
     case RefEventType::REPLACE:
       CHECK(_vboAttrName.size());
-      if (_internalInitFromData(_vboAttrName, dataPtr, _scaleConfigPtr != nullptr)) {
+      if (_internalInitFromData(_vboAttrName, dataPtr, _scaleConfigPtr != nullptr || _scalePtr != nullptr)) {
         _setShaderDirty();
       }
       break;
@@ -474,6 +484,7 @@ void BaseRenderProperty::_unsubscribeFromDataEvent() {
 }
 
 void BaseRenderProperty::_updateScalePtr(const ScaleShPtr& scalePtr) {
+  _scalePtr = scalePtr;
   _setAccumulatorFromScale(scalePtr);
 }
 
@@ -664,50 +675,55 @@ void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_updateScalePtr(const S
   bool scaleAccumulation = _checkAccumulator(scalePtr);
   bool scaleDensityAccumulation = (scaleAccumulation && scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
 
-  if (!_scaleConfigPtr) {
-    _setShaderDirty();
-  }
-
-  CHECK(_inType);
-
-  auto* rangeData = scalePtr->getRangeData();
-
-  ::Rendering::Colors::ColorType colorType = ::Rendering::Colors::ColorType::RGBA;
-  if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>*>(rangeData)) {
-    colorType = ::Rendering::Colors::ColorType::RGBA;
-  } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>*>(rangeData)) {
-    colorType = ::Rendering::Colors::ColorType::HSL;
-  } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>*>(rangeData)) {
-    colorType = ::Rendering::Colors::ColorType::LAB;
-  } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>*>(rangeData)) {
-    colorType = ::Rendering::Colors::ColorType::HCL;
-  } else {
-    THROW_RUNTIME_EX(std::string(*this) +
-                     ": Trying to add a color scale with an unsupported color type for its range.");
-  }
-
-  if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
-    _scaleConfigPtr = createColorScaleRef<unsigned int>(colorType, _ctx, scalePtr, this);
-  } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
-    _scaleConfigPtr = createColorScaleRef<int>(colorType, _ctx, scalePtr, this);
-  } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
-    _scaleConfigPtr = createColorScaleRef<float>(colorType, _ctx, scalePtr, this);
-  } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
-    _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
-  } else {
-    RUNTIME_EX_ASSERT(scaleDensityAccumulation,
-                      std::string(*this) + ": Scale domain with shader type \"" +
-                          scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
-                          _inType->glslType() + "\" are not supported to work together.");
-
-    switch (scalePtr->getDomainDataType()) {
-      case QueryDataType::DOUBLE:
-        _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
-        break;
-      default:
-        THROW_RUNTIME_EX(std::string(*this) + ": Unsupported density accumulator scale with domain of type " +
-                         to_string(scalePtr->getDomainDataType()));
+  if (_inType) {
+    if (!_scaleConfigPtr) {
+      _setShaderDirty();
     }
+
+    auto* rangeData = scalePtr->getRangeData();
+
+    ::Rendering::Colors::ColorType colorType = ::Rendering::Colors::ColorType::RGBA;
+    if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>*>(rangeData)) {
+      colorType = ::Rendering::Colors::ColorType::RGBA;
+    } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>*>(rangeData)) {
+      colorType = ::Rendering::Colors::ColorType::HSL;
+    } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>*>(rangeData)) {
+      colorType = ::Rendering::Colors::ColorType::LAB;
+    } else if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>*>(rangeData)) {
+      colorType = ::Rendering::Colors::ColorType::HCL;
+    } else {
+      THROW_RUNTIME_EX(std::string(*this) +
+                       ": Trying to add a color scale with an unsupported color type for its range.");
+    }
+
+    if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
+      _scaleConfigPtr = createColorScaleRef<unsigned int>(colorType, _ctx, scalePtr, this);
+    } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
+      _scaleConfigPtr = createColorScaleRef<int>(colorType, _ctx, scalePtr, this);
+    } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
+      _scaleConfigPtr = createColorScaleRef<float>(colorType, _ctx, scalePtr, this);
+    } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
+      _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
+    } else {
+      RUNTIME_EX_ASSERT(scaleDensityAccumulation,
+                        std::string(*this) + ": Scale domain with shader type \"" +
+                            scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
+                            _inType->glslType() + "\" are not supported to work together.");
+
+      switch (scalePtr->getDomainDataType()) {
+        case QueryDataType::DOUBLE:
+          _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
+          break;
+        default:
+          THROW_RUNTIME_EX(std::string(*this) + ": Unsupported density accumulator scale with domain of type " +
+                           to_string(scalePtr->getDomainDataType()));
+      }
+    }
+  } else {
+    if (_scaleConfigPtr) {
+      _setShaderDirty();
+    }
+    _scaleConfigPtr = nullptr;
   }
 
   BaseRenderProperty::_updateScalePtr(scalePtr);
@@ -723,22 +739,23 @@ void RenderProperty<ColorUnion, 1>::_validateType(const ::Rendering::GL::TypeGLS
 
 template <>
 void RenderProperty<ColorUnion, 1>::_validateScale() {
-  RUNTIME_EX_ASSERT(_scaleConfigPtr != nullptr,
+  RUNTIME_EX_ASSERT(_scaleConfigPtr != nullptr || _scalePtr != nullptr,
                     std::string(*this) + ": Cannot verify scale for mark property \"" + _name +
                         "\". Scale reference is uninitialized.");
 
-  TypeGLShPtr vboType = _scaleConfigPtr->getRangeTypeGL();
+  TypeGLShPtr vboType = (_scaleConfigPtr ? _scaleConfigPtr->getRangeTypeGL() : _scalePtr->getRangeTypeGL());
 
   // colors need to be a specific type
   RUNTIME_EX_ASSERT(_uniformVal.isValidTypeGL(vboType),
-                    std::string(*this) + ": The scale \"" + _scaleConfigPtr->getName() + "\" has a range type of " +
-                        (vboType ? std::string(*vboType) : "\"null\"") +
+                    std::string(*this) + ": The scale \"" +
+                        (_scaleConfigPtr ? _scaleConfigPtr->getName() : _scalePtr->getName()) +
+                        "\" has a range type of " + (vboType ? std::string(*vboType) : "\"null\"") +
                         " which is not a valid color type for mark property \"" + _name + "\".");
 }
 
 ::Rendering::Colors::ColorType ColorRenderProperty::getColorType() const {
-  if (_scaleConfigPtr) {
-    auto* rangeData = _scaleConfigPtr->getRangeData();
+  if (_scaleConfigPtr || _scalePtr) {
+    auto* rangeData = (_scaleConfigPtr ? _scaleConfigPtr->getRangeData() : _scalePtr->getRangeData());
 
     if (dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>*>(rangeData)) {
       return ::Rendering::Colors::ColorType::RGBA;
@@ -793,7 +810,7 @@ void RenderProperty<ColorUnion, 1>::_validateScale() {
 }
 
 bool ColorRenderProperty::isColorPacked() const {
-  if (_scaleConfigPtr) {
+  if (_scaleConfigPtr || _scalePtr) {
     // TODO(croot): support packed colors in scales?
     return false;
   }

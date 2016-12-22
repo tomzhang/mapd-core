@@ -78,7 +78,7 @@ class BaseRenderProperty {
   QueryUniformBufferShPtr getUboPtr(const GpuId& gpuId) const;
   QueryUniformBufferShPtr getUboPtr() const;
 
-  bool usesScaleConfig() { return (_scaleConfigPtr != nullptr); }
+  bool usesScaleConfig() { return (_scaleConfigPtr != nullptr || _scalePtr != nullptr); }
 
   const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
 
@@ -143,6 +143,7 @@ class BaseRenderProperty {
   ::Rendering::GL::TypeGLShPtr _outType;
 
   ScaleRefShPtr _scaleConfigPtr;
+  ScaleShPtr _scalePtr;
 
   bool _flexibleType;
 
@@ -156,7 +157,7 @@ class BaseRenderProperty {
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
   virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
-  virtual bool _initTypeFromBuffer(const bool hasScale = false) = 0;
+  virtual std::pair<bool, bool> _initTypeFromBuffer(const bool hasScale = false) = 0;
   virtual void _validateScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) = 0;
   virtual void _updateScalePtr(const ScaleShPtr& scalePtr);
@@ -245,7 +246,7 @@ class RenderProperty : public BaseRenderProperty {
         RapidJSONUtils::getJsonParseErrorStr(
             _ctx->getUserWidgetIds(), obj, "scale reference for mark property \"" + _name + "\" must be a string."));
 
-    RUNTIME_EX_ASSERT(_ctx != nullptr && _scaleConfigPtr == nullptr,
+    RUNTIME_EX_ASSERT(_ctx != nullptr && !_scaleConfigPtr && !_scalePtr,
                       RapidJSONUtils::getJsonParseErrorStr(
                           _ctx->getUserWidgetIds(),
                           obj,
@@ -274,37 +275,45 @@ class RenderProperty : public BaseRenderProperty {
   }
 
   void _updateScalePtr(const ScaleShPtr& scalePtr) {
+    CHECK(scalePtr);
+
     bool scaleAccumulation = _checkAccumulator(scalePtr);
     bool scaleDensityAccumulation = (scaleAccumulation && scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
 
-    if (!_scaleConfigPtr) {
-      _setShaderDirty();
-    }
-
-    CHECK(_inType);
-
-    if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
-      _scaleConfigPtr.reset(new ScaleRef<unsigned int, T>(_ctx, scalePtr, this));
-    } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
-      _scaleConfigPtr.reset(new ScaleRef<int, T>(_ctx, scalePtr, this));
-    } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
-      _scaleConfigPtr.reset(new ScaleRef<float, T>(_ctx, scalePtr, this));
-    } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
-      _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
-    } else {
-      RUNTIME_EX_ASSERT(scaleDensityAccumulation,
-                        std::string(*this) + ": Scale domain with shader type \"" +
-                            scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
-                            _inType->glslType() + "\" are not supported to work together.");
-
-      switch (scalePtr->getDomainDataType()) {
-        case QueryDataType::DOUBLE:
-          _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
-          break;
-        default:
-          THROW_RUNTIME_EX(std::string(*this) + ": Unsupported density accumulator scale with domain of type " +
-                           to_string(scalePtr->getDomainDataType()));
+    if (_inType) {
+      if (!_scaleConfigPtr) {
+        _setShaderDirty();
       }
+
+      if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
+        _scaleConfigPtr.reset(new ScaleRef<unsigned int, T>(_ctx, scalePtr, this));
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
+        _scaleConfigPtr.reset(new ScaleRef<int, T>(_ctx, scalePtr, this));
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
+        _scaleConfigPtr.reset(new ScaleRef<float, T>(_ctx, scalePtr, this));
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
+        _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
+      } else {
+        RUNTIME_EX_ASSERT(scaleDensityAccumulation,
+                          std::string(*this) + ": Scale domain with shader type \"" +
+                              scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
+                              _inType->glslType() + "\" are not supported to work together.");
+
+        switch (scalePtr->getDomainDataType()) {
+          case QueryDataType::DOUBLE:
+            _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
+            break;
+          default:
+            THROW_RUNTIME_EX(std::string(*this) + ": Unsupported density accumulator scale with domain of type " +
+                             to_string(scalePtr->getDomainDataType()));
+        }
+      }
+    } else {
+      if (_scaleConfigPtr) {
+        _setShaderDirty();
+      }
+
+      _scaleConfigPtr = nullptr;
     }
 
     BaseRenderProperty::_updateScalePtr(scalePtr);
@@ -336,19 +345,23 @@ class RenderProperty : public BaseRenderProperty {
     initializeValue(val);
   }
 
-  bool _initTypeFromBuffer(const bool hasScale = false) final {
-    bool rtn = false;
+  std::pair<bool, bool> _initTypeFromBuffer(const bool hasScale = false) final {
+    bool inchanged = false, outchanged = false;
     auto itr = _perGpuData.begin();
     if (itr == _perGpuData.end()) {
       // there's nothing in the data ptr
-      if (_inType || _outType) {
-        rtn = true;
+      if (_inType) {
+        inchanged = true;
+      }
+
+      if (_outType) {
+        outchanged = true;
       }
 
       _inType = nullptr;
       _outType = nullptr;
 
-      return rtn;
+      return std::make_pair(inchanged, outchanged);
     }
 
     QueryBufferShPtr bufToUse = (itr->second.vbo ? std::dynamic_pointer_cast<QueryBuffer>(itr->second.vbo)
@@ -369,17 +382,17 @@ class RenderProperty : public BaseRenderProperty {
       _validateType(vboType);
     } else {
       if (!_outType || *_outType != *vboType) {
-        rtn = true;
+        outchanged = true;
       }
       _outType = vboType;
     }
 
-    if (!rtn && (!_inType || !_outType || *_inType != *vboType)) {
-      rtn = true;
+    if (!_inType || *_inType != *vboType) {
+      inchanged = true;
     }
     _inType = vboType;
 
-    return rtn;
+    return std::make_pair(inchanged, outchanged);
   }
 
   void _validateType(const ::Rendering::GL::TypeGLShPtr& type) {
@@ -402,7 +415,11 @@ class RenderProperty : public BaseRenderProperty {
                               "\" has been updated into an accumulator scale, but this property doesn't allow for "
                               "accumulator scales.");
 
-        _scaleConfigPtr->updateScaleRef(scalePtr);
+        if (_scaleConfigPtr) {
+          _scaleConfigPtr->updateScaleRef(scalePtr);
+        }
+        // TODO(croot): should we do something here if there is no _scaleConfigPtr?
+        // Should we check if the data has changed or something?
 
         if (accumulatorChanged || scalePtr->hasPropertiesChanged() || scalePtr->hasDomainChangedInSize() ||
             scalePtr->hasRangeChangedInSize()) {
