@@ -18,6 +18,7 @@
 #include "../Shared/measure.h"
 #include "../Shared/thread_count.h"
 #include "../StringDictionary/StringDictionary.h"
+#include "../StringDictionary/StringDictionaryProxy.h"
 
 #include <boost/functional/hash.hpp>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -355,8 +356,8 @@ class Executor {
 
 #endif  // HAVE_RENDERING
 
-  StringDictionary* getStringDictionary(const int dictId,
-                                        const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner) const;
+  StringDictionaryProxy* getStringDictionaryProxy(const int dictId,
+                                                  const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner) const;
 
   bool isCPUOnly() const;
 
@@ -368,13 +369,13 @@ class Executor {
 
   const Catalog_Namespace::Catalog* getCatalog() const;
 
+  const std::shared_ptr<RowSetMemoryOwner> getRowSetMemoryOwner() const;
+
   const TemporaryTables* getTemporaryTables() const;
 
   Fragmenter_Namespace::TableInfo getTableInfo(const int table_id);
 
   ExpressionRange getColRange(const PhysicalInput&) const;
-
-  std::shared_ptr<RowSetMemoryOwner> getRowSetMemoryOwner() const;
 
   typedef boost::variant<int8_t, int16_t, int32_t, int64_t, float, double, std::pair<std::string, int>, std::string>
       LiteralValue;
@@ -1183,7 +1184,7 @@ class Executor {
   static const int max_gpu_count{16};
   std::mutex gpu_exec_mutex_[max_gpu_count];
 
-  mutable std::shared_ptr<StringDictionary> lit_str_dict_;
+  mutable std::shared_ptr<StringDictionaryProxy> lit_str_dict_proxy_;
   mutable std::mutex str_dict_mutex_;
 
   mutable std::unique_ptr<llvm::TargetMachine> nvptx_target_machine_;
