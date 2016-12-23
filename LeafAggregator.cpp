@@ -151,6 +151,9 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
                                            }));
     }
     for (auto& leaf_future : leaf_futures) {
+      leaf_future.wait();
+    }
+    for (auto& leaf_future : leaf_futures) {
       leaf_future.get();
     }
     QueryMemoryDescriptor empty_query_mem_desc{};
@@ -254,6 +257,9 @@ void LeafAggregator::broadcastResultSet(const ResultSet* result_set,
           const auto query_id = pending_queries[leaf_idx];
           leaf->broadcast_serialized_rows(serialized_result_set, row_desc, query_id);
         }));
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.wait();
   }
   for (auto& leaf_future : leaf_futures) {
     leaf_future.get();
