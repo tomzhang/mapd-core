@@ -161,4 +161,12 @@ GLShaderBlockLayoutShPtr QueryDataLayout::convertToUniformBufferLayout() {
   return std::dynamic_pointer_cast<GLShaderBlockLayout>(_convertedLayout);
 }
 
+bool QueryDataLayout::operator==(const QueryDataLayout& layout) const {
+  if (hasBeenConverted() && layout.hasBeenConverted()) {
+    return *_convertedLayout == *(layout._convertedLayout);
+  } else {
+    return attrTypes == layout.attrTypes;
+  }
+}
+
 }  // namespace QueryRenderer

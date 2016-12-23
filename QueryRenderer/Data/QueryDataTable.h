@@ -126,6 +126,7 @@ class SqlQueryDataTableJSON : public BaseQueryDataTableVBO, public BaseQueryData
   QueryDataType getAttributeType(const std::string& attrName) final;
 
   int numRows(const GpuId& gpuId) final;
+  bool hasLayoutChanged(const GpuId* gpuId = nullptr) const { return _layoutChanged; }
   bool hasLayoutOffsetChanged(const GpuId* gpuId = nullptr) const;
 
   QueryDataLayoutShPtr getQueryDataLayout() const final;
@@ -138,7 +139,7 @@ class SqlQueryDataTableJSON : public BaseQueryDataTableVBO, public BaseQueryData
  private:
   bool _justInitialized;
   std::map<GpuId, std::pair<size_t, bool>> _currBufOffsetBytes;
-  bool _layoutOffsetChanged;
+  bool _layoutOffsetChanged, _layoutChanged;
 
   bool _isInternalCacheUpToDate() final;
   void _updateFromJSONObj(const rapidjson::Value& obj,

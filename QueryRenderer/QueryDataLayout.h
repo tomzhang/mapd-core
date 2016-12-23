@@ -45,6 +45,9 @@ struct QueryDataLayout {
   bool hasBeenConverted() const { return _convertedLayout != nullptr; }
   Rendering::GL::Resources::GLBufferLayoutShPtr getBufferLayout() const { return _convertedLayout; }
 
+  bool operator==(const QueryDataLayout& layout) const;
+  bool operator!=(const QueryDataLayout& layout) const { return !operator==(layout); }
+
  private:
   static const std::string dummyPrefix;
 

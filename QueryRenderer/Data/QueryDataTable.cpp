@@ -159,7 +159,8 @@ SqlQueryDataTableJSON::SqlQueryDataTableJSON(const QueryRendererContextShPtr& ct
     : BaseQueryDataTableVBO(ctx->getRootGpuCache(), QueryDataTableType::SQLQUERY),
       BaseQueryDataTableSQLJSON(ctx, name, obj, objPath, false),
       _justInitialized(false),
-      _layoutOffsetChanged(false) {
+      _layoutOffsetChanged(false),
+      _layoutChanged(false) {
   _updateFromJSONObj(obj, objPath);
 }
 
@@ -315,6 +316,8 @@ void SqlQueryDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
   if (currSql != _sqlQueryStr || force || !_isInternalCacheUpToDate()) {
     // sql changed, re-run the query
     _runQueryAndInitResources(_ctx->getRootGpuCache(), true, &obj);
+  } else {
+    _layoutChanged = false;
   }
 }
 
@@ -323,17 +326,19 @@ void SqlQueryDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmP
                                                       const rapidjson::Value* dataObj) {
   if (!_justInitialized) {
     // first run the sql query, then initialize resources
+    auto origLayout = _queryDataLayoutPtr;
     if (!_executeQuery(dataObj)) {
       _currBufOffsetBytes.clear();
     }
 
-    auto layout = _queryDataLayoutPtr;
+    auto currLayout = _queryDataLayoutPtr;
+    _layoutChanged = (!origLayout && currLayout) || (origLayout && !currLayout) || *origLayout != *currLayout;
 
     // now initialize resources
-    BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr, layout);
+    BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr, currLayout);
 
-    if (!layout && _perGpuData.size()) {
-      layout = getQueryDataLayout();
+    if (!currLayout && _perGpuData.size()) {
+      currLayout = getQueryDataLayout();
     }
 
     size_t offset;
@@ -347,7 +352,7 @@ void SqlQueryDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmP
 
     _layoutOffsetChanged = false;
     std::for_each(_perGpuData.begin(), _perGpuData.end(), [&](const auto& pitr) {
-      offset = pitr.second.vbo->getLayoutOffsetBytes(layout);
+      offset = pitr.second.vbo->getLayoutOffsetBytes(currLayout);
       auto itr = _currBufOffsetBytes.find(pitr.first);
       if (itr == _currBufOffsetBytes.end()) {
         _currBufOffsetBytes.emplace(pitr.first, std::make_pair(offset, false));

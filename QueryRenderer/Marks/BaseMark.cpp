@@ -22,8 +22,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _vboProps(),
       _uboProps(),
       _uniformProps(),
-      _activeAccumulatorScaleName("") {
-}
+      _activeAccumulatorScaleName("") {}
 
 BaseMark::BaseMark(GeomType geomType,
                    const QueryRendererContextShPtr& ctx,
@@ -35,8 +34,7 @@ BaseMark::BaseMark(GeomType geomType,
   _initFromJSONObj(obj, objPath, baseType, mustUseDataRef, true);
 }
 
-BaseMark::~BaseMark() {
-}
+BaseMark::~BaseMark() {}
 
 void BaseMark::setAccumulatorScale(const std::string& accumulatorScaleName) {
   RUNTIME_EX_ASSERT(
@@ -183,6 +181,7 @@ std::string BaseMark::_addBaseTypeDefinesToShaderSrc(const std::string& shaderSr
 
 void BaseMark::_buildVertexArrayObjectFromProperties() {
   std::shared_ptr<SqlQueryDataTableJSON> dataPtr;
+  bool force = false;
   if (!_perGpuData.size()) {
     return;
   } else if (!_propsDirty) {
@@ -190,7 +189,7 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
       return;
     }
     dataPtr = std::dynamic_pointer_cast<SqlQueryDataTableJSON>(_dataPtr);
-    if (!dataPtr || !dataPtr->hasLayoutOffsetChanged()) {
+    if (!dataPtr || (!(force = dataPtr->hasLayoutChanged()) && !dataPtr->hasLayoutOffsetChanged())) {
       return;
     }
   }
@@ -216,8 +215,8 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
     bool deleteVao = true;
-    if (itr.second.shaderPtr &&
-        (!itr.second.vaoPtr || _propsDirty || !dataPtr || (deleteVao = dataPtr->hasLayoutOffsetChanged(&itr.first)))) {
+    if (itr.second.shaderPtr && (!itr.second.vaoPtr || _propsDirty || !dataPtr || force ||
+                                 (deleteVao = dataPtr->hasLayoutOffsetChanged(&itr.first)))) {
       currRenderer->bindShader(itr.second.shaderPtr);
 
       // build property map for how vertex buffer attributes will
