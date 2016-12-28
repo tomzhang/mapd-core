@@ -332,7 +332,12 @@ void SqlQueryDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmP
     }
 
     auto currLayout = _queryDataLayoutPtr;
-    _layoutChanged = (!origLayout && currLayout) || (origLayout && !currLayout) || *origLayout != *currLayout;
+
+    if (origLayout || currLayout) {
+      _layoutChanged = (!origLayout && currLayout) || (origLayout && !currLayout) || *origLayout != *currLayout;
+    } else {
+      _layoutChanged = false;
+    }
 
     // now initialize resources
     BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr, currLayout);
