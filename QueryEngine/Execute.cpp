@@ -1657,6 +1657,9 @@ llvm::Value* Executor::codegen(const Analyzer::InValues* expr, const Compilation
     const auto in_vals_bitmap = createInValuesBitmap(expr, co);
     if (in_vals_bitmap) {
       if (in_vals_bitmap->isEmpty()) {
+        if (in_vals_bitmap->hasNull()) {
+          return inlineIntNull(SQLTypeInfo(kBOOLEAN, false));
+        }
         return expr_ti.get_notnull()
                    ? llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(cgen_state_->context_), false)
                    : ll_int(int8_t(0));
@@ -1693,6 +1696,7 @@ InValuesBitmap* Executor::createInValuesBitmap(const Analyzer::InValues* in_valu
   }
   const auto sd = ti.is_string() ? getStringDictionary(ti.get_comp_param(), row_set_mem_owner_) : nullptr;
   if (value_list.size() > 3) {
+    const auto needle_null_val = inline_int_null_val(ti);
     for (const auto in_val : value_list) {
       const auto in_val_const = dynamic_cast<const Analyzer::Constant*>(extract_cast_arg(in_val.get()));
       if (!in_val_const) {
@@ -1702,8 +1706,9 @@ InValuesBitmap* Executor::createInValuesBitmap(const Analyzer::InValues* in_valu
       CHECK(in_val_ti == ti);
       if (ti.is_string()) {
         CHECK(sd);
-        const auto string_id = in_val_const->get_is_null() ? -1 : sd->get(*in_val_const->get_constval().stringval);
-        if (string_id >= 0) {
+        const auto string_id =
+            in_val_const->get_is_null() ? needle_null_val : sd->get(*in_val_const->get_constval().stringval);
+        if (string_id >= 0 || string_id == needle_null_val) {
           values.push_back(string_id);
         }
       } else {
@@ -1713,7 +1718,7 @@ InValuesBitmap* Executor::createInValuesBitmap(const Analyzer::InValues* in_valu
     try {
       return new InValuesBitmap(
           values,
-          inline_int_null_val(ti),
+          needle_null_val,
           co.device_type_ == ExecutorDeviceType::GPU ? Data_Namespace::GPU_LEVEL : Data_Namespace::CPU_LEVEL,
           deviceCount(co.device_type_),
           &catalog_->get_dataMgr());
