@@ -185,7 +185,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     std::lock_guard<std::mutex> lock(executor->execute_mutex_);
     ScopeGuard row_set_holder = [executor] { executor->row_set_mem_owner_ = nullptr; };
     executor->row_set_mem_owner_ = std::make_shared<RowSetMemoryOwner>();
-    ScopeGuard restore_input_table_info_cache = [executor] { executor->clearInputTableInfoCache(); };
+    ScopeGuard restore_metainfo_cache = [executor] { executor->clearMetaInfoCache(); };
     if (crt_subquery_idx >= static_cast<ssize_t>(subqueries.size())) {
       CHECK_EQ(static_cast<ssize_t>(subqueries.size()), crt_subquery_idx);
       CHECK(execution_finished);
