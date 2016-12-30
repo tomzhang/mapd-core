@@ -66,6 +66,64 @@ bool input_is_replicated(const RelAlgNode* ra) {
   return false;
 }
 
+typedef std::vector<TColumnRange> TColumnRanges;
+
+TColumnRanges aggregate_two_leaf_ranges(const TColumnRanges& lhs, const TColumnRanges& rhs) {
+  CHECK_EQ(lhs.size(), rhs.size());
+  TColumnRanges result;
+  for (const auto& lhs_column_range : lhs) {
+    const auto it = std::find_if(rhs.begin(), rhs.end(), [&lhs_column_range](const TColumnRange& r) {
+      return r.col_id == lhs_column_range.col_id && r.table_id == lhs_column_range.table_id;
+    });
+    CHECK(it != rhs.end());
+    const auto& rhs_column_range = *it;
+    CHECK_EQ(lhs_column_range.type, rhs_column_range.type);
+    TColumnRange column_range;
+    column_range.type = lhs_column_range.type;
+    column_range.col_id = lhs_column_range.col_id;
+    column_range.table_id = lhs_column_range.table_id;
+    switch (column_range.type) {
+      case TExpressionRangeType::INTEGER:
+        // handle empty lhs range
+        if (lhs_column_range.int_min > lhs_column_range.int_max) {
+          column_range = rhs_column_range;
+          break;
+        }
+        // handle empty rhs range
+        if (rhs_column_range.int_min > rhs_column_range.int_max) {
+          column_range = lhs_column_range;
+          break;
+        }
+        CHECK_EQ(lhs_column_range.bucket, rhs_column_range.bucket);
+        column_range.bucket = lhs_column_range.bucket;
+        column_range.int_min = std::min(lhs_column_range.int_min, rhs_column_range.int_min);
+        column_range.int_max = std::max(lhs_column_range.int_max, rhs_column_range.int_max);
+        column_range.has_nulls = lhs_column_range.has_nulls || rhs_column_range.has_nulls;
+        break;
+      case TExpressionRangeType::FLOATINGPOINT:
+        column_range.fp_min = std::min(lhs_column_range.fp_min, rhs_column_range.fp_min);
+        column_range.fp_max = std::max(lhs_column_range.fp_max, rhs_column_range.fp_max);
+        column_range.has_nulls = lhs_column_range.has_nulls || rhs_column_range.has_nulls;
+        break;
+      case TExpressionRangeType::INVALID:
+        break;
+      default:
+        CHECK(false);
+    }
+    result.push_back(column_range);
+  }
+  return result;
+}
+
+TColumnRanges aggregate_leaf_ranges(const std::vector<TPendingQuery>& pending_queries) {
+  CHECK(!pending_queries.empty());
+  auto aggregated_ranges = pending_queries.front().column_ranges;
+  for (size_t i = 1; i < pending_queries.size(); ++i) {
+    aggregated_ranges = aggregate_two_leaf_ranges(aggregated_ranges, pending_queries[i].column_ranges);
+  }
+  return aggregated_ranges;
+}
+
 }  // namespace
 
 // TODO(alex): split and clean-up this method
@@ -74,9 +132,15 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   const auto& leaf_session_ids = session_it->second;
-  std::vector<int64_t> pending_queries;
+  std::vector<TPendingQuery> pending_queries;
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-    pending_queries.push_back(leaves_[leaf_idx]->start_query(leaf_session_ids[leaf_idx], query_ra));
+    TPendingQuery pending_query;
+    leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+    pending_queries.push_back(pending_query);
+  }
+  const auto column_ranges = aggregate_leaf_ranges(pending_queries);
+  for (auto& pending_query : pending_queries) {
+    pending_query.column_ranges = column_ranges;
   }
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   bool execution_finished = false;
@@ -246,7 +310,7 @@ size_t LeafAggregator::leafCount() const {
 
 void LeafAggregator::broadcastResultSet(const ResultSet* result_set,
                                         const TRowDescriptor& row_desc,
-                                        const std::vector<int64_t>& pending_queries) const {
+                                        const std::vector<TPendingQuery>& pending_queries) const {
   CHECK_EQ(leaves_.size(), pending_queries.size());
   const auto serialized_result_set = result_set->serialize();
   std::vector<std::future<void>> leaf_futures;
@@ -254,7 +318,7 @@ void LeafAggregator::broadcastResultSet(const ResultSet* result_set,
     leaf_futures.emplace_back(
         std::async(std::launch::async, [&pending_queries, &row_desc, &serialized_result_set, leaf_idx, this] {
           const auto& leaf = leaves_[leaf_idx];
-          const auto query_id = pending_queries[leaf_idx];
+          const auto query_id = pending_queries[leaf_idx].id;
           leaf->broadcast_serialized_rows(serialized_result_set, row_desc, query_id);
         }));
   }

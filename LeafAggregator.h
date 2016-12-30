@@ -40,7 +40,7 @@ class LeafAggregator {
  private:
   void broadcastResultSet(const ResultSet* result_set,
                           const TRowDescriptor& row_desc,
-                          const std::vector<int64_t>& pending_queries) const;
+                          const std::vector<TPendingQuery>& pending_queries) const;
 
   typedef std::map<TSessionId, std::vector<TSessionId>> SessionMap;
 
