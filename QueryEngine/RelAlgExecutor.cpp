@@ -112,7 +112,9 @@ void RelAlgExecutor::executeRelAlgStep(const size_t i,
                                       eo.allow_loop_joins,
                                       eo.with_watchdog && (i == 0 || dynamic_cast<const RelProject*>(body)),
                                       eo.jit_debug,
-                                      eo.just_validate};
+                                      eo.just_validate,
+                                      eo.with_dynamic_watchdog,
+                                      eo.dynamic_watchdog_factor};
   const auto compound = dynamic_cast<const RelCompound*>(body);
   if (compound) {
     exec_desc.setResult(executeCompound(compound, co, eo_work_unit, render_info, queue_time_ms));
@@ -1032,6 +1034,9 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
   if (error_code == Executor::ERR_UNSUPPORTED_SELF_JOIN) {
     throw std::runtime_error("Self joins not supported yet");
   }
+  if (error_code == Executor::ERR_OUT_OF_TIME) {
+    throw std::runtime_error("Query execution has exceeded the time limit");
+  }
   if (error_code == Executor::ERR_OUT_OF_CPU_MEM) {
     throw std::runtime_error("Not enough host memory to execute the query");
   }
@@ -1161,6 +1166,9 @@ ExecutionResult RelAlgExecutor::renderWorkUnit(const RelAlgExecutor::WorkUnit& w
   if (error_code == Executor::ERR_OUT_OF_RENDER_MEM) {
     throw std::runtime_error("Not enough OpenGL memory to render the query results");
   }
+  if (error_code == Executor::ERR_OUT_OF_TIME) {
+    throw std::runtime_error("Query execution has exceeded the time limit");
+  }
   if (error_code == Executor::ERR_OUT_OF_GPU_MEM) {
     throw std::runtime_error("Not enough GPU memory to execute the query");
   }
@@ -1190,8 +1198,15 @@ ExecutionResult RelAlgExecutor::handleRetry(const int32_t error_code_in,
                                             const int64_t queue_time_ms) {
   auto error_code = error_code_in;
   auto max_groups_buffer_entry_guess = work_unit.max_groups_buffer_entry_guess;
-  ExecutionOptions eo_no_multifrag{
-      eo.output_columnar_hint, false, false, eo.allow_loop_joins, eo.with_watchdog, eo.jit_debug, false};
+  ExecutionOptions eo_no_multifrag{eo.output_columnar_hint,
+                                   false,
+                                   false,
+                                   eo.allow_loop_joins,
+                                   eo.with_watchdog,
+                                   eo.jit_debug,
+                                   false,
+                                   eo.with_dynamic_watchdog,
+                                   eo.dynamic_watchdog_factor};
   ExecutionResult result{ResultRows({}, {}, nullptr, nullptr, {}, co.device_type_), {}};
   if (error_code == Executor::ERR_OUT_OF_GPU_MEM) {
     result = {executor_->executeWorkUnit(&error_code,
@@ -1233,6 +1248,9 @@ ExecutionResult RelAlgExecutor::handleRetry(const int32_t error_code_in,
       }
       if (error_code == Executor::ERR_OUT_OF_CPU_MEM) {
         throw std::runtime_error("Not enough host memory to execute the query");
+      }
+      if (error_code == Executor::ERR_OUT_OF_TIME) {
+        throw std::runtime_error("Query execution has exceeded the time limit");
       }
       // Even the conservative guess failed; it should only happen when we group
       // by a huge cardinality array. Maybe we should throw an exception instead?

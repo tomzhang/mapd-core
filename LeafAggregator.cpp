@@ -181,7 +181,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     const auto target_meta_infos = target_meta_infos_from_thrift(row_desc);
     AggregatedResult leaves_result{reduced_rs, target_meta_infos};
     CompilationOptions co = {ExecutorDeviceType::CPU, true, ExecutorOptLevel::Default};
-    ExecutionOptions eo = {false, true, false, false, true, false, false};
+    ExecutionOptions eo = {false, true, false, false, true, false, false, false, 0};
     std::lock_guard<std::mutex> lock(executor->execute_mutex_);
     ScopeGuard row_set_holder = [executor] { executor->row_set_mem_owner_ = nullptr; };
     executor->row_set_mem_owner_ = std::make_shared<RowSetMemoryOwner>();
