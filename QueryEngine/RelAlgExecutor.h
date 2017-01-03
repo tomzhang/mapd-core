@@ -6,6 +6,7 @@
 #include "QueryRewrite.h"
 #include "RelAlgExecutionDescriptor.h"
 #include "SpeculativeTopN.h"
+#include "../Shared/scope.h"
 #include "../LeafAggregator.h"
 
 #include <ctime>
@@ -35,6 +36,8 @@ class RelAlgExecutor {
                                                        const ExecutionOptions& eo,
                                                        RenderInfo* render_info,
                                                        const AggregatedColRange& agg_col_range);
+
+  void prepareLeafExecution(const AggregatedColRange& agg_col_range);
 
   ExecutionResult executeRelAlgSubQuery(const RelAlgNode* subquery_ra,
                                         const CompilationOptions& co,
@@ -184,6 +187,7 @@ class RelAlgExecutor {
   std::vector<std::string> table_names_;  // used by poly rendering only, lazily initialized by executeRelAlgQuery()
   std::vector<RexSubQuery*> subqueries_;
   std::unordered_map<unsigned, AggregatedResult> leaf_results_;
+  std::unique_ptr<ScopeGuard> leaf_execution_cleanup_;
   static SpeculativeTopNBlacklist speculative_topn_blacklist_;
   static const size_t max_groups_buffer_entry_default_guess{16384};
 };
