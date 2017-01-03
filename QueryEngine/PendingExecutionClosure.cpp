@@ -66,16 +66,19 @@ const AggregatedColRange& PendingExecutionClosure::getColRangeCache() const {
 
 FirstStepExecutionResult PendingExecutionClosure::executeNextStep(const AggregatedColRange& col_ranges) {
   ++crt_subquery_idx_;
+  if (crt_subquery_idx_ == 0) {
+    ra_executor_->prepareLeafExecution(col_ranges);
+  }
   const auto subqueries = ra_executor_->getSubqueries();
   if (crt_subquery_idx_ >= static_cast<ssize_t>(subqueries.size())) {
     CHECK_EQ(static_cast<ssize_t>(subqueries.size()), crt_subquery_idx_);
-    auto result = ra_executor_->executeRelAlgQueryFirstStep(
-        ra_.get(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info, col_ranges);
+    auto result =
+        ra_executor_->executeRelAlgQueryFirstStep(ra_.get(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info);
     result.is_outermost_query = true;
     return result;
   }
   return ra_executor_->executeRelAlgQueryFirstStep(
-      subqueries[crt_subquery_idx_]->getRelAlg(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info, col_ranges);
+      subqueries[crt_subquery_idx_]->getRelAlg(), rel_alg_eo_.co, rel_alg_eo_.eo, rel_alg_eo_.render_info);
 }
 
 void PendingExecutionClosure::setCurrentSubqueryResult(const std::shared_ptr<const ExecutionResult> result) {
