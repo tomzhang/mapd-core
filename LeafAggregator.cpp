@@ -169,27 +169,11 @@ TColumnRanges aggregate_leaf_ranges(const std::vector<TPendingQuery>& pending_qu
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
                                          const std::string& query_ra) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
-  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
-  auto& leaf_session_ids = session_it->second;
-  std::vector<TPendingQuery> pending_queries;
-  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-    TPendingQuery pending_query;
-    try {
-      leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
-    } catch (const TException&) {
-      const auto credentials_it = session_credentials_.find(parent_session_info.get_session_id());
-      CHECK(credentials_it != session_credentials_.end());
-      const auto& credentials = credentials_it->second;
-      leaf_session_ids[leaf_idx] = leaves_[leaf_idx]->connect(credentials.user, credentials.passwd, credentials.dbname);
-      leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
-    }
-    pending_queries.push_back(pending_query);
-  }
+  auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra);
   const auto column_ranges = aggregate_leaf_ranges(pending_queries);
   for (auto& pending_query : pending_queries) {
     pending_query.column_ranges = column_ranges;
   }
-  CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   bool execution_finished = false;
   unsigned node_id{0};
   TMergeType::type merge_type = TMergeType::REDUCE;
@@ -234,7 +218,6 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       leaf_futures.emplace_back(std::async(std::launch::async,
                                            [&execution_finished,
                                             &leaf_results,
-                                            &leaf_session_ids,
                                             &leaves_mutex,
                                             &merge_type,
                                             &node_id,
@@ -322,6 +305,39 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   }
   CHECK(false);
   return {nullptr, {}};
+}
+
+std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                                              const std::string& query_ra) {
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  CHECK_EQ(leaves_.size(), leaf_session_ids.size());
+  std::vector<TPendingQuery> pending_queries(leaves_.size());
+  std::vector<std::future<void>> leaf_futures;
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    leaf_futures.emplace_back(std::async(
+        std::launch::async, [leaf_idx, &leaf_session_ids, &parent_session_info, &pending_queries, &query_ra, this] {
+          TPendingQuery pending_query;
+          try {
+            leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+          } catch (const TException&) {
+            const auto credentials_it = session_credentials_.find(parent_session_info.get_session_id());
+            CHECK(credentials_it != session_credentials_.end());
+            const auto& credentials = credentials_it->second;
+            leaf_session_ids[leaf_idx] =
+                leaves_[leaf_idx]->connect(credentials.user, credentials.passwd, credentials.dbname);
+            leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+          }
+          pending_queries[leaf_idx] = pending_query;
+        }));
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.wait();
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.get();
+  }
+  return pending_queries;
 }
 
 #endif  // HAVE_RAVM

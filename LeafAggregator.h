@@ -58,6 +58,9 @@ class LeafAggregator {
   size_t leafCount() const;
 
  private:
+  std::vector<TPendingQuery> startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                                const std::string& query_ra);
+
   void broadcastResultSet(const ResultSet* result_set,
                           const TRowDescriptor& row_desc,
                           const std::vector<TPendingQuery>& pending_queries) const;
