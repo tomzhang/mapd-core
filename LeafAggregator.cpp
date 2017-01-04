@@ -17,14 +17,53 @@ using apache::thrift::protocol::TBinaryProtocol;
 using apache::thrift::transport::TSocket;
 using apache::thrift::transport::TTransport;
 using apache::thrift::transport::TBufferedTransport;
+using apache::thrift::TException;
+using apache::thrift::transport::TTransportException;
+
+PresistentLeafClient::PresistentLeafClient(const LeafHostInfo& leaf_host) : leaf_host_(leaf_host) {
+  setupClient();
+}
+
+TSessionId PresistentLeafClient::connect(const std::string& user,
+                                         const std::string& passwd,
+                                         const std::string& dbname) {
+  try {
+    return client_->connect(user, passwd, dbname);
+  } catch (const TTransportException&) {
+    setupClient();
+  }
+  return client_->connect(user, passwd, dbname);
+}
+
+void PresistentLeafClient::disconnect(const TSessionId session) {
+  client_->disconnect(session);
+}
+
+void PresistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
+  client_->start_query(_return, session, query_ra);
+}
+
+void PresistentLeafClient::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query) {
+  client_->execute_first_step(_return, pending_query);
+}
+
+void PresistentLeafClient::broadcast_serialized_rows(const std::string& serialized_rows,
+                                                     const TRowDescriptor& row_desc,
+                                                     const TQueryId query_id) {
+  client_->broadcast_serialized_rows(serialized_rows, row_desc, query_id);
+}
+
+void PresistentLeafClient::setupClient() {
+  const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
+  const auto transport = boost::make_shared<TBufferedTransport>(socket);
+  transport->open();
+  const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
+  client_.reset(new MapDClient(protocol));
+}
 
 LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
   for (const auto& leaf : leaves) {
-    const auto socket = boost::make_shared<TSocket>(leaf.getHost(), leaf.getPort());
-    const auto transport = boost::make_shared<TBufferedTransport>(socket);
-    transport->open();
-    const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
-    leaves_.emplace_back(new MapDClient(protocol));
+    leaves_.emplace_back(new PresistentLeafClient(leaf));
   }
 }
 
@@ -131,11 +170,19 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
                                          const std::string& query_ra) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
-  const auto& leaf_session_ids = session_it->second;
+  auto& leaf_session_ids = session_it->second;
   std::vector<TPendingQuery> pending_queries;
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
     TPendingQuery pending_query;
-    leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+    try {
+      leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+    } catch (const TException&) {
+      const auto credentials_it = session_credentials_.find(parent_session_info.get_session_id());
+      CHECK(credentials_it != session_credentials_.end());
+      const auto& credentials = credentials_it->second;
+      leaf_session_ids[leaf_idx] = leaves_[leaf_idx]->connect(credentials.user, credentials.passwd, credentials.dbname);
+      leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+    }
     pending_queries.push_back(pending_query);
   }
   const auto column_ranges = aggregate_leaf_ranges(pending_queries);
@@ -288,8 +335,15 @@ void LeafAggregator::connect(const Catalog_Namespace::SessionInfo& parent_sessio
   for (const auto& leaf : leaves_) {
     leaf_session_ids.push_back(leaf->connect(user, passwd, dbname));
   }
-  const auto it_ok = leaf_sessions_.emplace(parent_session_info.get_session_id(), leaf_session_ids);
-  CHECK(it_ok.second);
+  {
+    const auto it_ok = leaf_sessions_.emplace(parent_session_info.get_session_id(), leaf_session_ids);
+    CHECK(it_ok.second);
+  }
+  {
+    const auto it_ok =
+        session_credentials_.emplace(parent_session_info.get_session_id(), Credentials{user, passwd, dbname});
+    CHECK(it_ok.second);
+  }
 }
 
 void LeafAggregator::disconnect(const TSessionId session) {
@@ -302,6 +356,7 @@ void LeafAggregator::disconnect(const TSessionId session) {
     leaf->disconnect(leaf_session_ids[leaf_idx]);
   }
   leaf_sessions_.erase(session);
+  session_credentials_.erase(session);
 }
 
 size_t LeafAggregator::leafCount() const {

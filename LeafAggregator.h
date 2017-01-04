@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 class MapDClient;
 class ResultSet;
@@ -20,6 +21,25 @@ class SessionInfo;
 struct AggregatedResult {
   std::shared_ptr<ResultSet> rs;
   const std::vector<TargetMetaInfo> targets_meta;
+};
+
+class PresistentLeafClient {
+ public:
+  PresistentLeafClient(const LeafHostInfo& leaf_host);
+
+  TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
+  void disconnect(const TSessionId session);
+  void start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra);
+  void execute_first_step(TStepResult& _return, const TPendingQuery& pending_query);
+  void broadcast_serialized_rows(const std::string& serialized_rows,
+                                 const TRowDescriptor& row_desc,
+                                 const TQueryId query_id);
+
+ private:
+  void setupClient();
+
+  const LeafHostInfo leaf_host_;
+  std::unique_ptr<MapDClient> client_;
 };
 
 class LeafAggregator {
@@ -46,8 +66,15 @@ class LeafAggregator {
 
   SessionMap::iterator getSessionIterator(const TSessionId session);
 
-  std::vector<std::unique_ptr<MapDClient>> leaves_;
+  struct Credentials {
+    const std::string user;
+    const std::string passwd;
+    const std::string dbname;
+  };
+
+  std::vector<std::unique_ptr<PresistentLeafClient>> leaves_;
   SessionMap leaf_sessions_;  // map from aggregator session to leaf sessions
+  std::unordered_map<TSessionId, Credentials> session_credentials_;
   mapd_shared_mutex leaf_sessions_mutex_;
 };
 
