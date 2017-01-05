@@ -253,24 +253,31 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     QueryMemoryDescriptor empty_query_mem_desc{};
     auto empty_result_set =
         std::make_shared<ResultSet>(target_infos, ExecutorDeviceType::CPU, empty_query_mem_desc, nullptr, nullptr);
-    if (merge_type == TMergeType::UNION) {
-      CHECK(false);  // TODO(alex)
-      continue;
-    }
-    std::vector<ResultSet*> leaf_results_ptrs;
-    for (auto& result : leaf_results) {
-      leaf_results_ptrs.push_back(result.get());
-    }
-    ResultSetManager rs_manager;
     std::shared_ptr<ResultSet> reduced_rs;
-    if (leaf_results_ptrs.size() == 1) {
-      reduced_rs = leaf_results.front();
-    } else if (leaf_results_ptrs.size() > 1) {
-      rs_manager.reduce(leaf_results_ptrs);
-      auto rs_manager_rs = rs_manager.getOwnResultSet();
-      reduced_rs = rs_manager_rs ? rs_manager_rs : leaf_results.front();
+    if (merge_type == TMergeType::UNION) {
+      if (leaf_results.empty()) {
+        reduced_rs = empty_result_set;
+      } else {
+        reduced_rs = leaf_results.front();
+        for (size_t i = 1; i < leaf_results.size(); ++i) {
+          reduced_rs->append(*leaf_results[i]);
+        }
+      }
     } else {
-      reduced_rs = empty_result_set;
+      std::vector<ResultSet*> leaf_results_ptrs;
+      for (auto& result : leaf_results) {
+        leaf_results_ptrs.push_back(result.get());
+      }
+      ResultSetManager rs_manager;
+      if (leaf_results_ptrs.size() == 1) {
+        reduced_rs = leaf_results.front();
+      } else if (leaf_results_ptrs.size() > 1) {
+        rs_manager.reduce(leaf_results_ptrs);
+        auto rs_manager_rs = rs_manager.getOwnResultSet();
+        reduced_rs = rs_manager_rs ? rs_manager_rs : leaf_results.front();
+      } else {
+        reduced_rs = empty_result_set;
+      }
     }
     const auto target_meta_infos = target_meta_infos_from_thrift(row_desc);
     AggregatedResult leaves_result{reduced_rs, target_meta_infos};
