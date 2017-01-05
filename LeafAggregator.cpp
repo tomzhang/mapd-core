@@ -300,7 +300,11 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       auto aggregated_result = std::make_shared<ExecutionResult>(
           subquery_executor.executeRelAlgSubQuery(current_subquery->getRelAlg(), co, eo));
       current_subquery->setExecutionResult(aggregated_result);
-      broadcastResultSet(reduced_rs.get(), row_desc, pending_queries);
+      const auto& aggregated_result_rows = aggregated_result->getRows();
+      auto aggregated_rs =
+          aggregated_result_rows.definitelyHasNoRows() ? empty_result_set : aggregated_result_rows.getResultSet();
+      CHECK(aggregated_rs);
+      broadcastResultSet(aggregated_rs.get(), row_desc, pending_queries);
     }
   }
   CHECK(false);
