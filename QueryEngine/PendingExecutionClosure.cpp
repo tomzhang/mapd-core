@@ -1,5 +1,7 @@
 #include "PendingExecutionClosure.h"
 
+#include <boost/algorithm/string/join.hpp>
+
 PendingExecutionClosure::PendingExecutionClosure(std::shared_ptr<const RelAlgNode> ra,
                                                  const int64_t id,
                                                  std::unique_ptr<RelAlgExecutor>& ra_executor,
@@ -17,6 +19,15 @@ PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const R
                                                          const Catalog_Namespace::Catalog& cat,
                                                          const RelAlgExecutionOptions& rel_alg_eo) {
   std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
+  if (!pending_queries_.empty()) {
+    std::vector<std::string> orphaned_ids;
+    for (const auto& kv : pending_queries_) {
+      orphaned_ids.push_back(std::to_string(kv.first));
+    }
+    LOG(INFO) << "Orphaned queries " << boost::algorithm::join(orphaned_ids, ", ")
+              << " cancelled, most likely because of an aggregator crash";
+    decltype(pending_queries_)().swap(pending_queries_);
+  }
   const auto it_ok = pending_queries_.emplace(pending_query_next_id_,
                                               std::unique_ptr<PendingExecutionClosure>(new PendingExecutionClosure(
                                                   ra, pending_query_next_id_, ra_executor, cat, rel_alg_eo)));
