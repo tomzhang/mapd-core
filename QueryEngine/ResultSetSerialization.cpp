@@ -196,8 +196,13 @@ std::string ResultSet::serialize() const {
   if (storage_) {
     const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
     serialized_rows.buffer = std::string(storage_buffer, storage_->query_mem_desc_.getBufferSizeBytes(device_type_));
+    for (const auto& appended_storage : appended_storage_) {
+      const auto appended_storage_buffer = reinterpret_cast<const char*>(appended_storage->getUnderlyingBuffer());
+      serialized_rows.buffer +=
+          std::string(appended_storage_buffer, appended_storage->query_mem_desc_.getBufferSizeBytes(device_type_));
+    }
   }
-  serialized_rows.descriptor = query_mem_desc_to_thrift(storage_->query_mem_desc_);
+  serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
   serialized_rows.targets = target_infos_to_thrift(targets_);
   serialized_rows.write(proto.get());
   return buffer->getBufferAsString();
