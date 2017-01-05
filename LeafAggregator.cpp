@@ -198,7 +198,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     std::vector<std::shared_ptr<ResultSet>> leaf_results;
     TRowDescriptor row_desc;
     std::vector<TargetInfo> target_infos;
-    std::vector<std::future<void>> leaf_futures;
+    std::vector<std::future<std::unique_ptr<ResultSet>>> leaf_futures;
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
       if (replicated) {
         TStepResult step_result;
@@ -217,7 +217,6 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       }
       leaf_futures.emplace_back(std::async(std::launch::async,
                                            [&execution_finished,
-                                            &leaf_results,
                                             &leaves_mutex,
                                             &merge_type,
                                             &node_id,
@@ -233,22 +232,23 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
                                              auto result_set = ResultSet::unserialize(step_result.serialized_rows);
                                              std::lock_guard<std::mutex> lock(leaves_mutex);
                                              target_infos = result_set->getTargetInfos();
-                                             if (!result_set->definitelyHasNoRows()) {
-                                               leaf_results.emplace_back(result_set.release());
-                                             }
                                              if (leaf_idx == 0) {
                                                execution_finished = step_result.execution_finished;
                                                merge_type = step_result.merge_type;
                                                row_desc = step_result.row_desc;
                                                node_id = step_result.node_id;
                                              }
+                                             return result_set;
                                            }));
     }
     for (auto& leaf_future : leaf_futures) {
       leaf_future.wait();
     }
     for (auto& leaf_future : leaf_futures) {
-      leaf_future.get();
+      auto result_set = leaf_future.get();
+      if (!result_set->definitelyHasNoRows()) {
+        leaf_results.emplace_back(result_set.release());
+      }
     }
     QueryMemoryDescriptor empty_query_mem_desc{};
     auto empty_result_set =
@@ -316,11 +316,10 @@ std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Name
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   auto& leaf_session_ids = session_it->second;
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
-  std::vector<TPendingQuery> pending_queries(leaves_.size());
-  std::vector<std::future<void>> leaf_futures;
+  std::vector<std::future<TPendingQuery>> leaf_futures;
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-    leaf_futures.emplace_back(std::async(
-        std::launch::async, [leaf_idx, &leaf_session_ids, &parent_session_info, &pending_queries, &query_ra, this] {
+    leaf_futures.emplace_back(
+        std::async(std::launch::async, [leaf_idx, &leaf_session_ids, &parent_session_info, &query_ra, this] {
           TPendingQuery pending_query;
           try {
             leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
@@ -332,14 +331,15 @@ std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Name
                 leaves_[leaf_idx]->connect(credentials.user, credentials.passwd, credentials.dbname);
             leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
           }
-          pending_queries[leaf_idx] = pending_query;
+          return pending_query;
         }));
   }
   for (auto& leaf_future : leaf_futures) {
     leaf_future.wait();
   }
+  std::vector<TPendingQuery> pending_queries;
   for (auto& leaf_future : leaf_futures) {
-    leaf_future.get();
+    pending_queries.push_back(leaf_future.get());
   }
   return pending_queries;
 }
