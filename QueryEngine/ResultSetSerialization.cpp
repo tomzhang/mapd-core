@@ -2,6 +2,7 @@
 #include "GroupByAndAggregate.h"
 #include "gen-cpp/serialized_result_set_types.h"
 #include "../MapDServer.h"
+#include "../Shared/scope.h"
 
 #include <boost/smart_ptr/make_shared.hpp>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -190,6 +191,9 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
 }  // namespace
 
 std::string ResultSet::serialize() const {
+  if (query_mem_desc_.hash_type == GroupByColRangeType::Projection) {
+    return serializeProjection();
+  }
   auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>();
   auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
   TSerializedRows serialized_rows;
@@ -204,6 +208,108 @@ std::string ResultSet::serialize() const {
   }
   serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
   serialized_rows.targets = target_infos_to_thrift(targets_);
+  serialized_rows.write(proto.get());
+  return buffer->getBufferAsString();
+}
+
+namespace {
+
+void serialize_projected_column(int8_t* col_ptr, const TargetValue& tv, const SQLTypeInfo& ti) {
+  int64_t int_val{0};
+  if (ti.is_integer()) {
+    const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
+    CHECK(scalar_tv);
+    const auto i64_p = boost::get<int64_t>(scalar_tv);
+    CHECK(i64_p);
+    int_val = *i64_p;
+  }
+  double double_val{0};
+  float float_val{0};
+  if (ti.is_fp()) {
+    const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
+    CHECK(scalar_tv);
+    if (ti.get_type() == kDOUBLE) {
+      const auto double_p = boost::get<double>(scalar_tv);
+      CHECK(double_p);
+      double_val = *double_p;
+    } else {
+      CHECK_EQ(kFLOAT, ti.get_type());
+      const auto float_p = boost::get<float>(scalar_tv);
+      CHECK(float_p);
+      float_val = *float_p;
+    }
+  }
+  switch (ti.get_type()) {
+    case kSMALLINT: {
+      *reinterpret_cast<int16_t*>(col_ptr) = int_val;
+      break;
+    }
+    case kINT: {
+      *reinterpret_cast<int32_t*>(col_ptr) = int_val;
+      break;
+    }
+    case kBIGINT: {
+      *reinterpret_cast<int64_t*>(col_ptr) = int_val;
+      break;
+    }
+    case kFLOAT: {
+      *reinterpret_cast<float*>(col_ptr) = float_val;
+      break;
+    }
+    case kDOUBLE: {
+      *reinterpret_cast<double*>(col_ptr) = double_val;
+      break;
+    }
+    default:
+      CHECK(false);
+  }
+}
+
+}  // namespace
+
+// The projection layout could contain lazy values, real strings and arrays.
+// Leverage the high-level row iteration to retrieve the values and put them
+// in the address-space independent buffer which then goes over the network.
+std::string ResultSet::serializeProjection() const {
+  moveToBegin();
+  ScopeGuard restore_cursor = [this] { moveToBegin(); };
+  size_t one_row_size{8};  // Store the index of the row for now, although it's
+                           // redundant since we only serialize non-empty entries.
+  auto proj_query_mem_desc = query_mem_desc_;
+  proj_query_mem_desc.agg_col_widths.clear();
+  for (size_t i = 0; i < colCount(); ++i) {
+    const auto ti = getColType(i);
+    const int8_t logical_size = ti.get_logical_size();
+    proj_query_mem_desc.agg_col_widths.emplace_back(ColWidths{logical_size, logical_size});
+    one_row_size += logical_size;
+  }
+  std::unique_ptr<int8_t[]> serialized_storage(new int8_t[one_row_size * entryCount()]);
+  auto row_ptr = serialized_storage.get();
+  size_t row_count{0};
+  while (true) {
+    const auto crt_row = getNextRow(false, false);
+    if (crt_row.empty()) {
+      break;
+    }
+    CHECK_EQ(colCount(), crt_row.size());
+    *reinterpret_cast<int64_t*>(row_ptr) = row_count;
+    auto col_ptr = row_ptr + 8;
+    for (size_t i = 0; i < colCount(); ++i) {
+      const auto ti = getColType(i);
+      serialize_projected_column(col_ptr, crt_row[i], ti);
+      col_ptr += ti.get_logical_size();
+    }
+    ++row_count;
+    row_ptr += one_row_size;
+  }
+  proj_query_mem_desc.entry_count = row_count;
+  TSerializedRows serialized_rows;
+  serialized_rows.buffer =
+      std::string(reinterpret_cast<const char*>(serialized_storage.get()), one_row_size * row_count);
+  serialized_rows.descriptor = query_mem_desc_to_thrift(proj_query_mem_desc);
+  serialized_rows.targets = target_infos_to_thrift(targets_);
+  auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>();
+  auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
   serialized_rows.write(proto.get());
   return buffer->getBufferAsString();
 }
