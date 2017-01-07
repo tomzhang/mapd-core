@@ -214,7 +214,23 @@ std::string ResultSet::serialize() const {
 
 namespace {
 
-void serialize_projected_column(int8_t* col_ptr, const TargetValue& tv, const SQLTypeInfo& ti) {
+void serialize_projected_column(int8_t* col_ptr,
+                                std::vector<std::string>& none_encoded_strings,
+                                const TargetValue& tv,
+                                const SQLTypeInfo& ti) {
+  if (ti.is_string() && ti.get_compression() == kENCODING_NONE) {
+    const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
+    CHECK(scalar_tv);
+    const auto nullable_str = boost::get<NullableString>(scalar_tv);
+    const auto str_p = boost::get<std::string>(nullable_str);
+    if (str_p) {
+      *reinterpret_cast<int32_t*>(col_ptr) = none_encoded_strings.size();
+      none_encoded_strings.push_back(*str_p);
+    } else {
+      *reinterpret_cast<int32_t*>(col_ptr) = -1;
+    }
+    return;
+  }
   int64_t int_val{0};
   if (ti.is_integer()) {
     const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
@@ -279,13 +295,14 @@ std::string ResultSet::serializeProjection() const {
   proj_query_mem_desc.agg_col_widths.clear();
   for (size_t i = 0; i < colCount(); ++i) {
     const auto ti = getColType(i);
-    const int8_t logical_size = ti.get_logical_size();
+    const int8_t logical_size = (ti.is_string() && ti.get_compression() == kENCODING_NONE) ? 4 : ti.get_logical_size();
     proj_query_mem_desc.agg_col_widths.emplace_back(ColWidths{logical_size, logical_size});
     one_row_size += logical_size;
   }
   std::unique_ptr<int8_t[]> serialized_storage(new int8_t[one_row_size * entryCount()]);
   auto row_ptr = serialized_storage.get();
   size_t row_count{0};
+  std::vector<std::string> none_encoded_strings;
   while (true) {
     const auto crt_row = getNextRow(false, false);
     if (crt_row.empty()) {
@@ -296,7 +313,7 @@ std::string ResultSet::serializeProjection() const {
     auto col_ptr = row_ptr + 8;
     for (size_t i = 0; i < colCount(); ++i) {
       const auto ti = getColType(i);
-      serialize_projected_column(col_ptr, crt_row[i], ti);
+      serialize_projected_column(col_ptr, none_encoded_strings, crt_row[i], ti);
       col_ptr += ti.get_logical_size();
     }
     ++row_count;
@@ -308,6 +325,7 @@ std::string ResultSet::serializeProjection() const {
       std::string(reinterpret_cast<const char*>(serialized_storage.get()), one_row_size * row_count);
   serialized_rows.descriptor = query_mem_desc_to_thrift(proj_query_mem_desc);
   serialized_rows.targets = target_infos_to_thrift(targets_);
+  serialized_rows.none_encoded_strings.swap(none_encoded_strings);
   auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>();
   auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
   serialized_rows.write(proto.get());
@@ -329,5 +347,7 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str) {
     auto storage_buff = storage->getUnderlyingBuffer();
     memcpy(storage_buff, serialized_rows.buffer.data(), serialized_rows.buffer.size());
   }
+  result_set->none_encoded_strings_valid_ = true;
+  result_set->none_encoded_strings_.emplace_back(std::move(serialized_rows.none_encoded_strings));
   return std::move(result_set);
 }

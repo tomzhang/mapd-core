@@ -41,5 +41,6 @@ struct TTargetInfo {
 struct TSerializedRows {
   1: binary buffer,
   2: TResultSetBufferDescriptor descriptor,
-  3: list<TTargetInfo> targets
+  3: list<TTargetInfo> targets,
+  4: list<string> none_encoded_strings
 }
