@@ -192,11 +192,28 @@ std::string image_from_rendered_rows(const ResultRows& rendered_results) {
   return *sptr;
 }
 
+std::vector<LeafHostInfo> only_db_leaves(const std::vector<LeafHostInfo>& all_leaves) {
+  std::vector<LeafHostInfo> data_leaves;
+  std::copy_if(all_leaves.begin(), all_leaves.end(), std::back_inserter(data_leaves), [](const LeafHostInfo& leaf) {
+    return leaf.getRole() == NodeRole::DbLeaf;
+  });
+  return data_leaves;
+}
+
+std::vector<LeafHostInfo> only_string_leaves(const std::vector<LeafHostInfo>& all_leaves) {
+  std::vector<LeafHostInfo> string_leaves;
+  std::copy_if(all_leaves.begin(), all_leaves.end(), std::back_inserter(string_leaves), [](const LeafHostInfo& leaf) {
+    return leaf.getRole() == NodeRole::String;
+  });
+  return string_leaves;
+}
+
 }  // namespace
 
 class MapDHandler : virtual public MapDIf {
  public:
-  MapDHandler(const std::vector<LeafHostInfo>& leaves,
+  MapDHandler(const std::vector<LeafHostInfo>& db_leaves,
+              const std::vector<LeafHostInfo>& string_leaves,
               const std::string& base_data_path,
               const std::string& executor_device,
               const bool allow_multifrag,
@@ -219,7 +236,8 @@ class MapDHandler : virtual public MapDIf {
               const int /* calcite_port */,
               const bool /* legacy_syntax */)
 #endif  // HAVE_CALCITE
-      : leaf_aggregator_(leaves),
+      : leaf_aggregator_(db_leaves),
+        string_leaves_(string_leaves),
         base_data_path_(base_data_path),
         random_gen_(std::random_device{}()),
         session_id_dist_(0, INT32_MAX),
@@ -375,6 +393,7 @@ class MapDHandler : virtual public MapDIf {
                                                                        data_mgr_
 #ifdef HAVE_CALCITE
                                                                        ,
+                                                                       string_leaves_,
                                                                        calcite_
 #endif  // HAVE_CALCITE
                                                                        );
@@ -2780,6 +2799,7 @@ class MapDHandler : virtual public MapDIf {
   std::map<std::string, std::shared_ptr<Catalog_Namespace::Catalog>> cat_map_;
 
   LeafAggregator leaf_aggregator_;
+  const std::vector<LeafHostInfo> string_leaves_;
   const std::string base_data_path_;
   boost::filesystem::path import_path_;
   ExecutorDeviceType executor_device_type_;
@@ -2900,7 +2920,8 @@ int main(int argc, char** argv) {
   po::options_description desc("Options");
   desc.add_options()("help,h", "Print help messages");
   desc.add_options()("config", po::value<std::string>(&config_file), "Path to mapd.conf");
-  desc.add_options()("cluster", po::value<std::string>(&cluster_file), "Path to cluster.conf");
+  desc.add_options()("cluster", po::value<std::string>(&cluster_file), "Path to data leaves list JSON file");
+  desc.add_options()("string-servers", po::value<std::string>(&cluster_file), "Path to string servers list JSON file");
   desc.add_options()(
       "data", po::value<std::string>(&base_path)->required()->default_value("data"), "Directory path to MapD catalogs");
   desc.add_options()("cpu", "Run on CPU only");
@@ -2986,7 +3007,8 @@ int main(int argc, char** argv) {
 
   po::variables_map vm;
 
-  std::vector<LeafHostInfo> leaves;
+  std::vector<LeafHostInfo> db_leaves;
+  std::vector<LeafHostInfo> string_leaves;
 
   try {
     po::store(po::command_line_parser(argc, argv).options(desc_all).positional(positionalOptions).run(), vm);
@@ -2999,8 +3021,13 @@ int main(int argc, char** argv) {
       settings_file.close();
     }
 
-    if (vm.count("cluster")) {
-      leaves = LeafHostInfo::parseClusterConfig(cluster_file);
+    if (vm.count("cluster") || vm.count("string-servers")) {
+      CHECK_NE(!!vm.count("cluster"), !!vm.count("string-servers"));
+      const auto all_nodes = LeafHostInfo::parseClusterConfig(cluster_file);
+      if (vm.count("cluster")) {
+        db_leaves = only_db_leaves(all_nodes);
+      }
+      string_leaves = only_string_leaves(all_nodes);
     }
 
     if (vm.count("help")) {
@@ -3146,7 +3173,8 @@ int main(int argc, char** argv) {
   // on shutdown
   register_signal_handler();
 
-  shared_ptr<MapDHandler> handler(new MapDHandler(leaves,
+  shared_ptr<MapDHandler> handler(new MapDHandler(db_leaves,
+                                                  string_leaves,
                                                   base_path,
                                                   device,
                                                   allow_multifrag,

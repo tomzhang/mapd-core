@@ -3,17 +3,6 @@
 #include <rapidjson/filereadstream.h>
 #include <cstdio>
 
-LeafHostInfo::LeafHostInfo(const std::string& host, const uint16_t port) : host_(host), port_(port) {
-}
-
-const std::string& LeafHostInfo::getHost() const {
-  return host_;
-}
-
-uint16_t LeafHostInfo::getPort() const {
-  return port_;
-}
-
 namespace {
 
 class ReadOnlyFileStream {
@@ -31,6 +20,14 @@ class ReadOnlyFileStream {
   std::FILE* file_stream_;
 };
 
+NodeRole parse_role(const std::string& str) {
+  if (str == "dbleaf") {
+    return NodeRole::DbLeaf;
+  }
+  CHECK_EQ(std::string("string"), str);
+  return NodeRole::String;
+}
+
 }  // namespace
 
 std::vector<LeafHostInfo> LeafHostInfo::parseClusterConfig(const std::string& file_path) {
@@ -46,7 +43,8 @@ std::vector<LeafHostInfo> LeafHostInfo::parseClusterConfig(const std::string& fi
     CHECK(leaf.IsObject());
     const auto host = json_str(field(leaf, "host"));
     const auto port = static_cast<uint16_t>(json_i64(field(leaf, "port")));
-    leaves.emplace_back(host, port);
+    const auto role = parse_role(json_str(field(leaf, "role")));
+    leaves.emplace_back(host, port, role);
   }
   return leaves;
 }
