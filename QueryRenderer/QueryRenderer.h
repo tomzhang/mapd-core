@@ -94,13 +94,15 @@ class QueryRenderer {
   std::shared_ptr<QueryRendererContext> _ctx;
 
   GpuId _pboGpu;
-  QueryIdMapPixelBufferUIntShPtr _pbo1;  // need a pbo for each of the id buffers
-  QueryIdMapPixelBufferIntShPtr _pbo2;   // 2 id buffers - one for the row id, the other for table id
+  QueryIdMapPixelBufferUIntShPtr _pbo1A;  // need a pbo for each of the id buffers
+  QueryIdMapPixelBufferUIntShPtr _pbo1B;  // The row id is a 64-bit int, so its packed into 2 32-bit textures
+  QueryIdMapPixelBufferIntShPtr _pbo2;    // 2 id buffers - one for the row id, the other for table id
 
   typedef ::Rendering::Objects::Array2d<unsigned int> Array2dui;
   typedef ::Rendering::Objects::Array2d<int> Array2di;
   bool _idPixelsDirty;
-  std::shared_ptr<Array2dui> _idPixels;
+  std::shared_ptr<Array2dui> _id1APixels;
+  std::shared_ptr<Array2dui> _id1BPixels;
   std::shared_ptr<Array2di> _id2Pixels;
 
   void _clear(bool preserveDimensions = false);

@@ -12,6 +12,10 @@ std::string to_string(QueryDataType dataType) {
       return "FLOAT";
     case QueryDataType::DOUBLE:
       return "DOUBLE";
+    case QueryDataType::UINT64:
+      return "UINT64";
+    case QueryDataType::INT64:
+      return "INT64";
     case QueryDataType::COLOR:
       return "COLOR";
     case QueryDataType::STRING:

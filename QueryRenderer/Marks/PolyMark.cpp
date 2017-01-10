@@ -45,6 +45,7 @@ PolyMark::PolyMark(const rapidjson::Value& obj, const rapidjson::Pointer& objPat
   // TODO(croot): add z to props when doDepthTest() is true
 
   _initPropertiesFromJSONObj(obj, objPath);
+  _initGpuResources(_ctx.get(), true);
   _jsonPath = objPath;
   _updateShader();
 }
@@ -335,11 +336,13 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
 
   bool useUniformId = true;
   bool usePerVertId = false;
+
   if (_ctx->doHitTest()) {
     props.push_back(&id);
     useUniformId = false;
   }
   for (auto& shaderSrc : shaderSrcs) {
+    ShaderUtils::setRenderPropertyTypeInShaderSrc(id, shaderSrc);
     ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, shaderSrc, useUniformId);
     boost::replace_first(shaderSrc, "<usePerVertId>", std::to_string(usePerVertId));
   }
@@ -501,14 +504,15 @@ void PolyMark::_updateShader() {
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
     if (doFill) {
-      itr.second.shaderPtr = rsrcMgr->createShader(BaseMark::_addBaseTypeDefinesToShaderSrc(polyShaders[0]),
-                                                   BaseMark::_addBaseTypeDefinesToShaderSrc(polyShaders[1]));
+      itr.second.shaderPtr = rsrcMgr->createShader(ShaderUtils::addShaderExtensionAndPreprocessorInfo(polyShaders[0]),
+                                                   ShaderUtils::addShaderExtensionAndPreprocessorInfo(polyShaders[1]));
     }
 
     if (doStroke) {
-      itr.second.strokeShaderPtr = rsrcMgr->createShader(BaseMark::_addBaseTypeDefinesToShaderSrc(lineShaders[0]),
-                                                         BaseMark::_addBaseTypeDefinesToShaderSrc(lineShaders[1]),
-                                                         BaseMark::_addBaseTypeDefinesToShaderSrc(lineShaders[2]));
+      itr.second.strokeShaderPtr =
+          rsrcMgr->createShader(ShaderUtils::addShaderExtensionAndPreprocessorInfo(lineShaders[0]),
+                                ShaderUtils::addShaderExtensionAndPreprocessorInfo(lineShaders[1]),
+                                ShaderUtils::addShaderExtensionAndPreprocessorInfo(lineShaders[2]));
     }
 
     // TODO(croot): should check the shader block layout attached
@@ -779,8 +783,9 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 bool PolyMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::POLY, false, false);
+    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::POLY, false);
     _initPropertiesFromJSONObj(obj, objPath);
+    _initGpuResources(_ctx.get(), false);
     rtn = true;
   } else if (_jsonPath != objPath) {
     // TODO(croot) - Bug! What if the cache is up-to-date, but the path has changed -- we need to update

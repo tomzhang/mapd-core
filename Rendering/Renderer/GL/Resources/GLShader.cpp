@@ -8,7 +8,7 @@ namespace Rendering {
 namespace GL {
 namespace Resources {
 
-static detail::UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint location);
+static std::unique_ptr<detail::UniformAttrInfo> createUniformAttrInfoPtr(GLint type, GLint size, GLuint location);
 
 namespace detail {
 
@@ -73,6 +73,70 @@ struct Uniform4iAttr : UniformAttrInfo {
   void setAttr(const void* data, GLint attrSize) {
     CHECK(attrSize <= size);
     MAPD_CHECK_GL_ERROR(glUniform4iv(location, attrSize, static_cast<const GLint*>(data)));
+  }
+};
+
+struct Uniform1ui64Attr : UniformAttrInfo {
+  Uniform1ui64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform1ui64vNV(location, attrSize, static_cast<const GLuint64EXT*>(data)));
+  }
+};
+
+struct Uniform2ui64Attr : UniformAttrInfo {
+  Uniform2ui64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform2ui64vNV(location, attrSize, static_cast<const GLuint64EXT*>(data)));
+  }
+};
+
+struct Uniform3ui64Attr : UniformAttrInfo {
+  Uniform3ui64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform3ui64vNV(location, attrSize, static_cast<const GLuint64EXT*>(data)));
+  }
+};
+
+struct Uniform4ui64Attr : UniformAttrInfo {
+  Uniform4ui64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform4ui64vNV(location, attrSize, static_cast<const GLuint64EXT*>(data)));
+  }
+};
+
+struct Uniform1i64Attr : UniformAttrInfo {
+  Uniform1i64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform1i64vNV(location, attrSize, static_cast<const GLint64EXT*>(data)));
+  }
+};
+
+struct Uniform2i64Attr : UniformAttrInfo {
+  Uniform2i64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform2i64vNV(location, attrSize, static_cast<const GLint64EXT*>(data)));
+  }
+};
+
+struct Uniform3i64Attr : UniformAttrInfo {
+  Uniform3i64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform3i64vNV(location, attrSize, static_cast<const GLint64EXT*>(data)));
+  }
+};
+
+struct Uniform4i64Attr : UniformAttrInfo {
+  Uniform4i64Attr(GLint t, GLint s, GLuint l) : UniformAttrInfo(t, s, l) {}
+  void setAttr(const void* data, GLint attrSize) {
+    CHECK(attrSize <= size && GLEW_NV_vertex_attrib_integer_64bit);
+    MAPD_CHECK_GL_ERROR(glUniform4i64vNV(location, attrSize, static_cast<const GLint64EXT*>(data)));
   }
 };
 
@@ -238,7 +302,8 @@ void UniformImageLoadStoreAttr::setImgUnit(GLint imgUnit, GLint attrSize) {
   startImgUnit = imgUnit;
 }
 
-UniformBlockAttrInfo::UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
+UniformBlockAttrInfo::UniformBlockAttrInfo(const std::set<std::string>& supportedExtensions,
+                                           const GLShaderShPtr& shaderPtr,
                                            const std::string& blockName,
                                            GLint blockIndex,
                                            GLint bufferSize,
@@ -248,7 +313,7 @@ UniformBlockAttrInfo::UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
       blockIndex(blockIndex),
       bufferSize(bufferSize),
       bufferBindingIndex(bufferBindingIndex),
-      blockLayoutPtr(new GLShaderBlockLayout(layoutType, shaderPtr, bufferSize)) {}
+      blockLayoutPtr(new GLShaderBlockLayout(supportedExtensions, layoutType, shaderPtr, bufferSize)) {}
 
 void UniformBlockAttrInfo::setBufferBinding(GLuint programId, GLint bindingIndex) {
   // TODO(croot): check that this binding index isn't in use elsewhere?
@@ -270,12 +335,73 @@ void UniformBlockAttrInfo::bindBuffer(GLuint bufferId, size_t offsetBytes, size_
 }
 
 void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type, GLint size, GLuint idx) {
-  activeAttrs.insert(make_pair(attrName, std::unique_ptr<UniformAttrInfo>(createUniformAttrInfoPtr(type, size, -1))));
+  activeAttrs.insert(make_pair(attrName, createUniformAttrInfoPtr(type, size, -1)));
 
   ShaderBlockLayoutType layoutType = blockLayoutPtr->getLayoutType();
   bool usePublicAddAttr = false;
   if (layoutType == ShaderBlockLayoutType::STD140 || layoutType == ShaderBlockLayoutType::STD430) {
     usePublicAddAttr = true;
+  }
+
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    switch (type) {
+      case GL_INT64_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<int64_t>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<int64_t>(attrName, idx);
+        }
+        break;
+      case GL_INT64_VEC2_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<int64_t, 2>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<int64_t, 2>(attrName, idx);
+        }
+        break;
+      case GL_INT64_VEC3_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<int64_t, 3>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<int64_t, 3>(attrName, idx);
+        }
+        break;
+      case GL_INT64_VEC4_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<int64_t, 4>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<int64_t, 4>(attrName, idx);
+        }
+        break;
+      case GL_UNSIGNED_INT64_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<uint64_t>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<uint64_t>(attrName, idx);
+        }
+        break;
+      case GL_UNSIGNED_INT64_VEC2_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<uint64_t, 2>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<uint64_t, 2>(attrName, idx);
+        }
+        break;
+      case GL_UNSIGNED_INT64_VEC3_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<uint64_t, 3>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<uint64_t, 3>(attrName, idx);
+        }
+        break;
+      case GL_UNSIGNED_INT64_VEC4_NV:
+        if (usePublicAddAttr) {
+          blockLayoutPtr->addAttribute<uint64_t, 4>(attrName);
+        } else {
+          blockLayoutPtr->addAttribute<uint64_t, 4>(attrName, idx);
+        }
+        break;
+    }
   }
 
   switch (type) {
@@ -516,6 +642,14 @@ using detail::Uniform1iAttr;
 using detail::Uniform2iAttr;
 using detail::Uniform3iAttr;
 using detail::Uniform4iAttr;
+using detail::Uniform1ui64Attr;
+using detail::Uniform2ui64Attr;
+using detail::Uniform3ui64Attr;
+using detail::Uniform4ui64Attr;
+using detail::Uniform1i64Attr;
+using detail::Uniform2i64Attr;
+using detail::Uniform3i64Attr;
+using detail::Uniform4i64Attr;
 using detail::Uniform1fAttr;
 using detail::Uniform2fAttr;
 using detail::Uniform3fAttr;
@@ -578,77 +712,76 @@ static GLint linkProgram(const GLuint& programId, std::string& errStr) {
   return linked;
 }
 
-static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint location) {
-  UniformAttrInfo* rtn = NULL;
+static std::unique_ptr<UniformAttrInfo> createUniformAttrInfoPtr(GLint type, GLint size, GLuint location) {
+  if (GLEW_NV_vertex_attrib_integer_64bit) {
+    switch (type) {
+      case GL_INT64_NV:
+        return std::make_unique<Uniform1i64Attr>(type, size, location);
+      case GL_INT64_VEC2_NV:
+        return std::make_unique<Uniform2i64Attr>(type, size, location);
+      case GL_INT64_VEC3_NV:
+        return std::make_unique<Uniform3i64Attr>(type, size, location);
+      case GL_INT64_VEC4_NV:
+        return std::make_unique<Uniform4i64Attr>(type, size, location);
+      case GL_UNSIGNED_INT64_NV:
+        return std::make_unique<Uniform1ui64Attr>(type, size, location);
+      case GL_UNSIGNED_INT64_VEC2_NV:
+        return std::make_unique<Uniform2ui64Attr>(type, size, location);
+      case GL_UNSIGNED_INT64_VEC3_NV:
+        return std::make_unique<Uniform3ui64Attr>(type, size, location);
+      case GL_UNSIGNED_INT64_VEC4_NV:
+        return std::make_unique<Uniform4ui64Attr>(type, size, location);
+    }
+  }
 
   switch (type) {
     // NOTE: uniform booleans can be set using
     // any of the ui/i/f constructs. It does
     // not have one of its own.
     case GL_BOOL:
-      rtn = new Uniform1iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform1iAttr>(type, size, location);
     case GL_BOOL_VEC2:
-      rtn = new Uniform2iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform2iAttr>(type, size, location);
     case GL_BOOL_VEC3:
-      rtn = new Uniform3iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform3iAttr>(type, size, location);
     case GL_BOOL_VEC4:
-      rtn = new Uniform4iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform4iAttr>(type, size, location);
 
     case GL_UNSIGNED_INT:
-      rtn = new Uniform1uiAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform1uiAttr>(type, size, location);
     case GL_UNSIGNED_INT_VEC2:
-      rtn = new Uniform2uiAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform2uiAttr>(type, size, location);
     case GL_UNSIGNED_INT_VEC3:
-      rtn = new Uniform3uiAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform3uiAttr>(type, size, location);
     case GL_UNSIGNED_INT_VEC4:
-      rtn = new Uniform4uiAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform4uiAttr>(type, size, location);
 
     case GL_INT:
-      rtn = new Uniform1iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform1iAttr>(type, size, location);
     case GL_INT_VEC2:
-      rtn = new Uniform2iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform2iAttr>(type, size, location);
     case GL_INT_VEC3:
-      rtn = new Uniform3iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform3iAttr>(type, size, location);
     case GL_INT_VEC4:
-      rtn = new Uniform4iAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform4iAttr>(type, size, location);
 
     case GL_FLOAT:
-      rtn = new Uniform1fAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform1fAttr>(type, size, location);
     case GL_FLOAT_VEC2:
-      rtn = new Uniform2fAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform2fAttr>(type, size, location);
     case GL_FLOAT_VEC3:
-      rtn = new Uniform3fAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform3fAttr>(type, size, location);
     case GL_FLOAT_VEC4:
-      rtn = new Uniform4fAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform4fAttr>(type, size, location);
 
     case GL_DOUBLE:
-      rtn = new Uniform1dAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform1dAttr>(type, size, location);
     case GL_DOUBLE_VEC2:
-      rtn = new Uniform2dAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform2dAttr>(type, size, location);
     case GL_DOUBLE_VEC3:
-      rtn = new Uniform3dAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform3dAttr>(type, size, location);
     case GL_DOUBLE_VEC4:
-      rtn = new Uniform4dAttr(type, size, location);
-      break;
+      return std::make_unique<Uniform4dAttr>(type, size, location);
 
     // case GL_SAMPLER_1D:
     // case GL_IMAGE_1D:
@@ -688,23 +821,19 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     // attr types that require it.
 
     case GL_SAMPLER_2D:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D);
     // case GL_IMAGE_2D:
     //   break;
     case GL_SAMPLER_2D_ARRAY:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_ARRAY);
     // case GL_IMAGE_2D_ARRAY:
     //   break;
     case GL_SAMPLER_2D_MULTISAMPLE:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
     // case GL_IMAGE_2D_MULTISAMPLE:
     //   break;
     case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
     // case GL_IMAGE_2D_MULTISAMPLE_ARRAY:
     //   break;
 
@@ -712,52 +841,40 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
     // case GL_SAMPLER_2D_ARRAY_SHADOW:
 
     case GL_INT_SAMPLER_2D:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D);
     case GL_INT_IMAGE_2D:
       // TODO(croot): need to un-hardcode the GL_RG32I/GL_READ_WRITE/multisample/binding attrs
-      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32I, GL_READ_WRITE, false, 0);
-      break;
+      return std::make_unique<UniformImageLoadStoreAttr>(type, size, location, GL_R32I, GL_READ_WRITE, false, 0);
     case GL_INT_SAMPLER_2D_ARRAY:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_ARRAY);
     case GL_INT_IMAGE_2D_ARRAY:
       // TODO(croot): need to un-hardcode the GL_RG32I/GL_READ_WRITE/multisample/binding attrs
-      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32I, GL_READ_WRITE, false, 0);
-      break;
+      return std::make_unique<UniformImageLoadStoreAttr>(type, size, location, GL_R32I, GL_READ_WRITE, false, 0);
     case GL_INT_SAMPLER_2D_MULTISAMPLE:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
     case GL_INT_IMAGE_2D_MULTISAMPLE:
       break;
     case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
     case GL_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
       break;
 
     case GL_UNSIGNED_INT_SAMPLER_2D:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D);
     case GL_UNSIGNED_INT_IMAGE_2D:
       // TODO(croot): need to un-hardcode the GL_RG32UI/GL_READ_WRITE/multisample/binding attrs
-      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32UI, GL_READ_WRITE, false, 0);
-      break;
+      return std::make_unique<UniformImageLoadStoreAttr>(type, size, location, GL_R32UI, GL_READ_WRITE, false, 0);
     case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_ARRAY);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_ARRAY);
     case GL_UNSIGNED_INT_IMAGE_2D_ARRAY:
       // TODO(croot): need to un-hardcode the GL_RG32UI/GL_READ_WRITE/multisample/binding attrs
-      rtn = new UniformImageLoadStoreAttr(type, size, location, GL_R32UI, GL_READ_WRITE, false, 0);
-      break;
+      return std::make_unique<UniformImageLoadStoreAttr>(type, size, location, GL_R32UI, GL_READ_WRITE, false, 0);
     case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_MULTISAMPLE);
     case GL_UNSIGNED_INT_IMAGE_2D_MULTISAMPLE:
       break;
     case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
-      rtn = new UniformSamplerAttr(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
-      break;
+      return std::make_unique<UniformSamplerAttr>(type, size, location, GL_TEXTURE_2D_MULTISAMPLE_ARRAY);
     case GL_UNSIGNED_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
       break;
 
@@ -800,7 +917,7 @@ static UniformAttrInfo* createUniformAttrInfoPtr(GLint type, GLint size, GLuint 
       break;
   }
 
-  return rtn;
+  return nullptr;
 }
 
 // TODO(croot): move strsplit() functions into a string utility somewhere
@@ -920,8 +1037,13 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
     // the block code
     auto blockItr = _uniformBlockAttrs.insert(
         make_pair(attrBlockName,
-                  std::make_unique<UniformBlockAttrInfo>(
-                      myRsrc, attrBlockName, i, bufSz, bindingIndex, ShaderBlockLayoutType::STD140)));
+                  std::make_unique<UniformBlockAttrInfo>(getGLRenderer()->getSupportedExtensions(),
+                                                         myRsrc,
+                                                         attrBlockName,
+                                                         i,
+                                                         bufSz,
+                                                         bindingIndex,
+                                                         ShaderBlockLayoutType::STD140)));
 
     blockItr.first->second->blockLayoutPtr->beginAddingAttrs();
 
@@ -966,8 +1088,7 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
         attrNameStr.erase(attrNameStr.size() - 3, 3);
       }
 
-      _uniformAttrs.insert(make_pair(
-          attrNameStr, std::unique_ptr<UniformAttrInfo>(createUniformAttrInfoPtr(attrType, attrSz, attrLoc))));
+      _uniformAttrs.insert(make_pair(attrNameStr, createUniformAttrInfoPtr(attrType, attrSz, attrLoc)));
     }
   }
 

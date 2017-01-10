@@ -1,3 +1,4 @@
+#include "../../QueryRenderManager.h"
 #include "../../QueryRenderer.h"
 #include "../../QueryRendererContext.h"
 #include "../../Scales/Scale.h"
@@ -42,11 +43,12 @@ EglQueryRenderCompositorImpl::EglImage::~EglImage() {
 
 EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                                            ::Rendering::RendererShPtr& rendererPtr,
-                                                           size_t width,
-                                                           size_t height,
-                                                           size_t numSamples,
-                                                           bool doHitTest,
-                                                           bool doDepthTest)
+                                                           const size_t width,
+                                                           const size_t height,
+                                                           const size_t numSamples,
+                                                           const bool doHitTest,
+                                                           const bool doDepthTest,
+                                                           const bool supportsInt64)
     : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest) {
   EglGLRenderer* eglRenderer = dynamic_cast<EglGLRenderer*>(rendererPtr.get());
   CHECK(eglRenderer && _framebufferPtr);
@@ -56,9 +58,15 @@ EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderManager* p
                                     _framebufferPtr->getId(FboColorBuffer::COLOR_BUFFER)));
 
   if (doHitTest) {
-    _idEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
-                                    eglRenderer->getEGLContext(),
-                                    _framebufferPtr->getId(FboColorBuffer::ID_BUFFER)));
+    _id1AEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
+                                      eglRenderer->getEGLContext(),
+                                      _framebufferPtr->getId(FboColorBuffer::ID1A_BUFFER)));
+
+    if (supportsInt64) {
+      _id1BEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
+                                        eglRenderer->getEGLContext(),
+                                        _framebufferPtr->getId(FboColorBuffer::ID1B_BUFFER)));
+    }
 
     _id2EglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
                                      eglRenderer->getEGLContext(),
@@ -72,8 +80,7 @@ EglQueryRenderCompositorImpl::EglQueryRenderCompositorImpl(QueryRenderManager* p
   }
 }
 
-EglQueryRenderCompositorImpl::~EglQueryRenderCompositorImpl() {
-}
+EglQueryRenderCompositorImpl::~EglQueryRenderCompositorImpl() {}
 
 void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
   // NOTE: all framebuffers that are consumed by the compositor need to be
@@ -85,6 +92,7 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
 
   bool doHit = doHitTest();
   bool doDepth = doDepthTest();
+  bool useInt64 = (_id1BEglImgPtr != nullptr);
 
   // rebuild the EglImage objects
   _rgbaEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
@@ -92,9 +100,15 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
                                     _framebufferPtr->getId(FboColorBuffer::COLOR_BUFFER)));
 
   if (doHit) {
-    _idEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
-                                    eglRenderer->getEGLContext(),
-                                    _framebufferPtr->getId(FboColorBuffer::ID_BUFFER)));
+    _id1AEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
+                                      eglRenderer->getEGLContext(),
+                                      _framebufferPtr->getId(FboColorBuffer::ID1A_BUFFER)));
+
+    if (useInt64) {
+      _id1BEglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
+                                        eglRenderer->getEGLContext(),
+                                        _framebufferPtr->getId(FboColorBuffer::ID1B_BUFFER)));
+    }
 
     _id2EglImgPtr.reset(new EglImage(eglRenderer->getEGLDisplayPtr(),
                                      eglRenderer->getEGLContext(),
@@ -123,22 +137,33 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
     glRenderer = nullptr;
 
     auto& rgbaTextures = itr.second.rgbaTextures;
-    rgbaTextures.erase(std::remove_if(rgbaTextures.begin(), rgbaTextures.end(), [](auto& rgbaTexture) {
-                         return rgbaTexture.expired();
-                       }),
-                       rgbaTextures.end());
+    rgbaTextures.erase(
+        std::remove_if(
+            rgbaTextures.begin(), rgbaTextures.end(), [](auto& rgbaTexture) { return rgbaTexture.expired(); }),
+        rgbaTextures.end());
 
     if (rgbaTextures.size()) {
       glRenderer = rgbaTextures[0].lock()->getGLRenderer();
     }
 
-    auto& idTextures = itr.second.idTextures;
-    idTextures.erase(
-        std::remove_if(idTextures.begin(), idTextures.end(), [](auto& idTexture) { return idTexture.expired(); }),
-        idTextures.end());
+    auto& id1ATextures = itr.second.id1ATextures;
+    id1ATextures.erase(
+        std::remove_if(
+            id1ATextures.begin(), id1ATextures.end(), [](auto& id1ATexture) { return id1ATexture.expired(); }),
+        id1ATextures.end());
 
-    if (!glRenderer && idTextures.size()) {
-      glRenderer = idTextures[0].lock()->getGLRenderer();
+    if (!glRenderer && id1ATextures.size()) {
+      glRenderer = id1ATextures[0].lock()->getGLRenderer();
+    }
+
+    auto& id1BTextures = itr.second.id1BTextures;
+    if (useInt64) {
+      id1BTextures.erase(
+          std::remove_if(
+              id1BTextures.begin(), id1BTextures.end(), [](auto& id1BTexture) { return id1BTexture.expired(); }),
+          id1BTextures.end());
+
+      CHECK(id1ATextures.size() == id1BTextures.size());
     }
 
     auto& id2Textures = itr.second.id2Textures;
@@ -146,7 +171,7 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
         std::remove_if(id2Textures.begin(), id2Textures.end(), [](auto& id2Texture) { return id2Texture.expired(); }),
         id2Textures.end());
 
-    CHECK(idTextures.size() == id2Textures.size());
+    CHECK(id1ATextures.size() == id2Textures.size());
 
     auto& rbos = itr.second.rbos;
     rbos.erase(std::remove_if(rbos.begin(), rbos.end(), [](auto& rbo) { return rbo.expired(); }), rbos.end());
@@ -181,12 +206,22 @@ void EglQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
         MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(texPtr->getTarget(), _rgbaEglImgPtr->img));
       }
 
-      for (auto& idTex : idTextures) {
-        texPtr = idTex.lock();
+      for (auto& id1ATex : id1ATextures) {
+        texPtr = id1ATex.lock();
         CHECK(texPtr);
 
         glRenderer->bindTexture2d(texPtr);
-        MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(texPtr->getTarget(), _idEglImgPtr->img));
+        MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(texPtr->getTarget(), _id1AEglImgPtr->img));
+      }
+
+      if (useInt64) {
+        for (auto& id1BTex : id1BTextures) {
+          texPtr = id1BTex.lock();
+          CHECK(texPtr);
+
+          glRenderer->bindTexture2d(texPtr);
+          MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(texPtr->getTarget(), _id1BEglImgPtr->img));
+        }
       }
 
       for (auto& id2Tex : id2Textures) {
@@ -242,9 +277,13 @@ GLTexture2dShPtr EglQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
       MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _rgbaEglImgPtr->img));
       rsrcStorage.rgbaTextures.push_back(tex);
       break;
-    case FboColorBuffer::ID_BUFFER:
-      MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _idEglImgPtr->img));
-      rsrcStorage.idTextures.push_back(tex);
+    case FboColorBuffer::ID1A_BUFFER:
+      MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _id1AEglImgPtr->img));
+      rsrcStorage.id1ATextures.push_back(tex);
+      break;
+    case FboColorBuffer::ID1B_BUFFER:
+      MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _id1BEglImgPtr->img));
+      rsrcStorage.id1BTextures.push_back(tex);
       break;
     case FboColorBuffer::ID2_BUFFER:
       MAPD_CHECK_GL_ERROR(glEGLImageTargetTexture2DOES(tex->getTarget(), _id2EglImgPtr->img));
@@ -422,8 +461,7 @@ void EglQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
                                                      bool doDepthTest,
                                                      int passCnt,
                                                      ScaleShPtr& accumulatorScalePtr,
-                                                     int accumulatorCnt) {
-}
+                                                     int accumulatorCnt) {}
 
 void EglQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpus,
                                                   size_t width,

@@ -16,6 +16,7 @@ struct ShaderUtils {
   static void setRenderPropertyAttrTypeInShaderSrc(const BaseRenderProperty& prop,
                                                    std::string& shaderSrc,
                                                    bool isUniform);
+  static std::string addShaderExtensionAndPreprocessorInfo(const std::string& shaderSrc);
 };
 
 }  // namespace QueryRenderer

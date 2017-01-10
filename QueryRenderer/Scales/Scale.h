@@ -117,6 +117,14 @@ class BaseScale : public JSONRefObject {
       const ScaleDomainRangeData<double>* domainOverride) const = 0;
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<int64_t>* domainOverride) const = 0;
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<uint64_t>* domainOverride) const = 0;
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
       const std::string& extraSuffix) const = 0;
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getRangeTypeUniforms(
       const std::string& extraSuffix) const = 0;
@@ -270,8 +278,8 @@ class Scale : public BaseScale {
                   type,
                   allowsAccumulator,
                   accumTypeMask),
-        _domainPtr("domain", false),
-        _rangePtr("range", true),
+        _domainPtr(ctx, "domain", false),
+        _rangePtr(ctx, "range", true),
         _nullVal(),
         _useNullVal(false) {
     _initGLTypes();
@@ -312,6 +320,18 @@ class Scale : public BaseScale {
       const std::string& extraSuffix,
       const ScaleDomainRangeData<double>* domainOverride) const {
     return _getDomainTypeUniforms<double>(extraSuffix, domainOverride);
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<int64_t>* domainOverride) const {
+    return _getDomainTypeUniforms<int64_t>(extraSuffix, domainOverride);
+  }
+
+  virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
+      const std::string& extraSuffix,
+      const ScaleDomainRangeData<uint64_t>* domainOverride) const {
+    return _getDomainTypeUniforms<uint64_t>(extraSuffix, domainOverride);
   }
 
   virtual std::pair<QueryDataType, std::unordered_map<std::string, boost::any>> getDomainTypeUniforms(
@@ -435,9 +455,8 @@ class Scale : public BaseScale {
           obj.IsObject(),
           RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "scale items must be objects."));
 
-      _domainPtr.initializeFromJSONObj(
-          obj, objPath, _ctx, _type, _domainSizeChanged, _domainValsChanged, domainValConvert);
-      _rangePtr.initializeFromJSONObj(obj, objPath, _ctx, _type, _rangeSizeChanged, _rangeValsChanged, rangeValConvert);
+      _domainPtr.initializeFromJSONObj(obj, objPath, _type, _domainSizeChanged, _domainValsChanged, domainValConvert);
+      _rangePtr.initializeFromJSONObj(obj, objPath, _type, _rangeSizeChanged, _rangeValsChanged, rangeValConvert);
 
       domainRangeUpdated = hasDomainDataChanged() || hasRangeDataChanged();
 

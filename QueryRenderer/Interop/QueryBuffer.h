@@ -215,12 +215,13 @@ class QueryLayoutBuffer : public QueryBuffer {
 
   QueryDataLayoutShPtr getQueryDataLayout() const { return _queryDataLayoutPtr; }
 
-  void setQueryDataLayout(const QueryDataLayoutShPtr& queryDataLayoutPtr,
+  void setQueryDataLayout(const std::set<std::string>& supportedExtensions,
+                          const QueryDataLayoutShPtr& queryDataLayoutPtr,
                           size_t usedBytes = 0,
                           size_t offsetBytes = 0) {
     CHECK(queryDataLayoutPtr && getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER);
     _queryDataLayoutPtr = queryDataLayoutPtr;
-    setBufferLayout(queryDataLayoutPtr->convertToBufferLayout(), usedBytes, offsetBytes);
+    setBufferLayout(queryDataLayoutPtr->convertToBufferLayout(supportedExtensions), usedBytes, offsetBytes);
   }
 
   void deleteAllQueryDataLayouts() { _getGLResource()->deleteAllBufferLayouts(); }

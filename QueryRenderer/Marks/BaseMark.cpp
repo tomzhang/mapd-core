@@ -31,7 +31,7 @@ BaseMark::BaseMark(GeomType geomType,
                    QueryDataTableBaseType baseType,
                    bool mustUseDataRef)
     : BaseMark(geomType, ctx) {
-  _initFromJSONObj(obj, objPath, baseType, mustUseDataRef, true);
+  _initFromJSONObj(obj, objPath, baseType, mustUseDataRef);
 }
 
 BaseMark::~BaseMark() {}
@@ -48,8 +48,7 @@ void BaseMark::setAccumulatorScale(const std::string& accumulatorScaleName) {
 void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,
                                 const rapidjson::Pointer& objPath,
                                 QueryDataTableBaseType baseType,
-                                bool mustUseDataRef,
-                                bool initializing) {
+                                bool mustUseDataRef) {
   RUNTIME_EX_ASSERT(
       obj.IsObject(),
       RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(), obj, "definition for marks must be an object."));
@@ -91,15 +90,14 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,
                           obj,
                           "A data reference (i.e. \"" + fromProp + "\") is not defined for mark. It is required."));
   }
-
-  _initGpuResources(_ctx.get(), initializing);
 }
 
 void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool force) {
   // Now update which props are vbo-defined, and which will be uniforms
   size_t sum = _vboProps.size() + _uboProps.size() + _uniformProps.size();
-  CHECK(sum == 0 || usedProps.size() == sum);
+  CHECK(sum == 0 || usedProps.size() == sum || usedProps.size() == sum - 1);  // include the possible use of key
 
+  bool keyAdded = false;
   if (force) {
     _vboProps.clear();
     _uboProps.clear();
@@ -108,6 +106,22 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
     for (const auto& prop : usedProps) {
       if (prop->hasVboPtr()) {
         _vboProps.insert(prop);
+        if (!keyAdded) {
+          auto keyName = key.getName();
+          auto vboPtr = prop->getVboPtr();
+          QueryDataLayoutShPtr layout = nullptr;
+          auto sqlJsonDataTablePtr = dynamic_cast<BaseQueryDataTableSQLJSON*>(_dataPtr.get());
+          if (sqlJsonDataTablePtr) {
+            layout = sqlJsonDataTablePtr->getQueryDataLayout();
+          }
+
+          if (vboPtr && vboPtr->getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER &&
+              vboPtr->hasAttribute(keyName, layout)) {
+            key.initializeFromData(keyName, _dataPtr);
+            _vboProps.insert(&key);
+            keyAdded = true;
+          }
+        }
       } else if (prop->hasUboPtr()) {
         _uboProps.insert(prop);
       } else {
@@ -123,6 +137,23 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
           setShaderDirty();
           if (!_uboProps.erase(prop)) {
             _uniformProps.erase(prop);
+          }
+        }
+        if (!keyAdded) {
+          auto keyName = key.getName();
+          auto vboPtr = prop->getVboPtr();
+          QueryDataLayoutShPtr layout = nullptr;
+          auto sqlJsonDataTablePtr = dynamic_cast<BaseQueryDataTableSQLJSON*>(_dataPtr.get());
+          if (sqlJsonDataTablePtr) {
+            layout = sqlJsonDataTablePtr->getQueryDataLayout();
+          }
+          if (vboPtr && vboPtr->getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER &&
+              vboPtr->hasAttribute(keyName, layout)) {
+            key.initializeFromData(keyName, _dataPtr);
+            if (_vboProps.insert(&key).second) {
+              setShaderDirty();
+            }
+            keyAdded = true;
           }
         }
       } else if (prop->hasUboPtr()) {
@@ -161,22 +192,11 @@ void BaseMark::_updateShader(std::string& vertSrc, std::string& fragSrc) {
   }
 }
 
-std::string BaseMark::_addBaseTypeDefinesToShaderSrc(const std::string& shaderSrc) {
-  // add the type defines at the head of vert shaders
-  RUNTIME_EX_ASSERT(GLRenderer::getCurrentThreadRenderer(),
-                    "A renderer needs to be active to call BaseTypeGL::getTypeDefinesMacroForShader()");
+void BaseMark::_setKeyInShaderSrc(std::string& shaderSrc) {
+  bool useKey = key.hasVboPtr();
+  boost::replace_first(shaderSrc, "<useKey>", std::to_string(useKey));
 
-  std::regex versionRegex("#version\\s+\\d+\\s+core\\s*");
-  std::smatch versionMatch;
-
-  size_t idx = 0;
-  if (std::regex_search(shaderSrc, versionMatch, versionRegex)) {
-    idx = versionMatch.position() + versionMatch.length();
-  }
-
-  std::string rtn = shaderSrc;
-  rtn.insert(idx, ::Rendering::GL::BaseTypeGL::getTypeDefinesMacroForShader());
-  return rtn;
+  ShaderUtils::setRenderPropertyTypeInShaderSrc(key, shaderSrc);
 }
 
 void BaseMark::_buildVertexArrayObjectFromProperties() {
@@ -399,7 +419,6 @@ void BaseMark::_initGpuResources(const QueryRendererContext* ctx, bool initializ
     setPropsDirty();
   }
 
-  // key.initGpuResources(ctx, unusedGpus, initializing);
   key.initGpuResources(ctx, usedGpuIds, unusedGpus);
 
   if (!initializing) {

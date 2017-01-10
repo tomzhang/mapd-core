@@ -79,7 +79,7 @@ typedef std::shared_ptr<RootCache> RootCacheShPtr;
 struct NonProjectionRenderQueryCache;
 typedef std::shared_ptr<NonProjectionRenderQueryCache> NPRQueryCacheShPtr;
 
-typedef std::pair<TableId, uint32_t> TableIdRowIdPair;
+typedef std::pair<TableId, uint64_t> TableIdRowIdPair;
 typedef std::pair<TableId, decltype(TableDescriptor::tableName)> TableIdNamePair;
 typedef std::function<std::tuple<ResultRows,
                                  std::vector<TargetMetaInfo>,
@@ -89,7 +89,8 @@ typedef std::function<std::tuple<ResultRows,
                                                                    Executor*,
                                                                    const std::string&,
                                                                    const rapidjson::Value*,
-                                                                   bool)> QueryExecCB;
+                                                                   bool)>
+    QueryExecCB;
 
 std::string to_string(const UserWidgetIdPair& value);
 std::string to_string(const RefType refType);

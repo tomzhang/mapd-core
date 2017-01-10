@@ -16,11 +16,12 @@ using ::Rendering::GL::Resources::GLRenderbufferShPtr;
 
 QueryRenderCompositor::QueryRenderCompositor(QueryRenderManager* prnt,
                                              ::Rendering::RendererShPtr& rendererPtr,
-                                             size_t width,
-                                             size_t height,
-                                             size_t numSamples,
-                                             bool doHitTest,
-                                             bool doDepthTest)
+                                             const size_t width,
+                                             const size_t height,
+                                             const size_t numSamples,
+                                             const bool doHitTest,
+                                             const bool doDepthTest,
+                                             const bool supportsInt64)
     :
 #ifdef MAPDGL_GLX
       _implPtr(new Impl::GLX::GlxQueryRenderCompositorImpl(prnt,
@@ -29,7 +30,8 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderManager* prnt,
                                                            height,
                                                            numSamples,
                                                            doHitTest,
-                                                           doDepthTest))
+                                                           doDepthTest,
+                                                           supportsInt64))
 #elif MAPDGL_EGL
       _implPtr(new Impl::EGL::EglQueryRenderCompositorImpl(prnt,
                                                            rendererPtr,
@@ -37,15 +39,15 @@ QueryRenderCompositor::QueryRenderCompositor(QueryRenderManager* prnt,
                                                            height,
                                                            numSamples,
                                                            doHitTest,
-                                                           doDepthTest))
+                                                           doDepthTest,
+                                                           supportsInt64))
 #else
       _implPtr(nullptr)
 #endif  // MAPDGL_GLX
 {
 }
 
-QueryRenderCompositor::~QueryRenderCompositor() {
-}
+QueryRenderCompositor::~QueryRenderCompositor() {}
 
 size_t QueryRenderCompositor::getWidth() {
   CHECK(_implPtr);
@@ -110,9 +112,9 @@ std::shared_ptr<unsigned int> QueryRenderCompositor::readIdBuffer(size_t startx,
   return _implPtr->readIdBuffer(startx, starty, width, height, idBufferType);
 }
 
-void QueryRenderCompositor::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo) {
+void QueryRenderCompositor::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo, const bool leastSignificantBits) {
   CHECK(_implPtr);
-  return _implPtr->copyRowIdBufferToPbo(pbo);
+  return _implPtr->copyRowIdBufferToPbo(pbo, leastSignificantBits);
 }
 
 void QueryRenderCompositor::copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo) {

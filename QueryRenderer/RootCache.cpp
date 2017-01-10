@@ -320,4 +320,13 @@ bool RootCache::hasPolyTableGpuCache(const std::string& tableName, const std::st
   return itr->second.second.usesGpu(gpuId);
 }
 
+bool RootCache::supportsInt64() const {
+  if (!_supportsInt64Ptr) {
+    _supportsInt64Ptr.reset(
+        new bool(supportedExtensions.find("GL_NV_vertex_attrib_integer_64bit") != supportedExtensions.end()));
+  }
+
+  return *_supportsInt64Ptr;
+}
+
 }  // namespace QueryRenderer

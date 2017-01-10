@@ -1,30 +1,17 @@
 #include "TypeGL.h"
 #include "MapDGL.h"
+#include "GLRenderer.h"
+#include "../../RenderError.h"
 
 namespace Rendering {
 namespace GL {
 
+static bool supports64Ints() {
+  CHECK(GLRenderer::getCurrentThreadRenderer());
+  return GLEW_NV_vertex_attrib_integer_64bit;
+}
+
 std::string gl_type_to_string(const int glType) {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    switch (glType) {
-      case GL_UNSIGNED_INT64_NV:
-        return "GL_UNSIGNED_INT64_NV";
-      case GL_UNSIGNED_INT64_VEC2_NV:
-        return "GL_UNSIGNED_INT64_VEC2_NV";
-      case GL_UNSIGNED_INT64_VEC3_NV:
-        return "GL_UNSIGNED_INT64_VEC3_NV";
-      case GL_UNSIGNED_INT64_VEC4_NV:
-        return "GL_UNSIGNED_INT64_VEC4_NV";
-      case GL_INT64_NV:
-        return "GL_INT64_NV";
-      case GL_INT64_VEC2_NV:
-        return "GL_INT64_VEC2_NV";
-      case GL_INT64_VEC3_NV:
-        return "GL_INT64_VEC3_NV";
-      case GL_INT64_VEC4_NV:
-        return "GL_INT64_VEC4_NV";
-    }
-  }
   switch (glType) {
     case GL_BOOL:
       return "GL_BOOL";
@@ -66,6 +53,22 @@ std::string gl_type_to_string(const int glType) {
       return "GL_UNSIGNED_INT_VEC3";
     case GL_UNSIGNED_INT_VEC4:
       return "GL_UNSIGNED_INT_VEC4";
+    case GL_UNSIGNED_INT64_NV:
+      return "GL_UNSIGNED_INT64_NV";
+    case GL_UNSIGNED_INT64_VEC2_NV:
+      return "GL_UNSIGNED_INT64_VEC2_NV";
+    case GL_UNSIGNED_INT64_VEC3_NV:
+      return "GL_UNSIGNED_INT64_VEC3_NV";
+    case GL_UNSIGNED_INT64_VEC4_NV:
+      return "GL_UNSIGNED_INT64_VEC4_NV";
+    case GL_INT64_NV:
+      return "GL_INT64_NV";
+    case GL_INT64_VEC2_NV:
+      return "GL_INT64_VEC2_NV";
+    case GL_INT64_VEC3_NV:
+      return "GL_INT64_VEC3_NV";
+    case GL_INT64_VEC4_NV:
+      return "GL_INT64_VEC4_NV";
   }
 
   return "undefined gl type: " + std::to_string(glType);
@@ -139,7 +142,7 @@ std::string BaseTypeGL::getTypeDefinesMacroForShader() {
       "\n"
       "#define UNSIGNED_INT_VEC4 " +
       std::to_string(GL_UNSIGNED_INT_VEC4) + "\n";
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
+  if (supports64Ints()) {
     rtn +=
         ""
         "#define UNSIGNED_INT64_NV " +
@@ -169,513 +172,192 @@ std::string BaseTypeGL::getTypeDefinesMacroForShader() {
   return rtn + "\n";
 }
 
+std::string BaseTypeGL::getExtensionStr() {
+  if (GLEW_NV_gpu_shader5) {
+    return "#extension GL_NV_gpu_shader5 : enable\n";
+  } else if (GLEW_AMD_gpu_shader_int64) {
+    return "#extension GL_AMD_gpu_shader_int64 : enable\n";
+  }
+
+  return "";
+}
+
+template <>
+TypeGLMiddleLayer<float>::TypeGLMiddleLayer(const int baseGLType,
+                                            const int glslGLType,
+                                            const std::string& glslType,
+                                            const bool useAsFloat,
+                                            const bool normalize)
+    : BaseTypeGL(baseGLType, glslGLType, glslType, true, false) {}
+
+template <>
+TypeGLMiddleLayer<double>::VertexAttribPtrFunc TypeGLMiddleLayer<double>::_getAltVertexAttribPointerFunc() const {
+  return glVertexAttribLPointer;
+}
+
+template <>
+TypeGLMiddleLayer<uint64_t>::VertexAttribPtrFunc TypeGLMiddleLayer<uint64_t>::_getAltVertexAttribPointerFunc() const {
+  if (_baseGLType == GL_UNSIGNED_INT64_NV) {
+    return glVertexAttribLPointer;
+  } else {
+    return glVertexAttribIPointer;
+  }
+}
+
+template <>
+TypeGLMiddleLayer<int64_t>::VertexAttribPtrFunc TypeGLMiddleLayer<int64_t>::_getAltVertexAttribPointerFunc() const {
+  if (_baseGLType == GL_INT64_NV) {
+    return glVertexAttribLPointer;
+  } else {
+    return glVertexAttribIPointer;
+  }
+}
+
 /*****************
  * BOOL
  *****************/
 
 template <>
-std::string TypeGL<bool, 1>::glslType() const {
-  return "bool";
-}
+TypeGL<bool, 1>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<bool>(GL_BOOL, GL_BOOL, "bool") {}
 
 template <>
-int TypeGL<bool, 1>::baseGLType() const {
-  return GL_BOOL;
-}
+TypeGL<bool, 2>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<bool>(GL_BOOL, GL_BOOL_VEC2, "bvec2") {}
 
 template <>
-int TypeGL<bool, 1>::glslGLType() const {
-  return GL_BOOL;
-}
+TypeGL<bool, 3>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<bool>(GL_BOOL, GL_BOOL_VEC3, "bvec3") {}
 
 template <>
-std::string TypeGL<bool, 2>::glslType() const {
-  return "bvec2";
-}
-
-template <>
-int TypeGL<bool, 2>::baseGLType() const {
-  return GL_BOOL;
-}
-
-template <>
-int TypeGL<bool, 2>::glslGLType() const {
-  return GL_BOOL_VEC2;
-}
-
-template <>
-std::string TypeGL<bool, 3>::glslType() const {
-  return "bvec3";
-}
-
-template <>
-int TypeGL<bool, 3>::baseGLType() const {
-  return GL_BOOL;
-}
-
-template <>
-int TypeGL<bool, 3>::glslGLType() const {
-  return GL_BOOL_VEC3;
-}
-
-template <>
-std::string TypeGL<bool, 4>::glslType() const {
-  return "bvec4";
-}
-
-template <>
-int TypeGL<bool, 4>::baseGLType() const {
-  return GL_BOOL;
-}
-
-template <>
-int TypeGL<bool, 4>::glslGLType() const {
-  return GL_BOOL_VEC4;
-}
+TypeGL<bool, 4>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<bool>(GL_BOOL, GL_BOOL_VEC4, "bvec4") {}
 
 /*****************
  * UNSIGNED INT
  *****************/
 
 template <>
-std::string TypeGL<unsigned int, 1>::glslType() const {
-  return "uint";
-}
+TypeGL<unsigned int, 1>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<unsigned int>(GL_UNSIGNED_INT, GL_UNSIGNED_INT, "uint", useAsFloat, normalize) {}
 
 template <>
-int TypeGL<unsigned int, 1>::baseGLType() const {
-  return GL_UNSIGNED_INT;
-}
+TypeGL<unsigned int, 2>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<unsigned int>(GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC2, "uvec2", useAsFloat, normalize) {}
 
 template <>
-int TypeGL<unsigned int, 1>::glslGLType() const {
-  return GL_UNSIGNED_INT;
-}
+TypeGL<unsigned int, 3>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<unsigned int>(GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC3, "uvec3", useAsFloat, normalize) {}
+
+template <>
+TypeGL<unsigned int, 4>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<unsigned int>(GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC4, "uvec4", useAsFloat, normalize) {}
 
 /*****************
  * INT
  *****************/
 
 template <>
-std::string TypeGL<int, 1>::glslType() const {
-  return "int";
-}
+TypeGL<int, 1>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<int>(GL_INT, GL_INT, "int", useAsFloat, normalize) {}
 
 template <>
-int TypeGL<int, 1>::baseGLType() const {
-  return GL_INT;
-}
+TypeGL<int, 2>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<int>(GL_INT, GL_INT_VEC2, "ivec2", useAsFloat, normalize) {}
 
 template <>
-int TypeGL<int, 1>::glslGLType() const {
-  return GL_INT;
-}
+TypeGL<int, 3>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<int>(GL_INT, GL_INT_VEC3, "ivec3", useAsFloat, normalize) {}
 
 template <>
-std::string TypeGL<int, 2>::glslType() const {
-  return (_useAsFloat ? "vec2" : "ivec2");
-}
-
-template <>
-int TypeGL<int, 2>::baseGLType() const {
-  return GL_INT;
-}
-
-template <>
-int TypeGL<int, 2>::glslGLType() const {
-  return GL_INT_VEC2;
-}
-
-template <>
-std::string TypeGL<int, 3>::glslType() const {
-  return (_useAsFloat ? "vec3" : "ivec3");
-}
-
-template <>
-int TypeGL<int, 3>::baseGLType() const {
-  return GL_INT;
-}
-
-template <>
-int TypeGL<int, 3>::glslGLType() const {
-  return GL_INT_VEC3;
-}
-
-template <>
-std::string TypeGL<int, 4>::glslType() const {
-  return (_useAsFloat ? "vec4" : "ivec4");
-}
-
-template <>
-int TypeGL<int, 4>::baseGLType() const {
-  return GL_INT;
-}
-
-template <>
-int TypeGL<int, 4>::glslGLType() const {
-  return GL_INT_VEC4;
-}
+TypeGL<int, 4>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<int>(GL_INT, GL_INT_VEC4, "ivec4", useAsFloat, normalize) {}
 
 /*****************
  * FLOAT
  *****************/
 
 template <>
-std::string TypeGL<float, 1>::glslType() const {
-  return "float";
-}
+TypeGL<float, 1>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<float>(GL_FLOAT, GL_FLOAT, "float") {}
 
 template <>
-int TypeGL<float, 1>::baseGLType() const {
-  return GL_FLOAT;
-}
+TypeGL<float, 2>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<float>(GL_FLOAT, GL_FLOAT_VEC2, "vec2") {}
 
 template <>
-int TypeGL<float, 1>::glslGLType() const {
-  return GL_FLOAT;
-}
+TypeGL<float, 3>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<float>(GL_FLOAT, GL_FLOAT_VEC3, "vec3") {}
 
 template <>
-void TypeGL<float, 1>::setUseAsFloat(bool bindAsFloat, bool normalize) {
-  _useAsFloat = true;
-  _normalize = false;
-}
-
-template <>
-std::string TypeGL<float, 2>::glslType() const {
-  return "vec2";
-}
-
-template <>
-int TypeGL<float, 2>::baseGLType() const {
-  return GL_FLOAT;
-}
-
-template <>
-int TypeGL<float, 2>::glslGLType() const {
-  return GL_FLOAT_VEC2;
-}
-
-template <>
-void TypeGL<float, 2>::setUseAsFloat(bool bindAsFloat, bool normalize) {
-  _useAsFloat = true;
-  _normalize = false;
-  // _bindFunc = std::bind(glVertexAttribPointer, std::placeholders::_1, 2, GL_FLOAT, GL_FALSE, std::placeholders::_2,
-  // std::placeholders::_3);
-}
-
-template <>
-std::string TypeGL<float, 3>::glslType() const {
-  return "vec3";
-}
-
-template <>
-int TypeGL<float, 3>::baseGLType() const {
-  return GL_FLOAT;
-}
-
-template <>
-int TypeGL<float, 3>::glslGLType() const {
-  return GL_FLOAT_VEC3;
-}
-
-template <>
-void TypeGL<float, 3>::setUseAsFloat(bool bindAsFloat, bool normalize) {
-  _useAsFloat = true;
-  _normalize = false;
-  // _bindFunc = std::bind(glVertexAttribPointer, std::placeholders::_1, 3, GL_FLOAT, GL_FALSE, std::placeholders::_2,
-  // std::placeholders::_3);
-}
-
-template <>
-std::string TypeGL<float, 4>::glslType() const {
-  return "vec4";
-}
-
-template <>
-int TypeGL<float, 4>::baseGLType() const {
-  return GL_FLOAT;
-}
-
-template <>
-int TypeGL<float, 4>::glslGLType() const {
-  return GL_FLOAT_VEC4;
-}
-
-template <>
-void TypeGL<float, 4>::setUseAsFloat(bool bindAsFloat, bool normalize) {
-  _useAsFloat = true;
-  _normalize = false;
-}
+TypeGL<float, 4>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<float>(GL_FLOAT, GL_FLOAT_VEC4, "vec4") {}
 
 /*****************
  * DOUBLE
  *****************/
 
 template <>
-std::string TypeGL<double, 1>::glslType() const {
-  return "double";
-}
+TypeGL<double, 1>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<double>(GL_DOUBLE, GL_DOUBLE, "double", useAsFloat, normalize) {}
 
 template <>
-int TypeGL<double, 1>::baseGLType() const {
-  return GL_DOUBLE;
-}
+TypeGL<double, 2>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<double>(GL_DOUBLE, GL_DOUBLE_VEC2, "dvec2", useAsFloat, normalize) {}
 
 template <>
-int TypeGL<double, 1>::glslGLType() const {
-  return GL_DOUBLE;
-}
+TypeGL<double, 3>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<double>(GL_DOUBLE, GL_DOUBLE_VEC3, "dvec3", useAsFloat, normalize) {}
 
 template <>
-TypeGL<double, 1>::VertexAttribPtrFunc TypeGL<double, 1>::_getAltVertexAttribPointerFunc() const {
-  return glVertexAttribLPointer;
-}
-
-template <>
-std::string TypeGL<double, 2>::glslType() const {
-  return (_useAsFloat ? "vec2" : "dvec2");
-}
-
-template <>
-int TypeGL<double, 2>::baseGLType() const {
-  return GL_DOUBLE;
-}
-
-template <>
-int TypeGL<double, 2>::glslGLType() const {
-  return GL_DOUBLE_VEC2;
-}
-
-template <>
-TypeGL<double, 2>::VertexAttribPtrFunc TypeGL<double, 2>::_getAltVertexAttribPointerFunc() const {
-  return glVertexAttribLPointer;
-}
-
-template <>
-std::string TypeGL<double, 3>::glslType() const {
-  return (_useAsFloat ? "vec3" : "dvec3");
-}
-
-template <>
-int TypeGL<double, 3>::baseGLType() const {
-  return GL_DOUBLE;
-}
-
-template <>
-int TypeGL<double, 3>::glslGLType() const {
-  return GL_DOUBLE_VEC3;
-}
-
-template <>
-TypeGL<double, 3>::VertexAttribPtrFunc TypeGL<double, 3>::_getAltVertexAttribPointerFunc() const {
-  return glVertexAttribLPointer;
-}
-
-template <>
-std::string TypeGL<double, 4>::glslType() const {
-  return (_useAsFloat ? "vec4" : "dvec4");
-}
-
-template <>
-int TypeGL<double, 4>::baseGLType() const {
-  return GL_DOUBLE;
-}
-
-template <>
-int TypeGL<double, 4>::glslGLType() const {
-  return GL_DOUBLE_VEC4;
-}
-
-template <>
-TypeGL<double, 4>::VertexAttribPtrFunc TypeGL<double, 4>::_getAltVertexAttribPointerFunc() const {
-  return glVertexAttribLPointer;
-}
-
-/*****************
- * UINT8
- *****************/
-
-template <>
-std::string TypeGL<uint8_t, 1>::glslType() const {
-  return "uint";
-}
-
-template <>
-int TypeGL<uint8_t, 1>::baseGLType() const {
-  return GL_UNSIGNED_BYTE;
-}
-
-template <>
-int TypeGL<uint8_t, 1>::glslGLType() const {
-  return GL_UNSIGNED_INT;
-}
-
-template <>
-std::string TypeGL<uint8_t, 2>::glslType() const {
-  return (_useAsFloat ? "vec2" : "uvec2");
-}
-
-template <>
-int TypeGL<uint8_t, 2>::baseGLType() const {
-  return GL_UNSIGNED_BYTE;
-}
-
-template <>
-int TypeGL<uint8_t, 2>::glslGLType() const {
-  return (_useAsFloat ? GL_FLOAT_VEC2 : GL_UNSIGNED_INT_VEC2);
-}
-
-template <>
-std::string TypeGL<uint8_t, 3>::glslType() const {
-  return (_useAsFloat ? "vec3" : "uvec3");
-}
-
-template <>
-int TypeGL<uint8_t, 3>::baseGLType() const {
-  return GL_UNSIGNED_BYTE;
-}
-
-template <>
-int TypeGL<uint8_t, 3>::glslGLType() const {
-  return (_useAsFloat ? GL_FLOAT_VEC3 : GL_UNSIGNED_INT_VEC3);
-}
-
-template <>
-std::string TypeGL<uint8_t, 4>::glslType() const {
-  return (_useAsFloat ? "vec4" : "uvec4");
-}
-
-template <>
-int TypeGL<uint8_t, 4>::baseGLType() const {
-  return GL_UNSIGNED_BYTE;
-}
-
-template <>
-int TypeGL<uint8_t, 4>::glslGLType() const {
-  return (_useAsFloat ? GL_FLOAT_VEC4 : GL_UNSIGNED_INT_VEC4);
-}
+TypeGL<double, 4>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize)
+    : TypeGLMiddleLayer<double>(GL_DOUBLE, GL_DOUBLE_VEC4, "dvec4", useAsFloat, normalize) {}
 
 /*****************
  * UINT64
  *****************/
 
+static bool supports64Ints(const std::set<std::string>& supportedExtensions) {
+  return supportedExtensions.find("GL_NV_vertex_attrib_integer_64bit") != supportedExtensions.end();
+}
+
 template <>
-std::string TypeGL<uint64_t, 1>::glslType() const {
-  // TODO(croot): make a specific class
-  // for these types and check for the
-  // existence of the extension at construction,
-  // or better yet, make it a static const
-  // member variable, if possible to reduce the
-  // if/else ? Not sure this is doable. Even
-  // with the static const variable, you still
-  // would need to do an if/else unless we're
-  // able to create an additional template
-  // specialization somehow, but i'm not sure
-  // how to do that.
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "uint64_t";
-  } else {
-    return "uint";
+TypeGL<uint64_t, 1>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<uint64_t>(GL_UNSIGNED_INT, GL_UNSIGNED_INT, "uint") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_UNSIGNED_INT64_NV;
+    _glslGLType = GL_UNSIGNED_INT64_NV;
+    _glslType = "uint64_t";
   }
 }
 
 template <>
-int TypeGL<uint64_t, 1>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
+TypeGL<uint64_t, 2>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<uint64_t>(GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC2, "uvec2") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_UNSIGNED_INT64_NV;
+    _glslGLType = GL_UNSIGNED_INT64_VEC2_NV;
+    _glslType = "u64vec2";
   }
 }
 
 template <>
-int TypeGL<uint64_t, 1>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
+TypeGL<uint64_t, 3>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<uint64_t>(GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC3, "uvec3") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_UNSIGNED_INT64_NV;
+    _glslGLType = GL_UNSIGNED_INT64_VEC3_NV;
+    _glslType = "u64vec3";
   }
 }
 
 template <>
-std::string TypeGL<uint64_t, 2>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "u64vec2";
-  } else {
-    return "uvec2";
-  }
-}
-
-template <>
-int TypeGL<uint64_t, 2>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
-}
-
-template <>
-int TypeGL<uint64_t, 2>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_VEC2_NV;
-  } else {
-    return GL_UNSIGNED_INT_VEC2;
-  }
-}
-
-template <>
-std::string TypeGL<uint64_t, 3>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "u64vec3";
-  } else {
-    return "uvec3";
-  }
-}
-
-template <>
-int TypeGL<uint64_t, 3>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
-}
-
-template <>
-int TypeGL<uint64_t, 3>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_VEC3_NV;
-  } else {
-    return GL_UNSIGNED_INT_VEC3;
-  }
-}
-
-template <>
-std::string TypeGL<uint64_t, 4>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "u64vec4";
-  } else {
-    return "uvec4";
-  }
-}
-
-template <>
-int TypeGL<uint64_t, 4>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_NV;
-  } else {
-    return GL_UNSIGNED_INT;
-  }
-}
-
-template <>
-int TypeGL<uint64_t, 4>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_UNSIGNED_INT64_VEC4_NV;
-  } else {
-    return GL_UNSIGNED_INT_VEC4;
+TypeGL<uint64_t, 4>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<uint64_t>(GL_UNSIGNED_INT, GL_UNSIGNED_INT_VEC4, "uvec4") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_UNSIGNED_INT64_NV;
+    _glslGLType = GL_UNSIGNED_INT64_VEC4_NV;
+    _glslType = "u64vec4";
   }
 }
 
@@ -684,121 +366,42 @@ int TypeGL<uint64_t, 4>::glslGLType() const {
  *****************/
 
 template <>
-std::string TypeGL<int64_t, 1>::glslType() const {
-  // TODO(croot): make a specific class
-  // for these types and check for the
-  // existence of the extension at construction,
-  // or better yet, make it a static const
-  // member variable, if possible to reduce the
-  // if/else ? Not sure this is doable. Even
-  // with the static const variable, you still
-  // would need to do an if/else unless we're
-  // able to create an additional template
-  // specialization somehow, but i'm not sure
-  // how to do that.
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "int64_t";
-  } else {
-    return "int";
+TypeGL<int64_t, 1>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<int64_t>(GL_INT, GL_INT, "int") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_INT64_NV;
+    _glslGLType = GL_INT64_NV;
+    _glslType = "int64_t";
   }
 }
 
 template <>
-int TypeGL<int64_t, 1>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
+TypeGL<int64_t, 2>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<int64_t>(GL_INT, GL_INT_VEC2, "ivec2") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_INT64_NV;
+    _glslGLType = GL_INT64_VEC2_NV;
+    _glslType = "i64vec2";
   }
 }
 
 template <>
-int TypeGL<int64_t, 1>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
+TypeGL<int64_t, 3>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<int64_t>(GL_INT, GL_INT_VEC3, "ivec3") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_INT64_NV;
+    _glslGLType = GL_INT64_VEC3_NV;
+    _glslType = "i64vec3";
   }
 }
 
 template <>
-std::string TypeGL<int64_t, 2>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "i64vec2";
-  } else {
-    return "ivec2";
-  }
-}
-
-template <>
-int TypeGL<int64_t, 2>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
-}
-
-template <>
-int TypeGL<int64_t, 2>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_VEC2_NV;
-  } else {
-    return GL_INT_VEC2;
-  }
-}
-
-template <>
-std::string TypeGL<int64_t, 3>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "i64vec3";
-  } else {
-    return "ivec3";
-  }
-}
-
-template <>
-int TypeGL<int64_t, 3>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
-}
-
-template <>
-int TypeGL<int64_t, 3>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_VEC3_NV;
-  } else {
-    return GL_INT_VEC3;
-  }
-}
-
-template <>
-std::string TypeGL<int64_t, 4>::glslType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return "i64vec4";
-  } else {
-    return "ivec4";
-  }
-}
-
-template <>
-int TypeGL<int64_t, 4>::baseGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_NV;
-  } else {
-    return GL_INT;
-  }
-}
-
-template <>
-int TypeGL<int64_t, 4>::glslGLType() const {
-  if (GLEW_NV_vertex_attrib_integer_64bit) {
-    return GL_INT64_VEC4_NV;
-  } else {
-    return GL_INT_VEC4;
+TypeGL<int64_t, 4>::TypeGL(const std::set<std::string>& supportedExtensions)
+    : TypeGLMiddleLayer<int64_t>(GL_INT, GL_INT_VEC4, "ivec4") {
+  if (supports64Ints(supportedExtensions)) {
+    _baseGLType = GL_INT64_NV;
+    _glslGLType = GL_INT64_VEC4_NV;
+    _glslType = "i64vec4";
   }
 }
 

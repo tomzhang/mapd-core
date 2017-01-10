@@ -1,11 +1,11 @@
 #include "Utils.h"
 #include "Scale.h"
-#include "../Utils/RapidJSONUtils.h"
 #include <Rendering/Colors/ColorRGBA.h>
 #include <Rendering/Colors/ColorHSL.h>
 #include <Rendering/Colors/ColorLAB.h>
 #include <Rendering/Colors/ColorHCL.h>
 #include <type_traits>
+#include <boost/any.hpp>
 
 namespace QueryRenderer {
 
@@ -91,7 +91,7 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
                     RapidJSONUtils::getJsonParseErrorStr(
                         obj, "\"domain\" property for scales must exist and must be an object or an array."));
 
-  QueryDataType domainType, itemType;
+  QueryDataType domainType;
 
   if (isObject) {
     domainType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
@@ -101,32 +101,32 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
     // can support strings for domain values. Others shouldn't.
     // Will allow all domains to accept all strings for now.
 
+    AnyDataType domainAnyType, itemAnyType;
     size_t startIdx = 0;
     switch (scaleType) {
-      case ScaleType::LINEAR:
       case ScaleType::LOG:
       case ScaleType::SQRT:
       case ScaleType::POW:
         // TODO(croot): support float?
-        domainType = QueryDataType::DOUBLE;
+        domainAnyType.set(QueryDataType::DOUBLE, double(0));
         startIdx = 0;
         break;
       default:
-        domainType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[0], true);
+        domainAnyType = RapidJSONUtils::getAnyDataFromJSONObj(itr->value[0], true);
         startIdx = 1;
         break;
     }
 
     for (size_t i = startIdx; i < itr->value.Size(); ++i) {
-      itemType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[i], true);
+      itemAnyType = RapidJSONUtils::getAnyDataFromJSONObj(itr->value[i], true);
 
       try {
-        domainType = getHigherPriorityDataType(domainType, itemType);
+        domainType = RapidJSONUtils::getHigherPriorityDataType(domainAnyType, itemAnyType);
       } catch (const std::runtime_error& e) {
         THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
             obj,
-            "scale domain item at index " + std::to_string(i) + " has an incompatible type. " + to_string(domainType) +
-                " is not compatible with " + to_string(itemType)));
+            "scale domain item at index " + std::to_string(i) + " has an incompatible type. " +
+                to_string(domainAnyType.getType()) + " is not compatible with " + to_string(itemAnyType.getType())));
       }
     }
   }
@@ -148,7 +148,7 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
                     RapidJSONUtils::getJsonParseErrorStr(
                         obj, "\"range\" property for scales must exist and must be an object or a string."));
 
-  QueryDataType rangeType, itemType;
+  QueryDataType rangeType;
   if (isObject) {
     rangeType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
   } else if (isString) {
@@ -166,18 +166,18 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
     // true 0-height in that case.
     rangeType = QueryDataType::FLOAT;
   } else {
-    rangeType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[0]);
+    AnyDataType rangeAnyType = RapidJSONUtils::getAnyDataFromJSONObj(itr->value[0]), itemAnyType;
 
     for (size_t i = 1; i < itr->value.Size(); ++i) {
-      itemType = RapidJSONUtils::getDataTypeFromJSONObj(itr->value[i]);
+      itemAnyType = RapidJSONUtils::getAnyDataFromJSONObj(itr->value[i]);
 
       try {
-        rangeType = getHigherPriorityDataType(rangeType, itemType);
+        rangeType = RapidJSONUtils::getHigherPriorityDataType(rangeAnyType, itemAnyType);
       } catch (const std::runtime_error& e) {
-        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj,
-                                                              "scale range item at index " + std::to_string(i) +
-                                                                  " has an incompatible type. " + to_string(rangeType) +
-                                                                  " is not compatible with " + to_string(itemType)));
+        THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+            obj,
+            "scale range item at index " + std::to_string(i) + " has an incompatible type. " +
+                to_string(rangeAnyType.getType()) + " is not compatible with " + to_string(itemAnyType.getType())));
       }
     }
   }
@@ -364,6 +364,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<unsigned int, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createScalePtr<unsigned int, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<unsigned int, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<unsigned int, int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createScalePtr<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
@@ -380,10 +384,54 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<int, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createScalePtr<int, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<int, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<int, int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createScalePtr<int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
           return createRangeColorScalePtr<int>(obj, objPath, ctx, scaleName, scaleType);
+        default:
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
+      }
+    case QueryDataType::UINT64:
+      switch (rangeType) {
+        case QueryDataType::UINT:
+          return createScalePtr<uint64_t, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT:
+          return createScalePtr<uint64_t, int>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::FLOAT:
+          return createScalePtr<uint64_t, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<uint64_t, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<uint64_t, int64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::DOUBLE:
+          return createScalePtr<uint64_t, double>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::COLOR:
+          return createRangeColorScalePtr<uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        default:
+          THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
+              obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
+      }
+    case QueryDataType::INT64:
+      switch (rangeType) {
+        case QueryDataType::UINT:
+          return createScalePtr<int64_t, unsigned int>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT:
+          return createScalePtr<int64_t, int>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::FLOAT:
+          return createScalePtr<int64_t, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<int64_t, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<int64_t, int64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::DOUBLE:
+          return createScalePtr<int64_t, double>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::COLOR:
+          return createRangeColorScalePtr<int64_t>(obj, objPath, ctx, scaleName, scaleType);
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
               obj, "range type is unsupported: " + std::to_string(static_cast<int>(rangeType))));
@@ -396,6 +444,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<float, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createScalePtr<float, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<float, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<float, int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createScalePtr<float, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
@@ -412,6 +464,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<double, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createScalePtr<double, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<double, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<double, int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createScalePtr<double, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
@@ -428,6 +484,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createDomainColorScalePtr<int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createDomainColorScalePtr<float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createDomainColorScalePtr<uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createDomainColorScalePtr<int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createDomainColorScalePtr<double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
@@ -444,6 +504,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<std::string, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createScalePtr<std::string, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<std::string, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<std::string, int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createScalePtr<std::string, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
@@ -470,6 +534,10 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
           return createScalePtr<unsigned int, int>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::FLOAT:
           return createScalePtr<unsigned int, float>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::UINT64:
+          return createScalePtr<unsigned int, uint64_t>(obj, objPath, ctx, scaleName, scaleType);
+        case QueryDataType::INT64:
+          return createScalePtr<unsigned int, int64_t>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::DOUBLE:
           return createScalePtr<unsigned int, double>(obj, objPath, ctx, scaleName, scaleType);
         case QueryDataType::COLOR:
@@ -483,46 +551,6 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
   }
 }
 
-QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const QueryDataType checkDataType) {
-  if (baseDataType == checkDataType) {
-    return baseDataType;
-  }
-
-  switch (baseDataType) {
-    case QueryDataType::FLOAT:
-      if (checkDataType == QueryDataType::UINT || checkDataType == QueryDataType::INT) {
-        return baseDataType;
-      } else if (checkDataType == QueryDataType::DOUBLE) {
-        return checkDataType;
-      }
-      break;
-    case QueryDataType::DOUBLE:
-      if (checkDataType == QueryDataType::UINT || checkDataType == QueryDataType::INT ||
-          checkDataType == QueryDataType::FLOAT) {
-        return baseDataType;
-      }
-      break;
-    case QueryDataType::INT:
-      if (checkDataType == QueryDataType::UINT) {
-        return baseDataType;
-      } else if (checkDataType == QueryDataType::FLOAT || checkDataType == QueryDataType::DOUBLE) {
-        return checkDataType;
-      }
-      break;
-    case QueryDataType::UINT:
-      if (checkDataType == QueryDataType::INT || checkDataType == QueryDataType::FLOAT ||
-          checkDataType == QueryDataType::DOUBLE) {
-        return checkDataType;
-      }
-      break;
-    default:
-      break;
-  }
-
-  THROW_RUNTIME_EX(to_string(baseDataType) + " is incompatible with " + to_string(checkDataType));
-  return baseDataType;
-}
-
 bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType domainType) {
   // TODO(croot): put this in the scale classes? It's easier to do here because
   // otherwise we'd have to do template specializations, which would require a lot
@@ -531,10 +559,10 @@ bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType doma
     case ScaleType::LOG:
     case ScaleType::POW:
     case ScaleType::SQRT:
-      // TODO(croot): support float?
-      return (domainType == QueryDataType::DOUBLE);
+      return (domainType == QueryDataType::DOUBLE || domainType == QueryDataType::FLOAT);
     case ScaleType::QUANTIZE:
       return (domainType == QueryDataType::UINT || domainType == QueryDataType::INT ||
+              domainType == QueryDataType::UINT64 || domainType == QueryDataType::INT64 ||
               domainType == QueryDataType::FLOAT || domainType == QueryDataType::DOUBLE);
     default:
       return true;
@@ -575,6 +603,10 @@ QueryDataType convertTypeIdToDataType(const std::type_info& srcTypeId) {
     return QueryDataType::UINT;
   } else if (srcTypeId == typeid(float)) {
     return QueryDataType::FLOAT;
+  } else if (srcTypeId == typeid(int64_t)) {
+    return QueryDataType::INT64;
+  } else if (srcTypeId == typeid(uint64_t)) {
+    return QueryDataType::UINT64;
   } else if (srcTypeId == typeid(double)) {
     return QueryDataType::DOUBLE;
   } else if (srcTypeId == typeid(::Rendering::Colors::ColorRGBA)) {

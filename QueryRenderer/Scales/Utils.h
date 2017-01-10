@@ -10,6 +10,7 @@
 #include <Rendering/RenderError.h>
 #include <Rendering/Colors/Types.h>
 
+#include "../Utils/RapidJSONUtils.h"
 #include <boost/any.hpp>
 
 namespace QueryRenderer {
@@ -32,7 +33,6 @@ ScaleShPtr createScale(const rapidjson::Value& obj,
                        // TODO(croot): expose default as a constant somewhere
                        ScaleType type = ScaleType::UNDEFINED);
 
-QueryDataType getHigherPriorityDataType(const QueryDataType baseDataType, const QueryDataType checkDataType);
 bool isScaleDomainCompatible(const ScaleType scaleType, const QueryDataType domainType);
 bool isScaleRangeCompatible(const ScaleType scaleType, const QueryDataType rangeType);
 bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType);
@@ -57,6 +57,14 @@ T convertType(const QueryDataType type, const boost::any& value) {
     }
     case QueryDataType::DOUBLE: {
       double val = boost::any_cast<double>(value);
+      return static_cast<T>(val);
+    }
+    case QueryDataType::UINT64: {
+      uint64_t val = boost::any_cast<uint64_t>(value);
+      return static_cast<T>(val);
+    }
+    case QueryDataType::INT64: {
+      int64_t val = boost::any_cast<int64_t>(value);
       return static_cast<T>(val);
     }
     default:

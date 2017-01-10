@@ -10,15 +10,19 @@ int GLShaderBlockLayout::maxUniformBlockSize = -1;
 // all shader block layouts must be interleaved, but there are rules for
 // the stride/offset for each layout type, hence the reasoning for
 // a specific shader block layout.
-GLShaderBlockLayout::GLShaderBlockLayout(ShaderBlockLayoutType layoutType)
-    : GLBaseBufferLayout(GLBufferLayoutType::INTERLEAVED), _layoutType(layoutType), _addingAttrs(false) {
+GLShaderBlockLayout::GLShaderBlockLayout(const std::set<std::string>& supportedExtensions,
+                                         ShaderBlockLayoutType layoutType)
+    : GLBaseBufferLayout(supportedExtensions, GLBufferLayoutType::INTERLEAVED),
+      _layoutType(layoutType),
+      _addingAttrs(false) {
   _itemByteSize = 0;
 }
 
-GLShaderBlockLayout::GLShaderBlockLayout(ShaderBlockLayoutType layoutType,
+GLShaderBlockLayout::GLShaderBlockLayout(const std::set<std::string>& supportedExtensions,
+                                         ShaderBlockLayoutType layoutType,
                                          const GLShaderShPtr& shaderPtr,
                                          size_t blockByteSize)
-    : GLBaseBufferLayout(GLBufferLayoutType::INTERLEAVED),
+    : GLBaseBufferLayout(supportedExtensions, GLBufferLayoutType::INTERLEAVED),
       _shaderPtr(shaderPtr),
       _layoutType(layoutType),
       _addingAttrs(false) {
@@ -37,8 +41,7 @@ GLShaderBlockLayout::GLShaderBlockLayout(ShaderBlockLayoutType layoutType,
   }
 }
 
-GLShaderBlockLayout::~GLShaderBlockLayout() {
-}
+GLShaderBlockLayout::~GLShaderBlockLayout() {}
 
 bool GLShaderBlockLayout::operator==(const GLShaderBlockLayout& layout) const {
   bool checkAttrs = (getLayoutType() == layout.getLayoutType() && getNumBytesInBlock() == layout.getNumBytesInBlock() &&

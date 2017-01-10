@@ -23,7 +23,9 @@ double ScaleDomainRangeData<ColorRGBA>::getDifference(const double divisor) cons
 template <>
 const TypeGLShPtr& ScaleDomainRangeData<ColorRGBA>::getTypeGL() {
   if (!_cachedTypeGL) {
-    _cachedTypeGL = ColorRGBA::getTypeGLPtr();
+    auto rootGpuCache = _ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
+    _cachedTypeGL = ColorRGBA::getTypeGLPtr(rootGpuCache->supportedExtensions);
   }
   return _cachedTypeGL;
 }
@@ -62,7 +64,9 @@ double ScaleDomainRangeData<ColorHSL>::getDifference(const double divisor) const
 template <>
 const TypeGLShPtr& ScaleDomainRangeData<ColorHSL>::getTypeGL() {
   if (!_cachedTypeGL) {
-    _cachedTypeGL = ColorHSL::getTypeGLPtr();
+    auto rootGpuCache = _ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
+    _cachedTypeGL = ColorHSL::getTypeGLPtr(rootGpuCache->supportedExtensions);
   }
   return _cachedTypeGL;
 }
@@ -100,7 +104,9 @@ double ScaleDomainRangeData<ColorLAB>::getDifference(const double divisor) const
 template <>
 const TypeGLShPtr& ScaleDomainRangeData<ColorLAB>::getTypeGL() {
   if (!_cachedTypeGL) {
-    _cachedTypeGL = ColorLAB::getTypeGLPtr();
+    auto rootGpuCache = _ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
+    _cachedTypeGL = ColorLAB::getTypeGLPtr(rootGpuCache->supportedExtensions);
   }
   return _cachedTypeGL;
 }
@@ -138,7 +144,9 @@ double ScaleDomainRangeData<ColorHCL>::getDifference(const double divisor) const
 template <>
 const TypeGLShPtr& ScaleDomainRangeData<ColorHCL>::getTypeGL() {
   if (!_cachedTypeGL) {
-    _cachedTypeGL = ColorHCL::getTypeGLPtr();
+    auto rootGpuCache = _ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
+    _cachedTypeGL = ColorHCL::getTypeGLPtr(rootGpuCache->supportedExtensions);
   }
   return _cachedTypeGL;
 }
@@ -236,5 +244,22 @@ template <>
 double ScaleDomainRangeData<double>::getNullValue() {
   return NULL_DOUBLE;
 }
+
+/*
+ * int64_t specializations
+ */
+template <>
+const QueryDataType ScaleDomainRangeData<int64_t>::dataType = QueryDataType::INT64;
+
+template <>
+int64_t ScaleDomainRangeData<int64_t>::getNullValue() {
+  return NULL_BIGINT;
+}
+
+/*
+ * uint64_t specializations
+ */
+template <>
+const QueryDataType ScaleDomainRangeData<uint64_t>::dataType = QueryDataType::UINT64;
 
 }  // namespace QueryRenderer

@@ -236,11 +236,14 @@ QueryBufferShPtr SqlQueryPolyDataTableCache::getAttributeDataBuffer(const GpuId&
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot get attribute data buffer for gpu " + std::to_string(gpuId));
 
-  // _initBuffers(itr->second);
-
-  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName)) {
+  QueryDataLayoutShPtr layout = nullptr;
+  auto sqlDataTable = dynamic_cast<SqlQueryPolyDataTableJSON*>(this);
+  if (sqlDataTable) {
+    layout = sqlDataTable->getQueryDataLayout();
+  }
+  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName, layout)) {
     return itr->second.vbo;
-  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName)) {
+  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName, layout)) {
     return itr->second.ubo;
   } else {
     THROW_RUNTIME_EX(_printInfo(true) + " getAttributeDataBuffer(): attribute \"" + attrName + "\" does not exist.");
@@ -253,12 +256,16 @@ std::map<GpuId, QueryBufferShPtr> SqlQueryPolyDataTableCache::getAttributeDataBu
   std::map<GpuId, QueryBufferShPtr> rtn;
   std::map<GpuId, QueryBufferShPtr>::iterator insertedItr;
 
-  for (auto& itr : _perGpuData) {
-    // _initBuffers(itr.second);
+  QueryDataLayoutShPtr layout = nullptr;
+  auto sqlDataTable = dynamic_cast<SqlQueryPolyDataTableJSON*>(this);
+  if (sqlDataTable) {
+    layout = sqlDataTable->getQueryDataLayout();
+  }
 
-    if (itr.second.vbo && itr.second.vbo->hasAttribute(attrName)) {
+  for (auto& itr : _perGpuData) {
+    if (itr.second.vbo && itr.second.vbo->hasAttribute(attrName, layout)) {
       insertedItr = rtn.insert({itr.first, itr.second.vbo}).first;
-    } else if (itr.second.ubo && itr.second.ubo->hasAttribute(attrName)) {
+    } else if (itr.second.ubo && itr.second.ubo->hasAttribute(attrName, layout)) {
       insertedItr = rtn.insert({itr.first, itr.second.ubo}).first;
     } else {
       THROW_RUNTIME_EX(_printInfo(true) + " getAttributeDataBuffer(): attribute \"" + attrName +
@@ -319,11 +326,11 @@ void SqlQueryPolyDataTableCache::allocBuffers(const GpuId& gpuId,
                                               const QueryDataLayoutShPtr& vertLayoutPtr,
                                               const PolyRowDataShPtr& rowDataPtr,
                                               const QueryDataLayoutShPtr& uniformLayoutPtr) {
+  auto qrmGpuCache = _qrmGpuCache.lock();
+  CHECK(qrmGpuCache);
   auto itr = _perGpuData.find(gpuId);
 
   if (itr == _perGpuData.end()) {
-    auto qrmGpuCache = _qrmGpuCache.lock();
-    CHECK(qrmGpuCache);
     auto qrmItr = qrmGpuCache->perGpuData->find(gpuId);
     CHECK(qrmItr != qrmGpuCache->perGpuData->end());
 
@@ -344,7 +351,8 @@ void SqlQueryPolyDataTableCache::allocBuffers(const GpuId& gpuId,
     }
 
     if (vertLayoutPtr) {
-      itr->second.vbo->setBufferLayout(vertLayoutPtr->convertToBufferLayout(), initData.numVertBytes, 0);
+      itr->second.vbo->setBufferLayout(
+          vertLayoutPtr->convertToBufferLayout(qrmGpuCache->supportedExtensions), initData.numVertBytes, 0);
     }
   } else {
     itr->second.vbo = nullptr;
@@ -358,7 +366,8 @@ void SqlQueryPolyDataTableCache::allocBuffers(const GpuId& gpuId,
     }
 
     if (uniformLayoutPtr) {
-      itr->second.ubo->setBufferLayout(uniformLayoutPtr->convertToUniformBufferLayout(), initData.numDataBytes, 0);
+      itr->second.ubo->setBufferLayout(
+          uniformLayoutPtr->convertToUniformBufferLayout(qrmGpuCache->supportedExtensions), initData.numDataBytes, 0);
     }
   } else {
     itr->second.ubo = nullptr;
@@ -457,6 +466,8 @@ void SqlQueryPolyDataTableCache::updatePostQuery(const GpuId& gpuId,
                                                  const QueryDataLayoutShPtr& vertLayoutPtr,
                                                  const QueryDataLayoutShPtr& uniformLayoutPtr,
                                                  const PolyRowDataShPtr& rowDataPtr) {
+  auto qrmGpuCache = _qrmGpuCache.lock();
+  CHECK(qrmGpuCache);
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find poly data on gpu " + std::to_string(gpuId));
@@ -467,7 +478,8 @@ void SqlQueryPolyDataTableCache::updatePostQuery(const GpuId& gpuId,
     itr->second.vbo->updatePostQuery(usedBytes);
 
     if (vertLayoutPtr) {
-      itr->second.vbo->setBufferLayout(vertLayoutPtr->convertToBufferLayout(), usedBytes, 0);
+      itr->second.vbo->setBufferLayout(
+          vertLayoutPtr->convertToBufferLayout(qrmGpuCache->supportedExtensions), usedBytes, 0);
     }
   }
 
@@ -476,7 +488,8 @@ void SqlQueryPolyDataTableCache::updatePostQuery(const GpuId& gpuId,
     itr->second.ubo->updatePostQuery(usedBytes);
 
     if (uniformLayoutPtr) {
-      itr->second.ubo->setBufferLayout(uniformLayoutPtr->convertToUniformBufferLayout(), usedBytes, 0);
+      itr->second.ubo->setBufferLayout(
+          uniformLayoutPtr->convertToUniformBufferLayout(qrmGpuCache->supportedExtensions), usedBytes, 0);
     }
   }
 
@@ -1522,6 +1535,9 @@ void PolyDataTable::_initBuffers(BaseQueryPolyDataTable::PerGpuData& gpuData) {
 }
 
 std::tuple<GLBufferLayoutShPtr, std::unique_ptr<char[]>, size_t> PolyDataTable::_createVBOData() {
+  auto qrmGpuCache = _ctx->getRootGpuCache();
+  CHECK(qrmGpuCache);
+
   GLBufferLayoutShPtr vboLayoutPtr;
   QueryVertexBufferShPtr vbo;
 
@@ -1529,7 +1545,7 @@ std::tuple<GLBufferLayoutShPtr, std::unique_ptr<char[]>, size_t> PolyDataTable::
 
   switch (_vboType) {
     case DataTable::VboType::SEQUENTIAL: {
-      vboLayoutPtr.reset(new GLSequentialBufferLayout());
+      vboLayoutPtr.reset(new GLSequentialBufferLayout(qrmGpuCache->supportedExtensions));
       auto vboLayout = dynamic_cast<GLSequentialBufferLayout*>(vboLayoutPtr.get());
 
       // build up the layout of the vertex buffer
@@ -1562,7 +1578,7 @@ std::tuple<GLBufferLayoutShPtr, std::unique_ptr<char[]>, size_t> PolyDataTable::
     } break;
 
     case DataTable::VboType::INTERLEAVED: {
-      vboLayoutPtr.reset(new GLInterleavedBufferLayout());
+      vboLayoutPtr.reset(new GLInterleavedBufferLayout(qrmGpuCache->supportedExtensions));
       auto vboLayout = dynamic_cast<GLInterleavedBufferLayout*>(vboLayoutPtr.get());
 
       // build up the layout of the vertex buffer
@@ -1605,7 +1621,11 @@ std::tuple<GLBufferLayoutShPtr, std::unique_ptr<char[]>, size_t> PolyDataTable::
 }
 
 std::tuple<GLShaderBlockLayoutShPtr, std::unique_ptr<char[]>, size_t> PolyDataTable::_createUBOData() {
-  GLShaderBlockLayoutShPtr blockLayoutPtr(new GLShaderBlockLayout(ShaderBlockLayoutType::STD140));
+  auto qrmGpuCache = _ctx->getRootGpuCache();
+  CHECK(qrmGpuCache);
+
+  GLShaderBlockLayoutShPtr blockLayoutPtr(
+      new GLShaderBlockLayout(qrmGpuCache->supportedExtensions, ShaderBlockLayoutType::STD140));
 
   ColumnMap::iterator itr;
 

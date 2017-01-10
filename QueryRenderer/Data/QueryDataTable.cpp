@@ -17,6 +17,7 @@ using ::Rendering::Colors::ColorRGBA;
 using ::Rendering::Colors::ColorHSL;
 using ::Rendering::Colors::ColorLAB;
 using ::Rendering::Colors::ColorHCL;
+using ::Rendering::Colors::ColorUnion;
 using ::Rendering::GL::Resources::GLBufferAttrType;
 using ::Rendering::GL::Resources::GLVertexBufferShPtr;
 
@@ -42,6 +43,16 @@ QueryDataType getDataTypeForType<float>() {
 }
 
 template <>
+QueryDataType getDataTypeForType<uint64_t>() {
+  return QueryDataType::UINT64;
+}
+
+template <>
+QueryDataType getDataTypeForType<int64_t>() {
+  return QueryDataType::INT64;
+}
+
+template <>
 QueryDataType getDataTypeForType<double>() {
   return QueryDataType::DOUBLE;
 }
@@ -63,6 +74,11 @@ QueryDataType getDataTypeForType<ColorLAB>() {
 
 template <>
 QueryDataType getDataTypeForType<ColorHCL>() {
+  return QueryDataType::COLOR;
+}
+
+template <>
+QueryDataType getDataTypeForType<ColorUnion>() {
   return QueryDataType::COLOR;
 }
 
@@ -173,7 +189,7 @@ bool SqlQueryDataTableJSON::hasAttribute(const std::string& attrName) {
   }
 
   // TODO(croot): throw a warning/error if the vbo isn't initialized?
-  return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName) : false);
+  return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName, getQueryDataLayout()) : false);
 }
 
 QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
@@ -651,9 +667,11 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
   GLBufferLayoutShPtr vboLayoutPtr;
   QueryVertexBufferShPtr vbo;
 
+  auto rootGpuCache = _ctx->getRootGpuCache();
+
   switch (_vboType) {
     case VboType::SEQUENTIAL: {
-      GLSequentialBufferLayout* vboLayout = new GLSequentialBufferLayout();
+      GLSequentialBufferLayout* vboLayout = new GLSequentialBufferLayout(rootGpuCache->supportedExtensions);
 
       ColumnMap::iterator itr;
       int numBytes = 0;
@@ -715,7 +733,7 @@ std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> DataT
     } break;
 
     case VboType::INTERLEAVED: {
-      GLInterleavedBufferLayout* vboLayout = new GLInterleavedBufferLayout();
+      GLInterleavedBufferLayout* vboLayout = new GLInterleavedBufferLayout(rootGpuCache->supportedExtensions);
 
       ColumnMap::iterator itr;
       int numBytes = 0;

@@ -1,5 +1,6 @@
 #include "ShaderUtils.h"
 #include "../Marks/RenderProperty.h"
+#include <Rendering/Renderer/GL/GLRenderer.h>
 
 #include <sstream>
 
@@ -85,6 +86,27 @@ void ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(const BaseRenderProperty&
 
   ss << "<useU" << name << ">";
   boost::replace_first(shaderSrc, ss.str(), (isUniform ? "1" : "0"));
+}
+
+std::string ShaderUtils::addShaderExtensionAndPreprocessorInfo(const std::string& shaderSrc) {
+  // add the type defines at the head of vert shaders
+  RUNTIME_EX_ASSERT(
+      ::Rendering::GL::GLRenderer::getCurrentThreadRenderer(),
+      "A renderer needs to be active to call BaseTypeGL::getExtensionStr & BaseTypeGL::getTypeDefinesMacroForShader()");
+
+  std::regex versionRegex("#version\\s+\\d+\\s+core\\s*");
+  std::smatch versionMatch;
+
+  size_t idx = 0;
+  if (std::regex_search(shaderSrc, versionMatch, versionRegex)) {
+    idx = versionMatch.position() + versionMatch.length();
+  }
+
+  std::string rtn = shaderSrc;
+  rtn.insert(idx,
+             ::Rendering::GL::BaseTypeGL::getExtensionStr() + "\n" +
+                 ::Rendering::GL::BaseTypeGL::getTypeDefinesMacroForShader());
+  return rtn;
 }
 
 }  // namespace QueryRenderer

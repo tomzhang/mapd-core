@@ -19,6 +19,9 @@ enum class GLBufferLayoutType { INTERLEAVED = 0, SEQUENTIAL, CUSTOM };
 
 enum class GLBufferAttrType {
   UINT = 0,
+  VEC2UI,
+  VEC3UI,
+  VEC4UI,
 
   INT,
   VEC2I,
@@ -45,64 +48,8 @@ enum class GLBufferAttrType {
   VEC3I64,
   VEC4I64,
 
-  // COLOR_R,
-  // COLOR_RG,
-  // COLOR_RGB,
-  // COLOR_RGBA,
-
   MAX_GL_BUFFER_ATTR_TYPE  // ALWAYS LEAVE THIS LAST, AND DO NOT USE
 };
-
-namespace detail {
-static std::array<TypeGLUqPtr, static_cast<size_t>(GLBufferAttrType::MAX_GL_BUFFER_ATTR_TYPE)> attrTypeInfo = {{
-    TypeGLUqPtr(new TypeGL<unsigned int, 1>()),  // UINT
-
-    TypeGLUqPtr(new TypeGL<int, 1>()),  // INT
-    TypeGLUqPtr(new TypeGL<int, 2>()),  // VEC2I
-    TypeGLUqPtr(new TypeGL<int, 3>()),  // VEC3I
-    TypeGLUqPtr(new TypeGL<int, 4>()),  // VEC4I
-
-    TypeGLUqPtr(new TypeGL<float, 1>()),  // FLOAT
-    TypeGLUqPtr(new TypeGL<float, 2>()),  // VEC2F
-    TypeGLUqPtr(new TypeGL<float, 3>()),  // VEC3F
-    TypeGLUqPtr(new TypeGL<float, 4>()),  // VEC4F
-
-    TypeGLUqPtr(new TypeGL<double, 1>()),  // DOUBLE
-    TypeGLUqPtr(new TypeGL<double, 2>()),  // VEC2D
-    TypeGLUqPtr(new TypeGL<double, 3>()),  // VEC3D
-    TypeGLUqPtr(new TypeGL<double, 4>()),  // VEC4D
-
-    TypeGLUqPtr(new TypeGL<uint64_t, 1>()),  // UINT64
-    TypeGLUqPtr(new TypeGL<uint64_t, 2>()),  // VEC2UI64
-    TypeGLUqPtr(new TypeGL<uint64_t, 3>()),  // VEC3UI64
-    TypeGLUqPtr(new TypeGL<uint64_t, 4>()),  // VEC4UI64
-
-    TypeGLUqPtr(new TypeGL<int64_t, 1>()),  // INT64
-    TypeGLUqPtr(new TypeGL<int64_t, 2>()),  // VEC2I64
-    TypeGLUqPtr(new TypeGL<int64_t, 3>()),  // VEC3I64
-    TypeGLUqPtr(new TypeGL<int64_t, 4>()),  // VEC4I64
-
-    // TypeGLUqPtr(new TypeGL<uint8_t, 1>(true, true)),   // COLOR_R
-    // TypeGLUqPtr(new TypeGL<uint8_t, 2>(true, true)),   // COLOR_RG
-    // TypeGLUqPtr(new TypeGL<uint8_t, 3>(true, true)),   // COLOR_RGB
-    // TypeGLUqPtr(new TypeGL<uint8_t, 4>(true, true))    // COLOR_RGBA
-}};
-
-GLBufferAttrType getBufferAttrType(unsigned int a, int numComponents = 1);
-GLBufferAttrType getBufferAttrType(int a, int numComponents = 1);
-GLBufferAttrType getBufferAttrType(float a, int numComponents = 1);
-GLBufferAttrType getBufferAttrType(double a, int numComponents = 1);
-
-}  // namespace detail
-
-namespace MultiIndexTags {
-
-// tags for boost::multi_index_container
-struct name {};
-
-struct rsrcid {};
-
-}  // namespace MultiIndexTags
 
 struct GLBufferAttrInfo {
   std::string name;
@@ -147,7 +94,11 @@ class GLBaseBufferLayout {
   virtual bool operator!=(const GLBaseBufferLayout& layoutPtr) const { return !operator==(layoutPtr); }
 
  protected:
-  GLBaseBufferLayout(GLBufferLayoutType layoutType) : _layoutType(layoutType), _itemByteSize(0) {}
+  GLBaseBufferLayout(const std::set<std::string>& supportedExtensions, GLBufferLayoutType layoutType);
+
+  // tags for boost::multi_index_container
+  struct name {};
+  struct rsrcid {};
 
   typedef std::unique_ptr<GLBufferAttrInfo> BufferAttrInfoPtr;
   typedef boost::multi_index_container<
@@ -157,34 +108,24 @@ class GLBaseBufferLayout {
 
           // hashed on name
           boost::multi_index::hashed_unique<
-              boost::multi_index::tag<MultiIndexTags::name>,
-              boost::multi_index::member<GLBufferAttrInfo, std::string, &GLBufferAttrInfo::name>>>> BufferAttrMap;
+              boost::multi_index::tag<name>,
+              boost::multi_index::member<GLBufferAttrInfo, std::string, &GLBufferAttrInfo::name>>>>
+      BufferAttrMap;
 
-  typedef BufferAttrMap::index<MultiIndexTags::name>::type BufferAttrMap_by_name;
+  typedef BufferAttrMap::index<name>::type BufferAttrMap_by_name;
 
   GLBufferLayoutType _layoutType;
   BufferAttrMap _attrMap;
 
   size_t _itemByteSize;
 
-  // typedef boost::multi_index_container<
-  //     BoundBufferData,
-  //     boost::multi_index::indexed_by<
-  //         boost::multi_index::random_access<>,
-
-  //         // hashed on name
-  //         boost::multi_index::hashed_unique<
-  //             boost::multi_index::tag<MultiIndexTags::rsrcid>,
-  //             boost::multi_index::member<BoundBufferData, UniqueResourceId, &BoundBufferData::rsrcId>>>>
-  //             BoundBufferMap;
-
-  // typedef BoundBufferMap::index<MultiIndexTags::rsrcid>::type BoundBufferMap_by_id;
-
-  // BoundBufferMap _boundBufferMap;
-
-  // // void validateBoundBuffer() const;
-  // BoundBufferMap_by_id::const_iterator validateBoundBuffer(const GLLayoutManagerBuffer* buffer) const;
-  // BoundBufferMap_by_id::const_iterator validateBoundBuffer(const GLLayoutManagerBufferShPtr& buffer) const;
+  static std::array<TypeGLUqPtr, static_cast<size_t>(GLBufferAttrType::MAX_GL_BUFFER_ATTR_TYPE)> attrTypeInfo;
+  static GLBufferAttrType getBufferAttrType(unsigned int a, int numComponents = 1);
+  static GLBufferAttrType getBufferAttrType(int a, int numComponents = 1);
+  static GLBufferAttrType getBufferAttrType(float a, int numComponents = 1);
+  static GLBufferAttrType getBufferAttrType(double a, int numComponents = 1);
+  static GLBufferAttrType getBufferAttrType(uint64_t a, int numComponents = 1);
+  static GLBufferAttrType getBufferAttrType(int64_t a, int numComponents = 1);
 
  private:
   virtual void bindToShader(GLShader* activeShader,
@@ -193,18 +134,14 @@ class GLBaseBufferLayout {
                             const std::string& attr = "",
                             const std::string& shaderAttr = "") const = 0;
 
-  // void setByteOffset(size_t byteOffset);
-  // void setUsedBytes(size_t usedBytes);
-  // void addBuffer(const GLLayoutManagerBufferShPtr& buffer, const size_t usedBytes, const size_t offsetBytes = 0);
-  // void clearBuffers();
-
   friend class ::Rendering::GL::Resources::GLLayoutManagerBuffer;
   friend class ::Rendering::GL::Resources::GLVertexBuffer;
 };
 
 class GLCustomBufferLayout : public GLBaseBufferLayout {
  public:
-  GLCustomBufferLayout() : GLBaseBufferLayout(GLBufferLayoutType::CUSTOM) {}
+  GLCustomBufferLayout(const std::set<std::string>& supportedExtensions)
+      : GLBaseBufferLayout(supportedExtensions, GLBufferLayoutType::CUSTOM) {}
   ~GLCustomBufferLayout() {}
 
   void addAttribute(const std::string& attrName, GLBufferAttrType type, int stride, int offset);
@@ -222,7 +159,8 @@ class GLCustomBufferLayout : public GLBaseBufferLayout {
 
 class GLInterleavedBufferLayout : public GLBaseBufferLayout {
  public:
-  GLInterleavedBufferLayout() : GLBaseBufferLayout(GLBufferLayoutType::INTERLEAVED) {}
+  GLInterleavedBufferLayout(const std::set<std::string>& supportedExtensions)
+      : GLBaseBufferLayout(supportedExtensions, GLBufferLayoutType::INTERLEAVED) {}
 
   void addAttribute(const std::string& attrName, GLBufferAttrType type);
 
@@ -232,13 +170,13 @@ class GLInterleavedBufferLayout : public GLBaseBufferLayout {
         !hasAttribute(attrName) && attrName.length(),
         "GLInterleavedBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
-    GLBufferAttrType type = detail::getBufferAttrType(T(0), numComponents);
+    GLBufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
 
-    _attrMap.push_back(BufferAttrInfoPtr(
-        new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, _itemByteSize)));
+    _attrMap.push_back(
+        BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, _itemByteSize)));
 
-    _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+    _itemByteSize += attrTypeInfo[enumVal]->numBytes();
   }
 
  private:
@@ -251,7 +189,8 @@ class GLInterleavedBufferLayout : public GLBaseBufferLayout {
 
 class GLSequentialBufferLayout : public GLBaseBufferLayout {
  public:
-  GLSequentialBufferLayout() : GLBaseBufferLayout(GLBufferLayoutType::SEQUENTIAL) {}
+  GLSequentialBufferLayout(const std::set<std::string>& supportedExtensions)
+      : GLBaseBufferLayout(supportedExtensions, GLBufferLayoutType::SEQUENTIAL) {}
 
   void addAttribute(const std::string& attrName, GLBufferAttrType type);
 
@@ -261,16 +200,12 @@ class GLSequentialBufferLayout : public GLBaseBufferLayout {
         !hasAttribute(attrName) && attrName.length(),
         "GLSequentialBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
-    GLBufferAttrType type = detail::getBufferAttrType(T(0), numComponents);
+    GLBufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
-    // _attrMap[attrName] = BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(),
-    // attrTypeInfo[enumVal]->numBytes(), -1));
-    // _attrMap.emplace_back(new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(),
-    // attrTypeInfo[enumVal]->numBytes(), -1));
-    _attrMap.push_back(BufferAttrInfoPtr(new GLBufferAttrInfo(
-        attrName, type, detail::attrTypeInfo[enumVal].get(), detail::attrTypeInfo[enumVal]->numBytes(), -1)));
+    _attrMap.push_back(BufferAttrInfoPtr(
+        new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1)));
 
-    _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+    _itemByteSize += attrTypeInfo[enumVal]->numBytes();
   }
 
  private:

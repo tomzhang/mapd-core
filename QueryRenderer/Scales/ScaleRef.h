@@ -75,10 +75,12 @@ class BaseScaleRef {
 
 template <class T, class TT, class Enable = void>
 struct ConvertDomainRangeData {
-  void operator()(std::shared_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
+  void operator()(const QueryRendererContextShPtr& ctx,
+                  std::shared_ptr<ScaleDomainRangeData<T>>& destData,
+                  ScaleDomainRangeData<TT>* srcData) {
     std::vector<TT>& srcVec = srcData->getVectorDataRef();
 
-    destData.reset(new ScaleDomainRangeData<T>(srcData->getName(), srcVec.size(), srcData->useString()));
+    destData.reset(new ScaleDomainRangeData<T>(ctx, srcData->getName(), srcVec.size(), srcData->useString()));
     std::vector<T>& destVec = destData->getVectorDataRef();
     for (size_t i = 0; i < srcVec.size(); ++i) {
       destVec[i] = static_cast<T>(srcVec[i]);
@@ -91,7 +93,9 @@ struct ConvertDomainRangeData<
     T,
     TT,
     typename std::enable_if<::Rendering::Colors::is_color<T>::value && std::is_arithmetic<TT>::value>::type> {
-  void operator()(std::shared_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
+  void operator()(const QueryRendererContextShPtr& ctx,
+                  std::shared_ptr<ScaleDomainRangeData<T>>& destData,
+                  ScaleDomainRangeData<TT>* srcData) {
     THROW_RUNTIME_EX("Cannot convert a numeric value (" + std::string(*srcData) + ") to a color" +
                      (destData ? " (" + std::string(*destData) + ")." : "."));
   }
@@ -102,7 +106,9 @@ struct ConvertDomainRangeData<
     T,
     TT,
     typename std::enable_if<std::is_arithmetic<T>::value && Rendering::Colors::is_color<TT>::value>::type> {
-  void operator()(std::shared_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
+  void operator()(const QueryRendererContextShPtr& ctx,
+                  std::shared_ptr<ScaleDomainRangeData<T>>& destData,
+                  ScaleDomainRangeData<TT>* srcData) {
     THROW_RUNTIME_EX("Cannot convert a color (" + std::string(*srcData) + ") to a numeric value" +
                      (destData ? " (" + std::string(*destData) + ")." : "."));
   }
@@ -113,10 +119,12 @@ struct ConvertDomainRangeData<
     T,
     TT,
     typename std::enable_if<::Rendering::Colors::is_color<T>::value && Rendering::Colors::is_color<TT>::value>::type> {
-  void operator()(std::shared_ptr<ScaleDomainRangeData<T>>& destData, ScaleDomainRangeData<TT>* srcData) {
+  void operator()(const QueryRendererContextShPtr& ctx,
+                  std::shared_ptr<ScaleDomainRangeData<T>>& destData,
+                  ScaleDomainRangeData<TT>* srcData) {
     std::vector<TT>& srcVec = srcData->getVectorDataRef();
 
-    destData.reset(new ScaleDomainRangeData<T>(srcData->getName(), srcVec.size(), srcData->useString()));
+    destData.reset(new ScaleDomainRangeData<T>(ctx, srcData->getName(), srcVec.size(), srcData->useString()));
     std::vector<T>& destVec = destData->getVectorDataRef();
     for (size_t i = 0; i < srcVec.size(); ++i) {
       convertColor(srcVec[i], destVec[i]);
@@ -260,6 +268,8 @@ class ScaleRef : public BaseScaleRef {
     ScaleDomainRangeData<unsigned int>* uintDomain;
     ScaleDomainRangeData<int>* intDomain;
     ScaleDomainRangeData<float>* floatDomain;
+    ScaleDomainRangeData<uint64_t>* uint64Domain;
+    ScaleDomainRangeData<int64_t>* int64Domain;
     ScaleDomainRangeData<double>* doubleDomain;
     ScaleDomainRangeData<std::string>* stringDomain;
     ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>* colorRGBADomain;
@@ -280,13 +290,17 @@ class ScaleRef : public BaseScaleRef {
       if (force || (!isQuantScale && theirDomainType != ourDomainType) ||
           (isQuantScale && !areTypesCompatible(ourDomainType, theirDomainType))) {
         if ((uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(domainDataPtr))) {
-          ConvertDomainRangeData<DomainType, unsigned int>()(_coercedDomainData, uintDomain);
+          ConvertDomainRangeData<DomainType, unsigned int>()(_ctx, _coercedDomainData, uintDomain);
         } else if ((intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(domainDataPtr))) {
-          ConvertDomainRangeData<DomainType, int>()(_coercedDomainData, intDomain);
+          ConvertDomainRangeData<DomainType, int>()(_ctx, _coercedDomainData, intDomain);
         } else if ((floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(domainDataPtr))) {
-          ConvertDomainRangeData<DomainType, float>()(_coercedDomainData, floatDomain);
+          ConvertDomainRangeData<DomainType, float>()(_ctx, _coercedDomainData, floatDomain);
+        } else if ((uint64Domain = dynamic_cast<ScaleDomainRangeData<uint64_t>*>(domainDataPtr))) {
+          ConvertDomainRangeData<DomainType, uint64_t>()(_ctx, _coercedDomainData, uint64Domain);
+        } else if ((int64Domain = dynamic_cast<ScaleDomainRangeData<int64_t>*>(domainDataPtr))) {
+          ConvertDomainRangeData<DomainType, int64_t>()(_ctx, _coercedDomainData, int64Domain);
         } else if ((doubleDomain = dynamic_cast<ScaleDomainRangeData<double>*>(domainDataPtr))) {
-          ConvertDomainRangeData<DomainType, double>()(_coercedDomainData, doubleDomain);
+          ConvertDomainRangeData<DomainType, double>()(_ctx, _coercedDomainData, doubleDomain);
         } else if ((stringDomain = dynamic_cast<ScaleDomainRangeData<std::string>*>(domainDataPtr))) {
           _doStringToDataConversion(stringDomain);
           doSort = true;
@@ -305,29 +319,33 @@ class ScaleRef : public BaseScaleRef {
       BaseScaleDomainRangeData* rangeDataPtr = _scalePtr->getRangeData();
       if (force || rangeDataPtr->getTypeInfo() != typeid(RangeType)) {
         if ((uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, unsigned int>()(_coercedRangeData, uintDomain);
+          ConvertDomainRangeData<RangeType, unsigned int>()(_ctx, _coercedRangeData, uintDomain);
         } else if ((intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, int>()(_coercedRangeData, intDomain);
+          ConvertDomainRangeData<RangeType, int>()(_ctx, _coercedRangeData, intDomain);
         } else if ((floatDomain = dynamic_cast<ScaleDomainRangeData<float>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, float>()(_coercedRangeData, floatDomain);
+          ConvertDomainRangeData<RangeType, float>()(_ctx, _coercedRangeData, floatDomain);
+        } else if ((uint64Domain = dynamic_cast<ScaleDomainRangeData<uint64_t>*>(rangeDataPtr))) {
+          ConvertDomainRangeData<RangeType, uint64_t>()(_ctx, _coercedRangeData, uint64Domain);
+        } else if ((int64Domain = dynamic_cast<ScaleDomainRangeData<int64_t>*>(rangeDataPtr))) {
+          ConvertDomainRangeData<RangeType, int64_t>()(_ctx, _coercedRangeData, int64Domain);
         } else if ((doubleDomain = dynamic_cast<ScaleDomainRangeData<double>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, double>()(_coercedRangeData, doubleDomain);
+          ConvertDomainRangeData<RangeType, double>()(_ctx, _coercedRangeData, doubleDomain);
         }
         // TODO(croot): support other strings?
         // else if ((stringDomain = dynamic_cast<ScaleDomainRangeData<std::string>*>(rangeDataPtr))) {
         // }
         else if ((colorRGBADomain =
                       dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorRGBA>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorRGBA>()(_coercedRangeData, colorRGBADomain);
+          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorRGBA>()(_ctx, _coercedRangeData, colorRGBADomain);
         } else if ((colorHSLDomain =
                         dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHSL>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorHSL>()(_coercedRangeData, colorHSLDomain);
+          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorHSL>()(_ctx, _coercedRangeData, colorHSLDomain);
         } else if ((colorLABDomain =
                         dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorLAB>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorLAB>()(_coercedRangeData, colorLABDomain);
+          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorLAB>()(_ctx, _coercedRangeData, colorLABDomain);
         } else if ((colorHCLDomain =
                         dynamic_cast<ScaleDomainRangeData<::Rendering::Colors::ColorHCL>*>(rangeDataPtr))) {
-          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorHCL>()(_coercedRangeData, colorHCLDomain);
+          ConvertDomainRangeData<RangeType, ::Rendering::Colors::ColorHCL>()(_ctx, _coercedRangeData, colorHCLDomain);
         } else {
           THROW_RUNTIME_EX(std::string(*this) + ": Cannot create scale reference - unsupported range type.");
         }
@@ -385,7 +403,7 @@ class ScaleRef : public BaseScaleRef {
 
     std::vector<std::string>& vec = domainData->getVectorDataRef();
     _coercedDomainData.reset(
-        new ScaleDomainRangeData<DomainType>(domainData->getName(), vec.size(), domainData->useString()));
+        new ScaleDomainRangeData<DomainType>(_ctx, domainData->getName(), vec.size(), domainData->useString()));
 
     QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getQueryDataLayout();
     if (!queryDataLayoutPtr) {

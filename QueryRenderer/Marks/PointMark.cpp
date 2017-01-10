@@ -34,6 +34,7 @@ PointMark::PointMark(const rapidjson::Value& obj,
       id(this, "id", ctx, false),
       fillColor(this, "fillColor", ctx) {
   _initPropertiesFromJSONObj(obj, objPath);
+  _initGpuResources(_ctx.get(), true);
   _jsonPath = objPath;
   _updateShader();
 }
@@ -218,11 +219,11 @@ void PointMark::_updateShader() {
   }
 
   std::string vertSrc(PointTemplate_Vert::source);
+  std::string fragSrc(PointTemplate_Frag::source);
 
-  std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO: add z & fillColor
+  std::vector<BaseRenderProperty*> props = {&x, &y, &size, &fillColor};  // TODO(croot): add z
 
-  bool useKey = key.hasVboPtr();
-  boost::replace_first(vertSrc, "<useKey>", std::to_string(useKey));
+  BaseMark::_setKeyInShaderSrc(vertSrc);
 
   // update all the types first
   for (auto& prop : props) {
@@ -238,12 +239,15 @@ void PointMark::_updateShader() {
     ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(*prop, vertSrc, true);
   }
 
+  bool idUniform = true;
   if (_ctx->doHitTest()) {
     props.push_back(&id);
-  } else {
-    // define the id as uniform to get the shader to compile
-    ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, true);
+    idUniform = !id.hasVboPtr();
   }
+  ShaderUtils::setRenderPropertyTypeInShaderSrc(id, vertSrc);
+  ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, vertSrc, idUniform);
+  ShaderUtils::setRenderPropertyTypeInShaderSrc(id, fragSrc);
+  ShaderUtils::setRenderPropertyAttrTypeInShaderSrc(id, fragSrc, idUniform);
 
   // now insert any additional functionality
   // std::unordered_map<std::string, BaseScale*> visitedScales;
@@ -295,24 +299,8 @@ void PointMark::_updateShader() {
     }
   }
 
-  std::string fragSrc(PointTemplate_Frag::source);
-
   BaseMark::_updateShader(vertSrc, fragSrc);
 
-  // static int CROOTcnt = 0;
-  // CROOTcnt++;
-  // if (CROOTcnt == 1) {
-  //   std::ofstream shadersrcstream;
-  //   shadersrcstream.open("shadersource.vert");
-  //   shadersrcstream << vertSrc;
-  //   shadersrcstream.close();
-
-  //   shadersrcstream.open("shadersource.frag");
-  //   shadersrcstream << fragSrc;
-  //   shadersrcstream.close();
-  // }
-
-  // now build the shader object
   // TODO(croot): How would we share shaders across different
   // query renderers?
 
@@ -328,8 +316,26 @@ void PointMark::_updateShader() {
 
     GLResourceManagerShPtr rsrcMgr = currRenderer->getResourceManager();
 
-    itr.second.shaderPtr = rsrcMgr->createShader(BaseMark::_addBaseTypeDefinesToShaderSrc(vertSrc),
-                                                 BaseMark::_addBaseTypeDefinesToShaderSrc(fragSrc));
+    // vertSrc = BaseMark::_addShaderExtensionAndPreprocessorInfo(vertSrc);
+    // fragSrc = BaseMark::_addShaderExtensionAndPreprocessorInfo(fragSrc);
+
+    // static int CROOTcnt = 0;
+    // CROOTcnt++;
+    // if (CROOTcnt == 1) {
+    //   std::ofstream shadersrcstream;
+    //   shadersrcstream.open("shadersource.vert");
+    //   shadersrcstream << vertSrc;
+    //   shadersrcstream.close();
+
+    //   shadersrcstream.open("shadersource.frag");
+    //   shadersrcstream << fragSrc;
+    //   shadersrcstream.close();
+    // }
+
+    // itr.second.shaderPtr = rsrcMgr->createShader(vertSrc, fragSrc);
+
+    itr.second.shaderPtr = rsrcMgr->createShader(ShaderUtils::addShaderExtensionAndPreprocessorInfo(vertSrc),
+                                                 ShaderUtils::addShaderExtensionAndPreprocessorInfo(fragSrc));
 
     // TODO(croot): should I make make the current thread
     // have an inactive renderer?
@@ -385,22 +391,20 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
   if (key.hasVboPtr()) {
     if (activeShader->hasUniformAttribute(invalidKeyAttrName)) {
       GLint type = activeShader->getUniformAttributeGLType(invalidKeyAttrName);
-      if (type == GL_INT) {
-        auto vboPtr = key.getVboPtr();
-        CHECK(vboPtr);
-        auto queryResultBuffer = dynamic_cast<QueryResultVertexBuffer*>(vboPtr.get());
-        if (queryResultBuffer) {
-          auto queryDataLayoutPtr = queryResultBuffer->getQueryDataLayout();
-          CHECK(queryDataLayoutPtr);
+      auto vboPtr = key.getVboPtr();
+      CHECK(vboPtr);
+      auto queryResultBuffer = dynamic_cast<QueryResultVertexBuffer*>(vboPtr.get());
+      if (queryResultBuffer) {
+        auto queryDataLayoutPtr = queryResultBuffer->getQueryDataLayout();
+        CHECK(queryDataLayoutPtr);
+        if (type == GL_INT) {
           activeShader->setUniformAttribute<int>(invalidKeyAttrName, static_cast<int>(queryDataLayoutPtr->invalidKey));
+        } else if (type == GL_INT64_NV) {
+          activeShader->setUniformAttribute<int64_t>(invalidKeyAttrName, queryDataLayoutPtr->invalidKey);
+        } else {
+          THROW_RUNTIME_EX("Unsupported invalid key gl type " + ::Rendering::GL::gl_type_to_string(type));
         }
-      }  // else if (GLEW_NV_vertex_attrib_integer_64bit && type == GL_INT64_NV) {
-         // TODO(croot) - do we need to do the glew extension check above or
-         // would there be an error at shader compilation if the extension
-         // didn't exist?
-
-      // TODO(croot) fill this out
-      // }
+      }
     }
   }
 
@@ -485,7 +489,7 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
   CHECK(qrmGpuData);
 
   ::Rendering::Renderer* rndr = qrmGpuData->rendererPtr.get();
-  CHECK(itr->second.shaderPtr && rndr == renderer);
+  CHECK(itr->second.shaderPtr && rndr == renderer && itr->second.vaoPtr);
 
   // now bind the shader
   renderer->bindShader(itr->second.shaderPtr);
@@ -520,8 +524,9 @@ void PointMark::draw(GLRenderer* renderer, const GpuId& gpuId) {
 bool PointMark::updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) {
   bool rtn = false;
   if (!_ctx->isJSONCacheUpToDate(_jsonPath, obj)) {
-    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::BASIC_VBO, false, false);
+    BaseMark::_initFromJSONObj(obj, objPath, QueryDataTableBaseType::BASIC_VBO, false);
     _initPropertiesFromJSONObj(obj, objPath);
+    _initGpuResources(_ctx.get(), false);
     rtn = true;
   } else if (_jsonPath != objPath) {
     // TODO(croot) - Bug! What if the cache is up-to-date, but the path has changed -- we need to update

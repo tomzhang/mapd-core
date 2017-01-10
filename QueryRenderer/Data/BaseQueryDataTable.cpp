@@ -15,9 +15,7 @@ bool BaseQueryDataTableJSON::updateFromJSONObj(const rapidjson::Value& obj, cons
     _jsonPath = objPath;
     return false;
   }
-
   _updateFromJSONObj(obj, objPath, !cacheUpToDate);
-
   _jsonPath = objPath;
 
   return true;

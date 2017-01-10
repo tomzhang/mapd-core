@@ -29,9 +29,10 @@ QueryDataLayout::QueryDataLayout(const std::vector<std::string>& attrNames,
       "QueryDataLayout constructor: The number of attribute names must match the number of attribute types.");
 }
 
-GLBufferLayoutShPtr QueryDataLayout::convertToBufferLayout() {
+GLBufferLayoutShPtr QueryDataLayout::convertToBufferLayout(const std::set<std::string>& supportedExtensions) {
   if (!_convertedLayout) {
     int dummyCnt = 0;
+    bool supportsInt64 = supportedExtensions.find("GL_NV_vertex_attrib_integer_64bit") != supportedExtensions.end();
     switch (layoutType) {
       case LayoutType::INTERLEAVED: {
         // TODO(croot): make a base interleaved/sequential buffer class
@@ -39,7 +40,7 @@ GLBufferLayoutShPtr QueryDataLayout::convertToBufferLayout() {
         // so we don't have to duplicate code here.
         // And support adding the attrnames and types in a constructor of
         // that base class?
-        _convertedLayout.reset(new GLInterleavedBufferLayout());
+        _convertedLayout.reset(new GLInterleavedBufferLayout(supportedExtensions));
         GLInterleavedBufferLayout* layout = dynamic_cast<GLInterleavedBufferLayout*>(_convertedLayout.get());
         for (size_t i = 0; i < attrNames.size(); ++i) {
           switch (attrTypes[i]) {
@@ -56,23 +57,33 @@ GLBufferLayoutShPtr QueryDataLayout::convertToBufferLayout() {
               layout->addAttribute(attrNames[i], GLBufferAttrType::DOUBLE);
               break;
             case AttrType::UINT64:
-              // TODO(croot): support 64-bit ints
-              // So for the time being, add a dummy attr for the first
-              // 32bits of the attr, and then the real attr for the
-              // last 32bits.
-              layout->addAttribute(attrNames[i], GLBufferAttrType::UINT);
-              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::UINT);
+              if (supportsInt64) {
+                layout->addAttribute(attrNames[i], GLBufferAttrType::UINT64);
+              } else {
+                // 64-bit ints are not supported, so add a dummy attr for the
+                // first 32 bits and then the real attr for the remaining
+                // 32 bits
+                layout->addAttribute(attrNames[i], GLBufferAttrType::UINT);
+                layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::UINT);
+              }
               break;
             case AttrType::INT64:
-              // TODO(croot): support 64-bit ints (see UINT64)
-              layout->addAttribute(attrNames[i], GLBufferAttrType::INT);
-              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::INT);
+              if (supportsInt64) {
+                layout->addAttribute(attrNames[i], GLBufferAttrType::INT64);
+              } else {
+                // 64-bit ints are not supported, so add a dummy attr for the
+                // first 32 bits and then the real attr for the remaining
+                // 32 bits
+                layout->addAttribute(attrNames[i], GLBufferAttrType::INT);
+                layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::INT);
+              }
+
               break;
           }
         }
       } break;
       case LayoutType::SEQUENTIAL: {
-        _convertedLayout.reset(new GLSequentialBufferLayout());
+        _convertedLayout.reset(new GLSequentialBufferLayout(supportedExtensions));
         GLSequentialBufferLayout* layout = dynamic_cast<GLSequentialBufferLayout*>(_convertedLayout.get());
         for (size_t i = 0; i < attrNames.size(); ++i) {
           switch (attrTypes[i]) {
@@ -89,20 +100,26 @@ GLBufferLayoutShPtr QueryDataLayout::convertToBufferLayout() {
               layout->addAttribute(attrNames[i], GLBufferAttrType::DOUBLE);
               break;
             case AttrType::UINT64:
-              // TODO(croot): support 64-bit ints
-              // So for the time being, add a dummy attr for the first
-              // 32bits of the attr, and then the real attr for the
-              // last 32bits.
-              layout->addAttribute(attrNames[i], GLBufferAttrType::UINT);
-              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::UINT);
+              if (supportsInt64) {
+                layout->addAttribute(attrNames[i], GLBufferAttrType::UINT64);
+              } else {
+                // 64-bit ints are not supported, so add a dummy attr for the
+                // first 32 bits and then the real attr for the remaining
+                // 32 bits
+                layout->addAttribute(attrNames[i], GLBufferAttrType::UINT);
+                layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::UINT);
+              }
               break;
             case AttrType::INT64:
-              // TODO(croot): support 64-bit ints
-              // So for the time being, add a dummy attr for the first
-              // 32bits of the attr, and then the real attr for the
-              // last 32bits.
-              layout->addAttribute(attrNames[i], GLBufferAttrType::INT);
-              layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::INT);
+              if (supportsInt64) {
+                layout->addAttribute(attrNames[i], GLBufferAttrType::INT64);
+              } else {
+                // 64-bit ints are not supported, so add a dummy attr for the
+                // first 32 bits and then the real attr for the remaining
+                // 32 bits
+                layout->addAttribute(attrNames[i], GLBufferAttrType::INT);
+                layout->addAttribute(dummyPrefix + std::to_string(dummyCnt++), GLBufferAttrType::INT);
+              }
               break;
           }
         }
@@ -116,10 +133,12 @@ GLBufferLayoutShPtr QueryDataLayout::convertToBufferLayout() {
   return _convertedLayout;
 }
 
-GLShaderBlockLayoutShPtr QueryDataLayout::convertToUniformBufferLayout() {
+GLShaderBlockLayoutShPtr QueryDataLayout::convertToUniformBufferLayout(
+    const std::set<std::string>& supportedExtensions) {
   if (!_convertedLayout) {
     int dummyCnt = 0;
-    _convertedLayout.reset(new GLShaderBlockLayout());
+    bool supportsInt64 = supportedExtensions.find("GL_NV_vertex_attrib_integer_64bit") != supportedExtensions.end();
+    _convertedLayout.reset(new GLShaderBlockLayout(supportedExtensions));
     GLShaderBlockLayout* layout = dynamic_cast<GLShaderBlockLayout*>(_convertedLayout.get());
     layout->beginAddingAttrs();
     for (size_t i = 0; i < attrNames.size(); ++i) {
@@ -137,17 +156,26 @@ GLShaderBlockLayoutShPtr QueryDataLayout::convertToUniformBufferLayout() {
           layout->addAttribute<double>(attrNames[i]);
           break;
         case AttrType::UINT64:
-          // TODO(croot): support 64-bit ints
-          // So for the time being, add a dummy attr for the first
-          // 32bits of the attr, and then the real attr for the
-          // last 32bits.
-          layout->addAttribute<unsigned int>(attrNames[i]);
-          layout->addAttribute<unsigned int>(dummyPrefix + std::to_string(dummyCnt++));
+          if (supportsInt64) {
+            layout->addAttribute<uint64_t>(attrNames[i]);
+          } else {
+            // 64-bit ints are not supported, so add a dummy attr for the
+            // first 32 bits and then the real attr for the remaining
+            // 32 bits
+            layout->addAttribute<unsigned int>(attrNames[i]);
+            layout->addAttribute<unsigned int>(dummyPrefix + std::to_string(dummyCnt++));
+          }
           break;
         case AttrType::INT64:
-          // TODO(croot): support 64-bit ints (see UINT64)
-          layout->addAttribute<int>(attrNames[i]);
-          layout->addAttribute<int>(dummyPrefix + std::to_string(dummyCnt++));
+          if (supportsInt64) {
+            layout->addAttribute<int64_t>(attrNames[i]);
+          } else {
+            // 64-bit ints are not supported, so add a dummy attr for the
+            // first 32 bits and then the real attr for the remaining
+            // 32 bits
+            layout->addAttribute<int>(attrNames[i]);
+            layout->addAttribute<int>(dummyPrefix + std::to_string(dummyCnt++));
+          }
           break;
       }
     }

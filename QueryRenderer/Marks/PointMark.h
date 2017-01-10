@@ -29,7 +29,7 @@ class PointMark : public BaseMark {
   RenderProperty<float> size;
   rapidjson::Pointer _sizeJsonPath;
 
-  RenderProperty<unsigned int> id;
+  RenderProperty<uint64_t> id;
   rapidjson::Pointer _idJsonPath;
 
   ColorRenderProperty fillColor;

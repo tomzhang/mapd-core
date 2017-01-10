@@ -65,8 +65,26 @@ void GLRenderer::initialize() {
 
   // call the derived class's initialize
   initializeGL();
+  _initExtensions();
 
   setInitialized();
+}
+
+void GLRenderer::_initExtensions() {
+  _supportedExtensions.clear();
+  int numExts = 0;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_NUM_EXTENSIONS, &numExts));
+  for (int i = 0; i < numExts; ++i) {
+    _supportedExtensions.emplace((const char*)MAPD_CHECK_GL_ERROR(glGetStringi(GL_EXTENSIONS, i)));
+  }
+}
+
+const std::set<std::string>& GLRenderer::getSupportedExtensions() const {
+  return _supportedExtensions;
+}
+
+bool GLRenderer::supportsExtension(const std::string& extStr) const {
+  return _supportedExtensions.find(extStr) != _supportedExtensions.end();
 }
 
 void GLRenderer::makeActiveOnCurrentThread(Window* window) {

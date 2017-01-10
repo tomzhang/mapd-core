@@ -11,7 +11,8 @@ namespace Resources {
 
 class GLShaderBlockLayout : public GLBaseBufferLayout {
  public:
-  GLShaderBlockLayout(ShaderBlockLayoutType layoutType = ShaderBlockLayoutType::STD140);
+  GLShaderBlockLayout(const std::set<std::string>& supportedExtensions,
+                      ShaderBlockLayoutType layoutType = ShaderBlockLayoutType::STD140);
   ~GLShaderBlockLayout();
 
   bool operator==(const GLShaderBlockLayout& layout) const;
@@ -41,9 +42,9 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
                       "GLShaderBlockLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
     int offset = 0;
-    GLBufferAttrType type = detail::getBufferAttrType(T(0), numComponents);
+    GLBufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
-    BaseTypeGL* typeGL = detail::attrTypeInfo[enumVal].get();
+    BaseTypeGL* typeGL = attrTypeInfo[enumVal].get();
 
     // TODO(croot): there's a lot to do to make this fully functional,
     // i.e. supporting matrices and structs, and arrays of all types
@@ -81,7 +82,10 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
   static size_t getNumAlignmentBytes();
 
  private:
-  GLShaderBlockLayout(ShaderBlockLayoutType layoutType, const GLShaderShPtr& shaderPtr, size_t blockByteSize);
+  GLShaderBlockLayout(const std::set<std::string>& supportedExtensions,
+                      ShaderBlockLayoutType layoutType,
+                      const GLShaderShPtr& shaderPtr,
+                      size_t blockByteSize);
 
   // TODO(croot): if these values can vary per-gpu, then we probably
   // need to store these on a per-object basis or query directly from
@@ -113,10 +117,10 @@ class GLShaderBlockLayout : public GLBaseBufferLayout {
     CHECK(offset >= 0) << "Attribute " << attrName
                        << " is not a part of a shader storage block. Cannot retrieve its offset";
 
-    GLBufferAttrType type = detail::getBufferAttrType(T(0), numComponents);
+    GLBufferAttrType type = getBufferAttrType(T(0), numComponents);
     int enumVal = static_cast<int>(type);
     _attrMap.push_back(
-        BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, offset)));
+        BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, offset)));
   }
 
   void bindToShader(GLShader* activeShader,

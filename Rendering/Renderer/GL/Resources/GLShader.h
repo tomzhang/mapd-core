@@ -68,7 +68,8 @@ struct UniformBlockAttrInfo {
   std::unordered_map<std::string, std::unique_ptr<UniformAttrInfo>> activeAttrs;
   GLShaderBlockLayoutShPtr blockLayoutPtr;
 
-  UniformBlockAttrInfo(const GLShaderShPtr& shaderPtr,
+  UniformBlockAttrInfo(const std::set<std::string>& supportedExtensions,
+                       const GLShaderShPtr& shaderPtr,
                        const std::string& blockName,
                        GLint blockIndex,
                        GLint bufferSize,

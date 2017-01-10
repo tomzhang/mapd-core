@@ -112,14 +112,18 @@ class ColorUnion {
 
   static bool isPackedTypeGL(const ::Rendering::GL::TypeGLShPtr& typeGL) { return ColorRGBA::isPackedTypeGL(typeGL); }
 
-  static ::Rendering::GL::TypeGL<float, 4> getTypeGL() { return ::Rendering::GL::TypeGL<float, 4>(); }
-  static ::Rendering::GL::TypeGLShPtr getTypeGLPtr() {
-    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<float, 4>());
+  static ::Rendering::GL::TypeGL<float, 4> getTypeGL(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGL<float, 4>(supportedExtensions);
+  }
+  static ::Rendering::GL::TypeGLShPtr getTypeGLPtr(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<float, 4>(supportedExtensions));
   }
 
-  static ::Rendering::GL::TypeGL<uint32_t> getPackedTypeGL() { return ::Rendering::GL::TypeGL<uint32_t>(); }
-  static ::Rendering::GL::TypeGLShPtr getPackedTypeGLPtr() {
-    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<uint32_t>());
+  static ::Rendering::GL::TypeGL<uint32_t, 1> getPackedTypeGL(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGL<uint32_t, 1>(supportedExtensions);
+  }
+  static ::Rendering::GL::TypeGLShPtr getPackedTypeGLPtr(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<uint32_t, 1>(supportedExtensions));
   }
 #endif  // MAPDGL
 

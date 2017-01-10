@@ -53,6 +53,9 @@ template <>
 QueryDataType getDataTypeForType<Rendering::Colors::ColorHCL>();
 
 template <>
+QueryDataType getDataTypeForType<Rendering::Colors::ColorUnion>();
+
+template <>
 QueryDataType getDataTypeForType<std::string>();
 
 class BaseQueryDataTableVBO : public BaseQueryDataTable {

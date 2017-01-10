@@ -14,6 +14,7 @@
 #include <Rendering/Renderer/GL/Resources/GLVertexArray.h>
 
 #include <set>
+#include <boost/any.hpp>
 
 #include "rapidjson/document.h"
 #include "rapidjson/pointer.h"
@@ -27,11 +28,13 @@ class BaseRenderProperty {
                      const QueryRendererContextShPtr& ctx,
                      bool useScale = true,
                      bool flexibleType = true,
-                     bool allowsAccumulatorScale = false)
+                     bool allowsAccumulatorScale = false,
+                     bool allowsNonColorStrings = false)
       : _prntMark(prntMark),
         _name(name),
         _useScale(useScale),
         _allowsAccumulatorScale(allowsAccumulatorScale),
+        _allowsNonColorStrings(allowsNonColorStrings),
         _vboAttrName(""),
         _perGpuData(),
         _vboInitType(VboInitType::UNDEFINED),
@@ -97,12 +100,13 @@ class BaseRenderProperty {
   virtual operator std::string() const = 0;
 
  protected:
-  enum class VboInitType { FROM_VALUE = 0, FROM_DATAREF, UNDEFINED };
+  enum class VboInitType { FROM_VALUE = 0, FROM_DATAREF, FROM_SCALEREF, UNDEFINED };
 
   BaseMark* _prntMark;
   std::string _name;
   bool _useScale;
   bool _allowsAccumulatorScale;
+  bool _allowsNonColorStrings;
 
   std::string _vboAttrName;
 
@@ -156,13 +160,19 @@ class BaseRenderProperty {
 
   virtual void _initScaleFromJSONObj(const rapidjson::Value& obj) = 0;
   virtual void _initFromJSONObj(const rapidjson::Value& obj) {}
-  virtual void _initValueFromJSONObj(const rapidjson::Value& obj) = 0;
+  virtual void _initValueFromJSONObj(const rapidjson::Value& obj,
+                                     const bool hasScale,
+                                     const bool resetTypes = false) = 0;
+  virtual void _validateValue(const bool hasScale) = 0;
+  virtual void _resetValue() = 0;
+  virtual bool _resetTypes() = 0;
   virtual std::pair<bool, bool> _initTypeFromBuffer(const bool hasScale = false) = 0;
   virtual void _validateScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) = 0;
   virtual void _updateScalePtr(const ScaleShPtr& scalePtr);
 
   void _dataRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr);
+  void _clearFieldPath();
   void _clearDataPtr();
 
   bool _checkAccumulator(const ScaleShPtr& scalePtr);
@@ -192,40 +202,54 @@ class RenderProperty : public BaseRenderProperty {
                  const QueryRendererContextShPtr& ctx,
                  bool useScale = true,
                  bool flexibleType = true,
-                 bool allowsAccumulatorScale = false)
-      : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType, allowsAccumulatorScale), _mult(), _offset() {
-    _inType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
-    _outType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
+                 bool allowsAccumulatorScale = false,
+                 bool allowsNonColorStrings = false)
+      : BaseRenderProperty(prntMark, name, ctx, useScale, flexibleType, allowsAccumulatorScale, allowsNonColorStrings),
+        _mult(),
+        _offset() {
+    _resetValue();
+    auto rootGpuCache = ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
+    _inType.reset(new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
+    _outType.reset(new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
   }
 
   virtual ~RenderProperty() {}
 
   void initializeValue(const T& val) {
     // TODO: this is a public function.. should I protect from already existing data?
-
-    if (_vboInitType != VboInitType::FROM_VALUE) {
-      _inType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
-      _outType.reset(new ::Rendering::GL::TypeGL<T, numComponents>());
-
-      for (auto& itr : _perGpuData) {
-        itr.second.vbo = nullptr;
-      }
-
-      _vboInitType = VboInitType::FROM_VALUE;
-      _setPropsDirty();
-    } else {
-      // TODO(croot): do we need to set props dirty on the parent?
-    }
-
-    _uniformVal = val;
+    _resetTypes();
+    _uniformVal.set(getDataTypeForType<T>(), val);
+    _validateValue(false);
   }
 
-  T getUniformValue() const { return _uniformVal; }
+  T getUniformValue() const { return _uniformVal.getVal<T>(); };
 
   void bindUniformToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                              const std::string& uniformAttrName) const {
-    // TODO(croot): deal with numComponents here by using a vector instead?
-    activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal);
+    if (_inType) {
+      if (_vboInitType == VboInitType::FROM_SCALEREF) {
+        if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
+          activeShader->setUniformAttribute<int>(uniformAttrName, _uniformVal.getVal<int>());
+        } else if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
+          activeShader->setUniformAttribute<unsigned int>(uniformAttrName, _uniformVal.getVal<unsigned int>());
+        } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
+          activeShader->setUniformAttribute<float>(uniformAttrName, _uniformVal.getVal<float>());
+        } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
+          activeShader->setUniformAttribute<double>(uniformAttrName, _uniformVal.getVal<double>());
+        } else if (dynamic_cast<::Rendering::GL::TypeGL<int64_t, 1>*>(_inType.get())) {
+          activeShader->setUniformAttribute<int64_t>(uniformAttrName, _uniformVal.getVal<int64_t>());
+        } else if (dynamic_cast<::Rendering::GL::TypeGL<uint64_t, 1>*>(_inType.get())) {
+          activeShader->setUniformAttribute<uint64_t>(uniformAttrName, _uniformVal.getVal<uint64_t>());
+        } else {
+          CHECK(false) << "Unsupported type: " << _uniformVal.getType() << " " << std::string(*_inType);
+        }
+      } else {
+        auto checkptr = dynamic_cast<::Rendering::GL::TypeGL<T, 1>*>(_inType.get());
+        CHECK(checkptr);
+        activeShader->setUniformAttribute<T>(uniformAttrName, _uniformVal.getVal<T>());
+      }
+    }
   }
 
   operator std::string() const final {
@@ -234,7 +258,7 @@ class RenderProperty : public BaseRenderProperty {
   }
 
  protected:
-  T _uniformVal;
+  AnyDataType _uniformVal;
 
  private:
   T _mult;
@@ -280,24 +304,39 @@ class RenderProperty : public BaseRenderProperty {
     bool scaleAccumulation = _checkAccumulator(scalePtr);
     bool scaleDensityAccumulation = (scaleAccumulation && scalePtr->getAccumulatorType() == AccumulatorType::DENSITY);
 
-    if (_inType) {
+    const ::Rendering::GL::TypeGLShPtr* inTypeToUse = &_inType;
+    if (*inTypeToUse) {
       if (!_scaleConfigPtr) {
         _setShaderDirty();
       }
 
-      if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>(_inType.get())) {
+      if (_vboInitType != VboInitType::FROM_DATAREF) {
+        inTypeToUse = &(scalePtr->getDomainTypeGL());
+        if (_inType != *inTypeToUse && (*_inType) != (**inTypeToUse)) {
+          _setShaderDirty();
+        }
+        _inType = *inTypeToUse;
+        _vboInitType = VboInitType::FROM_SCALEREF;
+        _validateValue(true);
+      }
+
+      if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>((*inTypeToUse).get())) {
         _scaleConfigPtr.reset(new ScaleRef<unsigned int, T>(_ctx, scalePtr, this));
-      } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>(_inType.get())) {
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>((*inTypeToUse).get())) {
         _scaleConfigPtr.reset(new ScaleRef<int, T>(_ctx, scalePtr, this));
-      } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>(_inType.get())) {
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<float, 1>*>((*inTypeToUse).get())) {
         _scaleConfigPtr.reset(new ScaleRef<float, T>(_ctx, scalePtr, this));
-      } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>(_inType.get())) {
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<double, 1>*>((*inTypeToUse).get())) {
         _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<int64_t, 1>*>((*inTypeToUse).get())) {
+        _scaleConfigPtr.reset(new ScaleRef<int64_t, T>(_ctx, scalePtr, this));
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<uint64_t, 1>*>((*inTypeToUse).get())) {
+        _scaleConfigPtr.reset(new ScaleRef<uint64_t, T>(_ctx, scalePtr, this));
       } else {
         RUNTIME_EX_ASSERT(scaleDensityAccumulation,
                           std::string(*this) + ": Scale domain with shader type \"" +
                               scalePtr->getDomainTypeGL()->glslType() + "\" and data with shader type \"" +
-                              _inType->glslType() + "\" are not supported to work together.");
+                              (*inTypeToUse)->glslType() + "\" are not supported to work together.");
 
         switch (scalePtr->getDomainDataType()) {
           case QueryDataType::DOUBLE:
@@ -339,11 +378,49 @@ class RenderProperty : public BaseRenderProperty {
     // }
   }
 
-  virtual void _initValueFromJSONObj(const rapidjson::Value& obj) {
-    T val = RapidJSONUtils::getNumValFromJSONObj<T>(obj);
+  bool _resetTypes() {
+    if (_vboInitType != VboInitType::FROM_VALUE) {
+      auto rootGpuCache = _ctx->getRootGpuCache();
+      CHECK(rootGpuCache);
 
-    initializeValue(val);
+      ::Rendering::GL::TypeGLShPtr newInType(
+          new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
+      ::Rendering::GL::TypeGLShPtr newOutType(
+          new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
+
+      for (auto& itr : _perGpuData) {
+        itr.second.vbo = nullptr;
+      }
+
+      if (_vboInitType == VboInitType::FROM_DATAREF) {
+        _setPropsDirty();
+      }
+
+      _vboInitType = VboInitType::FROM_VALUE;
+
+      if (!_inType || !_outType || (*_inType) != (*newInType) || (*_outType) != (*newOutType)) {
+        _setShaderDirty();
+
+        _inType = newInType;
+        _outType = newOutType;
+
+        return true;
+      }
+    }
+    return false;
   }
+
+  void _initValueFromJSONObj(const rapidjson::Value& obj, const bool hasScale, const bool resetTypes = false) final {
+    if (resetTypes) {
+      _resetTypes();
+    }
+    _uniformVal = RapidJSONUtils::getAnyDataFromJSONObj(obj, _allowsNonColorStrings);
+    _validateValue(hasScale);
+  }
+
+  virtual void _validateValue(const bool hasScale) {}
+
+  void _resetValue() { _uniformVal.set(getDataTypeForType<T>(), T()); }
 
   std::pair<bool, bool> _initTypeFromBuffer(const bool hasScale = false) final {
     bool inchanged = false, outchanged = false;
@@ -451,10 +528,11 @@ RenderProperty<::Rendering::Colors::ColorUnion, 1>::RenderProperty(
     // whether or not we can use a scale, right, which we have defined
     // with useScale?
     bool flexibleType,
-    bool allowsAccumulatorScale);
+    bool allowsAccumulatorScale,
+    bool allowsNonColorStrings);
 
 template <>
-void RenderProperty<::Rendering::Colors::ColorUnion, 1>::initializeValue(const ::Rendering::Colors::ColorUnion& val);
+::Rendering::Colors::ColorUnion RenderProperty<::Rendering::Colors::ColorUnion, 1>::getUniformValue() const;
 
 template <>
 void RenderProperty<::Rendering::Colors::ColorUnion, 1>::bindUniformToRenderer(
@@ -463,6 +541,12 @@ void RenderProperty<::Rendering::Colors::ColorUnion, 1>::bindUniformToRenderer(
 
 template <>
 void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_updateScalePtr(const ScaleShPtr& scalePtr);
+
+template <>
+bool RenderProperty<::Rendering::Colors::ColorUnion, 1>::_resetTypes();
+
+template <>
+void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_resetValue();
 
 template <>
 void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_validateType(const ::Rendering::GL::TypeGLShPtr& type);
@@ -489,7 +573,7 @@ class ColorRenderProperty : public RenderProperty<::Rendering::Colors::ColorUnio
   ColorInitType _colorInitType;
 
   void _initFromJSONObj(const rapidjson::Value& obj) final;
-  void _initValueFromJSONObj(const rapidjson::Value& obj) final;
+  void _validateValue(const bool hasScale) final;
 };
 
 class EnumRenderProperty : public RenderProperty<int> {
@@ -500,13 +584,14 @@ class EnumRenderProperty : public RenderProperty<int> {
                      bool useScale = true,
                      bool flexibleType = true,
                      std::function<int(const std::string&)> stringConvertFunc = nullptr)
-      : RenderProperty<int>(prntMark, name, ctx, useScale, flexibleType), _stringConvertFunc(stringConvertFunc) {}
+      : RenderProperty<int>(prntMark, name, ctx, useScale, flexibleType, false, true),
+        _stringConvertFunc(stringConvertFunc) {}
 
   ~EnumRenderProperty() {}
 
  private:
   std::function<int(const std::string&)> _stringConvertFunc;
-  void _initValueFromJSONObj(const rapidjson::Value& obj) final;
+  void _validateValue(const bool hasScale) final;
 };
 
 }  // namespace QueryRendererclass BaseRenderProperty {

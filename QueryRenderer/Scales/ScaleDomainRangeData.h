@@ -17,7 +17,8 @@ namespace QueryRenderer {
 
 class BaseScaleDomainRangeData {
  public:
-  BaseScaleDomainRangeData(const std::string& name, bool useString = false) : _name(name), _useString(useString) {}
+  BaseScaleDomainRangeData(const QueryRendererContextShPtr& ctx, const std::string& name, bool useString = false)
+      : _ctx(ctx), _name(name), _useString(useString) {}
   virtual ~BaseScaleDomainRangeData() {}
   virtual int size() const = 0;
   virtual QueryDataType getType() const = 0;
@@ -30,6 +31,7 @@ class BaseScaleDomainRangeData {
   virtual operator std::string() const = 0;
 
  protected:
+  QueryRendererContextShPtr _ctx;
   std::string _name;
   bool _useString;
 };
@@ -38,15 +40,17 @@ template <typename T>
 class ScaleDomainRangeData : public BaseScaleDomainRangeData {
  public:
   static const QueryDataType dataType;
-  ScaleDomainRangeData(const std::string& name, bool useString = false)
-      : BaseScaleDomainRangeData(name, useString), _vectorPtr(nullptr), _cachedTypeGL(nullptr) {}
-  ScaleDomainRangeData(const std::string& name, size_t size, bool useString = false)
-      : BaseScaleDomainRangeData(name, useString), _vectorPtr(new std::vector<T>(size)), _cachedTypeGL(nullptr) {}
+  ScaleDomainRangeData(const QueryRendererContextShPtr& ctx, const std::string& name, bool useString = false)
+      : BaseScaleDomainRangeData(ctx, name, useString), _vectorPtr(nullptr), _cachedTypeGL(nullptr) {}
+  ScaleDomainRangeData(const QueryRendererContextShPtr& ctx,
+                       const std::string& name,
+                       size_t size,
+                       bool useString = false)
+      : BaseScaleDomainRangeData(ctx, name, useString), _vectorPtr(new std::vector<T>(size)), _cachedTypeGL(nullptr) {}
   ~ScaleDomainRangeData() {}
 
   void initializeFromJSONObj(const rapidjson::Value& obj,
                              const rapidjson::Pointer& objPath,
-                             const QueryRendererContextShPtr& ctx,
                              ScaleType type,
                              bool& sizeChanged,
                              bool& valsChanged,
@@ -64,18 +68,18 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
     mitr = obj.FindMember(_name.c_str());
     RUNTIME_EX_ASSERT(mitr != obj.MemberEnd(),
                       RapidJSONUtils::getJsonParseErrorStr(
-                          ctx->getUserWidgetIds(), obj, "scale objects must have a \"" + _name + "\" property."));
+                          _ctx->getUserWidgetIds(), obj, "scale objects must have a \"" + _name + "\" property."));
 
-    if (!ctx->isJSONCacheUpToDate(_jsonPath, mitr->value)) {
+    if (!_ctx->isJSONCacheUpToDate(_jsonPath, mitr->value)) {
       if (_useString) {
         RUNTIME_EX_ASSERT(((isObject = mitr->value.IsObject()) || (isString = mitr->value.IsString()) ||
                            (mitr->value.IsArray() && mitr->value.Size())),
                           RapidJSONUtils::getJsonParseErrorStr(
-                              ctx->getUserWidgetIds(), mitr->value, "scale " + _name + " is invalid."));
+                              _ctx->getUserWidgetIds(), mitr->value, "scale " + _name + " is invalid."));
       } else {
         RUNTIME_EX_ASSERT(((isObject = mitr->value.IsObject()) || (mitr->value.IsArray() && mitr->value.Size())),
                           RapidJSONUtils::getJsonParseErrorStr(
-                              ctx->getUserWidgetIds(), mitr->value, "scale " + _name + " is invalid."));
+                              _ctx->getUserWidgetIds(), mitr->value, "scale " + _name + " is invalid."));
       }
 
       const rapidjson::Value& jsonObj = mitr->value;
@@ -88,13 +92,13 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
         RUNTIME_EX_ASSERT(
             (mitr = jsonObj.FindMember("data")) != jsonObj.MemberEnd() && mitr->value.IsString(),
             RapidJSONUtils::getJsonParseErrorStr(
-                ctx->getUserWidgetIds(), jsonObj, "scale data reference must have a \"data\" string property."));
-        tablePtr = ctx->getDataTable(mitr->value.GetString());
+                _ctx->getUserWidgetIds(), jsonObj, "scale data reference must have a \"data\" string property."));
+        tablePtr = _ctx->getDataTable(mitr->value.GetString());
 
         RUNTIME_EX_ASSERT(
             (mitr = jsonObj.FindMember("field")) != jsonObj.MemberEnd() && mitr->value.IsString(),
             RapidJSONUtils::getJsonParseErrorStr(
-                ctx->getUserWidgetIds(), jsonObj, "scale data reference must have a \"field\" string property."));
+                _ctx->getUserWidgetIds(), jsonObj, "scale data reference must have a \"field\" string property."));
 
         // Only supports hand-written data right now.
         // TODO(croot): Support query result vbo -- this is somewhat
@@ -106,7 +110,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
         // up callbacks for data replace/update/removes
         RUNTIME_EX_ASSERT(tablePtr->getType() == QueryDataTableType::EMBEDDED,
                           RapidJSONUtils::getJsonParseErrorStr(
-                              ctx->getUserWidgetIds(),
+                              _ctx->getUserWidgetIds(),
                               jsonObj,
                               "scale data references only support JSON-embedded data tables currently."));
 
@@ -119,7 +123,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
           RUNTIME_EX_ASSERT(
               polyDataTablePtr != nullptr,
-              RapidJSONUtils::getJsonParseErrorStr(ctx->getUserWidgetIds(),
+              RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
                                                    jsonObj,
                                                    "Unsupported data reference table type. Data reference is not a "
                                                    "vertex or poly buffer-based data table."));
@@ -131,7 +135,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
         RUNTIME_EX_ASSERT(dataColumnPtr != nullptr,
                           RapidJSONUtils::getJsonParseErrorStr(
-                              ctx->getUserWidgetIds(),
+                              _ctx->getUserWidgetIds(),
                               jsonObj,
                               "Data column " + columnName + " is of type " + to_string(columnPtr->getColumnType()) +
                                   " is not compatible with domain/range data of type " + to_string(getType())));
@@ -189,7 +193,9 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
 
   const ::Rendering::GL::TypeGLShPtr& getTypeGL() {
     if (!_cachedTypeGL) {
-      _cachedTypeGL.reset(new ::Rendering::GL::TypeGL<T>());
+      auto rootGpuCache = _ctx->getRootGpuCache();
+      CHECK(rootGpuCache);
+      _cachedTypeGL.reset(new ::Rendering::GL::TypeGL<T, 1>(rootGpuCache->supportedExtensions));
     }
     return _cachedTypeGL;
   }
@@ -358,6 +364,12 @@ float ScaleDomainRangeData<float>::getNullValue();
  */
 template <>
 double ScaleDomainRangeData<double>::getNullValue();
+
+/*
+ * int64 specializations
+ */
+template <>
+int64_t ScaleDomainRangeData<int64_t>::getNullValue();
 
 }  // namespace QueryRenderer
 

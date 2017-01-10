@@ -119,7 +119,8 @@ class NonProjectionRenderQueryCacheMap {
               ::boost::multi_index::tag<SqlStrTag>,
               ::boost::multi_index::member<NonProjectionRenderQueryCache,
                                            decltype(NonProjectionRenderQueryCache::sqlStr),
-                                           &NonProjectionRenderQueryCache::sqlStr>>>> QueryResultMap;
+                                           &NonProjectionRenderQueryCache::sqlStr>>>>
+      QueryResultMap;
 
   typedef QueryResultMap::index<SqlStrTag>::type QueryResultMap_by_SqlStr;
 
@@ -131,6 +132,8 @@ class NonProjectionRenderQueryCacheMap {
 
 struct RootCache {
   std::shared_ptr<RootPerGpuDataMap> perGpuData;
+  std::set<std::string> supportedExtensions;
+
   std::unordered_map<std::string, std::pair<size_t, SqlQueryPolyDataTableCache>> polyCacheMap;
   size_t numSamples;
   NonProjectionRenderQueryCacheMap renderQueryCacheMap;
@@ -147,6 +150,11 @@ struct RootCache {
   bool hasPolyTableGpuCache(const std::string& tableName, const GpuId gpuId);
   bool hasPolyTableGpuCache(const std::string& tableName, const std::string& sqlStr);
   bool hasPolyTableGpuCache(const std::string& tableName, const std::string& sqlStr, const GpuId gpuId);
+
+  bool supportsInt64() const;
+
+ private:
+  mutable std::shared_ptr<bool> _supportsInt64Ptr;
 };
 
 }  // namespace QueryRenderer

@@ -23,7 +23,7 @@ namespace QueryRenderer {
 
 class QueryRenderCompositor;
 
-enum class FboColorBuffer { COLOR_BUFFER = 0, ID_BUFFER, ID2_BUFFER, MAX_TEXTURE_BUFFERS = ID2_BUFFER };
+enum class FboColorBuffer { COLOR_BUFFER = 0, ID1A_BUFFER, ID1B_BUFFER, ID2_BUFFER, MAX_TEXTURE_BUFFERS = ID2_BUFFER };
 enum class FboRenderBuffer { DEPTH_BUFFER = 0, MAX_RENDER_BUFFERS = DEPTH_BUFFER };
 
 ///////////////////////////////////////////////////////////////////////
@@ -40,9 +40,12 @@ class QueryFramebuffer {
                    int height,
                    bool doHitTest = false,
                    bool doDepthTest = false,
-                   size_t numSamples = 1);
+                   size_t numSamples = 1,
+                   const bool useInt64Id = true);
 
-  QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer);
+  QueryFramebuffer(QueryRenderCompositor* compositor,
+                   ::Rendering::GL::GLRenderer* renderer,
+                   const bool useInt64Id = true);
   ~QueryFramebuffer();
 
   void resize(int width, int height);
@@ -58,16 +61,16 @@ class QueryFramebuffer {
                     int width,
                     int height,
                     unsigned int* idBuffer,
-                    const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
+                    const FboColorBuffer idBufferType = FboColorBuffer::ID1A_BUFFER);
   std::shared_ptr<unsigned int> readIdBuffer(size_t startx = 0,
                                              size_t starty = 0,
                                              int width = -1,
                                              int height = -1,
-                                             const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
+                                             const FboColorBuffer idBufferType = FboColorBuffer::ID1A_BUFFER);
 
   void blitToFramebuffer(QueryFramebuffer& dstFboPtr, size_t startx, size_t starty, size_t width, size_t height);
 
-  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo);
+  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo, const bool leastSignificantBits = true);
   void copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo);
 
   size_t getWidth() const;
@@ -109,7 +112,8 @@ class QueryFramebuffer {
   bool _doHitTest, _doDepthTest;
 
   ::Rendering::GL::Resources::GLTexture2dShPtr _rgbaTex;
-  ::Rendering::GL::Resources::GLTexture2dShPtr _idTex1;
+  ::Rendering::GL::Resources::GLTexture2dShPtr _idTex1A;
+  ::Rendering::GL::Resources::GLTexture2dShPtr _idTex1B;
   ::Rendering::GL::Resources::GLTexture2dShPtr _idTex2;
   ::Rendering::GL::Resources::GLRenderbufferShPtr _rbo;
   ::Rendering::GL::Resources::GLFramebufferShPtr _fbo;
@@ -126,8 +130,8 @@ class QueryFramebuffer {
   // attachment manager
   // AttachmentContainer _attachmentManager;
 
-  void _init(::Rendering::GL::GLRenderer* renderer, int width, int height, size_t numSamples);
-  void _init(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer);
+  void _init(::Rendering::GL::GLRenderer* renderer, int width, int height, size_t numSamples, const bool useInt64Id);
+  void _init(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer, const bool useInt64Id);
 };
 
 typedef std::unique_ptr<QueryFramebuffer> QueryFramebufferUqPtr;

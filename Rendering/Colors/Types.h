@@ -77,6 +77,10 @@ struct is_color : std::integral_constant<bool,
 template <class T, class TT>
 struct is_specific_color : std::integral_constant<bool, std::is_same<TT, typename std::remove_cv<T>::type>::value> {};
 
+template <class T>
+struct is_color_union
+    : std::integral_constant<bool, std::is_same<ColorUnion, typename std::remove_cv<T>::type>::value> {};
+
 template <class T, typename std::enable_if<is_color<T>::value>::type* = nullptr>
 ColorType getColorType() {
   return ColorType::RGBA;

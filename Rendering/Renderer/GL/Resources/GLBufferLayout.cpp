@@ -7,15 +7,45 @@ namespace GL {
 
 namespace Resources {
 
-namespace detail {
+static void initializeAttrTypes(
+    std::array<TypeGLUqPtr, static_cast<size_t>(GLBufferAttrType::MAX_GL_BUFFER_ATTR_TYPE)>& attrTypeInfo,
+    const std::set<std::string>& ext) {
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::UINT)].reset(new TypeGL<unsigned int, 1>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC2UI)].reset(new TypeGL<unsigned int, 2>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC3UI)].reset(new TypeGL<unsigned int, 3>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC4UI)].reset(new TypeGL<unsigned int, 4>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::INT)].reset(new TypeGL<int, 1>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC2I)].reset(new TypeGL<int, 2>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC3I)].reset(new TypeGL<int, 3>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC4I)].reset(new TypeGL<int, 4>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::FLOAT)].reset(new TypeGL<float, 1>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC2F)].reset(new TypeGL<float, 2>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC3F)].reset(new TypeGL<float, 3>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC4F)].reset(new TypeGL<float, 4>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::DOUBLE)].reset(new TypeGL<double, 1>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC2D)].reset(new TypeGL<double, 2>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC3D)].reset(new TypeGL<double, 3>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC4D)].reset(new TypeGL<double, 4>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::UINT64)].reset(new TypeGL<uint64_t, 1>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC2UI64)].reset(new TypeGL<uint64_t, 2>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC3UI64)].reset(new TypeGL<uint64_t, 3>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC4UI64)].reset(new TypeGL<uint64_t, 4>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::INT64)].reset(new TypeGL<int64_t, 1>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC2I64)].reset(new TypeGL<int64_t, 2>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC3I64)].reset(new TypeGL<int64_t, 3>(ext));
+  attrTypeInfo[static_cast<int>(GLBufferAttrType::VEC4I64)].reset(new TypeGL<int64_t, 4>(ext));
+};
 
-GLBufferAttrType getBufferAttrType(unsigned int a, int numComponents) {
+std::array<TypeGLUqPtr, static_cast<size_t>(GLBufferAttrType::MAX_GL_BUFFER_ATTR_TYPE)>
+    GLBaseBufferLayout::attrTypeInfo;
+
+GLBufferAttrType GLBaseBufferLayout::getBufferAttrType(unsigned int a, int numComponents) {
   RUNTIME_EX_ASSERT(numComponents == 1, "Only 1 component of unsigned ints are currently supported.");
 
   return GLBufferAttrType::UINT;
 }
 
-GLBufferAttrType getBufferAttrType(int a, int numComponents) {
+GLBufferAttrType GLBaseBufferLayout::getBufferAttrType(int a, int numComponents) {
   switch (numComponents) {
     case 1:
       return GLBufferAttrType::INT;
@@ -32,7 +62,7 @@ GLBufferAttrType getBufferAttrType(int a, int numComponents) {
   return GLBufferAttrType::INT;
 }
 
-GLBufferAttrType getBufferAttrType(float a, int numComponents) {
+GLBufferAttrType GLBaseBufferLayout::getBufferAttrType(float a, int numComponents) {
   switch (numComponents) {
     case 1:
       return GLBufferAttrType::FLOAT;
@@ -49,7 +79,7 @@ GLBufferAttrType getBufferAttrType(float a, int numComponents) {
   return GLBufferAttrType::FLOAT;
 }
 
-GLBufferAttrType getBufferAttrType(double a, int numComponents) {
+GLBufferAttrType GLBaseBufferLayout::getBufferAttrType(double a, int numComponents) {
   switch (numComponents) {
     case 1:
       return GLBufferAttrType::DOUBLE;
@@ -66,16 +96,54 @@ GLBufferAttrType getBufferAttrType(double a, int numComponents) {
   return GLBufferAttrType::DOUBLE;
 }
 
-}  // namespace detail
+GLBufferAttrType GLBaseBufferLayout::getBufferAttrType(uint64_t a, int numComponents) {
+  switch (numComponents) {
+    case 1:
+      return GLBufferAttrType::UINT64;
+    case 2:
+      return GLBufferAttrType::VEC2UI64;
+    case 3:
+      return GLBufferAttrType::VEC3UI64;
+    case 4:
+      return GLBufferAttrType::VEC4UI64;
+    default:
+      THROW_RUNTIME_EX("Invalid number of components " + std::to_string(numComponents) + ". Need 1-4 components.");
+  }
+
+  return GLBufferAttrType::UINT64;
+}
+
+GLBufferAttrType GLBaseBufferLayout::getBufferAttrType(int64_t a, int numComponents) {
+  switch (numComponents) {
+    case 1:
+      return GLBufferAttrType::INT64;
+    case 2:
+      return GLBufferAttrType::VEC2I64;
+    case 3:
+      return GLBufferAttrType::VEC3I64;
+    case 4:
+      return GLBufferAttrType::VEC4I64;
+    default:
+      THROW_RUNTIME_EX("Invalid number of components " + std::to_string(numComponents) + ". Need 1-4 components.");
+  }
+
+  return GLBufferAttrType::INT64;
+}
+
+GLBaseBufferLayout::GLBaseBufferLayout(const std::set<std::string>& supportedExtensions, GLBufferLayoutType layoutType)
+    : _layoutType(layoutType), _itemByteSize(0) {
+  if (attrTypeInfo.size() && !attrTypeInfo[0]) {
+    initializeAttrTypes(attrTypeInfo, supportedExtensions);
+  }
+}
 
 bool GLBaseBufferLayout::hasAttribute(const std::string& attrName) const {
-  const BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
+  const BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
   return (nameLookup.find(attrName) != nameLookup.end());
-  // return (_attrMap.find(attrName) != _attrMap.end());
 }
 
 TypeGLShPtr GLBaseBufferLayout::getAttributeTypeGL(const std::string& attrName) const {
-  const BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
+  const BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
   BufferAttrMap_by_name::iterator itr;
 
   RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
@@ -87,7 +155,7 @@ TypeGLShPtr GLBaseBufferLayout::getAttributeTypeGL(const std::string& attrName) 
 GLBufferAttrType GLBaseBufferLayout::getAttributeType(const std::string& attrName) const {
   // TODO(croot): consolidate this code and the one in getAttributeTypeGL()
   // into a single getBufferAttrInfo func or something.
-  const BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
+  const BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
   BufferAttrMap_by_name::iterator itr;
 
   RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
@@ -99,7 +167,7 @@ GLBufferAttrType GLBaseBufferLayout::getAttributeType(const std::string& attrNam
 const GLBufferAttrInfo& GLBaseBufferLayout::getAttributeInfo(const std::string& attrName) const {
   // TODO(croot): consolidate this code with those in the above two functions
   // into a single getBufferAttrInfo func or something.
-  const BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
+  const BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
   BufferAttrMap_by_name::iterator itr;
 
   RUNTIME_EX_ASSERT((itr = nameLookup.find(attrName)) != nameLookup.end(),
@@ -129,67 +197,6 @@ bool GLBaseBufferLayout::operator==(const GLBaseBufferLayout& layoutPtr) const {
   return true;
 }
 
-// size_t GLBaseBufferLayout::getBufferNumItems(const GLLayoutManagerBuffer* bufferPtr) const {
-//   RUNTIME_EX_ASSERT(_itemByteSize > 0,
-//                     "Buffer layout has yet to be initialized with attributes and bound to a buffer. Cannot get the "
-//                     "number of items associated with it");
-
-//   auto itr = validateBoundBuffer(bufferPtr);
-
-//   return itr->usedBytes / _itemByteSize;
-// }
-
-// size_t GLBaseBufferLayout::getBufferNumItems(const GLLayoutManagerBufferShPtr& bufferPtr) const {
-//   return getBufferNumItems(bufferPtr.get());
-// }
-
-// GLBaseBufferLayout::BoundBufferMap_by_id::const_iterator GLBaseBufferLayout::validateBoundBuffer(
-//     const GLLayoutManagerBuffer* buffer) const {
-//   RUNTIME_EX_ASSERT(buffer, "A valid buffer ptr must be supplied");
-
-//   const BoundBufferMap_by_id& idLookup = _boundBufferMap.get<MultiIndexTags::rsrcid>();
-
-//   auto rsrcPtr = dynamic_cast<const GLResource*>(buffer);
-//   CHECK(rsrcPtr);
-//   auto id = rsrcPtr->getRsrcId();
-
-//   auto itr = idLookup.find(id);
-//   RUNTIME_EX_ASSERT(
-//       itr != idLookup.end() && !itr->bufferPtr.expired(),
-//       "The buffer with unique id: " + ::Rendering::GL::to_string(id) + " is not bound to the buffer layout.");
-
-//   CHECK(itr->bufferPtr.lock().get() == buffer);
-
-//   return itr;
-// }
-
-// GLBaseBufferLayout::BoundBufferMap_by_id::const_iterator GLBaseBufferLayout::validateBoundBuffer(
-//     const GLLayoutManagerBufferShPtr& buffer) const {
-//   return validateBoundBuffer(buffer.get());
-// }
-
-// void GLBaseBufferLayout::validateBoundBuffer() const {
-//   RUNTIME_EX_ASSERT(!_boundBufferPtr.expired(), "There is not a valid buffer bound to the buffer layout");
-// }
-
-// bool GLBaseBufferLayout::hasBoundBuffer(const GLLayoutManagerBufferShPtr& bufferPtr) const {
-//   RUNTIME_EX_ASSERT(bufferPtr, "A valid buffer ptr must be supplied");
-
-//   const BoundBufferMap_by_id& idLookup = _boundBufferMap.get<MultiIndexTags::rsrcid>();
-
-//   auto rsrcPtr = std::dynamic_pointer_cast<GLResource>(bufferPtr);
-//   CHECK(rsrcPtr);
-//   auto id = rsrcPtr->getRsrcId();
-
-//   auto itr = idLookup.find(id);
-
-//   return (itr != idLookup.end() && !itr->bufferPtr.expired());
-// }
-
-// GLLayoutManagerBufferShPtr GLBaseBufferLayout::getBoundBuffer() const {
-//   return _boundBufferPtr.lock();
-// }
-
 const GLBufferAttrInfo& GLBaseBufferLayout::operator[](size_t i) const {
   RUNTIME_EX_ASSERT(i < _attrMap.size(),
                     "GLBaseBufferLayout::operator[]: cannot retrieve attribute info at index: " + std::to_string(i) +
@@ -198,54 +205,14 @@ const GLBufferAttrInfo& GLBaseBufferLayout::operator[](size_t i) const {
   return *_attrMap[i];
 }
 
-// void GLBaseBufferLayout::addBuffer(const GLLayoutManagerBufferShPtr& buffer,
-//                                    const size_t usedBytes,
-//                                    const size_t offsetBytes) {
-//   RUNTIME_EX_ASSERT(buffer, "A valid buffer ptr must be supplied");
-
-//   const BoundBufferMap_by_id& idLookup = _boundBufferMap.get<MultiIndexTags::rsrcid>();
-
-//   auto rsrcPtr = std::dynamic_pointer_cast<GLResource>(buffer);
-//   CHECK(rsrcPtr);
-//   auto id = rsrcPtr->getRsrcId();
-
-//   auto itr = idLookup.find(id);
-
-//   if (itr == idLookup.end()) {
-//     auto rsrc = std::dynamic_pointer_cast<GLResource>(buffer);
-//     _boundBufferMap.emplace_back(rsrc->getRsrcId(), buffer, usedBytes, offsetBytes);
-//     return;
-//   }
-
-//   CHECK(!itr->bufferPtr.expired());
-
-//   auto modified = idLookup.modify(itr, [usedBytes, offsetBytes](BoundBufferData& bufData) {
-//     bufData.usedBytes = usedBytes;
-//     bufData.offsetBytes = offsetBytes;
-//   });
-
-//   CHECK(modified);
-// }
-
-// void GLBaseBufferLayout::clearBuffers() {
-//   _boundBufferMap.clear();
-// }
-
 void GLCustomBufferLayout::addAttribute(const std::string& attrName, GLBufferAttrType type, int stride, int offset) {
   RUNTIME_EX_ASSERT(!hasAttribute(attrName) && attrName.length(),
                     "GLCustomBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
-
-  // _attrMap[attrName] = BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type,
-  // detail::attrTypeInfo[static_cast<int>(type)].get(), stride, offset));
-
-  // _attrMap.emplace_back(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[static_cast<int>(type)].get(),
-  // stride,
-  // offset));
   _attrMap.push_back(BufferAttrInfoPtr(
-      new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[static_cast<int>(type)].get(), stride, offset)));
+      new GLBufferAttrInfo(attrName, type, attrTypeInfo[static_cast<int>(type)].get(), stride, offset)));
 
   int enumVal = static_cast<int>(type);
-  _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+  _itemByteSize += attrTypeInfo[enumVal]->numBytes();
 }
 
 void GLInterleavedBufferLayout::addAttribute(const std::string& attrName, GLBufferAttrType type) {
@@ -253,20 +220,14 @@ void GLInterleavedBufferLayout::addAttribute(const std::string& attrName, GLBuff
       !hasAttribute(attrName) && attrName.length(),
       "GLInterleavedBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
-  // TODO, set the stride of all currently existing attrs, or leave
+  // TODO(croot), set the stride of all currently existing attrs, or leave
   // that for when the layout is bound to the renderer/shader/VAO
 
   int enumVal = static_cast<int>(type);
-  // _attrMap[attrName] = BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(),
-  // -1,
-  // _itemByteSize));
-
-  // _attrMap.emplace_back(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1,
-  // _itemByteSize));
   _attrMap.push_back(
-      BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(), -1, _itemByteSize)));
+      BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), -1, _itemByteSize)));
 
-  _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+  _itemByteSize += attrTypeInfo[enumVal]->numBytes();
 }
 
 void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
@@ -287,7 +248,7 @@ void GLInterleavedBufferLayout::bindToShader(GLShader* activeShader,
       attrPtr->bind(attrLoc, _itemByteSize, offsetBytes + bufAttrPtr->offset);
     }
   } else {
-    const BufferAttrMap_by_name& nameLookup = _attrMap.get<MultiIndexTags::name>();
+    const BufferAttrMap_by_name& nameLookup = _attrMap.get<name>();
     BufferAttrMap_by_name::iterator itr;
 
     RUNTIME_EX_ASSERT((itr = nameLookup.find(attr)) != nameLookup.end(),
@@ -305,14 +266,10 @@ void GLSequentialBufferLayout::addAttribute(const std::string& attrName, GLBuffe
       "GLSequentialBufferLayout::addAttribute(): attribute " + attrName + " already exists in the layout.");
 
   int enumVal = static_cast<int>(type);
-  // _attrMap[attrName] = BufferAttrInfoPtr(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(),
-  // detail::attrTypeInfo[enumVal]->numBytes(), -1));
-  // _attrMap.emplace_back(new GLBufferAttrInfo(attrName, type, detail::attrTypeInfo[enumVal].get(),
-  // detail::attrTypeInfo[enumVal]->numBytes(), -1));
-  _attrMap.push_back(BufferAttrInfoPtr(new GLBufferAttrInfo(
-      attrName, type, detail::attrTypeInfo[enumVal].get(), detail::attrTypeInfo[enumVal]->numBytes(), -1)));
+  _attrMap.push_back(BufferAttrInfoPtr(
+      new GLBufferAttrInfo(attrName, type, attrTypeInfo[enumVal].get(), attrTypeInfo[enumVal]->numBytes(), -1)));
 
-  _itemByteSize += detail::attrTypeInfo[enumVal]->numBytes();
+  _itemByteSize += attrTypeInfo[enumVal]->numBytes();
 }
 
 void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,
@@ -334,8 +291,6 @@ void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,
       bufAttrPtr = itr->get();
       attrLoc = activeShader->getVertexAttributeLocation(bufAttrPtr->name);
       attrPtr = bufAttrPtr->typeInfo;
-      // glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(), GL_FALSE, bufAttrPtr->stride,
-      // BUFFER_OFFFSET(offset));
       attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
       MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
       offset += attrPtr->numBytes() * numVerts;
@@ -350,9 +305,6 @@ void GLSequentialBufferLayout::bindToShader(GLShader* activeShader,
 
       if (bufAttrPtr->name == attr) {
         attrLoc = activeShader->getVertexAttributeLocation(shaderAttr.length() ? shaderAttr : bufAttrPtr->name);
-        // MAPD_CHECK_GL_ERROR(glVertexAttribPointer(attrLoc, attrPtr->numComponents(), attrPtr->baseGLType(),
-        // GL_FALSE,
-        // bufAttrPtr->stride, BUFFER_OFFSET(offset)));
         attrPtr->bind(attrLoc, bufAttrPtr->stride, offset);
         MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(attrLoc));
         break;

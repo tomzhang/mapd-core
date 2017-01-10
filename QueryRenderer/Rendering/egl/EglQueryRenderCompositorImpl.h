@@ -54,7 +54,8 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
 
   struct GLResourceStorage {
     std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> rgbaTextures;
-    std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> idTextures;
+    std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> id1ATextures;
+    std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> id1BTextures;
     std::vector<::Rendering::GL::Resources::GLTexture2dWkPtr> id2Textures;
     std::vector<::Rendering::GL::Resources::GLRenderbufferWkPtr> rbos;
     AccumulatorArray registeredAccumTxts;
@@ -62,11 +63,12 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
 
   EglQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                ::Rendering::RendererShPtr& rendererPtr,
-                               size_t width,
-                               size_t height,
-                               size_t numSamples = 1,
-                               bool doHitTest = false,
-                               bool doDepthTest = false);
+                               const size_t width,
+                               const size_t height,
+                               const size_t numSamples,
+                               const bool doHitTest,
+                               const bool doDepthTest,
+                               const bool supportsInt64);
 
   void _resizeImpl(size_t width, size_t height) final;
   void _initAccumResources(size_t width, size_t height, size_t depth);
@@ -91,7 +93,8 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
                       ScaleShPtr& accumulatorScalePtr);
 
   std::unique_ptr<EglImage> _rgbaEglImgPtr;
-  std::unique_ptr<EglImage> _idEglImgPtr;
+  std::unique_ptr<EglImage> _id1AEglImgPtr;
+  std::unique_ptr<EglImage> _id1BEglImgPtr;
   std::unique_ptr<EglImage> _id2EglImgPtr;
   std::unique_ptr<EglImage> _depthEglImgPtr;
 

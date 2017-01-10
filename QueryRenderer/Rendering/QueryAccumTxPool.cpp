@@ -357,7 +357,7 @@ void QueryAccumTxPool::_runExtentsPass(GLRendererShPtr& renderer,
     auto rsrcMgr = renderer->getResourceManager();
 
     ::Rendering::GL::Resources::GLInterleavedBufferLayoutShPtr bufferLayout(
-        new ::Rendering::GL::Resources::GLInterleavedBufferLayout());
+        new ::Rendering::GL::Resources::GLInterleavedBufferLayout(renderer->getSupportedExtensions()));
     bufferLayout->addAttribute<float, 2>("pos");
 
     rectvbo = rsrcMgr->createVertexBuffer<float>({-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, bufferLayout);

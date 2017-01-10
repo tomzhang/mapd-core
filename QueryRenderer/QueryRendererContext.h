@@ -37,6 +37,7 @@ class QueryRendererContext {
 
   bool doHitTest() const { return _doHitTest; }
   bool doDepthTest() const { return _doDepthTest; }
+  bool supportsInt64() const { return _supportsInt64; }
   size_t numSamples() const {
     auto qrmGpuCache = _qrmGpuCache.lock();
     CHECK(qrmGpuCache);
@@ -96,7 +97,8 @@ class QueryRendererContext {
           // hashed on name
           boost::multi_index::hashed_unique<
               boost::multi_index::tag<ScaleName>,
-              boost::multi_index::const_mem_fun<JSONRefObject, std::string, &JSONRefObject::getName>>>> ScaleConfigMap;
+              boost::multi_index::const_mem_fun<JSONRefObject, std::string, &JSONRefObject::getName>>>>
+      ScaleConfigMap;
   typedef ScaleConfigMap::index<ScaleName>::type ScaleConfigMap_by_name;
 
   struct DataTableName {};
@@ -108,7 +110,8 @@ class QueryRendererContext {
           // hashed on name
           boost::multi_index::hashed_unique<
               boost::multi_index::tag<DataTableName>,
-              boost::multi_index::const_mem_fun<JSONRefObject, std::string, &JSONRefObject::getName>>>> DataTableMap;
+              boost::multi_index::const_mem_fun<JSONRefObject, std::string, &JSONRefObject::getName>>>>
+      DataTableMap;
   typedef DataTableMap::index<DataTableName>::type DataTableMap_by_name;
 
   typedef std::shared_ptr<BaseMark> GeomConfigShPtr;
@@ -136,6 +139,7 @@ class QueryRendererContext {
   size_t _height;
   bool _doHitTest;
   bool _doDepthTest;
+  bool _supportsInt64;
 
   RapidJSONUtils::JsonCachePtr _jsonCache;
 

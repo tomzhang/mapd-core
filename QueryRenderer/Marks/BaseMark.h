@@ -59,10 +59,7 @@ class BaseMark {
 
   // all query-based shaders should have a "key"
 
-  // TODO(croot): Should we use this as a "property"? Or should we
-  // just always include it as an int/int64? My feeling is it should
-  // always be present and should be an int/int64
-  RenderProperty<int> key;
+  RenderProperty<int64_t> key;
   int64_t _invalidKey;
 
   QueryDataTableShPtr _dataPtr;
@@ -135,13 +132,14 @@ class BaseMark {
   void _initFromJSONObj(const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,
                         QueryDataTableBaseType baseType,
-                        bool mustUseDataRef,
-                        bool initializing);
+                        bool mustUseDataRef);
+
+  void _initGpuResources(const QueryRendererContext* ctx, bool initializing = true);
 
   virtual std::set<BaseRenderProperty*> _getUsedProps() = 0;
   void _updateProps(const std::set<BaseRenderProperty*>& usedProps, bool force = false);
   void _updateShader(std::string& vertSrc, std::string& fragSrc);
-  static std::string _addBaseTypeDefinesToShaderSrc(const std::string& shaderSrc);
+  void _setKeyInShaderSrc(std::string& shaderSrc);
 
  private:
   void _buildVertexArrayObjectFromProperties();
@@ -155,7 +153,6 @@ class BaseMark {
                              ::Rendering::GL::Resources::GLIndexBufferShPtr& ibo) = 0;
 
   std::set<GpuId> _initUnusedGpus() const;
-  void _initGpuResources(const QueryRendererContext* ctx, bool initializing = true);
 
   virtual void _updateRenderPropertyGpuResources(const QueryRendererContext* ctx,
                                                  const std::set<GpuId>& usedGpus,

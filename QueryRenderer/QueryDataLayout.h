@@ -39,8 +39,9 @@ struct QueryDataLayout {
 
   ~QueryDataLayout() {}
 
-  Rendering::GL::Resources::GLBufferLayoutShPtr convertToBufferLayout();
-  Rendering::GL::Resources::GLShaderBlockLayoutShPtr convertToUniformBufferLayout();
+  Rendering::GL::Resources::GLBufferLayoutShPtr convertToBufferLayout(const std::set<std::string>& supportedExtensions);
+  Rendering::GL::Resources::GLShaderBlockLayoutShPtr convertToUniformBufferLayout(
+      const std::set<std::string>& supportedExtensions);
 
   bool hasBeenConverted() const { return _convertedLayout != nullptr; }
   Rendering::GL::Resources::GLBufferLayoutShPtr getBufferLayout() const { return _convertedLayout; }

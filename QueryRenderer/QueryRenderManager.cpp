@@ -96,8 +96,7 @@ QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
   _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
 }
 
-QueryRenderManager::~QueryRenderManager() {
-}
+QueryRenderManager::~QueryRenderManager() {}
 
 void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                                      CudaMgr_Namespace::CudaMgr* cudaMgr,
@@ -129,7 +128,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   if (numSamples > 1 && numGpus > 1) {
     LOG(WARNING) << "QueryRenderManager: initializing the render manager with " << numGpus
                  << " gpus and the compositing will be performed using EGLImage objects. EGLImage objects do not "
-                    "support multisampling, so forcing the number of samples from " << numSamples << " to 1.";
+                    "support multisampling, so forcing the number of samples from "
+                 << numSamples << " to 1.";
     numSamples = 1;
   }
 #endif
@@ -155,13 +155,10 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   size_t startDevice = startGpu;
 
   ActiveRendererGuard renderGuard;
+  std::unordered_map<std::string, bool> extensionsToUse = {{"GL_NV_vertex_attrib_integer_64bit", false}};
 
+  // first build out the rendering contexts on each GPU and build up the supported extensions
   for (size_t i = startDevice; i < endDevice; ++i) {
-    if (cudaMgr) {
-      // need to set a cuda context before creating gl/cuda interop buffers
-      cudaMgr->setContext(i - startDevice);
-    }
-
     windowSettings.setStrSetting(StrSetting::NAME, windowName + std::to_string(i));
     windowSettings.setIntSetting(IntSetting::GPU_ID, i);
 
@@ -170,6 +167,48 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     gpuDataPtr = *itr.first;
     gpuDataPtr->windowPtr = windowMgr.createWindow(windowSettings);
     gpuDataPtr->rendererPtr = windowMgr.createRendererForWindow(rendererSettings, gpuDataPtr->windowPtr);
+
+    renderer = std::dynamic_pointer_cast<GLRenderer>(gpuDataPtr->rendererPtr);
+    CHECK(renderer != nullptr);
+
+    gpuDataPtr->makeActiveOnCurrentThread();
+
+    // now check extensions
+    if (i == startDevice) {
+      for (auto& item : extensionsToUse) {
+        if (renderer->supportsExtension(item.first)) {
+          _gpuCache->supportedExtensions.insert(item.first);
+          item.second = true;
+        } else {
+          item.second = false;
+        }
+      }
+    } else {
+      for (auto& item : extensionsToUse) {
+        if (item.second && !renderer->supportsExtension(item.first)) {
+          _gpuCache->supportedExtensions.erase(item.first);
+          item.second = false;
+        }
+      }
+    }
+
+    // make sure to clear the renderer from the current thread
+    gpuDataPtr->makeInactive();
+  }
+
+  bool supportsInt64 = _gpuCache->supportsInt64();
+
+  // now build the global gpu resources. This is done after all contexts have been built
+  // so we know what extensions are supported on all.
+  for (size_t i = startDevice; i < endDevice; ++i) {
+    if (cudaMgr) {
+      // need to set a cuda context before creating gl/cuda interop buffers
+      cudaMgr->setContext(i - startDevice);
+    }
+
+    auto itr = _gpuCache->perGpuData->find(i);
+    CHECK(itr != _gpuCache->perGpuData->end());
+    gpuDataPtr = *itr;
 
     renderer = std::dynamic_pointer_cast<GLRenderer>(gpuDataPtr->rendererPtr);
     CHECK(renderer != nullptr);
@@ -185,7 +224,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                                                        numSamples,
                                                        true,
                                                        // TODO(croot): do depth testing
-                                                       false));
+                                                       false,
+                                                       supportsInt64));
       }
     }
 
@@ -459,7 +499,8 @@ void QueryRenderManager::setCudaBufferDataLayout(size_t gpuIdx,
   // TODO(croot): Is the lock necessary here? Or should we lock on a per-gpu basis?
   std::lock_guard<std::mutex> render_lock(_bufferMtx);
 
-  inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(vertLayoutPtr, numUsedBytes, offsetBytes);
+  inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(
+      _gpuCache->supportedExtensions, vertLayoutPtr, numUsedBytes, offsetBytes);
 }
 
 void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx,
@@ -479,7 +520,8 @@ void QueryRenderManager::setCudaHandleUsedBytes(size_t gpuIdx,
   inOrder[gpuIdx]->queryResultBufferPtr->updatePostQuery(numUsedBytes);
 
   if (vertLayoutPtr) {
-    inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(vertLayoutPtr, numUsedBytes);
+    inOrder[gpuIdx]->queryResultBufferPtr->setQueryDataLayout(
+        _gpuCache->supportedExtensions, vertLayoutPtr, numUsedBytes);
   } else if (!numUsedBytes) {
     inOrder[gpuIdx]->queryResultBufferPtr->deleteAllQueryDataLayouts();
   }

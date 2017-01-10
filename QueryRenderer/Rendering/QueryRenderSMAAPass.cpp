@@ -36,8 +36,7 @@ QueryRenderSMAAPass::QueryRenderSMAAPass(::Rendering::GL::GLRendererShPtr& rende
   _initializeRsrcs(width, height, numSamples);
 }
 
-QueryRenderSMAAPass::~QueryRenderSMAAPass() {
-}
+QueryRenderSMAAPass::~QueryRenderSMAAPass() {}
 
 void QueryRenderSMAAPass::_initializeRsrcs(const size_t width, const size_t height, const size_t numSamples) {
   CHECK(_rendererPtr);
@@ -64,7 +63,7 @@ void QueryRenderSMAAPass::_initializeRsrcs(const size_t width, const size_t heig
   float fheight = static_cast<float>(height);
 
   ::Rendering::GL::Resources::GLInterleavedBufferLayoutShPtr bufferLayout(
-      new ::Rendering::GL::Resources::GLInterleavedBufferLayout());
+      new ::Rendering::GL::Resources::GLInterleavedBufferLayout(_rendererPtr->getSupportedExtensions()));
   bufferLayout->addAttribute<float, 2>("pos");
   bufferLayout->addAttribute<float, 2>("texcoord");
   _rectvbo = rsrcMgr->createVertexBuffer<float>(
@@ -204,7 +203,7 @@ void QueryRenderSMAAPass::resize(size_t width, size_t height) {
   float fwidth = static_cast<float>(width);
   float fheight = static_cast<float>(height);
   ::Rendering::GL::Resources::GLInterleavedBufferLayoutShPtr bufferLayout(
-      new ::Rendering::GL::Resources::GLInterleavedBufferLayout());
+      new ::Rendering::GL::Resources::GLInterleavedBufferLayout(_rendererPtr->getSupportedExtensions()));
   bufferLayout->addAttribute<float, 2>("pos");
   bufferLayout->addAttribute<float, 2>("texcoord");
   _rectvbo = rsrcMgr->createVertexBuffer<float>(

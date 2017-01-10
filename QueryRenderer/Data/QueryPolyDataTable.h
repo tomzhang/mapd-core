@@ -87,6 +87,7 @@ class BaseQueryPolyDataTable : public BaseQueryDataTable {
   };
   typedef std::map<GpuId, PerGpuData> PerGpuDataMap;
 
+  RootCacheShPtr rootGpuCache;
   PerGpuDataMap _perGpuData;
 
   std::string _printInfo(bool useClassSuffix = false) const;

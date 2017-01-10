@@ -484,10 +484,18 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
 
   if (_ctx->doHitTest()) {
     // resize the cpu-bound pixels that store the ids per-pixel
-    if (!_idPixels) {
-      _idPixels.reset(new Array2dui(width, height));
+    if (!_id1APixels) {
+      _id1APixels.reset(new Array2dui(width, height));
     } else {
-      _idPixels->resize(width, height);
+      _id1APixels->resize(width, height);
+    }
+
+    if (_ctx->supportsInt64()) {
+      if (!_id1BPixels) {
+        _id1BPixels.reset(new Array2dui(width, height));
+      } else {
+        _id1BPixels->resize(width, height);
+      }
     }
 
     if (!_id2Pixels) {
@@ -496,7 +504,7 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
       _id2Pixels->resize(width, height);
     }
 
-    if (_pbo1) {
+    if (_pbo1A) {
       CHECK(_pbo2);
       auto qrmGpuCache = _ctx->getRootGpuCache();
       CHECK(qrmGpuCache);
@@ -506,7 +514,10 @@ void QueryRenderer::setWidthHeight(size_t width, size_t height) {
       CHECK(itr != qrmPerGpuData->end());
 
       (*itr)->makeActiveOnCurrentThread();
-      _pbo1->resize(width, height);
+      _pbo1A->resize(width, height);
+      if (_pbo1B) {
+        _pbo1B->resize(width, height);
+      }
       _pbo2->resize(width, height);
     }
   }
@@ -577,7 +588,7 @@ void QueryRenderer::_update() {
 }
 
 void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int height, bool makeContextInactive) {
-  CHECK(!_pbo1 && !_pbo2);
+  CHECK(!_pbo1A && !_pbo1B && !_pbo2);
 
   auto itr = usedGpus.begin();
   if (itr != usedGpus.end()) {
@@ -596,7 +607,10 @@ void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int h
 
     auto widthToUse = (width < 0 ? _ctx->getWidth() : width);
     auto heightToUse = (height < 0 ? _ctx->getHeight() : height);
-    _pbo1 = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+    _pbo1A = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+    if (_ctx->supportsInt64()) {
+      _pbo1B = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+    }
     _pbo2 = (*qrmItr)->getInactiveTableIdMapPbo(widthToUse, heightToUse);
 
     _pboGpu = (*qrmItr)->gpuId;
@@ -608,7 +622,7 @@ void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int h
 }
 
 void QueryRenderer::_releasePbo(bool makeContextInactive) {
-  if (_pbo1 || _pbo2) {
+  if (_pbo1A || _pbo1B || _pbo2) {
     auto qrmGpuCache = _ctx->getRootGpuCache();
     if (qrmGpuCache) {
       auto qrmPerGpuData = _ctx->getRootGpuCache()->perGpuData;
@@ -619,15 +633,20 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
 
         (*itr)->makeActiveOnCurrentThread();
 
-        if (_pbo1) {
-          (*itr)->setRowIdMapPboInactive(_pbo1);
+        if (_pbo1A) {
+          (*itr)->setRowIdMapPboInactive(_pbo1A);
+        }
+
+        if (_pbo1B) {
+          (*itr)->setRowIdMapPboInactive(_pbo1B);
         }
 
         if (_pbo2) {
           (*itr)->setTableIdMapPboInactive(_pbo2);
         }
 
-        _pbo1 = nullptr;
+        _pbo1A = nullptr;
+        _pbo1B = nullptr;
         _pbo2 = nullptr;
         _pboGpu = EMPTY_GPUID;
 
@@ -640,7 +659,7 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
 }
 
 void QueryRenderer::_updatePbo() {
-  if (_pbo1 || _pbo2) {
+  if (_pbo1A || _pbo1B || _pbo2) {
     auto gpuIds = _ctx->getUsedGpus();
 
     bool deletePBO = (!gpuIds.size() || (gpuIds.size() == 1 && _pboGpu != *gpuIds.begin()));
@@ -860,7 +879,6 @@ QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
     if (activeAccumulator != currAccumulator) {
       if (activeAccumulator.size()) {
         // finish the accumulation by running the blending pass
-        auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
         scalePtr->renderAccumulation(renderer, gpuId);
         scalePtr->accumulationPostRender(gpuId);
       }
@@ -882,7 +900,6 @@ QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
   if (activeAccumulator.size()) {
     // finish the accumulation by running the blending pass
     scalePtr = ctx->getScale(activeAccumulator);
-    auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
     scalePtr->renderAccumulation(renderer, gpuId);
     scalePtr->accumulationPostRender(gpuId);
   }
@@ -911,7 +928,7 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
     // update everything marked dirty before rendering
     _update();
 
-    if (_ctx->doHitTest() && (!_pbo1 || !_pbo2)) {
+    if (_ctx->doHitTest() && ((!_pbo1A || !_pbo2) || (_ctx->supportsInt64() && !_pbo1B))) {
       _createPbo(usedGpus);
     }
 
@@ -942,8 +959,12 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
         // clock_begin = timer_start();
 
         if (_ctx->doHitTest()) {
-          CHECK(_idPixels && _id2Pixels && _pbo1 && _pbo2 && usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
-          usedFramebuffer->copyRowIdBufferToPbo(_pbo1);
+          CHECK(_id1APixels && _id2Pixels && _pbo1A && _pbo2 &&
+                usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
+          usedFramebuffer->copyRowIdBufferToPbo(_pbo1A, true);
+          if (_id1BPixels && _pbo1B) {
+            usedFramebuffer->copyRowIdBufferToPbo(_pbo1B, false);
+          }
           usedFramebuffer->copyTableIdBufferToPbo(_pbo2);
 
           // time_ms = timer_stop(clock_begin);
@@ -979,11 +1000,15 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
         // clock_begin = timer_start();
 
         if (_ctx->doHitTest()) {
-          CHECK(_idPixels && _id2Pixels && _pbo1 && _pbo2 && usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
+          CHECK(_id1APixels && _id2Pixels && _pbo1A && _pbo2 &&
+                usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
           auto renderer = usedFramebuffer->getRenderer();
           renderer->makeActiveOnCurrentThread();
 
-          usedFramebuffer->copyRowIdBufferToPbo(_pbo1);
+          usedFramebuffer->copyRowIdBufferToPbo(_pbo1A, true);
+          if (_id1BPixels && _pbo1B) {
+            usedFramebuffer->copyRowIdBufferToPbo(_pbo1B, false);
+          }
           usedFramebuffer->copyTableIdBufferToPbo(_pbo2);
 
           // time_ms = timer_stop(clock_begin);
@@ -1099,7 +1124,10 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 
       if (_ctx->doHitTest()) {
         // clear out the id buffer
-        _idPixels->resetToDefault();
+        _id1APixels->resetToDefault();
+        if (_id1BPixels) {
+          _id1BPixels->resetToDefault();
+        }
         _id2Pixels->resetToDefault();
       }
     }
@@ -1126,18 +1154,18 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
                     "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + " was not initialized for hit-testing.");
 
   try {
-    unsigned int id = 0;
+    uint64_t id = 0;
     unsigned int tableId = 0;
 
-    if (_idPixels && _id2Pixels) {
+    if (_id1APixels && _id2Pixels) {
       size_t width = _ctx->getWidth();
       size_t height = _ctx->getHeight();
       if (x < width && y < height) {
-        CHECK(_idPixels->getWidth() == width && _idPixels->getHeight() == height && _id2Pixels->getWidth() == width &&
-              _id2Pixels->getHeight() == height);
+        CHECK(_id1APixels->getWidth() == width && _id1APixels->getHeight() == height &&
+              _id2Pixels->getWidth() == width && _id2Pixels->getHeight() == height);
 
         if (_idPixelsDirty) {
-          unsigned int* rawIds = _idPixels->getDataPtr();
+          unsigned int* rawIds1A = _id1APixels->getDataPtr();
           int* rawIds2 = _id2Pixels->getDataPtr();
 
           auto qrmGpuCache = _ctx->getRootGpuCache();
@@ -1150,7 +1178,11 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
             // auto clock_begin = timer_start();
 
             (*itr)->makeActiveOnCurrentThread();
-            _pbo1->readIdBuffer(width, height, rawIds);
+            _pbo1A->readIdBuffer(width, height, rawIds1A);
+            if (_id1BPixels && _pbo1B) {
+              auto rawIds1B = _id1BPixels->getDataPtr();
+              _pbo1B->readIdBuffer(width, height, rawIds1B);
+            }
             _pbo2->readIdBuffer(width, height, rawIds2);
             _releasePbo();
             (*itr)->makeInactive();
@@ -1163,7 +1195,10 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
         }
 
         if (pixelRadius == 0) {
-          id = _idPixels->get(x, y);
+          id = static_cast<uint64_t>(_id1APixels->get(x, y));
+          if (_id1BPixels) {
+            id |= (static_cast<uint64_t>(_id1BPixels->get(x, y)) << 32);
+          }
           tableId = _id2Pixels->get(x, y);
         } else {
           typedef std::unordered_map<size_t, Array2df> KernelMap;
@@ -1176,17 +1211,29 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
           }
 
           const Array2df& kernel = itr->second;
-          Array2dui ids(pixelRadius2xPlus1, pixelRadius2xPlus1);
+          Array2dui ids1A(pixelRadius2xPlus1, pixelRadius2xPlus1);
+          Array2dui ids1B(pixelRadius2xPlus1, pixelRadius2xPlus1);
           Array2di ids2(pixelRadius2xPlus1, pixelRadius2xPlus1);
 
-          ids.copyFromPixelCenter(*_idPixels,
-                                  x,
-                                  y,
-                                  pixelRadius,
-                                  pixelRadius,
-                                  pixelRadius,
-                                  pixelRadius,
-                                  ::Rendering::Objects::WrapType::USE_DEFAULT);
+          ids1A.copyFromPixelCenter(*_id1APixels,
+                                    x,
+                                    y,
+                                    pixelRadius,
+                                    pixelRadius,
+                                    pixelRadius,
+                                    pixelRadius,
+                                    ::Rendering::Objects::WrapType::USE_DEFAULT);
+
+          if (_id1BPixels) {
+            ids1B.copyFromPixelCenter(*_id1BPixels,
+                                      x,
+                                      y,
+                                      pixelRadius,
+                                      pixelRadius,
+                                      pixelRadius,
+                                      pixelRadius,
+                                      ::Rendering::Objects::WrapType::USE_DEFAULT);
+          }
 
           ids2.copyFromPixelCenter(*_id2Pixels,
                                    x,
@@ -1198,19 +1245,20 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
                                    ::Rendering::Objects::WrapType::USE_DEFAULT);
 
           // build up the counter
-          std::unordered_map<unsigned int, std::unordered_map<unsigned int, float>> idCounterMap;
-          std::unordered_map<unsigned int, std::unordered_map<unsigned int, float>>::iterator tableIdItr;
-          std::unordered_map<unsigned int, float>::iterator idItr;
+          std::unordered_map<unsigned int, std::unordered_map<uint64_t, float>> idCounterMap;
+          decltype(idCounterMap)::iterator tableIdItr;
+          std::unordered_map<uint64_t, float>::iterator idItr;
           for (size_t i = 0; i < pixelRadius2xPlus1; ++i) {
             for (size_t j = 0; j < pixelRadius2xPlus1; ++j) {
-              id = ids[i][j];
+              id = static_cast<uint64_t>(ids1A[i][j]);
+              id |= (static_cast<uint64_t>(ids1B[i][j]) << 32);
               tableId = ids2[i][j];
 
               // TODO(croot): what about cases where there's no table id defined?
               if (id > 0 && kernel[i][j] > 0) {  // don't include empty pixels or gaussian distro outliers
                 if ((tableIdItr = idCounterMap.find(tableId)) == idCounterMap.end()) {
                   tableIdItr = idCounterMap.insert(
-                      tableIdItr, std::make_pair(tableId, std::unordered_map<unsigned int, float>({{id, 0.0}})));
+                      tableIdItr, std::make_pair(tableId, std::unordered_map<uint64_t, float>({{id, 0.0}})));
                 }
 
                 if ((idItr = tableIdItr->second.find(id)) == tableIdItr->second.end()) {
@@ -1234,7 +1282,7 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
             }
             tableId = tableIdItr->first;
           } else {
-            std::vector<std::tuple<unsigned int, unsigned int, float>> flattened(idCounterMap.size());
+            std::vector<std::tuple<unsigned int, uint64_t, float>> flattened(idCounterMap.size());
 
             size_t idx = 0;
             std::for_each(idCounterMap.begin(), idCounterMap.end(), [&flattened, &idx](auto& item) {

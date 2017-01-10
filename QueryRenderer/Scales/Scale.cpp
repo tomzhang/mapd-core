@@ -212,6 +212,7 @@ void BaseScale::renderAccumulation(::Rendering::GL::GLRenderer* glRenderer,
   // 3) improve the activateEnabledAttachmentsForDrawing method name?
   fbo->disableAttachment(GL_COLOR_ATTACHMENT1);
   fbo->disableAttachment(GL_COLOR_ATTACHMENT2);
+  fbo->disableAttachment(GL_COLOR_ATTACHMENT3);
   fbo->activateEnabledAttachmentsForDrawing();
 
   ::Rendering::GL::Resources::GLTexture2dShPtr extentTx;
@@ -580,7 +581,8 @@ void BaseScale::_bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* ac
   boost::replace_range(fragSrc, funcRange, scaleCode);
   boost::replace_all(fragSrc, "getDensityColor(pct)", getScaleGLSLFuncName(suffix) + "(pct)");
 
-  return rsrcMgr->createShader(vertSrc, fragSrc);
+  return rsrcMgr->createShader(ShaderUtils::addShaderExtensionAndPreprocessorInfo(vertSrc),
+                               ShaderUtils::addShaderExtensionAndPreprocessorInfo(fragSrc));
 }
 
 void BaseScale::_initGpuResources(QueryRendererContext* ctx, bool initializing) {
@@ -599,11 +601,13 @@ void BaseScale::_initGpuResources(QueryRendererContext* ctx, bool initializing) 
       return;
     }
 
-    auto qrmPerGpuDataPtr = ctx->getRootGpuCache()->perGpuData;
+    auto rootGpuCache = ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
+    auto qrmPerGpuDataPtr = rootGpuCache->perGpuData;
     CHECK(qrmPerGpuDataPtr);
 
     ::Rendering::GL::Resources::GLInterleavedBufferLayoutShPtr bufferLayout(
-        new ::Rendering::GL::Resources::GLInterleavedBufferLayout());
+        new ::Rendering::GL::Resources::GLInterleavedBufferLayout(rootGpuCache->supportedExtensions));
     bufferLayout->addAttribute<float, 2>("pos");
 
     for (auto& itr : *qrmPerGpuDataPtr) {

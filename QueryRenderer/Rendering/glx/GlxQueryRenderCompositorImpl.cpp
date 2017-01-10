@@ -47,11 +47,12 @@ const int GlxQueryRenderCompositorImpl::maxAccumColors = static_cast<int>(
 
 GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                                            ::Rendering::RendererShPtr& rendererPtr,
-                                                           size_t width,
-                                                           size_t height,
-                                                           size_t numSamples,
-                                                           bool doHitTest,
-                                                           bool doDepthTest)
+                                                           const size_t width,
+                                                           const size_t height,
+                                                           const size_t numSamples,
+                                                           const bool doHitTest,
+                                                           const bool doDepthTest,
+                                                           const bool supportsInt64)
     : QueryRenderCompositorImpl(prnt, rendererPtr, width, height, numSamples, doHitTest, doDepthTest),
       _rendererPtr(rendererPtr) {
   CHECK(rendererPtr);
@@ -62,16 +63,16 @@ GlxQueryRenderCompositorImpl::GlxQueryRenderCompositorImpl(QueryRenderManager* p
       GLXEW_NV_copy_image,
       "NV_copy_image GLX extension is not supported. Cannot initialize compositor for multi-gpu rendering.");
 
-  _initResources(prnt);
+  _initResources(prnt, supportsInt64);
 }
 
-void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRenderManager) {
+void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRenderManager, const bool supportsInt64) {
   _renderer->makeActiveOnCurrentThread();
   GLResourceManagerShPtr rsrcMgr = _renderer->getResourceManager();
 
   // create a rectangle vertex buffer that will cover the entire buffer
   // and textured with the textures from all the gpus
-  GLInterleavedBufferLayoutShPtr bufferLayout(new GLInterleavedBufferLayout());
+  GLInterleavedBufferLayoutShPtr bufferLayout(new GLInterleavedBufferLayout(_renderer->getSupportedExtensions()));
   bufferLayout->addAttribute<float, 2>("pos");
   _rectvbo = rsrcMgr->createVertexBuffer<float>({-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, bufferLayout);
 
@@ -85,8 +86,9 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
 
   // TODO(croot): automate the texture image unit binding
   _shader->setSamplerTextureImageUnit("rgbaArraySampler", GL_TEXTURE0);
-  _shader->setSamplerTextureImageUnit("idArraySampler", GL_TEXTURE1);
-  _shader->setSamplerTextureImageUnit("id2ArraySampler", GL_TEXTURE2);
+  _shader->setSamplerTextureImageUnit("id1AArraySampler", GL_TEXTURE1);
+  _shader->setSamplerTextureImageUnit("id1BArraySampler", GL_TEXTURE2);
+  _shader->setSamplerTextureImageUnit("id2ArraySampler", GL_TEXTURE3);
 
   _vao = rsrcMgr->createVertexArray({{_rectvbo, {}}});
 
@@ -103,7 +105,10 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
   _rgbaTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_RGBA8, numSamples, sampleProps);
 
   if (doHitTest()) {
-    _idTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
+    _id1ATextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
+    if (supportsInt64) {
+      _id1BTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI, numSamples, sampleProps);
+    }
     _id2TextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32I, numSamples, sampleProps);
   }
 }
@@ -121,9 +126,14 @@ void GlxQueryRenderCompositorImpl::_resizeImpl(size_t width, size_t height) {
     _rgbaTextureArray->resize(width, height);
   }
 
-  if (_idTextureArray) {
+  if (_id1ATextureArray) {
     CHECK(doHitTest());
-    _idTextureArray->resize(width, height);
+    _id1ATextureArray->resize(width, height);
+  }
+
+  if (_id1BTextureArray) {
+    CHECK(doHitTest());
+    _id1BTextureArray->resize(width, height);
   }
 
   if (_id2TextureArray) {
@@ -161,8 +171,11 @@ GLTexture2dShPtr GlxQueryRenderCompositorImpl::createFboTexture2d(::Rendering::G
     case FboColorBuffer::COLOR_BUFFER:
       _rgbaTextures.insert(tex.get());
       break;
-    case FboColorBuffer::ID_BUFFER:
-      _idTextures.insert(tex.get());
+    case FboColorBuffer::ID1A_BUFFER:
+      _id1ATextures.insert(tex.get());
+      break;
+    case FboColorBuffer::ID1B_BUFFER:
+      _id1BTextures.insert(tex.get());
       break;
     case FboColorBuffer::ID2_BUFFER:
       _id2Textures.insert(tex.get());
@@ -424,27 +437,28 @@ void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
   }
 
   if (doHitTest) {
-    auto idTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID_BUFFER);
+    auto id1ATex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID1A_BUFFER);
+    auto id1BTex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID1B_BUFFER);
     auto id2Tex = framebufferPtr->getGLTexture2d(FboColorBuffer::ID2_BUFFER);
-    CHECK(idTex && id2Tex);
+    CHECK(id1ATex && id2Tex);
 
-    auto idItr = _idTextures.find(idTex.get());
-    CHECK(idItr != _idTextures.end());
+    auto id1AItr = _id1ATextures.find(id1ATex.get());
+    CHECK(id1AItr != _id1ATextures.end());
 
     auto id2Itr = _id2Textures.find(id2Tex.get());
     CHECK(id2Itr != _id2Textures.end());
 
     glXCopyImageSubDataNV(displayPtr.get(),
                           glxCtx,
-                          idTex->getId(),
-                          idTex->getTarget(),
+                          id1ATex->getId(),
+                          id1ATex->getTarget(),
                           0,
                           0,
                           0,
                           0,
                           myGlxCtx,
-                          _idTextureArray->getId(),
-                          _idTextureArray->getTarget(),
+                          _id1ATextureArray->getId(),
+                          _id1ATextureArray->getTarget(),
                           0,
                           0,
                           0,
@@ -452,6 +466,29 @@ void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer
                           width,
                           height,
                           1);
+
+    if (id1BTex) {
+      auto id1BItr = _id1BTextures.find(id1BTex.get());
+      CHECK(id1BItr != _id1BTextures.end());
+      glXCopyImageSubDataNV(displayPtr.get(),
+                            glxCtx,
+                            id1BTex->getId(),
+                            id1BTex->getTarget(),
+                            0,
+                            0,
+                            0,
+                            0,
+                            myGlxCtx,
+                            _id1BTextureArray->getId(),
+                            _id1BTextureArray->getTarget(),
+                            0,
+                            0,
+                            0,
+                            gpuCnt,
+                            width,
+                            height,
+                            1);
+    }
 
     glXCopyImageSubDataNV(displayPtr.get(),
                           glxCtx,
@@ -540,10 +577,15 @@ void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
   _shader->setUniformAttribute("rgbaArraySize", usedGpus.size());
 
   if (doHitTest) {
-    CHECK(_idTextureArray->getDepth() == _id2TextureArray->getDepth());
-    _shader->setSamplerAttribute("idArraySampler", _idTextureArray);
+    CHECK(_id1ATextureArray->getDepth() == _id2TextureArray->getDepth());
+    _shader->setSamplerAttribute("id1AArraySampler", _id1ATextureArray);
+    if (_id1BTextureArray) {
+      CHECK(_id1ATextureArray->getDepth() == _id1BTextureArray->getDepth());
+      _shader->setSamplerAttribute("id1BArraySampler", _id1BTextureArray);
+    }
     _shader->setSamplerAttribute("id2ArraySampler", _id2TextureArray);
     _shader->setUniformAttribute("idArraySize", usedGpus.size());
+    _shader->setUniformAttribute("idBArraySize", (_id1BTextureArray ? usedGpus.size() : 0));
   } else {
     _shader->setUniformAttribute("idArraySize", 0);
   }
@@ -604,18 +646,26 @@ void GlxQueryRenderCompositorImpl::render(QueryRenderer* queryRenderer, const st
   }
 
   if (doHitTest) {
-    CHECK(_idTextureArray && _id2TextureArray && _idTextures.size() && _idTextures.size() == _rgbaTextures.size() &&
-          _id2Textures.size() && _id2Textures.size() == _rgbaTextures.size());
-    if (_idTextureArray->getDepth() != _idTextures.size()) {
+    CHECK(_id1ATextureArray && _id2TextureArray && _id1ATextures.size() &&
+          _id1ATextures.size() == _rgbaTextures.size() && _id2Textures.size() &&
+          _id2Textures.size() == _rgbaTextures.size());
+    if (_id1ATextureArray->getDepth() != _id1ATextures.size()) {
       _renderer->makeActiveOnCurrentThread();
-      _idTextureArray->resize(_idTextures.size());
-      CHECK(_idTextures.size() == _idTextureArray->getDepth());
+      _id1ATextureArray->resize(_id1ATextures.size());
+      CHECK(_id1ATextures.size() == _id1ATextureArray->getDepth());
+    }
+
+    if (_id1BTextureArray && _id1BTextureArray->getDepth() != _id1BTextures.size()) {
+      CHECK(_id1BTextures.size() == _rgbaTextures.size());
+      _renderer->makeActiveOnCurrentThread();
+      _id1BTextureArray->resize(_id1BTextures.size());
+      CHECK(_id1BTextures.size() == _id1BTextureArray->getDepth());
     }
 
     if (_id2TextureArray->getDepth() != _id2Textures.size()) {
       _renderer->makeActiveOnCurrentThread();
       _id2TextureArray->resize(_id2Textures.size());
-      CHECK(_id2Textures.size() == _id2TextureArray->getDepth() && _idTextures.size() == _id2Textures.size());
+      CHECK(_id2Textures.size() == _id2TextureArray->getDepth() && _id1ATextures.size() == _id2Textures.size());
     }
   }
   // if (doDepthTest) {

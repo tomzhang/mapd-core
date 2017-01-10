@@ -46,9 +46,11 @@ class BaseColor4f : BaseOpacityValidator {
     return (num == 4 && baseType == GL_FLOAT);
   }
 
-  static ::Rendering::GL::TypeGL<float, 4> getTypeGL() { return ::Rendering::GL::TypeGL<float, 4>(); }
-  static ::Rendering::GL::TypeGLShPtr getTypeGLPtr() {
-    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<float, 4>());
+  static ::Rendering::GL::TypeGL<float, 4> getTypeGL(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGL<float, 4>(supportedExtensions);
+  }
+  static ::Rendering::GL::TypeGLShPtr getTypeGLPtr(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<float, 4>(supportedExtensions));
   }
 #endif  // MAPDGL
 
@@ -165,9 +167,11 @@ class BaseColorPacked4f : public BaseOpacityConvertToFloat, public BaseColor4f<C
     return (num == 1 && (baseType == GL_INT || baseType == GL_UNSIGNED_INT));
   }
 
-  static ::Rendering::GL::TypeGL<uint32_t> getPackedTypeGL() { return ::Rendering::GL::TypeGL<uint32_t>(); }
-  static ::Rendering::GL::TypeGLShPtr getPackedTypeGLPtr() {
-    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<uint32_t>());
+  static ::Rendering::GL::TypeGL<uint32_t, 1> getPackedTypeGL(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGL<uint32_t, 1>(supportedExtensions);
+  }
+  static ::Rendering::GL::TypeGLShPtr getPackedTypeGLPtr(const std::set<std::string>& supportedExtensions) {
+    return ::Rendering::GL::TypeGLShPtr(new ::Rendering::GL::TypeGL<uint32_t, 1>(supportedExtensions));
   }
 #endif  // MAPDGL
 

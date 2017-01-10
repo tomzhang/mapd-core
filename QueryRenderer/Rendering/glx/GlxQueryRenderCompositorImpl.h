@@ -41,15 +41,16 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
 
   GlxQueryRenderCompositorImpl(QueryRenderManager* prnt,
                                ::Rendering::RendererShPtr& rendererPtr,
-                               size_t width,
-                               size_t height,
-                               size_t numSamples = 1,
-                               bool doHitTest = false,
-                               bool doDepthTest = false);
+                               const size_t width,
+                               const size_t height,
+                               const size_t numSamples,
+                               const bool doHitTest,
+                               const bool doDepthTest,
+                               const bool supportsInt64);
 
   void _initAccumResources(size_t width, size_t height, size_t depth);
   void _cleanupAccumResources();
-  void _initResources(QueryRenderManager* queryRenderer);
+  void _initResources(QueryRenderManager* queryRenderer, const bool supportsInt64);
   void _resizeImpl(size_t width, size_t height) final;
 
   void _postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
@@ -76,7 +77,8 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLShaderShPtr _shader;
   ::Rendering::GL::Resources::GLVertexArrayShPtr _vao;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _rgbaTextureArray;
-  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _idTextureArray;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _id1ATextureArray;
+  ::Rendering::GL::Resources::GLTexture2dArrayShPtr _id1BTextureArray;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _id2TextureArray;
 
   ::Rendering::GL::Resources::GLPixelBuffer2dShPtr _clearPboPtr;
@@ -84,11 +86,13 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _accumulationCpTextureArray;
   ::Rendering::GL::Resources::GLTexture2dArrayShPtr _accumulationTextureArray;
 
-  std::vector<std::unordered_map<::Rendering::GL::Resources::GLTexture2d*,
-                                 ::Rendering::GL::Resources::GLTexture2dWkPtr>> _registeredAccumTxts;
+  std::vector<
+      std::unordered_map<::Rendering::GL::Resources::GLTexture2d*, ::Rendering::GL::Resources::GLTexture2dWkPtr>>
+      _registeredAccumTxts;
 
   std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _rgbaTextures;
-  std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _idTextures;
+  std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _id1ATextures;
+  std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _id1BTextures;
   std::unordered_set<::Rendering::GL::Resources::GLTexture2d*> _id2Textures;
   std::unordered_set<::Rendering::GL::Resources::GLRenderbuffer*> _rbos;
 

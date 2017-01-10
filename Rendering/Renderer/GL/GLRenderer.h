@@ -37,6 +37,9 @@ class GLRenderer : public Renderer {
   GLWindow* getPrimaryGLWindow();
   size_t getGpuId() const;
 
+  const std::set<std::string>& getSupportedExtensions() const;
+  bool supportsExtension(const std::string& extStr) const;
+
   /** State related functions **/
 
   // TODO(croot): Eventually put in a state machine class
@@ -184,6 +187,7 @@ class GLRenderer : public Renderer {
 
  private:
   virtual void initializeGL() = 0;
+  void _initExtensions();
 
   void setResourceManager(const GLResourceManagerShPtr& glRsrcMgr);
 
@@ -204,6 +208,7 @@ class GLRenderer : public Renderer {
   GLEWContext _glewContext;
 #endif
 
+  std::set<std::string> _supportedExtensions;
   State::GLBindState _bindState;
 
   static std::mutex _currRendererMtx;

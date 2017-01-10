@@ -56,23 +56,29 @@ QueryFramebuffer::QueryFramebuffer(GLRenderer* renderer,
                                    int height,
                                    bool doHitTest,
                                    bool doDepthTest,
-                                   size_t numSamples)
+                                   size_t numSamples,
+                                   const bool useInt64Id)
     : _defaultDoHitTest(doHitTest), _defaultDoDepthTest(doDepthTest), _doHitTest(doHitTest), _doDepthTest(doDepthTest) {
-  _init(renderer, width, height, numSamples);
+  _init(renderer, width, height, numSamples, useInt64Id);
 }
 
-QueryFramebuffer::QueryFramebuffer(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer)
+QueryFramebuffer::QueryFramebuffer(QueryRenderCompositor* compositor,
+                                   ::Rendering::GL::GLRenderer* renderer,
+                                   const bool useInt64Id)
     : _defaultDoHitTest(compositor->doHitTest()),
       _defaultDoDepthTest(compositor->doDepthTest()),
       _doHitTest(compositor->doHitTest()),
       _doDepthTest(compositor->doDepthTest()) {
-  _init(compositor, renderer);
+  _init(compositor, renderer, useInt64Id);
 }
 
-QueryFramebuffer::~QueryFramebuffer() {
-}
+QueryFramebuffer::~QueryFramebuffer() {}
 
-void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, int height, size_t numSamples) {
+void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer,
+                             int width,
+                             int height,
+                             size_t numSamples,
+                             const bool useInt64Id) {
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
   _rgbaTex = createFboTexture2d(rsrcMgr, FboColorBuffer::COLOR_BUFFER, width, height, numSamples);
@@ -80,11 +86,16 @@ void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, i
   GLFramebufferAttachmentMap attachments({{GL_COLOR_ATTACHMENT0, _rgbaTex}});
 
   if (_defaultDoHitTest) {
-    _idTex1 = createFboTexture2d(rsrcMgr, FboColorBuffer::ID_BUFFER, width, height, numSamples);
-    attachments.insert({GL_COLOR_ATTACHMENT1, _idTex1});
+    _idTex1A = createFboTexture2d(rsrcMgr, FboColorBuffer::ID1A_BUFFER, width, height, numSamples);
+    attachments.insert({GL_COLOR_ATTACHMENT1, _idTex1A});
+
+    if (useInt64Id) {
+      _idTex1B = createFboTexture2d(rsrcMgr, FboColorBuffer::ID1B_BUFFER, width, height, numSamples);
+      attachments.insert({GL_COLOR_ATTACHMENT2, _idTex1B});
+    }
 
     _idTex2 = createFboTexture2d(rsrcMgr, FboColorBuffer::ID2_BUFFER, width, height, numSamples);
-    attachments.insert({GL_COLOR_ATTACHMENT2, _idTex2});
+    attachments.insert({GL_COLOR_ATTACHMENT3, _idTex2});
   }
 
   if (_defaultDoDepthTest) {
@@ -95,18 +106,25 @@ void QueryFramebuffer::_init(::Rendering::GL::GLRenderer* renderer, int width, i
   _fbo = rsrcMgr->createFramebuffer(attachments);
 }
 
-void QueryFramebuffer::_init(QueryRenderCompositor* compositor, ::Rendering::GL::GLRenderer* renderer) {
+void QueryFramebuffer::_init(QueryRenderCompositor* compositor,
+                             ::Rendering::GL::GLRenderer* renderer,
+                             const bool useInt64Id) {
   GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
 
   _rgbaTex = compositor->createFboTexture2d(renderer, FboColorBuffer::COLOR_BUFFER);
   GLFramebufferAttachmentMap attachments({{GL_COLOR_ATTACHMENT0, _rgbaTex}});
 
   if (_defaultDoHitTest) {
-    _idTex1 = compositor->createFboTexture2d(renderer, FboColorBuffer::ID_BUFFER);
-    attachments.insert({GL_COLOR_ATTACHMENT1, _idTex1});
+    _idTex1A = compositor->createFboTexture2d(renderer, FboColorBuffer::ID1A_BUFFER);
+    attachments.insert({GL_COLOR_ATTACHMENT1, _idTex1A});
+
+    if (useInt64Id) {
+      _idTex1B = compositor->createFboTexture2d(renderer, FboColorBuffer::ID1B_BUFFER);
+      attachments.insert({GL_COLOR_ATTACHMENT2, _idTex1B});
+    }
 
     _idTex2 = compositor->createFboTexture2d(renderer, FboColorBuffer::ID2_BUFFER);
-    attachments.insert({GL_COLOR_ATTACHMENT2, _idTex2});
+    attachments.insert({GL_COLOR_ATTACHMENT3, _idTex2});
   }
 
   if (_defaultDoDepthTest) {
@@ -162,8 +180,10 @@ GLTexture2dShPtr QueryFramebuffer::getGLTexture2d(FboColorBuffer texType) const 
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
       return _rgbaTex;
-    case FboColorBuffer::ID_BUFFER:
-      return _idTex1;
+    case FboColorBuffer::ID1A_BUFFER:
+      return _idTex1A;
+    case FboColorBuffer::ID1B_BUFFER:
+      return _idTex1B;
     case FboColorBuffer::ID2_BUFFER:
       return _idTex2;
     default:
@@ -187,8 +207,10 @@ GLuint QueryFramebuffer::getId(FboColorBuffer buffer) {
   switch (buffer) {
     case FboColorBuffer::COLOR_BUFFER:
       return (_rgbaTex ? _rgbaTex->getId() : 0);
-    case FboColorBuffer::ID_BUFFER:
-      return (_idTex1 ? _idTex1->getId() : 0);
+    case FboColorBuffer::ID1A_BUFFER:
+      return (_idTex1A ? _idTex1A->getId() : 0);
+    case FboColorBuffer::ID1B_BUFFER:
+      return (_idTex1B ? _idTex1B->getId() : 0);
     case FboColorBuffer::ID2_BUFFER:
       return (_idTex2 ? _idTex2->getId() : 0);
     default:
@@ -214,10 +236,16 @@ std::pair<std::vector<GLenum>, std::vector<GLenum>> QueryFramebuffer::getEnabled
 
   if (_doHitTest) {
     enableAttachments.push_back(GL_COLOR_ATTACHMENT1);
-    enableAttachments.push_back(GL_COLOR_ATTACHMENT2);
+    if (_idTex1B) {
+      enableAttachments.push_back(GL_COLOR_ATTACHMENT2);
+    } else {
+      disableAttachments.push_back(GL_COLOR_ATTACHMENT2);
+    }
+    enableAttachments.push_back(GL_COLOR_ATTACHMENT3);
   } else if (_defaultDoHitTest) {
     disableAttachments.push_back(GL_COLOR_ATTACHMENT1);
     disableAttachments.push_back(GL_COLOR_ATTACHMENT2);
+    disableAttachments.push_back(GL_COLOR_ATTACHMENT3);
   }
 
   if (_doDepthTest) {
@@ -284,13 +312,17 @@ void QueryFramebuffer::readIdBuffer(size_t startx,
   GLenum attachmentToUse;
 
   switch (idBufferType) {
-    case FboColorBuffer::ID_BUFFER:
-      idTexToUse = _idTex1.get();
+    case FboColorBuffer::ID1A_BUFFER:
+      idTexToUse = _idTex1A.get();
       attachmentToUse = GL_COLOR_ATTACHMENT1;
+      break;
+    case FboColorBuffer::ID1B_BUFFER:
+      idTexToUse = _idTex1B.get();
+      attachmentToUse = GL_COLOR_ATTACHMENT2;
       break;
     case FboColorBuffer::ID2_BUFFER:
       idTexToUse = _idTex2.get();
-      attachmentToUse = GL_COLOR_ATTACHMENT2;
+      attachmentToUse = GL_COLOR_ATTACHMENT3;
       break;
     default:
       THROW_RUNTIME_EX("QueryFramebuffer:readIdBuffer: Unsupported id buffer type " +
@@ -402,11 +434,11 @@ void QueryFramebuffer::blitToFramebuffer(QueryFramebuffer& dstFboPtr,
   // }
 }
 
-void QueryFramebuffer::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo) {
+void QueryFramebuffer::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo, const bool leastSignificantBits) {
   RUNTIME_EX_ASSERT(pbo != nullptr, "Pbo is empty. Cannot copy pixels to an undefined pbo.");
 
   RUNTIME_EX_ASSERT(
-      _idTex1 != nullptr,
+      (leastSignificantBits && _idTex1A != nullptr) || (!leastSignificantBits && _idTex1B),
       "QueryFramebuffer: The framebuffer was not setup for an ID map. Cannot copy ID map to pixel buffer object.");
 
   size_t myWidth = getWidth();
@@ -426,8 +458,14 @@ void QueryFramebuffer::copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo)
 
   GLRenderer* renderer = _fbo->getGLRenderer();
   renderer->bindWritePixelBuffer(pbo->getPixelBuffer2d());
-  _fbo->copyPixelsToBoundPixelBuffer(
-      GL_COLOR_ATTACHMENT1, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT);
+  _fbo->copyPixelsToBoundPixelBuffer((leastSignificantBits ? GL_COLOR_ATTACHMENT1 : GL_COLOR_ATTACHMENT2),
+                                     0,
+                                     0,
+                                     pboWidth,
+                                     pboHeight,
+                                     0,
+                                     GL_RED_INTEGER,
+                                     GL_UNSIGNED_INT);
   renderer->bindWritePixelBuffer(nullptr);
 }
 
@@ -455,7 +493,7 @@ void QueryFramebuffer::copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo
 
   GLRenderer* renderer = _fbo->getGLRenderer();
   renderer->bindWritePixelBuffer(pbo->getPixelBuffer2d());
-  _fbo->copyPixelsToBoundPixelBuffer(GL_COLOR_ATTACHMENT2, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_INT);
+  _fbo->copyPixelsToBoundPixelBuffer(GL_COLOR_ATTACHMENT3, 0, 0, pboWidth, pboHeight, 0, GL_RED_INTEGER, GL_INT);
   renderer->bindWritePixelBuffer(nullptr);
 }
 
@@ -467,7 +505,8 @@ GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rs
   switch (texType) {
     case FboColorBuffer::COLOR_BUFFER:
       return rsrcMgr->createTexture2d(width, height, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, numSamples);
-    case FboColorBuffer::ID_BUFFER:
+    case FboColorBuffer::ID1A_BUFFER:
+    case FboColorBuffer::ID1B_BUFFER:
       return rsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, numSamples);
     case FboColorBuffer::ID2_BUFFER:
       // The ID2_BUFFER is used to store the table-id of the id stored in ID_BUFFER.

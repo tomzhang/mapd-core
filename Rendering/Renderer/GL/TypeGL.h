@@ -9,6 +9,7 @@
 #include <functional>
 #include <cstdint>
 #include <sstream>
+#include <set>
 
 namespace Rendering {
 namespace GL {
@@ -17,76 +18,32 @@ std::string gl_type_to_string(const int glType);
 
 struct BaseTypeGL {
   static std::string getTypeDefinesMacroForShader();
+  static std::string getExtensionStr();
 
-  BaseTypeGL() {}
-  BaseTypeGL(const BaseTypeGL& baseTypeGL) {}
+  template <class T>
+  struct is_convertible_to_float
+      : std::integral_constant<bool,
+                               std::is_same<int, T>::value || std::is_same<unsigned int, T>::value ||
+                                   std::is_same<double, T>::value> {};
+
   virtual ~BaseTypeGL() {}
 
-  virtual std::shared_ptr<BaseTypeGL> clone() const = 0;
+  virtual TypeGLShPtr clone() const = 0;
 
   virtual int numComponents() const = 0;
   virtual int numBytes() const = 0;
-  // virtual int numGLSLBytes() const = 0;
-  virtual int baseGLType() const = 0;
-  virtual int glslGLType() const = 0;
-  virtual std::string glslType() const = 0;
-
-  virtual void bind(GLuint shaderAttrLoc, int stride, int offset) const = 0;
-
-  virtual GLboolean normalize() { return GL_FALSE; }
-
-  inline friend bool operator==(const BaseTypeGL& lhs, const BaseTypeGL& rhs) {
-    return (lhs.numComponents() == rhs.numComponents() && lhs.numBytes() == rhs.numBytes() &&
-            lhs.baseGLType() == rhs.baseGLType());
-  }
-
-  inline friend bool operator!=(const BaseTypeGL& lhs, const BaseTypeGL& rhs) {
-    return (lhs.numComponents() != rhs.numComponents() || lhs.numBytes() != rhs.numBytes() ||
-            lhs.baseGLType() != rhs.baseGLType());
-  }
-
-  operator std::string() const {
-    std::ostringstream s;
-    s << "<GL type: " << gl_type_to_string(baseGLType()) << ", Num components: " << numComponents()
-      << ", Num bytes: " << numBytes() << ">";
-    return s.str();
-  }
-};
-
-template <typename T, int componentCnt = 1>
-struct TypeGL : BaseTypeGL {
-  TypeGL(bool useAsFloat = false, bool normalize = false) { setUseAsFloat(useAsFloat, normalize); }
-
-  TypeGL(const TypeGL<T, componentCnt>& typeGL) { setUseAsFloat(typeGL._useAsFloat, typeGL._normalize); }
-
-  ~TypeGL() {}
-
-  TypeGLShPtr clone() const { return TypeGLShPtr(new TypeGL<T, componentCnt>(*this)); }
-
-  int numComponents() const { return componentCnt; }
-
-  int numBytes() const { return sizeof(T) * numComponents(); }
-
-  // int numGLSLBytes() { return numBytes(); }
-
-  int baseGLType() const final;
-  int glslGLType() const final;
-  std::string glslType() const;
-
-  void setUseAsFloat(bool useAsFloat, bool normalize = false) {
-    _useAsFloat = useAsFloat;
-    _normalize = normalize;
-    // if (useAsFloat) {
-    //     _bindFunc = std::bind(glVertexAttribPointer, std::placeholders::_1, numComponents(), baseGLType(), (normalize
-    //     ? GL_TRUE : GL_FALSE), std::placeholders::_2, std::placeholders::_3);
-
-    //     _useAsFloat = useAsFloat;
-    //     _normalize = normalize;
-    // } else {
-    //     _bindFunc = std::bind(_getAltVertexAttribPointerFunc(), std::placeholders::_1, numComponents(), baseGLType(),
-    //     std::placeholders::_2, std::placeholders::_3);
-    //     _normalize = false;
-    // }
+  int baseGLType() const { return _baseGLType; }
+  int glslGLType() const { return _glslGLType; }
+  std::string glslType() const {
+    if (_useAsFloat) {
+      auto numComps = numComponents();
+      if (numComps == 1) {
+        return "float";
+      } else {
+        return "vec" + std::to_string(numComps);
+      }
+    }
+    return _glslType;
   }
 
   void bind(GLuint shaderAttrLoc, int stride, int offset) const {
@@ -104,12 +61,29 @@ struct TypeGL : BaseTypeGL {
     MAPD_CHECK_GL_ERROR(glEnableVertexAttribArray(shaderAttrLoc));
   }
 
-  // void bind(GLuint shaderAttrLoc, int stride, int offset) {
-  //     _bindFunc(shaderAttrLoc, stride, BUFFER_OFFSET(offset));
-  // }
+  inline friend bool operator==(const BaseTypeGL& lhs, const BaseTypeGL& rhs) {
+    return (lhs.numComponents() == rhs.numComponents() && lhs.numBytes() == rhs.numBytes() &&
+            lhs.baseGLType() == rhs.baseGLType());
+  }
 
- private:
+  inline friend bool operator!=(const BaseTypeGL& lhs, const BaseTypeGL& rhs) {
+    return (lhs.numComponents() != rhs.numComponents() || lhs.numBytes() != rhs.numBytes() ||
+            lhs.baseGLType() != rhs.baseGLType());
+  }
+
+  operator std::string() const {
+    std::ostringstream s;
+    s << "<GL type: " << gl_type_to_string(baseGLType()) << ", Num components: " << numComponents()
+      << ", Num bytes: " << numBytes() << ">";
+    return s.str();
+  }
+
+ protected:
   typedef std::function<void(GLuint, GLint, GLenum, GLsizei, const GLvoid*)> VertexAttribPtrFunc;
+
+  int _baseGLType;
+  int _glslGLType;
+  std::string _glslType;
 
   bool _useAsFloat;  // when binding the attr type, this determines whether the attr
                      // will be bound as a float (via glVertexAttribPointer) or
@@ -121,9 +95,94 @@ struct TypeGL : BaseTypeGL {
                     // normalization results in a value from 0 to 1. If signed, then it
                     // results in a value from -1 to 1.
 
-  // std::function<void(GLuint, GLsizei, const GLvoid *)> _bindFunc;
+  BaseTypeGL(const int baseGLType,
+             const int glslGLType,
+             const std::string& glslType,
+             const bool useAsFloat = false,
+             const bool normalize = false)
+      : _baseGLType(baseGLType),
+        _glslGLType(glslGLType),
+        _glslType(glslType),
+        _useAsFloat(useAsFloat),
+        _normalize(normalize) {}
 
-  VertexAttribPtrFunc _getAltVertexAttribPointerFunc() const { return glVertexAttribIPointer; }
+  BaseTypeGL(const BaseTypeGL& baseTypeGL)
+      : _baseGLType(baseTypeGL._baseGLType),
+        _glslGLType(baseTypeGL._glslGLType),
+        _glslType(baseTypeGL._glslType),
+        _useAsFloat(baseTypeGL._useAsFloat),
+        _normalize(baseTypeGL._normalize) {}
+
+  void _setUseAsFloat(const bool useAsFloat, const bool normalize) {
+    _useAsFloat = useAsFloat;
+    _normalize = normalize;
+  }
+
+ private:
+  virtual VertexAttribPtrFunc _getAltVertexAttribPointerFunc() const = 0;
+};
+
+template <typename T>
+struct TypeGLMiddleLayer : BaseTypeGL {
+  virtual ~TypeGLMiddleLayer() {}
+
+ protected:
+  TypeGLMiddleLayer(const int baseGLType,
+                    const int glslGLType,
+                    const std::string& glslType,
+                    const bool useAsFloat = false,
+                    const bool normalize = false)
+      : BaseTypeGL(baseGLType, glslGLType, glslType, useAsFloat, normalize) {}
+
+  TypeGLMiddleLayer(const TypeGLMiddleLayer<T>& typeGLMiddleLayer) : BaseTypeGL(typeGLMiddleLayer) {}
+
+ private:
+  VertexAttribPtrFunc _getAltVertexAttribPointerFunc() const final { return glVertexAttribIPointer; }
+};
+
+template <>
+TypeGLMiddleLayer<float>::TypeGLMiddleLayer(const int baseGLType,
+                                            const int glslGLType,
+                                            const std::string& glslType,
+                                            const bool useAsFloat,
+                                            const bool normalize);
+
+template <>
+TypeGLMiddleLayer<double>::VertexAttribPtrFunc TypeGLMiddleLayer<double>::_getAltVertexAttribPointerFunc() const;
+
+template <>
+TypeGLMiddleLayer<uint64_t>::VertexAttribPtrFunc TypeGLMiddleLayer<uint64_t>::_getAltVertexAttribPointerFunc() const;
+
+template <>
+TypeGLMiddleLayer<int64_t>::VertexAttribPtrFunc TypeGLMiddleLayer<int64_t>::_getAltVertexAttribPointerFunc() const;
+
+template <typename T, int componentCnt, class Enable = void>
+struct TypeGL : TypeGLMiddleLayer<T> {
+  TypeGL(const std::set<std::string>& supportedExtensions);
+  TypeGL(const TypeGL<T, componentCnt>& typeGL) : TypeGLMiddleLayer<T>(typeGL) {}
+  ~TypeGL() {}
+
+  TypeGLShPtr clone() const { return TypeGLShPtr(new TypeGL<T, componentCnt>(*this)); }
+
+  int numComponents() const { return componentCnt; }
+  int numBytes() const { return sizeof(T) * numComponents(); }
+};
+
+template <typename T, int componentCnt>
+struct TypeGL<T, componentCnt, typename std::enable_if<BaseTypeGL::is_convertible_to_float<T>::value>::type>
+    : TypeGLMiddleLayer<T> {
+  TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat = false, bool normalize = false);
+  TypeGL(const TypeGL<T, componentCnt>& typeGL) : TypeGLMiddleLayer<T>(typeGL) {}
+  ~TypeGL() {}
+
+  TypeGLShPtr clone() const { return TypeGLShPtr(new TypeGL<T, componentCnt>(*this)); }
+
+  int numComponents() const { return componentCnt; }
+  int numBytes() const { return sizeof(T) * numComponents(); }
+
+  void setUseAsFloat(const bool useAsFloat, const bool normalize = false) {
+    BaseTypeGL::_setUseAsFloat(useAsFloat, normalize);
+  }
 };
 
 // SPECIALIZATIONS
@@ -131,326 +190,100 @@ struct TypeGL : BaseTypeGL {
 // BOOL:
 
 template <>
-std::string TypeGL<bool, 1>::glslType() const;
+TypeGL<bool, 1>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<bool, 1>::baseGLType() const;
+TypeGL<bool, 2>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<bool, 1>::glslGLType() const;
+TypeGL<bool, 3>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-std::string TypeGL<bool, 2>::glslType() const;
-
-template <>
-int TypeGL<bool, 2>::baseGLType() const;
-
-template <>
-int TypeGL<bool, 2>::glslGLType() const;
-
-template <>
-std::string TypeGL<bool, 3>::glslType() const;
-
-template <>
-int TypeGL<bool, 3>::baseGLType() const;
-
-template <>
-int TypeGL<bool, 3>::glslGLType() const;
-
-template <>
-std::string TypeGL<bool, 4>::glslType() const;
-
-template <>
-int TypeGL<bool, 4>::baseGLType() const;
-
-template <>
-int TypeGL<bool, 4>::glslGLType() const;
+TypeGL<bool, 4>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 // UNSIGNED INT:
 
 template <>
-std::string TypeGL<unsigned int, 1>::glslType() const;
+TypeGL<unsigned int, 1>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-int TypeGL<unsigned int, 1>::baseGLType() const;
+TypeGL<unsigned int, 2>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-int TypeGL<unsigned int, 1>::glslGLType() const;
+TypeGL<unsigned int, 3>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
+
+template <>
+TypeGL<unsigned int, 4>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 // INT:
 
 template <>
-std::string TypeGL<int, 1>::glslType() const;
+TypeGL<int, 1>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-int TypeGL<int, 1>::baseGLType() const;
+TypeGL<int, 2>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-int TypeGL<int, 1>::glslGLType() const;
+TypeGL<int, 3>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-std::string TypeGL<int, 2>::glslType() const;
-
-template <>
-int TypeGL<int, 2>::baseGLType() const;
-
-template <>
-int TypeGL<int, 2>::glslGLType() const;
-
-template <>
-std::string TypeGL<int, 3>::glslType() const;
-
-template <>
-int TypeGL<int, 3>::baseGLType() const;
-
-template <>
-int TypeGL<int, 3>::glslGLType() const;
-
-template <>
-std::string TypeGL<int, 4>::glslType() const;
-
-template <>
-int TypeGL<int, 4>::baseGLType() const;
-
-template <>
-int TypeGL<int, 4>::glslGLType() const;
+TypeGL<int, 4>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 // FLOAT
 
 template <>
-std::string TypeGL<float, 1>::glslType() const;
+TypeGL<float, 1>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<float, 1>::baseGLType() const;
+TypeGL<float, 2>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<float, 1>::glslGLType() const;
+TypeGL<float, 3>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-void TypeGL<float, 1>::setUseAsFloat(bool bindAsFloat, bool normalize);
-
-template <>
-std::string TypeGL<float, 2>::glslType() const;
-
-template <>
-int TypeGL<float, 2>::baseGLType() const;
-
-template <>
-int TypeGL<float, 2>::glslGLType() const;
-
-template <>
-void TypeGL<float, 2>::setUseAsFloat(bool bindAsFloat, bool normalize);
-
-template <>
-std::string TypeGL<float, 3>::glslType() const;
-
-template <>
-int TypeGL<float, 3>::baseGLType() const;
-
-template <>
-int TypeGL<float, 3>::glslGLType() const;
-
-template <>
-void TypeGL<float, 3>::setUseAsFloat(bool bindAsFloat, bool normalize);
-
-template <>
-std::string TypeGL<float, 4>::glslType() const;
-
-template <>
-int TypeGL<float, 4>::baseGLType() const;
-
-template <>
-int TypeGL<float, 4>::glslGLType() const;
-
-template <>
-void TypeGL<float, 4>::setUseAsFloat(bool bindAsFloat, bool normalize);
+TypeGL<float, 4>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 // DOUBLE
 
 template <>
-std::string TypeGL<double, 1>::glslType() const;
+TypeGL<double, 1>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-int TypeGL<double, 1>::baseGLType() const;
+TypeGL<double, 2>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-int TypeGL<double, 1>::glslGLType() const;
+TypeGL<double, 3>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 template <>
-TypeGL<double, 1>::VertexAttribPtrFunc TypeGL<double, 1>::_getAltVertexAttribPointerFunc() const;
-
-template <>
-std::string TypeGL<double, 2>::glslType() const;
-
-template <>
-int TypeGL<double, 2>::baseGLType() const;
-
-template <>
-int TypeGL<double, 2>::glslGLType() const;
-
-template <>
-TypeGL<double, 2>::VertexAttribPtrFunc TypeGL<double, 2>::_getAltVertexAttribPointerFunc() const;
-
-template <>
-std::string TypeGL<double, 3>::glslType() const;
-
-template <>
-int TypeGL<double, 3>::baseGLType() const;
-
-template <>
-int TypeGL<double, 3>::glslGLType() const;
-
-template <>
-TypeGL<double, 3>::VertexAttribPtrFunc TypeGL<double, 3>::_getAltVertexAttribPointerFunc() const;
-
-template <>
-std::string TypeGL<double, 4>::glslType() const;
-
-template <>
-int TypeGL<double, 4>::baseGLType() const;
-
-template <>
-int TypeGL<double, 4>::glslGLType() const;
-
-template <>
-TypeGL<double, 4>::VertexAttribPtrFunc TypeGL<double, 4>::_getAltVertexAttribPointerFunc() const;
-
-// UINT8
-
-template <>
-std::string TypeGL<uint8_t, 1>::glslType() const;
-
-template <>
-int TypeGL<uint8_t, 1>::baseGLType() const;
-
-template <>
-int TypeGL<uint8_t, 1>::glslGLType() const;
-
-template <>
-std::string TypeGL<uint8_t, 2>::glslType() const;
-
-template <>
-int TypeGL<uint8_t, 2>::baseGLType() const;
-
-template <>
-int TypeGL<uint8_t, 2>::glslGLType() const;
-
-template <>
-std::string TypeGL<uint8_t, 3>::glslType() const;
-
-template <>
-int TypeGL<uint8_t, 3>::baseGLType() const;
-
-template <>
-int TypeGL<uint8_t, 3>::glslGLType() const;
-template <>
-std::string TypeGL<uint8_t, 4>::glslType() const;
-
-template <>
-int TypeGL<uint8_t, 4>::baseGLType() const;
-
-template <>
-int TypeGL<uint8_t, 4>::glslGLType() const;
+TypeGL<double, 4>::TypeGL(const std::set<std::string>& supportedExtensions, bool useAsFloat, bool normalize);
 
 // UINT64
 
 template <>
-std::string TypeGL<uint64_t, 1>::glslType() const;
+TypeGL<uint64_t, 1>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<uint64_t, 1>::baseGLType() const;
+TypeGL<uint64_t, 2>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<uint64_t, 1>::glslGLType() const;
-
-// template <>
-// int TypeGL<uint64_t, 1>::numGLSLBytes();
+TypeGL<uint64_t, 3>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-std::string TypeGL<uint64_t, 2>::glslType() const;
-
-template <>
-int TypeGL<uint64_t, 2>::baseGLType() const;
-
-template <>
-int TypeGL<uint64_t, 2>::glslGLType() const;
-
-// template <>
-// int TypeGL<uint64_t, 2>::numGLSLBytes();
-
-template <>
-std::string TypeGL<uint64_t, 3>::glslType() const;
-
-template <>
-int TypeGL<uint64_t, 3>::baseGLType() const;
-
-template <>
-int TypeGL<uint64_t, 3>::glslGLType() const;
-
-// template <>
-// int TypeGL<uint64_t, 3>::numGLSLBytes();
-
-template <>
-std::string TypeGL<uint64_t, 4>::glslType() const;
-
-template <>
-int TypeGL<uint64_t, 4>::baseGLType() const;
-
-template <>
-int TypeGL<uint64_t, 4>::glslGLType() const;
-
-// template <>
-// int TypeGL<uint64_t, 4>::numGLSLBytes();
+TypeGL<uint64_t, 4>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 // INT64
 
 template <>
-std::string TypeGL<int64_t, 1>::glslType() const;
+TypeGL<int64_t, 1>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<int64_t, 1>::baseGLType() const;
+TypeGL<int64_t, 2>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-int TypeGL<int64_t, 1>::glslGLType() const;
-
-// template <>
-// int TypeGL<int64_t, 1>::numGLSLBytes();
+TypeGL<int64_t, 3>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 template <>
-std::string TypeGL<int64_t, 2>::glslType() const;
-
-template <>
-int TypeGL<int64_t, 2>::baseGLType() const;
-
-template <>
-int TypeGL<int64_t, 2>::glslGLType() const;
-
-// template <>
-// int TypeGL<int64_t, 2>::numGLSLBytes();
-
-template <>
-std::string TypeGL<int64_t, 3>::glslType() const;
-
-template <>
-int TypeGL<int64_t, 3>::baseGLType() const;
-
-template <>
-int TypeGL<int64_t, 3>::glslGLType() const;
-
-// template <>
-// int TypeGL<int64_t, 3>::numGLSLBytes();
-
-template <>
-std::string TypeGL<int64_t, 4>::glslType() const;
-
-template <>
-int TypeGL<int64_t, 4>::baseGLType() const;
-
-template <>
-int TypeGL<int64_t, 4>::glslGLType() const;
-
-// template <>
-// int TypeGL<int64_t, 4>::numGLSLBytes();
+TypeGL<int64_t, 4>::TypeGL(const std::set<std::string>& supportedExtensions);
 
 }  // namespace GL
 }  // namespace Rendering

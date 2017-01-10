@@ -77,19 +77,24 @@ class QueryRenderCompositorImpl {
                                              size_t starty = 0,
                                              int width = -1,
                                              int height = -1,
-                                             const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER) {
+                                             const FboColorBuffer idBufferType = FboColorBuffer::ID1A_BUFFER) {
     CHECK(_framebufferPtr);
     return _framebufferPtr->readIdBuffer(startx, starty, width, height, idBufferType);
   }
 
-  void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer) {
+  void readIdBuffer(size_t startx,
+                    size_t starty,
+                    int width,
+                    int height,
+                    unsigned int* idBuffer,
+                    const FboColorBuffer idBufferType = FboColorBuffer::ID1A_BUFFER) {
     CHECK(_framebufferPtr);
-    _framebufferPtr->readIdBuffer(startx, starty, width, height, idBuffer);
+    _framebufferPtr->readIdBuffer(startx, starty, width, height, idBuffer, idBufferType);
   }
 
-  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo) {
+  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo, const bool leastSignificantBits) {
     CHECK(_framebufferPtr);
-    _framebufferPtr->copyRowIdBufferToPbo(pbo);
+    _framebufferPtr->copyRowIdBufferToPbo(pbo, leastSignificantBits);
   }
 
   void copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo) {
@@ -121,11 +126,11 @@ class QueryRenderCompositorImpl {
  protected:
   QueryRenderCompositorImpl(QueryRenderManager* prnt,
                             ::Rendering::RendererShPtr rendererPtr,
-                            size_t width,
-                            size_t height,
-                            size_t numSamples = 1,
-                            bool doHitTest = false,
-                            bool doDepthTest = false)
+                            const size_t width,
+                            const size_t height,
+                            const size_t numSamples,
+                            const bool doHitTest,
+                            const bool doDepthTest)
       : _framebufferPtr(nullptr) {
     CHECK(rendererPtr);
     ::Rendering::GL::GLRenderer* renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(rendererPtr.get());
@@ -163,10 +168,10 @@ class QueryRenderCompositor {
                                              size_t starty = 0,
                                              int width = -1,
                                              int height = -1,
-                                             const FboColorBuffer idBufferType = FboColorBuffer::ID_BUFFER);
+                                             const FboColorBuffer idBufferType = FboColorBuffer::ID1A_BUFFER);
 
   void readIdBuffer(size_t startx, size_t starty, int width, int height, unsigned int* idBuffer);
-  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo);
+  void copyRowIdBufferToPbo(QueryIdMapPixelBufferUIntShPtr& pbo, const bool leastSignificantBits = true);
   void copyTableIdBufferToPbo(QueryIdMapPixelBufferIntShPtr& pbo);
 
   ::Rendering::GL::Resources::GLTexture2dShPtr createFboTexture2d(::Rendering::GL::GLRenderer* renderer,
@@ -185,11 +190,12 @@ class QueryRenderCompositor {
  private:
   QueryRenderCompositor(QueryRenderManager* prnt,
                         ::Rendering::RendererShPtr& rendererPtr,
-                        size_t width,
-                        size_t height,
-                        size_t numSamples = 1,
-                        bool doHitTest = false,
-                        bool doDepthTest = false);
+                        const size_t width,
+                        const size_t height,
+                        const size_t numSamples,
+                        const bool doHitTest,
+                        const bool doDepthTest,
+                        const bool supportsInt64);
 
   std::unique_ptr<Impl::QueryRenderCompositorImpl> _implPtr;
 

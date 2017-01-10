@@ -27,9 +27,9 @@ QueryRendererContext::QueryRendererContext(int userId,
       _height(0),
       _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
+      _supportsInt64(qrmGpuCache->supportsInt64()),
       _jsonCache(nullptr),
-      _currCbId(0) {
-}
+      _currCbId(0) {}
 
 QueryRendererContext::QueryRendererContext(int userId,
                                            int widgetId,
@@ -45,10 +45,10 @@ QueryRendererContext::QueryRendererContext(int userId,
       _height(height),
       _doHitTest(doHitTest),
       _doDepthTest(doDepthTest),
+      _supportsInt64(qrmGpuCache->supportsInt64()),
       _jsonCache(nullptr),
       _currCbId(0),
-      _queryDataLayoutPtr(nullptr) {
-}
+      _queryDataLayoutPtr(nullptr) {}
 
 QueryRendererContext::~QueryRendererContext() {
   _clear();
