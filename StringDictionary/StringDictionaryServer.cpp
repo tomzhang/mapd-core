@@ -1,5 +1,5 @@
 #include "StringDictionary.h"
-#include "gen-cpp/StringDictionaryProxy.h"
+#include "gen-cpp/RemoteStringDictionary.h"
 
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
@@ -20,9 +20,9 @@
 
 namespace {
 
-class StringDictionaryProxy : virtual public StringDictionaryProxyIf {
+class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
  public:
-  StringDictionaryProxy(const std::string& base_path) : base_path_(base_path) {
+  RemoteStringDictionary(const std::string& base_path) : base_path_(base_path) {
     boost::regex dict_folder_expr{R"(DB_(\d+)_DICT_(\d+))", boost::regex::extended};
     for (auto& dict_folder : boost::make_iterator_range(boost::filesystem::directory_iterator(base_path_))) {
       boost::smatch what;
@@ -81,9 +81,9 @@ int main(int argc, char** argv) {
   po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
   po::notify(vm);
 
-  auto handler = boost::make_shared<StringDictionaryProxy>(base_path);
+  auto handler = boost::make_shared<RemoteStringDictionary>(base_path);
 
-  auto processor = boost::make_shared<StringDictionaryProxyProcessor>(handler);
+  auto processor = boost::make_shared<RemoteStringDictionaryProcessor>(handler);
 
   using namespace ::apache::thrift;
   using namespace ::apache::thrift::concurrency;

@@ -5,7 +5,7 @@ add_library(StringDictionary StringDictionary.cpp)
 target_link_libraries(StringDictionary Utils ${Glog_LIBRARIES})
 
 set(string_dictionary_service_thrift_files
-    ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/StringDictionaryProxy.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/RemoteStringDictionary.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/string_dictionary_constants.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/string_dictionary_types.cpp)
 
