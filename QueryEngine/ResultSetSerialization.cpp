@@ -148,6 +148,8 @@ TResultSetBufferDescriptor query_mem_desc_to_thrift(const QueryMemoryDescriptor&
   thrift_query_mem_desc.layout = layout_to_thrift(query_mem_desc.hash_type);
   thrift_query_mem_desc.keyless = query_mem_desc.keyless_hash;
   thrift_query_mem_desc.entry_count = query_mem_desc.entry_count;
+  thrift_query_mem_desc.idx_target_as_key = query_mem_desc.idx_target_as_key;
+  thrift_query_mem_desc.init_val = query_mem_desc.init_val;
   thrift_query_mem_desc.min_val = query_mem_desc.min_val;
   thrift_query_mem_desc.max_val = query_mem_desc.max_val;
   thrift_query_mem_desc.bucket = query_mem_desc.bucket;
@@ -173,6 +175,8 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
   query_mem_desc.interleaved_bins_on_gpu = false;
   query_mem_desc.entry_count = thrift_query_mem_desc.entry_count;
   query_mem_desc.entry_count_small = 0;
+  query_mem_desc.idx_target_as_key = thrift_query_mem_desc.idx_target_as_key;
+  query_mem_desc.init_val = thrift_query_mem_desc.init_val;
   query_mem_desc.min_val = thrift_query_mem_desc.min_val;
   query_mem_desc.max_val = thrift_query_mem_desc.max_val;
   query_mem_desc.bucket = thrift_query_mem_desc.bucket;

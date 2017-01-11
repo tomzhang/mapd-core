@@ -17,12 +17,14 @@ struct TResultSetBufferDescriptor {
   1: TResultSetLayout layout,
   2: bool keyless,
   3: i32 entry_count,
-  4: i64 min_val,
-  5: i64 max_val,
-  6: i64 bucket,
-  7: list<i16> group_col_widths,
-  8: list<TColWidths> agg_col_widths,
-  9: list<i32> target_groupby_indices
+  4: i32 idx_target_as_key,
+  5: i64 init_val,
+  6: i64 min_val,
+  7: i64 max_val,
+  8: i64 bucket,
+  9: list<i16> group_col_widths,
+  10: list<TColWidths> agg_col_widths,
+  11: list<i32> target_groupby_indices
 }
 
 enum TAggKind {
