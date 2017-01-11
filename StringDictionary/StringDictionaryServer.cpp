@@ -51,18 +51,21 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
 
  private:
   StringDictionary* getStringDictionary(const int32_t dict_id) const {
+    mapd_shared_lock<mapd_shared_mutex> read_lock(string_dictionaries_mutex_);
     const auto it = string_dictionaries_.find(dict_id);
     CHECK(it != string_dictionaries_.end());
     return it->second.get();
   }
 
   void createDictionaryFromPath(const int32_t dict_id, const boost::filesystem::path& dict_path) {
+    mapd_lock_guard<mapd_shared_mutex> write_lock(string_dictionaries_mutex_);
     const auto it_ok = string_dictionaries_.emplace(dict_id, boost::make_unique<StringDictionary>(dict_path.string()));
     CHECK(it_ok.second);
   }
 
   boost::filesystem::path base_path_;
   std::unordered_map<int32_t, std::unique_ptr<StringDictionary>> string_dictionaries_;
+  mutable mapd_shared_mutex string_dictionaries_mutex_;
 };
 
 }  // namespace
