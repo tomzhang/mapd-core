@@ -1,4 +1,5 @@
 #include "ResultSet.h"
+#include "Execute.h"
 #include "GroupByAndAggregate.h"
 #include "gen-cpp/serialized_result_set_types.h"
 #include "../MapDServer.h"
@@ -339,7 +340,7 @@ std::string ResultSet::serializeProjection() const {
   return buffer->getBufferAsString();
 }
 
-std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str) {
+std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str, const Executor* executor) {
   auto buffer_bytes = reinterpret_cast<uint8_t*>(const_cast<char*>(str.data()));
   auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>(buffer_bytes, str.size());
   auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
@@ -347,8 +348,11 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str) {
   serialized_rows.read(proto.get());
   const auto target_infos = target_infos_from_thrift(serialized_rows.targets);
   const auto query_mem_desc = query_mem_desc_from_thrift(serialized_rows.descriptor);
+  CHECK(executor);
+  auto row_set_mem_owner = executor->getRowSetMemoryOwner();
+  CHECK(row_set_mem_owner);
   auto result_set =
-      boost::make_unique<ResultSet>(target_infos, ExecutorDeviceType::CPU, query_mem_desc, nullptr, nullptr);
+      boost::make_unique<ResultSet>(target_infos, ExecutorDeviceType::CPU, query_mem_desc, row_set_mem_owner, executor);
   if (query_mem_desc.entry_count) {
     auto storage = result_set->allocateStorage();
     auto storage_buff = storage->getUnderlyingBuffer();

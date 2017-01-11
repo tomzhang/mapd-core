@@ -180,6 +180,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   const auto& cat = parent_session_info.get_catalog();
   auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, nullptr);
   RelAlgExecutor ra_executor(executor.get(), cat);
+  ra_executor.prepareLeafExecution(column_ranges_from_thrift(column_ranges));
   const auto ra = deserialize_ra_dag(query_ra, cat, &ra_executor);
   std::mutex leaves_mutex;
   ssize_t crt_subquery_idx = -1;
@@ -204,7 +205,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
         TStepResult step_result;
         const auto& leaf = leaves_[leaf_idx];
         leaf->execute_first_step(step_result, pending_queries[leaf_idx]);
-        auto result_set = ResultSet::unserialize(step_result.serialized_rows);
+        auto result_set = ResultSet::unserialize(step_result.serialized_rows, ra_executor.getExecutor());
         target_infos = result_set->getTargetInfos();
         if (!result_set->definitelyHasNoRows()) {
           leaf_results.emplace_back(result_set.release());
@@ -222,6 +223,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
                                             &node_id,
                                             &pending_queries,
                                             &query_ra,
+                                            &ra_executor,
                                             &row_desc,
                                             &target_infos,
                                             leaf_idx,
@@ -229,7 +231,8 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
                                              TStepResult step_result;
                                              const auto& leaf = leaves_[leaf_idx];
                                              leaf->execute_first_step(step_result, pending_queries[leaf_idx]);
-                                             auto result_set = ResultSet::unserialize(step_result.serialized_rows);
+                                             auto result_set = ResultSet::unserialize(step_result.serialized_rows,
+                                                                                      ra_executor.getExecutor());
                                              std::lock_guard<std::mutex> lock(leaves_mutex);
                                              target_infos = result_set->getTargetInfos();
                                              if (leaf_idx == 0) {
@@ -283,10 +286,6 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     AggregatedResult leaves_result{reduced_rs, target_meta_infos};
     CompilationOptions co = {ExecutorDeviceType::CPU, true, ExecutorOptLevel::Default};
     ExecutionOptions eo = {false, true, false, false, true, false, false, false, 0};
-    std::lock_guard<std::mutex> lock(executor->execute_mutex_);
-    ScopeGuard row_set_holder = [executor] { executor->row_set_mem_owner_ = nullptr; };
-    executor->row_set_mem_owner_ = std::make_shared<RowSetMemoryOwner>();
-    ScopeGuard restore_metainfo_cache = [executor] { executor->clearMetaInfoCache(); };
     if (crt_subquery_idx >= static_cast<ssize_t>(subqueries.size())) {
       CHECK_EQ(static_cast<ssize_t>(subqueries.size()), crt_subquery_idx);
       CHECK(execution_finished);

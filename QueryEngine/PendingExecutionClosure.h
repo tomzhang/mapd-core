@@ -32,6 +32,8 @@ class PendingExecutionClosure {
 
   static void setCurrentSubqueryResult(const int64_t query_id, const std::shared_ptr<const ExecutionResult> result);
 
+  static Executor* getExecutor(const int64_t query_id);
+
   int64_t getId() const;
 
   const AggregatedColRange& getColRangeCache() const;
@@ -46,6 +48,8 @@ class PendingExecutionClosure {
   FirstStepExecutionResult executeNextStep(const AggregatedColRange& col_ranges);
 
   void setCurrentSubqueryResult(const std::shared_ptr<const ExecutionResult> result);
+
+  static PendingExecutionClosure* getClosureById(const int64_t query_id);
 
   const std::shared_ptr<const RelAlgNode> ra_;
   const int64_t id_;

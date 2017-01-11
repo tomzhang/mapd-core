@@ -38,14 +38,7 @@ PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const R
 
 FirstStepExecutionResult PendingExecutionClosure::executeNextStep(const int64_t query_id,
                                                                   const AggregatedColRange& col_ranges) {
-  PendingExecutionClosure* closure{nullptr};
-  {
-    std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
-    const auto it = pending_queries_.find(query_id);
-    CHECK(it != pending_queries_.end());
-    closure = it->second.get();
-  }
-  CHECK(closure);
+  auto closure = getClosureById(query_id);
   const auto result = closure->executeNextStep(col_ranges);
   if (result.is_outermost_query) {
     std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
@@ -56,15 +49,13 @@ FirstStepExecutionResult PendingExecutionClosure::executeNextStep(const int64_t 
 
 void PendingExecutionClosure::setCurrentSubqueryResult(const int64_t query_id,
                                                        const std::shared_ptr<const ExecutionResult> result) {
-  PendingExecutionClosure* closure{nullptr};
-  {
-    std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
-    const auto it = pending_queries_.find(query_id);
-    CHECK(it != pending_queries_.end());
-    closure = it->second.get();
-  }
-  CHECK(closure);
+  auto closure = getClosureById(query_id);
   closure->setCurrentSubqueryResult(result);
+}
+
+Executor* PendingExecutionClosure::getExecutor(const int64_t query_id) {
+  auto closure = getClosureById(query_id);
+  return closure->ra_executor_->getExecutor();
 }
 
 int64_t PendingExecutionClosure::getId() const {
@@ -97,6 +88,18 @@ void PendingExecutionClosure::setCurrentSubqueryResult(const std::shared_ptr<con
   const auto subqueries = ra_executor_->getSubqueries();
   CHECK_LT(crt_subquery_idx_, static_cast<ssize_t>(subqueries.size()));
   subqueries[crt_subquery_idx_]->setExecutionResult(result);
+}
+
+PendingExecutionClosure* PendingExecutionClosure::getClosureById(const int64_t query_id) {
+  PendingExecutionClosure* closure{nullptr};
+  {
+    std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
+    const auto it = pending_queries_.find(query_id);
+    CHECK(it != pending_queries_.end());
+    closure = it->second.get();
+  }
+  CHECK(closure);
+  return closure;
 }
 
 std::unordered_map<int64_t, std::unique_ptr<PendingExecutionClosure>> PendingExecutionClosure::pending_queries_;

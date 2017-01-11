@@ -1273,6 +1273,10 @@ ExpressionRange Executor::getColRange(const PhysicalInput& phys_input) const {
   return agg_col_range_cache_.getColRange(phys_input);
 }
 
+std::shared_ptr<RowSetMemoryOwner> Executor::getRowSetMemoryOwner() const {
+  return row_set_mem_owner_;
+}
+
 void Executor::clearMetaInfoCache() {
   input_table_info_cache_.clear();
   agg_col_range_cache_.clear();
