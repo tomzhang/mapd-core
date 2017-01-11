@@ -356,5 +356,5 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str) {
   }
   result_set->none_encoded_strings_valid_ = true;
   result_set->none_encoded_strings_.emplace_back(std::move(serialized_rows.none_encoded_strings));
-  return std::move(result_set);
+  return result_set;
 }
