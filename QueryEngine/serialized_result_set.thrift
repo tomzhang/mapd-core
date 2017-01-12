@@ -54,9 +54,20 @@ struct TTargetInfo {
   6: bool is_distinct
 }
 
+union TCountDistinctSetStorage {
+  1: binary bitmap
+  2: set<i64> sparse_set
+}
+
+struct TCountDistinctSet {
+  1: TCountDistinctImplType type,
+  2: TCountDistinctSetStorage storage
+}
+
 struct TSerializedRows {
   1: binary buffer,
   2: TResultSetBufferDescriptor descriptor,
   3: list<TTargetInfo> targets,
-  4: list<string> none_encoded_strings
+  4: list<string> none_encoded_strings,
+  5: map<i64, TCountDistinctSet> count_distinct_sets
 }

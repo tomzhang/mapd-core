@@ -237,6 +237,7 @@ std::string ResultSet::serialize() const {
   if (storage_) {
     const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
     serialized_rows.buffer = std::string(storage_buffer, storage_->query_mem_desc_.getBufferSizeBytes(device_type_));
+    serializeCountDistinctColumns(serialized_rows);
   }
   serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
   serialized_rows.targets = target_infos_to_thrift(targets_);
@@ -376,6 +377,25 @@ std::string ResultSet::serializeProjection() const {
   return buffer->getBufferAsString();
 }
 
+void ResultSet::serializeCountDistinctColumns(TSerializedRows& serialized_rows) const {
+  for (const auto& bitmap : row_set_mem_owner_->count_distinct_bitmaps_) {
+    TCountDistinctSet thrift_bitmap;
+    thrift_bitmap.type = TCountDistinctImplType::Bitmap;
+    thrift_bitmap.storage.bitmap = std::string(reinterpret_cast<const char*>(bitmap.first), bitmap.second);
+    const auto it_ok =
+        serialized_rows.count_distinct_sets.emplace(reinterpret_cast<int64_t>(bitmap.first), thrift_bitmap);
+    CHECK(it_ok.second);
+  }
+  for (const auto sparse_set : row_set_mem_owner_->count_distinct_sets_) {
+    TCountDistinctSet thrift_sparse_set;
+    thrift_sparse_set.type = TCountDistinctImplType::StdSet;
+    thrift_sparse_set.storage.sparse_set = *sparse_set;
+    const auto it_ok =
+        serialized_rows.count_distinct_sets.emplace(reinterpret_cast<int64_t>(sparse_set), thrift_sparse_set);
+    CHECK(it_ok.second);
+  }
+}
+
 std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str, const Executor* executor) {
   auto buffer_bytes = reinterpret_cast<uint8_t*>(const_cast<char*>(str.data()));
   auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>(buffer_bytes, str.size());
@@ -393,8 +413,35 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str, const 
     auto storage = result_set->allocateStorage();
     auto storage_buff = storage->getUnderlyingBuffer();
     memcpy(storage_buff, serialized_rows.buffer.data(), serialized_rows.buffer.size());
+    result_set->unserializeCountDistinctColumns(serialized_rows);
   }
   result_set->none_encoded_strings_valid_ = true;
   result_set->none_encoded_strings_.emplace_back(std::move(serialized_rows.none_encoded_strings));
   return result_set;
+}
+
+void ResultSet::unserializeCountDistinctColumns(const TSerializedRows& serialized_rows) {
+  for (const auto& kv : serialized_rows.count_distinct_sets) {
+    const auto remote_ptr = kv.first;
+    CHECK(remote_ptr);
+    switch (kv.second.type) {
+      case TCountDistinctImplType::Bitmap: {
+        CHECK(!kv.second.storage.bitmap.empty());
+        const auto bitmap_byte_sz = kv.second.storage.bitmap.size();
+        auto count_distinct_buffer = static_cast<int8_t*>(checked_malloc(bitmap_byte_sz));
+        memcpy(count_distinct_buffer, &kv.second.storage.bitmap[0], bitmap_byte_sz);
+        row_set_mem_owner_->addCountDistinctBuffer(count_distinct_buffer, bitmap_byte_sz);
+        storage_->addCountDistinctSetPointerMapping(kv.first, reinterpret_cast<int64_t>(count_distinct_buffer));
+        break;
+      }
+      case TCountDistinctImplType::StdSet: {
+        auto count_distinct_set = new std::set<int64_t>(kv.second.storage.sparse_set);
+        row_set_mem_owner_->addCountDistinctSet(count_distinct_set);
+        storage_->addCountDistinctSetPointerMapping(kv.first, reinterpret_cast<int64_t>(count_distinct_set));
+        break;
+      }
+      default:
+        CHECK(false);
+    }
+  }
 }
