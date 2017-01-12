@@ -13,6 +13,19 @@ struct TColWidths {
   2: i16 compact
 }
 
+enum TCountDistinctImplType {
+  Bitmap,
+  StdSet
+}
+
+struct TCountDistinctDescriptor {
+  1: TCountDistinctImplType impl_type,
+  2: i64 min_val,
+  3: i64 bitmap_sz_bits
+}
+
+typedef map<i64, TCountDistinctDescriptor> TCountDistinctDescriptors
+
 struct TResultSetBufferDescriptor {
   1: TResultSetLayout layout,
   2: bool keyless,
@@ -24,7 +37,8 @@ struct TResultSetBufferDescriptor {
   8: i64 bucket,
   9: list<i16> group_col_widths,
   10: list<TColWidths> agg_col_widths,
-  11: list<i32> target_groupby_indices
+  11: list<i32> target_groupby_indices,
+  12: TCountDistinctDescriptors count_distinct_descriptors
 }
 
 enum TAggKind {

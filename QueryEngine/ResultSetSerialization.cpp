@@ -143,6 +143,27 @@ std::vector<TargetInfo> target_infos_from_thrift(const std::vector<TTargetInfo>&
   return targets;
 }
 
+TCountDistinctDescriptor count_distinct_descriptor_to_thrift(const CountDistinctDescriptor& count_distinct_descriptor) {
+  TCountDistinctDescriptor thrift_count_distinct_descriptor;
+  thrift_count_distinct_descriptor.impl_type = count_distinct_descriptor.impl_type_ == CountDistinctImplType::Bitmap
+                                                   ? TCountDistinctImplType::Bitmap
+                                                   : TCountDistinctImplType::StdSet;
+  thrift_count_distinct_descriptor.min_val = count_distinct_descriptor.min_val;
+  thrift_count_distinct_descriptor.bitmap_sz_bits = count_distinct_descriptor.bitmap_sz_bits;
+  return thrift_count_distinct_descriptor;
+}
+
+CountDistinctDescriptor count_distinct_descriptor_from_thrift(
+    const TCountDistinctDescriptor& thrift_count_distinct_descriptor) {
+  CountDistinctDescriptor count_distinct_descriptor;
+  count_distinct_descriptor.impl_type_ = thrift_count_distinct_descriptor.impl_type == TCountDistinctImplType::Bitmap
+                                             ? CountDistinctImplType::Bitmap
+                                             : CountDistinctImplType::StdSet;
+  count_distinct_descriptor.min_val = thrift_count_distinct_descriptor.min_val;
+  count_distinct_descriptor.bitmap_sz_bits = thrift_count_distinct_descriptor.bitmap_sz_bits;
+  return count_distinct_descriptor;
+}
+
 TResultSetBufferDescriptor query_mem_desc_to_thrift(const QueryMemoryDescriptor& query_mem_desc) {
   TResultSetBufferDescriptor thrift_query_mem_desc;
   thrift_query_mem_desc.layout = layout_to_thrift(query_mem_desc.hash_type);
@@ -164,6 +185,11 @@ TResultSetBufferDescriptor query_mem_desc_to_thrift(const QueryMemoryDescriptor&
   }
   for (const auto target_groupby_index : query_mem_desc.target_groupby_indices) {
     thrift_query_mem_desc.target_groupby_indices.push_back(target_groupby_index);
+  }
+  for (const auto& count_distinct_descriptor_kv : query_mem_desc.count_distinct_descriptors_) {
+    const auto it_ok = thrift_query_mem_desc.count_distinct_descriptors.emplace(
+        count_distinct_descriptor_kv.first, count_distinct_descriptor_to_thrift(count_distinct_descriptor_kv.second));
+    CHECK(it_ok.second);
   }
   return thrift_query_mem_desc;
 }
@@ -189,6 +215,12 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
   }
   for (const auto target_groupby_index : thrift_query_mem_desc.target_groupby_indices) {
     query_mem_desc.target_groupby_indices.push_back(target_groupby_index);
+  }
+  for (const auto& thrift_count_distinct_descriptor_kv : thrift_query_mem_desc.count_distinct_descriptors) {
+    const auto it_ok = query_mem_desc.count_distinct_descriptors_.emplace(
+        thrift_count_distinct_descriptor_kv.first,
+        count_distinct_descriptor_from_thrift(thrift_count_distinct_descriptor_kv.second));
+    CHECK(it_ok.second);
   }
   return query_mem_desc;
 }
