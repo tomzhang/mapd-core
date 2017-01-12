@@ -91,7 +91,7 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
                     RapidJSONUtils::getJsonParseErrorStr(
                         obj, "\"domain\" property for scales must exist and must be an object or an array."));
 
-  QueryDataType domainType;
+  QueryDataType domainType{QueryDataType::UINT};
 
   if (isObject) {
     domainType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
@@ -148,7 +148,7 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
                     RapidJSONUtils::getJsonParseErrorStr(
                         obj, "\"range\" property for scales must exist and must be an object or a string."));
 
-  QueryDataType rangeType;
+  QueryDataType rangeType{QueryDataType::UINT};
   if (isObject) {
     rangeType = getDataTypeFromDataRefJSONObj(itr->value, ctx);
   } else if (isString) {
