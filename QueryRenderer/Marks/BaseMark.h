@@ -128,6 +128,7 @@ class BaseMark {
   PropMap _vboProps;
   PropMap _uboProps;
   PropMap _uniformProps;
+  PropMap _decimalProps;
 
   void _initFromJSONObj(const rapidjson::Value& obj,
                         const rapidjson::Pointer& objPath,

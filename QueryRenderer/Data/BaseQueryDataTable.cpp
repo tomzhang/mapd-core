@@ -40,8 +40,16 @@ BaseQueryDataTableSQLJSON::BaseQueryDataTableSQLJSON(const QueryRendererContextS
                                                      bool isPolyQuery)
     : BaseQueryDataTableJSON(ctx, name, obj, objPath), BaseQueryDataTableSQL(), _isPolyQuery(isPolyQuery) {}
 
-::Rendering::GL::Resources::GLBufferLayoutShPtr BaseQueryDataTableSQLJSON::getGLBufferLayout() const {
-  auto qlayout = getQueryDataLayout();
+::Rendering::GL::Resources::GLBufferLayoutShPtr BaseQueryDataTableSQLJSON::getVboGLBufferLayout() const {
+  auto qlayout = getVboQueryDataLayout();
+  if (qlayout) {
+    return qlayout->getBufferLayout();
+  }
+  return nullptr;
+}
+
+::Rendering::GL::Resources::GLBufferLayoutShPtr BaseQueryDataTableSQLJSON::getUboGLBufferLayout() const {
+  auto qlayout = getVboQueryDataLayout();
   if (qlayout) {
     return qlayout->getBufferLayout();
   }
@@ -117,7 +125,8 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
         _tableId = tables[0].first;
 
         // avoid a superfluous copy
-        _queryDataLayoutPtr = (std::get<4>(render_info) ? std::move(std::get<4>(render_info)) : nullptr);
+        _vboQueryDataLayoutPtr = (std::get<4>(render_info) ? std::move(std::get<4>(render_info)) : nullptr);
+        _uboQueryDataLayoutPtr = (std::get<5>(render_info) ? std::move(std::get<5>(render_info)) : nullptr);
 
         auto& rows = std::get<0>(render_info);
         if (tables.size() > 1) {

@@ -94,8 +94,10 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
 
   virtual ~BaseQueryDataTableSQLJSON() {}
 
-  virtual QueryDataLayoutShPtr getQueryDataLayout() const { return _queryDataLayoutPtr; }
-  ::Rendering::GL::Resources::GLBufferLayoutShPtr getGLBufferLayout() const;
+  virtual QueryDataLayoutShPtr getVboQueryDataLayout() const { return _vboQueryDataLayoutPtr; }
+  virtual QueryDataLayoutShPtr getUboQueryDataLayout() const { return _uboQueryDataLayoutPtr; }
+  ::Rendering::GL::Resources::GLBufferLayoutShPtr getVboGLBufferLayout() const;
+  ::Rendering::GL::Resources::GLBufferLayoutShPtr getUboGLBufferLayout() const;
 
  protected:
   std::string _printInfo() const {
@@ -108,7 +110,8 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
                                   const rapidjson::Pointer& objPath,
                                   const bool force = false);
 
-  QueryDataLayoutShPtr _queryDataLayoutPtr;
+  QueryDataLayoutShPtr _vboQueryDataLayoutPtr;
+  QueryDataLayoutShPtr _uboQueryDataLayoutPtr;
 
  private:
   bool _isPolyQuery;

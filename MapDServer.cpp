@@ -1638,7 +1638,7 @@ class MapDHandler : virtual public MapDIf {
               std::string query_str = query;
 
               // reset any layouts from prior executions
-              render_info->result_query_data_layout = nullptr;
+              render_info->vbo_result_query_data_layout = nullptr;
 
               if (is_poly_query) {
                 render_info->do_render = false;  // do not perform the render post query
@@ -1711,15 +1711,16 @@ class MapDHandler : virtual public MapDIf {
               CHECK(usedTables.size() > 0);
 
               if (is_poly_query) {
-              } else if (render_info->render_allocator_map_ptr && render_info->result_query_data_layout) {
-                render_info->render_allocator_map_ptr->setDataLayout(render_info->result_query_data_layout);
+              } else if (render_info->render_allocator_map_ptr && render_info->vbo_result_query_data_layout) {
+                render_info->render_allocator_map_ptr->setDataLayout(render_info->vbo_result_query_data_layout);
               }
 
               return std::make_tuple(std::move(std::get<0>(rtnData)),
                                      std::move(std::get<1>(rtnData)),
                                      std::get<2>(rtnData),
                                      std::move(usedTables),
-                                     render_info->result_query_data_layout);
+                                     render_info->vbo_result_query_data_layout,
+                                     render_info->ubo_result_query_data_layout);
             },
             compressionLevel,
             true);
@@ -2189,8 +2190,16 @@ class MapDHandler : virtual public MapDIf {
     }
 
     if (is_poly_query) {
-      auto rendered_results = executor->renderPolygons(
-          query_str, results, targetMetaInfo, session_info, 1, *data_desc, nullptr, is_projection_query, tableName);
+      auto rendered_results = executor->renderPolygons(query_str,
+                                                       results,
+                                                       targetMetaInfo,
+                                                       session_info,
+                                                       1,
+                                                       *data_desc,
+                                                       nullptr,
+                                                       is_projection_query,
+                                                       tableName,
+                                                       render_info);
       render_timer.queue_time_ms += rendered_results.getQueueTime();
       render_timer.render_time_ms += rendered_results.getRenderTime();
     } else {
@@ -2331,7 +2340,8 @@ class MapDHandler : virtual public MapDIf {
                                                        *data_desc,
                                                        nullptr,
                                                        tables.size() == 1,
-                                                       rtn[0].second);
+                                                       rtn[0].second,
+                                                       render_info);
       render_timer.render_time_ms += rendered_results.getRenderTime();
       render_timer.queue_time_ms += rendered_results.getQueueTime();
     } else {

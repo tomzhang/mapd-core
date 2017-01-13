@@ -253,12 +253,15 @@ void PointMark::_updateShader() {
   // std::unordered_map<std::string, BaseScale*> visitedScales;
   std::unordered_map<std::string, BaseScale*>::iterator itr;
 
-  std::string funcName;
-  std::string propFuncName;
+  std::string funcName, propName, propFuncName;
   ShaderUtils::str_itr_range funcRange;
 
   for (auto prop : props) {
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
+
+    propName = prop->getName();
+    propFuncName = prop->getGLSLFunc();
+
     if (scalePtr != nullptr) {
       // NOTE: Because the domains of scales can be coerced into
       // the render property's type, we need to provide a new
@@ -273,8 +276,6 @@ void PointMark::_updateShader() {
       // scale be referenced many times at this point (11/9/15), so
       // it's probably not worth the effort to optimize at this point.
       std::string suffix = "_" + prop->getName();
-      propFuncName = prop->getGLSLFunc();
-
       funcRange = ShaderUtils::getGLSLFunctionBounds(vertSrc, propFuncName);
 
       RUNTIME_EX_ASSERT(!funcRange.empty(),
@@ -287,15 +288,33 @@ void PointMark::_updateShader() {
 
       funcName = scalePtr->getScaleGLSLFuncName(suffix);
 
-      if (*prop->getInTypeGL() == *scalePtr->getDomainTypeGL()) {
-        boost::replace_all(vertSrc, propFuncName + "(" + prop->getName() + ")", funcName + "(" + prop->getName() + ")");
+      if (prop->isDecimal()) {
+        if (*prop->getOutTypeGL() == *scalePtr->getDomainTypeGL()) {
+          boost::replace_all(vertSrc,
+                             propFuncName + "(" + propName + ")",
+                             funcName + "(convertDecimalToDouble(" + propName + ", " + propName + "_ExpScale))");
 
+        } else {
+          std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
+          boost::replace_all(
+              vertSrc,
+              propFuncName + "(" + propName + ")",
+              funcName + "(" + domainType + "(convertDecimalToDouble(" + propName + ", " + propName + "_ExpScale)))");
+        }
       } else {
-        std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
-        boost::replace_all(vertSrc,
-                           propFuncName + "(" + prop->getName() + ")",
-                           funcName + "(" + domainType + "(" + prop->getName() + "))");
+        if (*prop->getInTypeGL() == *scalePtr->getDomainTypeGL()) {
+          boost::replace_all(vertSrc, propFuncName + "(" + propName + ")", funcName + "(" + propName + ")");
+
+        } else {
+          std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
+          boost::replace_all(
+              vertSrc, propFuncName + "(" + propName + ")", funcName + "(" + domainType + "(" + propName + "))");
+        }
       }
+    } else if (prop->isDecimal()) {
+      boost::replace_all(vertSrc,
+                         propFuncName + "(" + propName + ")",
+                         "convertDecimalToDouble(" + propName + ", " + propName + "_ExpScale)");
     }
   }
 
@@ -426,6 +445,10 @@ void PointMark::_bindUniformProperties(GLShader* activeShader) {
     if (!hasDensityAccumulator || activeShader->hasUniformAttribute(prop->getName())) {
       prop->bindUniformToRenderer(activeShader, prop->getName());
     }
+  }
+
+  for (auto prop : _decimalProps) {
+    prop->bindUniformScaleToRenderer(activeShader);
   }
 
   // TODO(croot): fold this into the base class

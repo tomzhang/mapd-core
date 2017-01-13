@@ -584,9 +584,12 @@ bool areTypesCompatible(const QueryDataType srcType, const QueryDataType inType)
     case QueryDataType::UINT:
     case QueryDataType::INT:
     case QueryDataType::FLOAT:
+      return (inType == QueryDataType::UINT || inType == QueryDataType::INT || inType == QueryDataType::FLOAT);
+    case QueryDataType::UINT64:
+    case QueryDataType::INT64:
     case QueryDataType::DOUBLE:
       return (inType == QueryDataType::UINT || inType == QueryDataType::INT || inType == QueryDataType::FLOAT ||
-              inType == QueryDataType::DOUBLE);
+              inType == QueryDataType::UINT64 || inType == QueryDataType::INT64 || inType == QueryDataType::DOUBLE);
     default:
       return false;
   }

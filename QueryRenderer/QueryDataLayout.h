@@ -26,16 +26,19 @@ struct QueryDataLayout {
   std::vector<std::string> attrNames;
   std::vector<AttrType> attrTypes;
   std::unordered_map<std::string, std::string> attrAliasToName;
+  std::unordered_map<std::string, uint64_t> decimalAttrToExpScale;
   LayoutType layoutType;
 
-  QueryDataLayout(const std::vector<std::string>& attrNames,
-                  const std::vector<AttrType>& attrTypes,
-                  const std::unordered_map<std::string, std::string>& attrAliasToName,
-                  const size_t numKeys = 0,  // TODO(croot) - fill out the number of keys still, all would be irrelevant
-                                             // except the first key, which would be the one to check the invalid key
-                                             // against.
-                  const int64_t invalidKey = std::numeric_limits<int64_t>::max(),
-                  const LayoutType layoutType = LayoutType::INTERLEAVED);
+  QueryDataLayout(
+      const std::vector<std::string>& attrNames,
+      const std::vector<AttrType>& attrTypes,
+      const std::unordered_map<std::string, std::string>& attrAliasToName,
+      const std::unordered_map<std::string, uint64_t>& decimalAttrToExpScale,
+      const LayoutType layoutType = LayoutType::INTERLEAVED,
+      const int64_t invalidKey = std::numeric_limits<int64_t>::max(),
+      const size_t numKeys = 0);  // TODO(croot) - fill out the number of keys still, all would be irrelevant
+                                  // except the first key, which would be the one to check the invalid key
+                                  // against.
 
   ~QueryDataLayout() {}
 
@@ -46,12 +49,19 @@ struct QueryDataLayout {
   bool hasBeenConverted() const { return _convertedLayout != nullptr; }
   Rendering::GL::Resources::GLBufferLayoutShPtr getBufferLayout() const { return _convertedLayout; }
 
+  bool hasAttribute(const std::string& attr) const;
+
+  bool isDecimalAttr(const std::string& attr) const {
+    return decimalAttrToExpScale.find(attr) != decimalAttrToExpScale.end();
+  }
+
+  uint64_t getDecimalExp(const std::string& attr) const;
+
   bool operator==(const QueryDataLayout& layout) const;
   bool operator!=(const QueryDataLayout& layout) const { return !operator==(layout); }
 
  private:
   static const std::string dummyPrefix;
-
   ::Rendering::GL::Resources::GLBufferLayoutShPtr _convertedLayout;
 };
 

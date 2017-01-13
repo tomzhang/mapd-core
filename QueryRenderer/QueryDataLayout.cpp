@@ -15,14 +15,16 @@ const std::string QueryDataLayout::dummyPrefix = "_dummy";
 QueryDataLayout::QueryDataLayout(const std::vector<std::string>& attrNames,
                                  const std::vector<AttrType>& attrTypes,
                                  const std::unordered_map<std::string, std::string>& attrAliasToName,
-                                 const size_t numKeys,
+                                 const std::unordered_map<std::string, uint64_t>& decimalAttrToExpScale,
+                                 const LayoutType layoutType,
                                  const int64_t invalidKey,
-                                 const LayoutType layoutType)
+                                 const size_t numKeys)
     : numKeys(numKeys),
       invalidKey(invalidKey),
       attrNames(attrNames),
       attrTypes(attrTypes),
       attrAliasToName(attrAliasToName),
+      decimalAttrToExpScale(decimalAttrToExpScale),
       layoutType(layoutType) {
   RUNTIME_EX_ASSERT(
       attrNames.size() == attrTypes.size(),
@@ -187,6 +189,26 @@ GLShaderBlockLayoutShPtr QueryDataLayout::convertToUniformBufferLayout(
   }
 
   return std::dynamic_pointer_cast<GLShaderBlockLayout>(_convertedLayout);
+}
+
+bool QueryDataLayout::hasAttribute(const std::string& attr) const {
+  if (_convertedLayout) {
+    return _convertedLayout->hasAttribute(attr);
+  }
+
+  // TODO(croot): use a map for lookup? Keep in mind that attrNames/attrTypes needs to be in a specific order
+  for (auto& attrName : attrNames) {
+    if (attr == attrName) {
+      return true;
+    }
+  }
+  return false;
+}
+
+uint64_t QueryDataLayout::getDecimalExp(const std::string& attr) const {
+  auto itr = decimalAttrToExpScale.find(attr);
+  RUNTIME_EX_ASSERT(itr != decimalAttrToExpScale.end(), "The attr \"" + attr + "\" is not a decimal.");
+  return itr->second;
 }
 
 bool QueryDataLayout::operator==(const QueryDataLayout& layout) const {

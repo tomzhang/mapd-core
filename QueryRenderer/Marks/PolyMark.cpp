@@ -380,11 +380,13 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
   // now insert any additional functionality
   std::unordered_map<std::string, BaseScale*>::iterator itr;
 
-  std::string funcName;
-  std::string propFuncName;
+  std::string funcName, propName, propFuncName;
   ShaderUtils::str_itr_range funcRange;
 
   for (auto prop : props) {
+    propName = prop->getName();
+    propFuncName = prop->getGLSLFunc();
+    std::regex funcRegex(propFuncName + "\\((\\s*[\\w.<>]*\\s*)\\)");
     const ScaleRefShPtr& scalePtr = prop->getScaleReference();
     if (scalePtr != nullptr) {
       // NOTE: Because the domains of scales can be coerced into
@@ -399,11 +401,12 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
       // do there as well, but it is likely rare that the same
       // scale be referenced many times at this point (11/9/15), so
       // it's probably not worth the effort to optimize at this point.
-      std::string suffix = "_" + prop->getName();
-      propFuncName = prop->getGLSLFunc();
+      std::string suffix = "_" + propName;
+      std::string scaleCode = scalePtr->getGLSLCode(suffix);
+      std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
+      funcName = scalePtr->getScaleGLSLFuncName(suffix);
 
       bool found = false;
-
       for (auto& shaderSrc : shaderSrcs) {
         if (!shaderSrc.length()) {
           continue;
@@ -412,19 +415,25 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
         funcRange = ShaderUtils::getGLSLFunctionBounds(shaderSrc, propFuncName);
         if (!funcRange.empty()) {
           found = true;
-          std::string scaleCode = scalePtr->getGLSLCode(suffix);
 
           boost::replace_range(shaderSrc, funcRange, scaleCode);
 
-          funcName = scalePtr->getScaleGLSLFuncName(suffix);
-
-          if (*prop->getInTypeGL() == *scalePtr->getDomainTypeGL()) {
-            boost::replace_all(shaderSrc, propFuncName + "(", funcName + "(");
+          if (prop->isDecimal()) {
+            if (*prop->getOutTypeGL() == *scalePtr->getDomainTypeGL()) {
+              shaderSrc = std::regex_replace(
+                  shaderSrc, funcRegex, funcName + "(convertDecimalToDouble($1, " + propName + "_ExpScale))");
+            } else {
+              shaderSrc = std::regex_replace(
+                  shaderSrc,
+                  funcRegex,
+                  funcName + "(" + domainType + "(convertDecimalToDouble($1, " + propName + "_ExpScale)))");
+            }
           } else {
-            std::string domainType = scalePtr->getDomainGLSLTypeName(suffix);
-            std::regex funcRegex(propFuncName + "\\((\\s*[\\w.<>]*\\s*)\\)");
-
-            shaderSrc = std::regex_replace(shaderSrc, funcRegex, funcName + "(" + domainType + "($1))");
+            if (*prop->getInTypeGL() == *scalePtr->getDomainTypeGL()) {
+              boost::replace_all(shaderSrc, propFuncName + "(", funcName + "(");
+            } else {
+              shaderSrc = std::regex_replace(shaderSrc, funcRegex, funcName + "(" + domainType + "($1))");
+            }
           }
         }
       }
@@ -432,6 +441,10 @@ void PolyMark::_buildShaderSrc(std::vector<std::string>& shaderSrcs,
       RUNTIME_EX_ASSERT(
           found,
           std::string(*this) + ": Cannot find a properly defined \"" + propFuncName + "\" function in the shader.");
+    } else if (prop->isDecimal()) {
+      for (auto& shaderSrc : shaderSrcs) {
+        shaderSrc = std::regex_replace(shaderSrc, funcRegex, "convertDecimalToDouble($1, " + propName + "_ExpScale)");
+      }
     }
   }
 
@@ -603,6 +616,10 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
 
       prop->bindUniformToRenderer(activeShader, prop->getName());
     }
+  }
+
+  for (auto prop : _decimalProps) {
+    prop->bindUniformScaleToRenderer(activeShader);
   }
 
   // TODO(croot): fold this into the base class

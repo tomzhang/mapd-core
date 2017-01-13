@@ -132,7 +132,7 @@ class SqlQueryDataTableJSON : public BaseQueryDataTableVBO, public BaseQueryData
   bool hasLayoutChanged(const GpuId* gpuId = nullptr) const { return _layoutChanged; }
   bool hasLayoutOffsetChanged(const GpuId* gpuId = nullptr) const;
 
-  QueryDataLayoutShPtr getQueryDataLayout() const final;
+  QueryDataLayoutShPtr getVboQueryDataLayout() const final;
 
   operator std::string() const final;
 

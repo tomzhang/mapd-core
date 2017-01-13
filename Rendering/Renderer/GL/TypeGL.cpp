@@ -174,9 +174,9 @@ std::string BaseTypeGL::getTypeDefinesMacroForShader() {
 
 std::string BaseTypeGL::getExtensionStr() {
   if (GLEW_NV_gpu_shader5) {
-    return "#extension GL_NV_gpu_shader5 : enable\n";
+    return "#extension GL_NV_gpu_shader5 : enable\n#define EXT_GL_NV_gpu_shader5 1\n";
   } else if (GLEW_AMD_gpu_shader_int64) {
-    return "#extension GL_AMD_gpu_shader_int64 : enable\n";
+    return "#extension GL_AMD_gpu_shader_int64 : enable\n#define EXT_GL_AMD_gpu_shader_int64 1\n";
   }
 
   return "";

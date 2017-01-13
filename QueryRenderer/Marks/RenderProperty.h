@@ -35,6 +35,7 @@ class BaseRenderProperty {
         _useScale(useScale),
         _allowsAccumulatorScale(allowsAccumulatorScale),
         _allowsNonColorStrings(allowsNonColorStrings),
+        _decimalExpScale(0),
         _vboAttrName(""),
         _perGpuData(),
         _vboInitType(VboInitType::UNDEFINED),
@@ -69,11 +70,13 @@ class BaseRenderProperty {
   std::string getOutGLSLType() const;
   const ::Rendering::GL::TypeGLShPtr& getOutTypeGL() const;
 
-  bool hasVboPtr();
-  bool hasVboPtr(const GpuId& gpuId);
+  bool hasVboPtr() const;
+  bool hasVboPtr(const GpuId& gpuId) const;
 
-  bool hasUboPtr();
-  bool hasUboPtr(const GpuId& gpuId);
+  bool hasUboPtr() const;
+  bool hasUboPtr(const GpuId& gpuId) const;
+
+  bool isDecimal() const { return _decimalExpScale != 0; }
 
   QueryVertexBufferShPtr getVboPtr(const GpuId& gpuId) const;
   QueryVertexBufferShPtr getVboPtr() const;
@@ -81,14 +84,16 @@ class BaseRenderProperty {
   QueryUniformBufferShPtr getUboPtr(const GpuId& gpuId) const;
   QueryUniformBufferShPtr getUboPtr() const;
 
-  bool usesScaleConfig() { return (_scaleConfigPtr != nullptr || _scalePtr != nullptr); }
+  bool usesScaleConfig() const { return (_scaleConfigPtr != nullptr || _scalePtr != nullptr); }
 
-  const ScaleRefShPtr& getScaleReference() { return _scaleConfigPtr; }
+  const ScaleRefShPtr& getScaleReference() const { return _scaleConfigPtr; }
 
   void addToVboAttrMap(const GpuId& gpuId, ::Rendering::GL::Resources::VboLayoutAttrToShaderAttrMap& attrMap) const;
 
   virtual void bindUniformToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
                                      const std::string& uniformAttrName) const = 0;
+
+  void bindUniformScaleToRenderer(::Rendering::GL::Resources::GLShader* activeShader) const;
 
   std::string getDataColumnName() { return _vboAttrName; }
   const QueryDataTableShPtr& getDataTablePtr() { return _dataPtr; }
@@ -107,6 +112,7 @@ class BaseRenderProperty {
   bool _useScale;
   bool _allowsAccumulatorScale;
   bool _allowsNonColorStrings;
+  uint64_t _decimalExpScale;
 
   std::string _vboAttrName;
 
@@ -320,7 +326,9 @@ class RenderProperty : public BaseRenderProperty {
         _validateValue(true);
       }
 
-      if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>((*inTypeToUse).get())) {
+      if (isDecimal()) {
+        _scaleConfigPtr.reset(new ScaleRef<double, T>(_ctx, scalePtr, this));
+      } else if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>((*inTypeToUse).get())) {
         _scaleConfigPtr.reset(new ScaleRef<unsigned int, T>(_ctx, scalePtr, this));
       } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>((*inTypeToUse).get())) {
         _scaleConfigPtr.reset(new ScaleRef<int, T>(_ctx, scalePtr, this));
@@ -449,8 +457,19 @@ class RenderProperty : public BaseRenderProperty {
                           _name + "\".");
 
     auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
-    auto vboType = bufToUse->getAttributeTypeGL(_vboAttrName, (dataPtr ? dataPtr->getQueryDataLayout() : nullptr));
+    QueryDataLayoutShPtr layout;
+    if (dataPtr) {
+      layout = dataPtr->getVboQueryDataLayout();
+      if (!layout || !layout->hasAttribute(_vboAttrName)) {
+        layout = dataPtr->getUboQueryDataLayout();
+        if (layout && !layout->hasAttribute(_vboAttrName)) {
+          layout = nullptr;
+        }
+      }
+    }
+    auto vboType = bufToUse->getAttributeTypeGL(_vboAttrName, layout);
 
+    _decimalExpScale = 0;
     if (!_flexibleType && (!_useScale || !hasScale)) {
       // if _flexibleType is false, then the render property is rigid,
       // meaning it cannot accept certain types. So validate the type of the attribute
@@ -458,10 +477,18 @@ class RenderProperty : public BaseRenderProperty {
       // in/out types match the vbo
       _validateType(vboType);
     } else {
-      if (!_outType || *_outType != *vboType) {
+      auto typeToUse = vboType;
+      if (layout && layout->isDecimalAttr(_vboAttrName)) {
+        auto rootGpuCache = _ctx->getRootGpuCache();
+        typeToUse.reset(new ::Rendering::GL::TypeGL<double, 1>(rootGpuCache->supportedExtensions));
+
+        // NOTE: decimal types are only determined via data buffers.
+        _decimalExpScale = layout->getDecimalExp(_vboAttrName);
+      }
+      if (!_outType || *_outType != *typeToUse) {
         outchanged = true;
       }
-      _outType = vboType;
+      _outType = typeToUse;
     }
 
     if (!_inType || *_inType != *vboType) {

@@ -28,6 +28,12 @@ const std::string LineTemplate_Frag::source =
     "uniform inTid id;\n"
     "#endif\n"
     "\n"
+    "#if EXT_GL_NV_gpu_shader5 == 1 || EXT_GL_AMD_gpu_shader_int64 == 1\n"
+    "#define EXP_TYPE uint64_t\n"
+    "#else\n"
+    "#define EXP_TYPE uint\n"
+    "#endif\n"
+    "\n"
     "#define usePerVertColor <usePerVertColor>\n"
     "#define useUstrokeColor <useUstrokeColor>\n"
     "#define inTstrokeColor <inTstrokeColorType>\n"
@@ -39,6 +45,7 @@ const std::string LineTemplate_Frag::source =
     "#elif useUstrokeColor == 1\n"
     "uniform inTstrokeColor strokeColor;\n"
     "#endif\n"
+    "uniform EXP_TYPE strokeColor_ExpScale;\n"
     "\n"
     "#define useUlineJoin <useUlineJoin>\n"
     "#if useUlineJoin == 1\n"
@@ -49,6 +56,12 @@ const std::string LineTemplate_Frag::source =
     "#if useUniformBuffer == 1\n"
     "<lineData>\n"
     "#endif\n"
+    "\n"
+    // TODO(croot): create general conversion utilities somewhere
+    // that can be added via #include
+    "double convertDecimalToDouble(in int64_t val, in EXP_TYPE scale) {\n"
+    "    return double(val) / double(scale);\n"
+    "}\n"
     "\n"
     "#if usePerVertColor == 0\n"
     // TODO(croot): create a set of color utility functions that

@@ -652,11 +652,16 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
   std::vector<std::string> attr_names{"key"};
   std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types{::QueryRenderer::QueryDataLayout::AttrType::INT64};
   std::unordered_map<std::string, std::string> alias_to_name;
+  std::unordered_map<std::string, uint64_t> decimal_to_scale;
   for (const auto te : targets) {
     const auto alias = te->get_resname();
     attr_names.push_back(alias);
     const auto target_expr = te->get_expr();
-    attr_types.push_back(sql_type_to_render_type(target_expr->get_type_info()));
+    const auto type_info = target_expr->get_type_info();
+    attr_types.push_back(sql_type_to_render_type(type_info));
+    if (type_info.is_decimal()) {
+      decimal_to_scale.insert(std::make_pair(alias, exp_to_scale(type_info.get_scale())));
+    }
     const auto col_var = dynamic_cast<const Analyzer::ColumnVar*>(target_expr);
     if (col_var) {
       const int col_id = col_var->get_column_id();
@@ -672,16 +677,17 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
       new ::QueryRenderer::QueryDataLayout(attr_names,
                                            attr_types,
                                            alias_to_name,
-                                           0,
+                                           decimal_to_scale,
+                                           ::QueryRenderer::QueryDataLayout::LayoutType::INTERLEAVED,
                                            EMPTY_KEY_64,
-                                           ::QueryRenderer::QueryDataLayout::LayoutType::INTERLEAVED));
+                                           0));
 
   if (!render_info->render_vega.length() || render_info->render_vega == "NONE") {
     // NOTE: this is a new render call, but we need the
     // query_data_layout for later use, so storing it here
     // TODO(croot): refactor as part of render query validation
     // effort
-    render_info->result_query_data_layout = query_data_layout;
+    render_info->vbo_result_query_data_layout = query_data_layout;
     return "";
   }
 
@@ -748,7 +754,8 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
                                     const rapidjson::Value& data_desc,
                                     const std::string* render_config_json,
                                     const bool is_projection_query,
-                                    const std::string& poly_table_name) {
+                                    const std::string& poly_table_name,
+                                    RenderInfo* render_query_data) {
 #ifdef HAVE_CUDA
   // capture the lock acquistion time
   auto clock_begin = timer_start();
@@ -863,10 +870,15 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
     std::shared_ptr<::QueryRenderer::QueryDataLayout> vertLayout(new ::QueryRenderer::QueryDataLayout(
         {"x", "y"},
         {::QueryRenderer::QueryDataLayout::AttrType::DOUBLE, ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE},
+        {{}},
         {{}}));
 
     // now create the cache
     render_manager_->createPolyTableCache(polyTableName, gpuId, polyByteData, vertLayout, rowData);
+
+    if (render_query_data) {
+      render_query_data->vbo_result_query_data_layout = vertLayout;
+    }
 
     // get cuda handles for each of the 5 buffers for poly rendering
     polyData = render_manager_->getPolyTableCudaHandles(polyTableName, gpuId);
@@ -905,6 +917,10 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
   // set the buffers as renderable
   render_manager_->setPolyTableReadyForRender(
       polyTableName, queryStr, gpuId, data_query_result.poly_render_data_layout);
+
+  if (render_query_data) {
+    render_query_data->ubo_result_query_data_layout = data_query_result.poly_render_data_layout;
+  }
 
   if (!render_config_json || !render_config_json->length() || *render_config_json == "NONE") {
     int64_t render_time_ms = timer_stop(clock_begin);
@@ -1141,9 +1157,11 @@ Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const st
 
   std::vector<std::string> attr_names;
   std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types;
+  std::unordered_map<std::string, uint64_t> decimal_to_scale;
   for (size_t i = 0; i < row_shape.size(); ++i) {
     const auto& target_meta_info = row_shape[i];
-    attr_names.push_back(target_meta_info.get_resname());
+    auto alias = target_meta_info.get_resname();
+    attr_names.push_back(alias);
     if (!is_projection_query && i == rowid_idx) {
       // Adding the row index as our rowid in these cases, not the rowid of
       // the actual poly
@@ -1151,11 +1169,15 @@ Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const st
       // TODO(croot): can we ever have more than max(size_t) rows?
       attr_types.push_back(::QueryRenderer::QueryDataLayout::AttrType::UINT64);
     } else {
-      attr_types.push_back(sql_type_to_render_type(target_meta_info.get_type_info()));
+      const auto type_info = target_meta_info.get_type_info();
+      attr_types.push_back(sql_type_to_render_type(type_info));
+      if (type_info.is_decimal()) {
+        decimal_to_scale.insert(std::make_pair(alias, exp_to_scale(type_info.get_scale())));
+      }
     }
   }
 
-  auto query_data_layout = new ::QueryRenderer::QueryDataLayout(attr_names, attr_types, {{}});
+  auto query_data_layout = new ::QueryRenderer::QueryDataLayout(attr_names, attr_types, {{}}, decimal_to_scale);
 
   return {std::shared_ptr<::QueryRenderer::QueryDataLayout>(query_data_layout),
           std::unique_ptr<char[]>(raw_data),

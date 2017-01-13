@@ -189,7 +189,7 @@ bool SqlQueryDataTableJSON::hasAttribute(const std::string& attrName) {
   }
 
   // TODO(croot): throw a warning/error if the vbo isn't initialized?
-  return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName, getQueryDataLayout()) : false);
+  return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName, getVboQueryDataLayout()) : false);
 }
 
 QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
@@ -202,7 +202,7 @@ QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuI
                     "Cannot get the data buffer for " + attrName + " in table " + getTableName() +
                         ". The table's vbo has not been initialized yet.");
 
-  auto layout = getQueryDataLayout();
+  auto layout = getVboQueryDataLayout();
   CHECK(layout);
   RUNTIME_EX_ASSERT(itr->second.vbo->hasAttribute(attrName, layout),
                     _printInfo(true) + ": attribute \"" + attrName + "\" does not exist in VBO.");
@@ -271,8 +271,8 @@ bool SqlQueryDataTableJSON::hasLayoutOffsetChanged(const GpuId* gpuId) const {
   return itr->second.second;
 }
 
-QueryDataLayoutShPtr SqlQueryDataTableJSON::getQueryDataLayout() const {
-  auto rtn = BaseQueryDataTableSQLJSON::getQueryDataLayout();
+QueryDataLayoutShPtr SqlQueryDataTableJSON::getVboQueryDataLayout() const {
+  auto rtn = BaseQueryDataTableSQLJSON::getVboQueryDataLayout();
   if (rtn) {
     return rtn;
   }
@@ -309,12 +309,12 @@ std::string SqlQueryDataTableJSON::_printInfo(bool useClassSuffix) const {
 
 bool SqlQueryDataTableJSON::_isInternalCacheUpToDate() {
   if (_perGpuData.size()) {
-    if (!_queryDataLayoutPtr) {
+    if (!_vboQueryDataLayoutPtr) {
       return false;
     }
 
     for (auto itr = _perGpuData.begin(); itr != _perGpuData.end(); ++itr) {
-      if (!itr->second.vbo->hasBufferLayout(_queryDataLayoutPtr)) {
+      if (!itr->second.vbo->hasBufferLayout(_vboQueryDataLayoutPtr)) {
         return false;
       }
     }
@@ -342,12 +342,12 @@ void SqlQueryDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmP
                                                       const rapidjson::Value* dataObj) {
   if (!_justInitialized) {
     // first run the sql query, then initialize resources
-    auto origLayout = _queryDataLayoutPtr;
+    auto origLayout = _vboQueryDataLayoutPtr;
     if (!_executeQuery(dataObj)) {
       _currBufOffsetBytes.clear();
     }
 
-    auto currLayout = _queryDataLayoutPtr;
+    auto currLayout = _vboQueryDataLayoutPtr;
 
     if (origLayout || currLayout) {
       _layoutChanged = (!origLayout && currLayout) || (origLayout && !currLayout) || *origLayout != *currLayout;
@@ -359,7 +359,7 @@ void SqlQueryDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmP
     BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr, currLayout);
 
     if (!currLayout && _perGpuData.size()) {
-      currLayout = getQueryDataLayout();
+      currLayout = getVboQueryDataLayout();
     }
 
     size_t offset;

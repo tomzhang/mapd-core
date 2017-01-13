@@ -288,7 +288,7 @@ class ScaleRef : public BaseScaleRef {
       const auto& theirDomainType = domainDataPtr->getTypeInfo();
       const auto& ourDomainType = typeid(DomainType);
       if (force || (!isQuantScale && theirDomainType != ourDomainType) ||
-          (isQuantScale && !areTypesCompatible(ourDomainType, theirDomainType))) {
+          (isQuantScale && !areTypesCompatible(theirDomainType, ourDomainType))) {
         if ((uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(domainDataPtr))) {
           ConvertDomainRangeData<DomainType, unsigned int>()(_ctx, _coercedDomainData, uintDomain);
         } else if ((intDomain = dynamic_cast<ScaleDomainRangeData<int>*>(domainDataPtr))) {
@@ -405,13 +405,21 @@ class ScaleRef : public BaseScaleRef {
     _coercedDomainData.reset(
         new ScaleDomainRangeData<DomainType>(_ctx, domainData->getName(), vec.size(), domainData->useString()));
 
-    QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getQueryDataLayout();
-    if (!queryDataLayoutPtr) {
-      // We can run into a scenario where there still exists a referenced data ptr, but that
-      // data ptr has nothing in it. We handle that case by just returning here, but this
-      // scale ref should/will not do anything in the future (like init a shader or bind uniforms)
-      // We can reach here and ultimately not render thanks to a scale update in QueryRenderer::_initFromJSON
-      return;
+    QueryDataLayoutShPtr queryDataLayoutPtr = sqlDataTable->getVboQueryDataLayout();
+    // TODO(croot): check whether the colName exists in the layout
+    if (!queryDataLayoutPtr || !queryDataLayoutPtr->hasAttribute(colName)) {
+      queryDataLayoutPtr = sqlDataTable->getUboQueryDataLayout();
+      if (!queryDataLayoutPtr) {
+        // We can run into a scenario where there still exists a referenced data ptr, but that
+        // data ptr has nothing in it. We handle that case by just returning here, but this
+        // scale ref should/will not do anything in the future (like init a shader or bind uniforms)
+        // We can reach here and ultimately not render thanks to a scale update in QueryRenderer::_initFromJSON
+        return;
+      }
+
+      RUNTIME_EX_ASSERT(queryDataLayoutPtr->hasAttribute(colName),
+                        "The vega data " + std::string(*sqlDataTable) +
+                            " does not have a layout that contains the attribute \"" + colName + "\"");
     }
 
     std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorDataRef();

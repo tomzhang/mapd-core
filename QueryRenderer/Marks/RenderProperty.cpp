@@ -183,12 +183,12 @@ int BaseRenderProperty::size(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   if (itr != _perGpuData.end() && itr->second.vbo) {
     auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
-    return itr->second.vbo->numVertices(dataPtr ? dataPtr->getQueryDataLayout() : nullptr);
+    return itr->second.vbo->numVertices(dataPtr ? dataPtr->getVboQueryDataLayout() : nullptr);
   }
   return 0;
 }
 
-bool BaseRenderProperty::hasVboPtr() {
+bool BaseRenderProperty::hasVboPtr() const {
   for (auto& itr : _perGpuData) {
     if (itr.second.vbo != nullptr) {
       return true;
@@ -197,7 +197,7 @@ bool BaseRenderProperty::hasVboPtr() {
   return false;
 }
 
-bool BaseRenderProperty::hasVboPtr(const GpuId& gpuId) {
+bool BaseRenderProperty::hasVboPtr(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
 
   return (itr != _perGpuData.end() && itr->second.vbo != nullptr);
@@ -221,7 +221,7 @@ QueryVertexBufferShPtr BaseRenderProperty::getVboPtr() const {
   return nullptr;
 }
 
-bool BaseRenderProperty::hasUboPtr() {
+bool BaseRenderProperty::hasUboPtr() const {
   for (auto& itr : _perGpuData) {
     if (itr.second.ubo != nullptr) {
       return true;
@@ -230,7 +230,7 @@ bool BaseRenderProperty::hasUboPtr() {
   return false;
 }
 
-bool BaseRenderProperty::hasUboPtr(const GpuId& gpuId) {
+bool BaseRenderProperty::hasUboPtr(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
 
   return (itr != _perGpuData.end() && itr->second.ubo != nullptr);
@@ -283,6 +283,12 @@ std::string BaseRenderProperty::getOutGLSLType() const {
 }
 
 const ::Rendering::GL::TypeGLShPtr& BaseRenderProperty::getOutTypeGL() const {
+  if (_scaleConfigPtr) {
+    return _scaleConfigPtr->getRangeTypeGL();
+  } else if (_scalePtr) {
+    return _scalePtr->getRangeTypeGL();
+  }
+
   RUNTIME_EX_ASSERT(_outType != nullptr,
                     std::string(*this) + " getOutTypeGL(): input type for \"" + _name + "\" is uninitialized.");
 
@@ -300,12 +306,22 @@ void BaseRenderProperty::addToVboAttrMap(const GpuId& gpuId,
 
   ::Rendering::GL::Resources::GLVertexBufferShPtr glVbo = itr->second.vbo->getGLVertexBufferPtr();
   auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
-  auto pair = std::make_pair(glVbo, (dataPtr ? dataPtr->getGLBufferLayout() : nullptr));
+  auto pair = std::make_pair(glVbo, (dataPtr ? dataPtr->getVboGLBufferLayout() : nullptr));
   auto attrMapItr = attrMap.find(pair);
   if (attrMapItr == attrMap.end()) {
     attrMap.insert({pair, {{_vboAttrName, _name}}});
   } else {
     attrMapItr->second.push_back({_vboAttrName, _name});
+  }
+}
+
+void BaseRenderProperty::bindUniformScaleToRenderer(::Rendering::GL::Resources::GLShader* activeShader) const {
+  if (_decimalExpScale > 0 && _outType) {
+    if (_ctx->supportsInt64()) {
+      activeShader->setUniformAttribute<uint64_t>(_name + "_ExpScale", _decimalExpScale);
+    } else {
+      activeShader->setUniformAttribute<unsigned int>(_name + "_ExpScale", static_cast<unsigned int>(_decimalExpScale));
+    }
   }
 }
 
@@ -461,6 +477,7 @@ void BaseRenderProperty::_clearFieldPath() {
   _fieldJsonPath = rapidjson::Pointer();
   _clearDataPtr();
   _vboAttrName = "";
+  _decimalExpScale = 0;
 }
 
 void BaseRenderProperty::_clearDataPtr() {
@@ -770,7 +787,9 @@ void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_updateScalePtr(const S
                        ": Trying to add a color scale with an unsupported color type for its range.");
     }
 
-    if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>((*inTypeToUse).get())) {
+    if (isDecimal()) {
+      _scaleConfigPtr = createColorScaleRef<double>(colorType, _ctx, scalePtr, this);
+    } else if (dynamic_cast<::Rendering::GL::TypeGL<unsigned int, 1>*>((*inTypeToUse).get())) {
       _scaleConfigPtr = createColorScaleRef<unsigned int>(colorType, _ctx, scalePtr, this);
     } else if (dynamic_cast<::Rendering::GL::TypeGL<int, 1>*>((*inTypeToUse).get())) {
       _scaleConfigPtr = createColorScaleRef<int>(colorType, _ctx, scalePtr, this);

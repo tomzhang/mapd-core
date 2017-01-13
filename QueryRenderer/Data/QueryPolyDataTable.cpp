@@ -236,14 +236,15 @@ QueryBufferShPtr SqlQueryPolyDataTableCache::getAttributeDataBuffer(const GpuId&
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot get attribute data buffer for gpu " + std::to_string(gpuId));
 
-  QueryDataLayoutShPtr layout = nullptr;
+  QueryDataLayoutShPtr vbolayout = nullptr, ubolayout = nullptr;
   auto sqlDataTable = dynamic_cast<SqlQueryPolyDataTableJSON*>(this);
   if (sqlDataTable) {
-    layout = sqlDataTable->getQueryDataLayout();
+    vbolayout = sqlDataTable->getVboQueryDataLayout();
+    ubolayout = sqlDataTable->getUboQueryDataLayout();
   }
-  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName, layout)) {
+  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName, vbolayout)) {
     return itr->second.vbo;
-  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName, layout)) {
+  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName, ubolayout)) {
     return itr->second.ubo;
   } else {
     THROW_RUNTIME_EX(_printInfo(true) + " getAttributeDataBuffer(): attribute \"" + attrName + "\" does not exist.");
@@ -256,16 +257,17 @@ std::map<GpuId, QueryBufferShPtr> SqlQueryPolyDataTableCache::getAttributeDataBu
   std::map<GpuId, QueryBufferShPtr> rtn;
   std::map<GpuId, QueryBufferShPtr>::iterator insertedItr;
 
-  QueryDataLayoutShPtr layout = nullptr;
+  QueryDataLayoutShPtr vbolayout = nullptr, ubolayout = nullptr;
   auto sqlDataTable = dynamic_cast<SqlQueryPolyDataTableJSON*>(this);
   if (sqlDataTable) {
-    layout = sqlDataTable->getQueryDataLayout();
+    vbolayout = sqlDataTable->getVboQueryDataLayout();
+    ubolayout = sqlDataTable->getUboQueryDataLayout();
   }
 
   for (auto& itr : _perGpuData) {
-    if (itr.second.vbo && itr.second.vbo->hasAttribute(attrName, layout)) {
+    if (itr.second.vbo && itr.second.vbo->hasAttribute(attrName, vbolayout)) {
       insertedItr = rtn.insert({itr.first, itr.second.vbo}).first;
-    } else if (itr.second.ubo && itr.second.ubo->hasAttribute(attrName, layout)) {
+    } else if (itr.second.ubo && itr.second.ubo->hasAttribute(attrName, ubolayout)) {
       insertedItr = rtn.insert({itr.first, itr.second.ubo}).first;
     } else {
       THROW_RUNTIME_EX(_printInfo(true) + " getAttributeDataBuffer(): attribute \"" + attrName +
@@ -545,6 +547,12 @@ std::string SqlQueryPolyDataTableJSON::_printInfo(bool useClassSuffix) const {
   return rtn;
 }
 
+bool SqlQueryPolyDataTableJSON::_isInternalCacheUpToDate() {
+  auto rootCache = _ctx->getRootGpuCache();
+  CHECK(rootCache);
+  return rootCache->hasPolyTableGpuCache(_tableName, _sqlQueryStr);
+}
+
 void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
                                                    const rapidjson::Pointer& objPath,
                                                    const bool force) {
@@ -657,13 +665,7 @@ void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
     _factsTableName = "";
   }
 
-  if (!executeQuery) {
-    auto rootCache = _ctx->getRootGpuCache();
-    CHECK(rootCache);
-    executeQuery = rootCache->hasPolyTableGpuCache(_tableName, _sqlQueryStr);
-  }
-
-  if (executeQuery) {
+  if (executeQuery || force || !_isInternalCacheUpToDate()) {
     if (_hasExecutableSql() && !_polysKey.empty()) {
       if (!_factsKey.empty()) {
         _sqlQueryStrOverride =
@@ -707,11 +709,10 @@ void SqlQueryPolyDataTableJSON::_initGpuResources(const RootCacheShPtr& qrmGpuCa
   // the query has changed -- which is currently handled in the _updateFromJSONObj method
   // but what if the tables themselves have changed? Should re-run query in that case
   // here.
-
-  auto rootCache = _ctx->getRootGpuCache();
-  CHECK(rootCache);
-  if (!rootCache->hasPolyTableGpuCache(_tableName, _sqlQueryStr)) {
+  if (!_isInternalCacheUpToDate()) {
     _runQueryAndInitResources(qrmGpuCache, false);
+  } else {
+    _justInitialized = false;
   }
 }
 

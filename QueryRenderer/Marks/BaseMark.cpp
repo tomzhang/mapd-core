@@ -22,6 +22,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _vboProps(),
       _uboProps(),
       _uniformProps(),
+      _decimalProps(),
       _activeAccumulatorScaleName("") {}
 
 BaseMark::BaseMark(GeomType geomType,
@@ -98,40 +99,56 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
   CHECK(sum == 0 || usedProps.size() == sum || usedProps.size() == sum - 1);  // include the possible use of key
 
   bool keyAdded = false;
+
+  QueryDataLayoutShPtr vbolayout, ubolayout;
+  QueryDataLayoutShPtr* layoutToUse;
+  if (_dataPtr) {
+    auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQLJSON>(_dataPtr);
+    if (dataPtr) {
+      vbolayout = dataPtr->getVboQueryDataLayout();
+      ubolayout = dataPtr->getUboQueryDataLayout();
+    }
+  }
+
   if (force) {
     _vboProps.clear();
     _uboProps.clear();
     _uniformProps.clear();
+    _decimalProps.clear();
 
     for (const auto& prop : usedProps) {
+      layoutToUse = nullptr;
       if (prop->hasVboPtr()) {
         _vboProps.insert(prop);
         if (!keyAdded) {
           auto keyName = key.getName();
           auto vboPtr = prop->getVboPtr();
-          QueryDataLayoutShPtr layout = nullptr;
-          auto sqlJsonDataTablePtr = dynamic_cast<BaseQueryDataTableSQLJSON*>(_dataPtr.get());
-          if (sqlJsonDataTablePtr) {
-            layout = sqlJsonDataTablePtr->getQueryDataLayout();
-          }
+          QueryDataLayoutShPtr vbolayout = nullptr;
 
           if (vboPtr && vboPtr->getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER &&
-              vboPtr->hasAttribute(keyName, layout)) {
+              vboPtr->hasAttribute(keyName, vbolayout)) {
             key.initializeFromData(keyName, _dataPtr);
             _vboProps.insert(&key);
             keyAdded = true;
           }
         }
+        layoutToUse = &vbolayout;
       } else if (prop->hasUboPtr()) {
         _uboProps.insert(prop);
+        layoutToUse = &ubolayout;
       } else {
         _uniformProps.insert(prop);
+      }
+
+      if (layoutToUse && *layoutToUse && (*layoutToUse)->isDecimalAttr(prop->getDataColumnName())) {
+        _decimalProps.insert(prop);
       }
     }
 
     setShaderDirty();
   } else {
     for (const auto& prop : usedProps) {
+      layoutToUse = nullptr;
       if (prop->hasVboPtr()) {
         if (_vboProps.insert(prop).second) {
           setShaderDirty();
@@ -142,13 +159,8 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
         if (!keyAdded) {
           auto keyName = key.getName();
           auto vboPtr = prop->getVboPtr();
-          QueryDataLayoutShPtr layout = nullptr;
-          auto sqlJsonDataTablePtr = dynamic_cast<BaseQueryDataTableSQLJSON*>(_dataPtr.get());
-          if (sqlJsonDataTablePtr) {
-            layout = sqlJsonDataTablePtr->getQueryDataLayout();
-          }
           if (vboPtr && vboPtr->getType() == QueryBuffer::BufType::QUERY_RESULT_BUFFER &&
-              vboPtr->hasAttribute(keyName, layout)) {
+              vboPtr->hasAttribute(keyName, vbolayout)) {
             key.initializeFromData(keyName, _dataPtr);
             if (_vboProps.insert(&key).second) {
               setShaderDirty();
@@ -156,6 +168,7 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
             keyAdded = true;
           }
         }
+        layoutToUse = &vbolayout;
       } else if (prop->hasUboPtr()) {
         if (_uboProps.insert(prop).second) {
           setShaderDirty();
@@ -163,6 +176,7 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
             _uniformProps.erase(prop);
           }
         }
+        layoutToUse = &ubolayout;
       } else {
         if (_uniformProps.insert(prop).second) {
           setShaderDirty();
@@ -170,6 +184,14 @@ void BaseMark::_updateProps(const std::set<BaseRenderProperty*>& usedProps, bool
             _uboProps.erase(prop);
           }
         }
+      }
+
+      if (layoutToUse && *layoutToUse && (*layoutToUse)->isDecimalAttr(prop->getDataColumnName())) {
+        if (_decimalProps.insert(prop).second) {
+          setShaderDirty();
+        }
+      } else if (_decimalProps.erase(prop)) {
+        setShaderDirty();
       }
     }
   }

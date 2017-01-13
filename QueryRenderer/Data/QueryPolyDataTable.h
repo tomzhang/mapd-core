@@ -167,6 +167,7 @@ class SqlQueryPolyDataTableJSON : public SqlQueryPolyDataTableCache, public Base
 
   std::string _printInfo(bool useClassSuffix = false) const;
 
+  bool _isInternalCacheUpToDate() final;
   void _updateFromJSONObj(const rapidjson::Value& obj,
                           const rapidjson::Pointer& objPath,
                           const bool force = false) final;
