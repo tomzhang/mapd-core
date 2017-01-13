@@ -120,10 +120,10 @@ TargetInfo target_info_from_thrift(const TTargetInfo& thrift_target_info) {
   target_info.is_agg = thrift_target_info.is_agg;
   target_info.agg_kind = agg_kind_from_thrift(thrift_target_info.kind);
   target_info.sql_type = type_info_from_thrift(thrift_target_info.type);
+  target_info.is_distinct = thrift_target_info.is_distinct;
   target_info.agg_arg_type =
       takes_arg(target_info) ? type_info_from_thrift(thrift_target_info.arg_type) : SQLTypeInfo(kNULLT, false);
   target_info.skip_null_val = thrift_target_info.skip_nulls;
-  target_info.is_distinct = thrift_target_info.is_distinct;
   return target_info;
 }
 
