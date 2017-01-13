@@ -316,6 +316,7 @@ class MapDHandler : virtual public MapDIf {
 #endif  // HAVE_CALCITE
                                                      ));
     import_path_ = boost::filesystem::path(base_data_path_) / "mapd_import";
+    start_time_ = std::time(nullptr);
   }
 
   ~MapDHandler() { LOG(INFO) << "mapd_server exits." << std::endl; }
@@ -410,6 +411,7 @@ class MapDHandler : virtual public MapDIf {
     _return.read_only = read_only_;
     _return.version = MapDRelease;
     _return.rendering_enabled = enable_rendering_;
+    _return.start_time = start_time_;
   }
 
   static void value_to_thrift_column(const TargetValue& tv, const SQLTypeInfo& ti, TColumn& column) {
@@ -2796,6 +2798,7 @@ class MapDHandler : virtual public MapDIf {
   bool cpu_mode_only_;
   mapd_shared_mutex sessions_mutex_;
   std::mutex render_mutex_;
+  int64_t start_time_;
 #ifdef HAVE_RENDERING
   std::unique_ptr<::QueryRenderer::QueryRenderManager> render_manager_;
 #endif
