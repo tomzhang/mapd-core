@@ -326,6 +326,10 @@ void serialize_projected_column(int8_t* col_ptr,
   }
 }
 
+size_t get_projected_size(const SQLTypeInfo& ti) {
+  return (ti.is_string() && ti.get_compression() == kENCODING_NONE) ? 4 : ti.get_logical_size();
+}
+
 }  // namespace
 
 // The projection layout could contain lazy values, real strings and arrays.
@@ -340,7 +344,7 @@ std::string ResultSet::serializeProjection() const {
   proj_query_mem_desc.agg_col_widths.clear();
   for (size_t i = 0; i < colCount(); ++i) {
     const auto ti = getColType(i);
-    const int8_t logical_size = (ti.is_string() && ti.get_compression() == kENCODING_NONE) ? 4 : ti.get_logical_size();
+    const int8_t logical_size = get_projected_size(ti);
     proj_query_mem_desc.agg_col_widths.emplace_back(ColWidths{logical_size, logical_size});
     one_row_size += logical_size;
   }
@@ -359,7 +363,7 @@ std::string ResultSet::serializeProjection() const {
     for (size_t i = 0; i < colCount(); ++i) {
       const auto ti = getColType(i);
       serialize_projected_column(col_ptr, none_encoded_strings, crt_row[i], ti);
-      col_ptr += ti.get_logical_size();
+      col_ptr += get_projected_size(ti);
     }
     ++row_count;
     row_ptr += one_row_size;
