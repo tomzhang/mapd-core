@@ -18,7 +18,7 @@ struct NonProjectionRenderQueryCache {
   TableId tableId;
   std::string sqlStr;
   size_t cachedBytes;
-  ResultRows results;
+  std::shared_ptr<ResultRows> results;
   std::vector<TargetMetaInfo> resultsRowShape;
   std::vector<std::pair<TableId, std::string>> usedTablesInQuery;
   std::chrono::milliseconds lastUsedTime;
@@ -26,7 +26,7 @@ struct NonProjectionRenderQueryCache {
   explicit NonProjectionRenderQueryCache(const TableId tableId,
                                          const std::string& sqlStr,
                                          const size_t numBytes,
-                                         const ResultRows&& results,
+                                         const std::shared_ptr<ResultRows>& results,
                                          const std::vector<TargetMetaInfo>&& resultsRowShape,
                                          const std::vector<std::pair<TableId, std::string>>&& usedTablesInQuery)
       : tableId(tableId),
@@ -54,7 +54,7 @@ class NonProjectionRenderQueryCacheMap {
       : _totalCachedBytes(0), _maxTotalCachedBytes(maxTotalCachedBytes) {}
 
   NPRQueryCacheShPtr addQueryResultToCache(const std::string& sqlStr,
-                                           const ResultRows&& results,
+                                           const std::shared_ptr<ResultRows>& results,
                                            const std::vector<TargetMetaInfo>&& resultRowShape,
                                            const std::vector<std::pair<TableId, std::string>>&& usedTablesInQuery);
 
@@ -62,10 +62,10 @@ class NonProjectionRenderQueryCacheMap {
                                          const std::vector<std::pair<TableId, std::string>>&& usedTablesInQuery);
 
   NPRQueryCacheShPtr updateQueryResultsInCache(const std::string& sqlStr,
-                                               const ResultRows&& results,
+                                               const std::shared_ptr<ResultRows>& results,
                                                const std::vector<TargetMetaInfo>&& resultRowShape);
   NPRQueryCacheShPtr updateQueryResultsInCache(const TableId tableId,
-                                               const ResultRows&& results,
+                                               const std::shared_ptr<ResultRows>& results,
                                                const std::vector<TargetMetaInfo>&& resultRowShape);
 
   NPRQueryCacheShPtr removeQueryResultsFromCache(const TableId tableId);
@@ -77,9 +77,9 @@ class NonProjectionRenderQueryCacheMap {
   std::string getQueryForCache(const TableId tableId) const;
   std::pair<TableId, std::string> getQueryCachePrimaryTableInfo(const TableId tableId) const;
 
-  bool canFitResults(const ResultRows& newResults);
-  bool canFitUpdatedResults(const std::string& sqlStr, const ResultRows& updatedResults);
-  bool canFitUpdatedResults(const TableId tableId, const ResultRows& updatedResults);
+  bool canFitResults(const std::shared_ptr<ResultRows>& newResults);
+  bool canFitUpdatedResults(const std::string& sqlStr, const std::shared_ptr<ResultRows>& updatedResults);
+  bool canFitUpdatedResults(const TableId tableId, const std::shared_ptr<ResultRows>& updatedResults);
 
   std::pair<const ResultRows*, const std::vector<TargetMetaInfo>*> getQueryCacheResults(const TableId tableId) const;
 
@@ -93,7 +93,7 @@ class NonProjectionRenderQueryCacheMap {
   struct SqlStrTag {};
 
   struct UpdateCacheResults {
-    UpdateCacheResults(const ResultRows&& results,
+    UpdateCacheResults(const std::shared_ptr<ResultRows>& results,
                        const std::vector<TargetMetaInfo>&& resultsRowShape,
                        const size_t numBytes,
                        bool udpateTime = true);
@@ -102,7 +102,7 @@ class NonProjectionRenderQueryCacheMap {
 
    private:
     std::chrono::milliseconds new_time;
-    ResultRows new_results;
+    std::shared_ptr<ResultRows> new_results;
     std::vector<TargetMetaInfo> new_results_row_shape;
     size_t new_size;
     bool update_time;

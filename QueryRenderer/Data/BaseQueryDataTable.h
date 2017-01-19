@@ -98,6 +98,7 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
   virtual QueryDataLayoutShPtr getUboQueryDataLayout() const { return _uboQueryDataLayoutPtr; }
   ::Rendering::GL::Resources::GLBufferLayoutShPtr getVboGLBufferLayout() const;
   ::Rendering::GL::Resources::GLBufferLayoutShPtr getUboGLBufferLayout() const;
+  const ResultRows* getResultRows() const { return _resultRows.get(); }
 
  protected:
   std::string _printInfo() const {
@@ -115,6 +116,7 @@ class BaseQueryDataTableSQLJSON : public BaseQueryDataTableJSON, public BaseQuer
 
  private:
   bool _isPolyQuery;
+  std::shared_ptr<ResultRows> _resultRows;
 };
 
 }  // namespace QueryRenderer

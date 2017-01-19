@@ -128,7 +128,7 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
         _vboQueryDataLayoutPtr = (std::get<4>(render_info) ? std::move(std::get<4>(render_info)) : nullptr);
         _uboQueryDataLayoutPtr = (std::get<5>(render_info) ? std::move(std::get<5>(render_info)) : nullptr);
 
-        auto& rows = std::get<0>(render_info);
+        _resultRows = std::get<0>(render_info);
         if (tables.size() > 1) {
           // TODO(croot): is the number of table names used in a query good enough
           // in determining whether a query is a non-projection query?
@@ -147,15 +147,15 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
             // and there's enough memory to store the cache
 
             if (!queryCacheMap.hasQueryCache(sqlQueryToUse)) {
-              if (queryCacheMap.canFitResults(rows)) {
+              if (queryCacheMap.canFitResults(_resultRows)) {
                 _queryCachePtr = queryCacheMap.addQueryResultToCache(
-                    sqlQueryToUse, std::move(rows), std::move(std::get<1>(render_info)), std::move(tables));
+                    sqlQueryToUse, _resultRows, std::move(std::get<1>(render_info)), std::move(tables));
               } else {
                 _queryCachePtr = queryCacheMap.addQueryOnlyToCache(sqlQueryToUse, std::move(tables));
               }
-            } else if (queryCacheMap.canFitUpdatedResults(sqlQueryToUse, rows)) {
+            } else if (queryCacheMap.canFitUpdatedResults(sqlQueryToUse, _resultRows)) {
               _queryCachePtr = queryCacheMap.updateQueryResultsInCache(
-                  sqlQueryToUse, std::move(rows), std::move(std::get<1>(render_info)));
+                  sqlQueryToUse, _resultRows, std::move(std::get<1>(render_info)));
             } else {
               // cannot store the results in the cache, so we need to force
               // the query to run on hit-testing. That means removing the cached results
@@ -172,10 +172,13 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
 
         return true;
       }
+    } else {
+      _resultRows = nullptr;
     }
   } else {
     _tableId = NonProjectionRenderQueryCacheMap::emptyTableId;
     _queryCachePtr = nullptr;
+    _resultRows = nullptr;
   }
 
   return false;

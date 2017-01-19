@@ -533,7 +533,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
         auto clock_begin = timer_start();
         auto rrows = renderRows(root_plan->get_plan()->get_targetlist(), render_info);
         int64_t render_time_ms = timer_stop(clock_begin);
-        return ResultRows(rrows, queue_time_ms, render_time_ms);
+        return ResultRows(rrows, queue_time_ms, render_time_ms, row_set_mem_owner_);
       }
 #endif  // HAVE_RENDERING
       if (error_code == ERR_OVERFLOW_OR_UNDERFLOW) {
@@ -924,7 +924,7 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
 
   if (!render_config_json || !render_config_json->length() || *render_config_json == "NONE") {
     int64_t render_time_ms = timer_stop(clock_begin);
-    return ResultRows(std::string(), queue_time_ms, render_time_ms);
+    return ResultRows(std::string(), queue_time_ms, render_time_ms, row_set_mem_owner_);
   }
 
   // now configure the render like normal
@@ -1232,7 +1232,8 @@ void Executor::setPolyRenderDataEntry(Executor::PolyRenderDataQueryResult& rende
 int32_t Executor::getStringId(const std::string& table_name,
                               const std::string& col_name,
                               const std::string& col_val,
-                              const ::QueryRenderer::QueryDataLayout* query_data_layout) const {
+                              const ::QueryRenderer::QueryDataLayout* query_data_layout,
+                              const ResultRows* results) const {
   const auto td = catalog_->getMetadataForTable(table_name);
   CHECK(td);
   CHECK(query_data_layout);
@@ -1242,7 +1243,16 @@ int32_t Executor::getStringId(const std::string& table_name,
   CHECK(cd);
   CHECK(cd->columnType.is_string() && cd->columnType.get_compression() == kENCODING_DICT);
   const int dict_id = cd->columnType.get_comp_param();
-  const auto sdp = getStringDictionaryProxy(dict_id, row_set_mem_owner_);
+  std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner;
+  if (results) {
+    row_set_mem_owner = results->getRowSetMemOwner();
+  }
+
+  if (!row_set_mem_owner) {
+    row_set_mem_owner = row_set_mem_owner_;
+  }
+
+  auto sdp = getStringDictionaryProxy(dict_id, row_set_mem_owner);
   CHECK(sdp);
   return sdp->get(col_val);
 }

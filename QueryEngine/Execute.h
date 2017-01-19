@@ -304,7 +304,8 @@ class Executor {
   int32_t getStringId(const std::string& table_name,
                       const std::string& col_name,
                       const std::string& col_val,
-                      const ::QueryRenderer::QueryDataLayout*) const;
+                      const ::QueryRenderer::QueryDataLayout*,
+                      const ResultRows* results) const;
 
   std::vector<double> getShapeVertices(const Catalog_Namespace::SessionInfo& session,
                                        const TableDescriptor* td,

@@ -425,8 +425,8 @@ class ScaleRef : public BaseScaleRef {
     std::vector<DomainType>& coercedVec = _coercedDomainData->getVectorDataRef();
     for (size_t i = 0; i < vec.size(); ++i) {
       // get data from the executor
-      coercedVec[i] =
-          static_cast<DomainType>(executor->getStringId(tableName, colName, vec[i], queryDataLayoutPtr.get()));
+      coercedVec[i] = static_cast<DomainType>(
+          executor->getStringId(tableName, colName, vec[i], queryDataLayoutPtr.get(), sqlDataTable->getResultRows()));
     }
   }
 

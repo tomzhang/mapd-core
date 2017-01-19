@@ -1250,7 +1250,8 @@ ExecutionResult RelAlgExecutor::renderWorkUnit(const RelAlgExecutor::WorkUnit& w
   }
   auto image_bytes = executor_->renderRows(target_entries, render_info);
   int64_t render_time_ms = timer_stop(clock_begin);
-  return {boost::make_unique<ResultRows>(image_bytes, queue_time_ms, render_time_ms), {}};
+  return {boost::make_unique<ResultRows>(image_bytes, queue_time_ms, render_time_ms, executor_->row_set_mem_owner_),
+          {}};
 }
 #endif  // HAVE_RENDERING
 

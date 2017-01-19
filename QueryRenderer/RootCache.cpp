@@ -10,7 +10,7 @@ const std::chrono::milliseconds NonProjectionRenderQueryCacheMap::maxCacheIdleTi
 const TableId NonProjectionRenderQueryCacheMap::emptyTableId = -1;
 
 NonProjectionRenderQueryCacheMap::UpdateCacheResults::UpdateCacheResults(
-    const ResultRows&& results,
+    const std::shared_ptr<ResultRows>& results,
     const std::vector<TargetMetaInfo>&& resultsRowShape,
     const size_t numBytes,
     bool updateTime)
@@ -59,14 +59,14 @@ void NonProjectionRenderQueryCacheMap::_purgeUnusedCaches() {
 
 NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::addQueryResultToCache(
     const std::string& sqlStr,
-    const ResultRows&& results,
+    const std::shared_ptr<ResultRows>& results,
     const std::vector<TargetMetaInfo>&& resultRowShape,
     const std::vector<std::pair<TableId, std::string>>&& usedTablesInQuery) {
   // TODO(croot): make thread safe?
 
   _purgeUnusedCaches();
 
-  auto numBytes = results.getQueryMemDesc().getBufferSizeBytes(results.getDeviceType());
+  auto numBytes = results->getQueryMemDesc().getBufferSizeBytes(results->getDeviceType());
 
   // TODO(croot): if an error is thrown, what happens to results (which should be called with a
   // std::move())
@@ -87,7 +87,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::addQueryResultToCache(
   CHECK(_queryResultMap.find(tableId) == _queryResultMap.end());
 
   auto rtnpair = _queryResultMap.emplace(new NonProjectionRenderQueryCache(
-      tableId, sqlStr, numBytes, std::move(results), std::move(resultRowShape), std::move(usedTablesInQuery)));
+      tableId, sqlStr, numBytes, results, std::move(resultRowShape), std::move(usedTablesInQuery)));
   CHECK(rtnpair.second);
 
   _totalCachedBytes += numBytes;
@@ -116,7 +116,8 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::addQueryOnlyToCache(
       tableId,
       sqlStr,
       0,
-      ResultRows({}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU, nullptr, 0, 0, 0, 0),
+      std::shared_ptr<ResultRows>(
+          new ResultRows({}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU, nullptr, 0, 0, 0, 0)),
       std::vector<TargetMetaInfo>(),
       std::move(usedTablesInQuery)));
   CHECK(rtnpair.second);
@@ -126,7 +127,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::addQueryOnlyToCache(
 
 NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
     const std::string& sqlStr,
-    const ResultRows&& results,
+    const std::shared_ptr<ResultRows>& results,
     const std::vector<TargetMetaInfo>&& resultRowShape) {
   // TODO(croot): make thread safe?
   _purgeUnusedCaches();
@@ -136,7 +137,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
   RUNTIME_EX_ASSERT(itr != cacheMapBySql.end(),
                     "A render query result cache for sql \"" + sqlStr + "\" does not exist.");
 
-  auto numBytes = results.getQueryMemDesc().getBufferSizeBytes(results.getDeviceType());
+  auto numBytes = results->getQueryMemDesc().getBufferSizeBytes(results->getDeviceType());
   auto currBytes = (*itr)->cachedBytes;
 
   // TODO(croot): if an error is thrown, what happens to results (which should be called with a
@@ -147,7 +148,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
                         std::to_string(_maxTotalCachedBytes - _totalCachedBytes + (*itr)->cachedBytes) +
                         " unused bytes remaining in the cache.");
 
-  cacheMapBySql.modify(itr, UpdateCacheResults(std::move(results), std::move(resultRowShape), numBytes));
+  cacheMapBySql.modify(itr, UpdateCacheResults(results, std::move(resultRowShape), numBytes));
   _totalCachedBytes += (numBytes - currBytes);
 
   return *itr;
@@ -155,7 +156,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
 
 NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
     const TableId tableId,
-    const ResultRows&& results,
+    const std::shared_ptr<ResultRows>& results,
     const std::vector<TargetMetaInfo>&& resultRowShape) {
   // TODO(croot): make thread safe?
   _purgeUnusedCaches();
@@ -164,7 +165,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
   RUNTIME_EX_ASSERT(itr != _queryResultMap.end(),
                     "A render query result cache for table id: " + std::to_string(tableId) + " does not exist.");
 
-  auto numBytes = results.getQueryMemDesc().getBufferSizeBytes(results.getDeviceType());
+  auto numBytes = results->getQueryMemDesc().getBufferSizeBytes(results->getDeviceType());
   auto currBytes = (*itr)->cachedBytes;
 
   // TODO(croot): if an error is thrown, what happens to results (which should be called with a
@@ -175,7 +176,7 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::updateQueryResultsInCache(
                         std::to_string(_maxTotalCachedBytes - _totalCachedBytes + (*itr)->cachedBytes) +
                         " unused bytes remaining in the cache.");
 
-  _queryResultMap.modify(itr, UpdateCacheResults(std::move(results), std::move(resultRowShape), numBytes));
+  _queryResultMap.modify(itr, UpdateCacheResults(results, std::move(resultRowShape), numBytes));
   _totalCachedBytes += (numBytes - currBytes);
 
   return *itr;
@@ -192,7 +193,8 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::removeQueryResultsFromCache
   auto bytes = (*itr)->cachedBytes;
   _queryResultMap.modify(
       itr,
-      UpdateCacheResults(ResultRows({}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU, nullptr, 0, 0, 0, 0),
+      UpdateCacheResults(std::shared_ptr<ResultRows>(new ResultRows(
+                             {}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU, nullptr, 0, 0, 0, 0)),
                          std::vector<TargetMetaInfo>(),
                          0));
   _totalCachedBytes -= bytes;
@@ -212,7 +214,8 @@ NPRQueryCacheShPtr NonProjectionRenderQueryCacheMap::removeQueryResultsFromCache
   auto bytes = (*itr)->cachedBytes;
   cacheMapBySql.modify(
       itr,
-      UpdateCacheResults(ResultRows({}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU, nullptr, 0, 0, 0, 0),
+      UpdateCacheResults(std::shared_ptr<ResultRows>(new ResultRows(
+                             {}, {}, nullptr, nullptr, {}, ExecutorDeviceType::CPU, nullptr, 0, 0, 0, 0)),
                          std::vector<TargetMetaInfo>(),
                          0));
 
@@ -247,14 +250,14 @@ std::pair<TableId, std::string> NonProjectionRenderQueryCacheMap::getQueryCacheP
   return (*itr)->getPrimaryTableInfo();
 }
 
-bool NonProjectionRenderQueryCacheMap::canFitResults(const ResultRows& newResults) {
+bool NonProjectionRenderQueryCacheMap::canFitResults(const std::shared_ptr<ResultRows>& newResults) {
   _purgeUnusedCaches();
-  auto numBytes = newResults.getQueryMemDesc().getBufferSizeBytes(newResults.getDeviceType());
+  auto numBytes = newResults->getQueryMemDesc().getBufferSizeBytes(newResults->getDeviceType());
   return _totalCachedBytes + numBytes <= _maxTotalCachedBytes;
 }
 
 bool NonProjectionRenderQueryCacheMap::canFitUpdatedResults(const std::string& sqlStr,
-                                                            const ResultRows& updatedResults) {
+                                                            const std::shared_ptr<ResultRows>& updatedResults) {
   _purgeUnusedCaches();
   auto& cacheMapBySql = _queryResultMap.get<SqlStrTag>();
   auto itr = cacheMapBySql.find(sqlStr);
@@ -262,18 +265,19 @@ bool NonProjectionRenderQueryCacheMap::canFitUpdatedResults(const std::string& s
   RUNTIME_EX_ASSERT(itr != cacheMapBySql.end(),
                     "A render query result cache for sql \"" + sqlStr + "\" does not exist.");
 
-  auto numBytes = updatedResults.getQueryMemDesc().getBufferSizeBytes(updatedResults.getDeviceType());
+  auto numBytes = updatedResults->getQueryMemDesc().getBufferSizeBytes(updatedResults->getDeviceType());
   return _totalCachedBytes + numBytes - (*itr)->cachedBytes <= _maxTotalCachedBytes;
 }
 
-bool NonProjectionRenderQueryCacheMap::canFitUpdatedResults(const TableId tableId, const ResultRows& updatedResults) {
+bool NonProjectionRenderQueryCacheMap::canFitUpdatedResults(const TableId tableId,
+                                                            const std::shared_ptr<ResultRows>& updatedResults) {
   _purgeUnusedCaches();
   auto itr = _queryResultMap.find(tableId);
 
   RUNTIME_EX_ASSERT(itr != _queryResultMap.end(),
                     "A render query result cache for table id: " + std::to_string(tableId) + " does not exist.");
 
-  auto numBytes = updatedResults.getQueryMemDesc().getBufferSizeBytes(updatedResults.getDeviceType());
+  auto numBytes = updatedResults->getQueryMemDesc().getBufferSizeBytes(updatedResults->getDeviceType());
   return _totalCachedBytes + numBytes - (*itr)->cachedBytes <= _maxTotalCachedBytes;
 }
 
@@ -282,7 +286,7 @@ std::pair<const ResultRows*, const std::vector<TargetMetaInfo>*> NonProjectionRe
   auto itr = _queryResultMap.find(tableId);
   RUNTIME_EX_ASSERT(itr != _queryResultMap.end(),
                     "A render query result cache for table id " + std::to_string(tableId) + " does not exist.");
-  return std::make_pair(&(*itr)->results, &(*itr)->resultsRowShape);
+  return std::make_pair((*itr)->results.get(), &(*itr)->resultsRowShape);
 }
 
 bool RootCache::hasPolyTableGpuCache(const std::string& tableName) {

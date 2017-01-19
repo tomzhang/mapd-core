@@ -2141,7 +2141,7 @@ class MapDHandler : virtual public MapDIf {
   }
 
 #ifdef HAVE_RENDERING
-  std::tuple<ResultRows,
+  std::tuple<std::shared_ptr<ResultRows>,
              std::vector<TargetMetaInfo>,
              int64_t,
              std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
@@ -2210,7 +2210,7 @@ class MapDHandler : virtual public MapDIf {
     render_timer.execution_time_ms += execute_time_ms;
 
     return std::make_tuple(
-        std::move(results),
+        std::shared_ptr<ResultRows>(new ResultRows(results)),
         std::move(targetMetaInfo),
         execute_time_ms,
         std::vector<std::pair<decltype(TableDescriptor::tableId), std::string>>({std::make_pair(tableId, tableName)}));
@@ -2283,7 +2283,7 @@ class MapDHandler : virtual public MapDIf {
 #ifdef HAVE_RAVM
 
 #ifdef HAVE_RENDERING
-  std::tuple<ResultRows,
+  std::tuple<std::shared_ptr<ResultRows>,
              std::vector<TargetMetaInfo>,
              int64_t,
              std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
@@ -2351,7 +2351,10 @@ class MapDHandler : virtual public MapDIf {
 
     render_timer.execution_time_ms += execute_time_ms;
 
-    return std::make_tuple(std::move(results), std::move(exe_result.getTargetsMeta()), execute_time_ms, rtn);
+    return std::make_tuple(std::shared_ptr<ResultRows>(new ResultRows(results)),
+                           std::move(exe_result.getTargetsMeta()),
+                           execute_time_ms,
+                           rtn);
   }
 #endif  // HAVE_RENDERING
 

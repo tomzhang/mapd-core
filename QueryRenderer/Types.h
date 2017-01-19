@@ -81,7 +81,7 @@ typedef std::shared_ptr<NonProjectionRenderQueryCache> NPRQueryCacheShPtr;
 
 typedef std::pair<TableId, uint64_t> TableIdRowIdPair;
 typedef std::pair<TableId, decltype(TableDescriptor::tableName)> TableIdNamePair;
-typedef std::function<std::tuple<ResultRows,
+typedef std::function<std::tuple<std::shared_ptr<ResultRows>,
                                  std::vector<TargetMetaInfo>,
                                  int64_t,
                                  std::vector<TableIdNamePair>,
