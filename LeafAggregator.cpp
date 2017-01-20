@@ -286,7 +286,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     const auto target_meta_infos = target_meta_infos_from_thrift(row_desc);
     AggregatedResult leaves_result{reduced_rs, target_meta_infos};
     CompilationOptions co = {ExecutorDeviceType::CPU, true, ExecutorOptLevel::Default, false};
-    ExecutionOptions eo = {false, true, false, false, true, false, false, false, 0};
+    ExecutionOptions eo = {false, true, false, false, true, false, false, false, 1.0};
     if (crt_subquery_idx >= static_cast<ssize_t>(subqueries.size())) {
       CHECK_EQ(static_cast<ssize_t>(subqueries.size()), crt_subquery_idx);
       CHECK(execution_finished);
