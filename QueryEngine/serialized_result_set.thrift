@@ -14,6 +14,7 @@ struct TColWidths {
 }
 
 enum TCountDistinctImplType {
+  Invalid,
   Bitmap,
   StdSet
 }
@@ -24,7 +25,7 @@ struct TCountDistinctDescriptor {
   3: i64 bitmap_sz_bits
 }
 
-typedef map<i64, TCountDistinctDescriptor> TCountDistinctDescriptors
+typedef list<TCountDistinctDescriptor> TCountDistinctDescriptors
 
 struct TResultSetBufferDescriptor {
   1: TResultSetLayout layout,

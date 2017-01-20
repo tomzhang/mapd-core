@@ -143,22 +143,53 @@ std::vector<TargetInfo> target_infos_from_thrift(const std::vector<TTargetInfo>&
   return targets;
 }
 
+#define THRIFT_COUNTDESCRIPTORIMPL_CASE(kind) \
+  case CountDistinctImplType::kind:           \
+    return TCountDistinctImplType::kind;
+
+TCountDistinctImplType::type count_distinct_impl_type_to_thrift(const CountDistinctImplType impl_type) {
+  switch (impl_type) {
+    THRIFT_COUNTDESCRIPTORIMPL_CASE(Invalid)
+    THRIFT_COUNTDESCRIPTORIMPL_CASE(Bitmap)
+    THRIFT_COUNTDESCRIPTORIMPL_CASE(StdSet)
+    default:
+      CHECK(false);
+  }
+  abort();
+}
+
+#undef THRIFT_COUNTDESCRIPTORIMPL_CASE
+
 TCountDistinctDescriptor count_distinct_descriptor_to_thrift(const CountDistinctDescriptor& count_distinct_descriptor) {
   TCountDistinctDescriptor thrift_count_distinct_descriptor;
-  thrift_count_distinct_descriptor.impl_type = count_distinct_descriptor.impl_type_ == CountDistinctImplType::Bitmap
-                                                   ? TCountDistinctImplType::Bitmap
-                                                   : TCountDistinctImplType::StdSet;
+  thrift_count_distinct_descriptor.impl_type = count_distinct_impl_type_to_thrift(count_distinct_descriptor.impl_type_);
   thrift_count_distinct_descriptor.min_val = count_distinct_descriptor.min_val;
   thrift_count_distinct_descriptor.bitmap_sz_bits = count_distinct_descriptor.bitmap_sz_bits;
   return thrift_count_distinct_descriptor;
 }
 
+#define UNTHRIFT_COUNTDESCRIPTORIMPL_CASE(kind) \
+  case TCountDistinctImplType::kind:            \
+    return CountDistinctImplType::kind;
+
+CountDistinctImplType count_distinct_impl_type_from_thrift(const TCountDistinctImplType::type impl_type) {
+  switch (impl_type) {
+    UNTHRIFT_COUNTDESCRIPTORIMPL_CASE(Invalid)
+    UNTHRIFT_COUNTDESCRIPTORIMPL_CASE(Bitmap)
+    UNTHRIFT_COUNTDESCRIPTORIMPL_CASE(StdSet)
+    default:
+      CHECK(false);
+  }
+  abort();
+}
+
+#undef UNTHRIFT_COUNTDESCRIPTORIMPL_CASE
+
 CountDistinctDescriptor count_distinct_descriptor_from_thrift(
     const TCountDistinctDescriptor& thrift_count_distinct_descriptor) {
   CountDistinctDescriptor count_distinct_descriptor;
-  count_distinct_descriptor.impl_type_ = thrift_count_distinct_descriptor.impl_type == TCountDistinctImplType::Bitmap
-                                             ? CountDistinctImplType::Bitmap
-                                             : CountDistinctImplType::StdSet;
+  count_distinct_descriptor.impl_type_ =
+      count_distinct_impl_type_from_thrift(thrift_count_distinct_descriptor.impl_type);
   count_distinct_descriptor.min_val = thrift_count_distinct_descriptor.min_val;
   count_distinct_descriptor.bitmap_sz_bits = thrift_count_distinct_descriptor.bitmap_sz_bits;
   return count_distinct_descriptor;
@@ -186,10 +217,9 @@ TResultSetBufferDescriptor query_mem_desc_to_thrift(const QueryMemoryDescriptor&
   for (const auto target_groupby_index : query_mem_desc.target_groupby_indices) {
     thrift_query_mem_desc.target_groupby_indices.push_back(target_groupby_index);
   }
-  for (const auto& count_distinct_descriptor_kv : query_mem_desc.count_distinct_descriptors_) {
-    const auto it_ok = thrift_query_mem_desc.count_distinct_descriptors.emplace(
-        count_distinct_descriptor_kv.first, count_distinct_descriptor_to_thrift(count_distinct_descriptor_kv.second));
-    CHECK(it_ok.second);
+  for (const auto& count_distinct_descriptor : query_mem_desc.count_distinct_descriptors_) {
+    thrift_query_mem_desc.count_distinct_descriptors.push_back(
+        count_distinct_descriptor_to_thrift(count_distinct_descriptor));
   }
   return thrift_query_mem_desc;
 }
@@ -216,11 +246,9 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
   for (const auto target_groupby_index : thrift_query_mem_desc.target_groupby_indices) {
     query_mem_desc.target_groupby_indices.push_back(target_groupby_index);
   }
-  for (const auto& thrift_count_distinct_descriptor_kv : thrift_query_mem_desc.count_distinct_descriptors) {
-    const auto it_ok = query_mem_desc.count_distinct_descriptors_.emplace(
-        thrift_count_distinct_descriptor_kv.first,
-        count_distinct_descriptor_from_thrift(thrift_count_distinct_descriptor_kv.second));
-    CHECK(it_ok.second);
+  for (const auto& thrift_count_distinct_descriptor : thrift_query_mem_desc.count_distinct_descriptors) {
+    query_mem_desc.count_distinct_descriptors_.push_back(
+        count_distinct_descriptor_from_thrift(thrift_count_distinct_descriptor));
   }
   return query_mem_desc;
 }
