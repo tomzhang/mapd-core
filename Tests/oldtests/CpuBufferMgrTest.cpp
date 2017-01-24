@@ -24,7 +24,7 @@ class CpuBufferMgrTest : public ::testing::Test {
     deleteData("data");
     cudaMgr = new CudaMgr_Namespace::CudaMgr;
     fm = new File_Namespace::FileMgr("data");
-    bm = new CpuBufferMgr(memSize, CUDA_HOST, cudaMgr, slabSize, pageSize, fm);
+    bm = new CpuBufferMgr(0, memSize, cudaMgr, slabSize, pageSize, fm);
   }
 
   virtual void TearDown() {

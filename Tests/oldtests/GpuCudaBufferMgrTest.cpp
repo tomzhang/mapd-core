@@ -21,7 +21,7 @@ class GpuCudaBufferMgrTest : public ::testing::Test {
  protected:
   virtual void SetUp() {
     cudaMgr = new CudaMgr_Namespace::CudaMgr();
-    cpuBufferMgr = new CpuBufferMgr(memSize, CUDA_HOST, cudaMgr);
+    cpuBufferMgr = new CpuBufferMgr(0, memSize, cudaMgr);
     gpuBufferMgr = new GpuCudaBufferMgr(memSize, 0, cudaMgr, slabSize, pageSize, cpuBufferMgr);
   }
 
