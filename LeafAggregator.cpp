@@ -179,7 +179,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   unsigned node_id{0};
   TMergeType::type merge_type = TMergeType::REDUCE;
   const auto& cat = parent_session_info.get_catalog();
-  auto executor = Executor::getExecutor(cat.get_currentDB().dbId, "", "", 0, 0, nullptr);
+  auto executor = Executor::getExecutor(cat.get_currentDB().dbId);
   RelAlgExecutor ra_executor(executor.get(), cat);
   ra_executor.prepareLeafExecution(column_ranges_from_thrift(column_ranges));
   const auto ra = deserialize_ra_dag(query_ra, cat, &ra_executor);
