@@ -1009,6 +1009,7 @@ ExecutionResult RelAlgExecutor::executeWorkUnit(const RelAlgExecutor::WorkUnit& 
   CHECK(body);
   auto it = leaf_results_.find(body->getId());
   if (it != leaf_results_.end()) {
+    GroupByAndAggregate::addTransientStringLiterals(work_unit.exe_unit, executor_, executor_->row_set_mem_owner_);
     auto& aggregated_result = it->second;
     ResultRows result_rows(aggregated_result.rs);
     ExecutionResult result(result_rows, aggregated_result.targets_meta);
