@@ -69,6 +69,7 @@ struct TSerializedRows {
   1: binary buffer,
   2: TResultSetBufferDescriptor descriptor,
   3: list<TTargetInfo> targets,
-  4: list<string> none_encoded_strings,
-  5: map<i64, TCountDistinctSet> count_distinct_sets
+  4: list<i64> target_init_vals,
+  5: list<string> none_encoded_strings,
+  6: map<i64, TCountDistinctSet> count_distinct_sets
 }

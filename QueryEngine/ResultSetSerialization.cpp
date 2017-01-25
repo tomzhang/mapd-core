@@ -265,6 +265,7 @@ std::string ResultSet::serialize() const {
   if (storage_) {
     const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
     serialized_rows.buffer = std::string(storage_buffer, storage_->query_mem_desc_.getBufferSizeBytes(device_type_));
+    serialized_rows.target_init_vals = storage_->target_init_vals_;
     serializeCountDistinctColumns(serialized_rows);
   }
   serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
@@ -442,7 +443,7 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str, const 
   auto result_set =
       boost::make_unique<ResultSet>(target_infos, ExecutorDeviceType::CPU, query_mem_desc, row_set_mem_owner, executor);
   if (query_mem_desc.entry_count) {
-    auto storage = result_set->allocateStorage();
+    auto storage = result_set->allocateStorage(serialized_rows.target_init_vals);
     auto storage_buff = storage->getUnderlyingBuffer();
     memcpy(storage_buff, serialized_rows.buffer.data(), serialized_rows.buffer.size());
     result_set->unserializeCountDistinctColumns(serialized_rows);
