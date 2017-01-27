@@ -122,6 +122,9 @@ QueryDataType getScaleDomainDataTypeFromJSONObj(const rapidjson::Value& obj,
 
       try {
         domainType = RapidJSONUtils::getHigherPriorityDataType(domainAnyType, itemAnyType);
+        if (domainType != domainAnyType.getType()) {
+          domainAnyType = itemAnyType;
+        }
       } catch (const std::runtime_error& e) {
         THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
             obj,
@@ -173,6 +176,9 @@ QueryDataType getScaleRangeDataTypeFromJSONObj(const rapidjson::Value& obj,
 
       try {
         rangeType = RapidJSONUtils::getHigherPriorityDataType(rangeAnyType, itemAnyType);
+        if (rangeType != rangeAnyType.getType()) {
+          rangeAnyType = itemAnyType;
+        }
       } catch (const std::runtime_error& e) {
         THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(
             obj,
