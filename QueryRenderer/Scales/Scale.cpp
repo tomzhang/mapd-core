@@ -1,4 +1,5 @@
 #include "Scale.h"
+#include "ScaleRef.h"
 #include "Utils.h"
 #include "../Utils/ShaderUtils.h"
 #include "shaders/quantitativeScaleTemplate_vert.h"
@@ -654,8 +655,20 @@ void BaseScale::_setDomainOverride(const ScaleDomainRangeDataShPtr& domainOverri
   _domainOverrideData.dataTablePtr = domainOverrideTablePtr;
 }
 
+void BaseScale::_setRangeOverride(const ScaleDomainRangeDataShPtr& rangeOverridePtr) {
+  if (rangeOverridePtr) {
+    auto rangeData = getRangeData(true);
+    CHECK(rangeData->getTypeInfo() == rangeOverridePtr->getTypeInfo() && rangeData->size() == rangeOverridePtr->size());
+  }
+  _rangeOverrideData = rangeOverridePtr;
+}
+
 bool BaseScale::_hasDomainOverride() const {
   return _domainOverrideData.dataPtr != nullptr;
+}
+
+bool BaseScale::_hasRangeOverride() const {
+  return _rangeOverrideData != nullptr;
 }
 
 std::string BaseScale::_getDomainOverrideTableName() const {

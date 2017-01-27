@@ -33,13 +33,14 @@ class BaseMark {
   void setShaderDirty() { _shaderDirty = true; }
   void setPropsDirty() { _propsDirty = true; }
 
-  bool hasAccumulator() const { return (_activeAccumulatorScaleName.size() > 0); }
-  std::string getAccumulatorScaleName() const { return _activeAccumulatorScaleName; }
+  bool hasAccumulator() const;
+  std::string getAccumulatorScaleName() const;
+  ScaleShPtr getAccumulatorScale() const;
 
   // set/clear accumulator should only be called by render property
   // TODO(croot): make these functions private and make render properties friends?
-  void setAccumulatorScale(const std::string& accumulatorScaleName);
-  void clearAccumulatorScale() { _activeAccumulatorScaleName = ""; }
+  void setAccumulatorScale(const ScaleShPtr& scalePtr, const ScaleRefShPtr& scaleRefPtr);
+  void clearAccumulatorScale();
 
   virtual void draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) = 0;
 
@@ -159,7 +160,7 @@ class BaseMark {
                                                  const std::set<GpuId>& usedGpus,
                                                  const std::set<GpuId>& unusedGpus) = 0;
 
-  std::string _activeAccumulatorScaleName;
+  ScaleWkPtr _activeAccumulator;
 
   friend class QueryRendererContext;
 };

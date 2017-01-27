@@ -87,7 +87,8 @@ std::string BaseScaleRef::_getRndrPropName() {
   return _rndrPropPtr->getName();
 }
 
-void BaseScaleRef::_initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr) {
+void BaseScaleRef::_initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr,
+                                 const ScaleDomainRangeDataShPtr& rangeDataPtr) {
   // doing this here because we only need to initialize
   // the gpu resources for a scale when it is being used
   // by a mark and it is guaranteed to be used by a mark
@@ -95,7 +96,7 @@ void BaseScaleRef::_initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr)
   // initialize the gpu resources here.
   auto accumulates = _scalePtr->hasAccumulator();
   if (accumulates) {
-    auto scaleDomainDataPtr = _scalePtr->getDomainData();
+    auto scaleDomainDataPtr = _scalePtr->getDomainData(true);
     CHECK(scaleDomainDataPtr);
     if (scaleDomainDataPtr->getType() == QueryDataType::STRING) {
       // we've got a scale that is accumulating, but it has
@@ -136,6 +137,8 @@ void BaseScaleRef::_initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr)
       if (!hasOverride) {
         _scalePtr->_setDomainOverride(domainDataPtr, dataTable);
       }
+
+      _scalePtr->_setRangeOverride(rangeDataPtr);
     }
   }
 

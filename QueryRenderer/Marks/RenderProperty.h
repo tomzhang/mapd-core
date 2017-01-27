@@ -195,7 +195,10 @@ class BaseRenderProperty {
   std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
   std::set<GpuId> _initUnusedGpus(const std::set<GpuId>& usedGpus);
   void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
-  bool _internalInitFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr, const bool hasScale);
+  bool _internalInitFromData(const std::string& attrName,
+                             const QueryDataTableShPtr& dataPtr,
+                             const bool hasScale,
+                             const bool updatingScale);
 
   friend class BaseScaleRef;
 };

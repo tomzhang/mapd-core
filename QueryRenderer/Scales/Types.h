@@ -31,9 +31,11 @@ typedef std::shared_ptr<BaseScaleDomainRangeData> ScaleDomainRangeDataShPtr;
 
 class BaseScale;
 typedef std::shared_ptr<BaseScale> ScaleShPtr;
+typedef std::weak_ptr<BaseScale> ScaleWkPtr;
 
 class BaseScaleRef;
 typedef std::shared_ptr<BaseScaleRef> ScaleRefShPtr;
+typedef std::weak_ptr<BaseScaleRef> ScaleRefWkPtr;
 
 std::string to_string(const ScaleType scaleType);
 std::string to_string(const AccumulatorType accumType);

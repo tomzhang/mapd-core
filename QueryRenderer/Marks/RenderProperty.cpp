@@ -40,6 +40,8 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
             RapidJSONUtils::getJsonParseErrorStr(
                 _ctx->getUserWidgetIds(), obj, "render property \"" + _name + "\" does not support scale references."));
         updateScale = true;
+      } else if (_scalePtr && _ctx->getScale(_scalePtr->getName()) != _scalePtr) {
+        updateScale = true;
       }
 
       _scaleJsonPath = objPath.Append(scaleProp.c_str(), scaleProp.length());
@@ -68,7 +70,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
           _unsubscribeFromDataEvent();
         }
 
-        _internalInitFromData(mitr->value.GetString(), dataPtr, hasScale);
+        _internalInitFromData(mitr->value.GetString(), dataPtr, hasScale, updateScale);
 
         if (dataPtrChanged) {
           // setup callbacks for data updates
@@ -102,6 +104,8 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 
     if (updateScale) {
       // initialize according to the scale
+      _scaleConfigPtr = nullptr;
+      _scalePtr = nullptr;
       _initScaleFromJSONObj(scalemitr->value);
       _validateScale();
     }
@@ -149,12 +153,13 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 }
 
 bool BaseRenderProperty::initializeFromData(const std::string& attrName, const QueryDataTableShPtr& dataPtr) {
-  return _internalInitFromData(attrName, dataPtr, false);
+  return _internalInitFromData(attrName, dataPtr, false, false);
 }
 
 bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
                                                const QueryDataTableShPtr& dataPtr,
-                                               const bool hasScale) {
+                                               const bool hasScale,
+                                               const bool updatingScale) {
   RUNTIME_EX_ASSERT(dataPtr != nullptr,
                     std::string(*this) + ": Cannot initialize mark property " + _name +
                         " from data. A valid data reference hasn't been initialized.");
@@ -168,7 +173,7 @@ bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
   bool inchanged, outchanged;
   std::tie(inchanged, outchanged) = _initTypeFromBuffer(hasScale);
   if (inchanged || outchanged) {
-    if (inchanged && _scalePtr) {
+    if (inchanged && !updatingScale && _scalePtr) {
       // need to make sure our scale reference is properly
       // adjusted for a possible new data type
       _updateScalePtr(_scalePtr);
@@ -458,7 +463,7 @@ void BaseRenderProperty::_dataRefUpdateCB(RefEventType refEventType, const RefOb
     // pass thru to the REPLACE code
     case RefEventType::REPLACE:
       CHECK(_vboAttrName.size());
-      if (_internalInitFromData(_vboAttrName, dataPtr, _scaleConfigPtr != nullptr || _scalePtr != nullptr)) {
+      if (_internalInitFromData(_vboAttrName, dataPtr, _scaleConfigPtr != nullptr || _scalePtr != nullptr, false)) {
         _setShaderDirty();
       }
       break;
@@ -501,7 +506,7 @@ void BaseRenderProperty::_setAccumulatorFromScale(const ScaleShPtr& scalePtr) {
         !_prntMark->hasAccumulator() || scalePtr->getName() == _prntMark->getAccumulatorScaleName(),
         std::string(*_prntMark) +
             " has more that one accumulator scale attached to it. There can only be one accumulator scale per mark.");
-    _prntMark->setAccumulatorScale(scalePtr->getName());
+    _prntMark->setAccumulatorScale(scalePtr, _scaleConfigPtr);
   }
 }
 

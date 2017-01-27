@@ -85,8 +85,8 @@ class BaseScale : public JSONRefObject {
                                       bool ignoreRange = false,
                                       bool ignoreAccum = false) = 0;
 
-  virtual BaseScaleDomainRangeData* getDomainData() = 0;
-  virtual BaseScaleDomainRangeData* getRangeData() = 0;
+  virtual BaseScaleDomainRangeData* getDomainData(const bool getOrig = false) = 0;
+  virtual BaseScaleDomainRangeData* getRangeData(const bool getOrig = false) = 0;
 
   virtual bool updateFromJSONObj(const rapidjson::Value& obj, const rapidjson::Pointer& objPath) = 0;
 
@@ -183,6 +183,7 @@ class BaseScale : public JSONRefObject {
   };
 
   OverrideData _domainOverrideData;
+  ScaleDomainRangeDataShPtr _rangeOverrideData;
 
  private:
   struct PerGpuData : BasePerGpuData {
@@ -250,7 +251,9 @@ class BaseScale : public JSONRefObject {
 
   void _setDomainOverride(const ScaleDomainRangeDataShPtr& domainOverridePtr,
                           const QueryDataTableSqlShPtr& domainOverrideTablePtr);
+  void _setRangeOverride(const ScaleDomainRangeDataShPtr& rangeOverridePtr);
   bool _hasDomainOverride() const;
+  bool _hasRangeOverride() const;
   std::string _getDomainOverrideTableName() const;
 
   void _clearResources();
@@ -287,14 +290,19 @@ class Scale : public BaseScale {
 
   virtual ~Scale() {}
 
-  BaseScaleDomainRangeData* getDomainData() {
-    if (_domainOverrideData.dataPtr) {
+  BaseScaleDomainRangeData* getDomainData(const bool getOrig = false) {
+    if (!getOrig && _domainOverrideData.dataPtr) {
       return _domainOverrideData.dataPtr.get();
     }
     return &_domainPtr;
   };
 
-  BaseScaleDomainRangeData* getRangeData() { return &_rangePtr; };
+  BaseScaleDomainRangeData* getRangeData(const bool getOrig = false) {
+    if (!getOrig && _rangeOverrideData) {
+      return _rangeOverrideData.get();
+    }
+    return &_rangePtr;
+  };
 
   ::Rendering::Colors::ColorType getRangeColorType() const final { return _getRangeColorTypeInternal(); }
 
@@ -420,6 +428,8 @@ class Scale : public BaseScale {
     }
 
     if (!ignoreRange) {
+      // NOTE: not using the range override data here because it should
+      // be the same type as the original range data
       boost::replace_first(shaderCode, "<rangeType>", _rangeTypeGL->glslType());
       boost::replace_all(shaderCode, "<rangeTypeEnum>", std::to_string(_rangeTypeGL->glslGLType()));
     }
@@ -462,6 +472,10 @@ class Scale : public BaseScale {
 
       if (hasDomainDataChanged()) {
         _domainOverrideData.reset();
+      }
+
+      if (hasRangeDataChanged()) {
+        _rangeOverrideData.reset();
       }
 
       // TODO(croot): expose "nullValue" as a constant somewhere;
@@ -615,7 +629,13 @@ class Scale : public BaseScale {
     }
 
     if (!ignoreRange) {
-      activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorDataRef());
+      if (_rangeOverrideData) {
+        auto overrideData = std::dynamic_pointer_cast<ScaleDomainRangeData<RangeType>>(_rangeOverrideData);
+        CHECK(overrideData);
+        activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, overrideData->getVectorDataRef());
+      } else {
+        activeShader->setUniformAttribute(getRangeGLSLUniformName() + extraSuffix, _rangePtr.getVectorDataRef());
+      }
 
       if (_useNullVal) {
         activeShader->setUniformAttribute("nullRangeVal_" + this->_name + extraSuffix, _nullVal);
@@ -888,7 +908,8 @@ class QuantitativeScale : public Scale<DomainType, RangeType> {
     RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
                       "Colors are currently the only supported accumulation range types.");
 
-    auto data = this->_rangePtr.getVectorData();
+    auto overrideData = std::dynamic_pointer_cast<ScaleDomainRangeData<RangeType>>(this->_rangeOverrideData);
+    auto data = (overrideData ? overrideData->getVectorData() : this->_rangePtr.getVectorData());
     if (this->_useNullVal) {
       data.push_back(this->_nullVal);
     }
@@ -1158,7 +1179,8 @@ class OrdinalScale : public Scale<DomainType, RangeType> {
     RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
                       "Colors are currently the only supported accumulation types.");
 
-    auto data = this->_rangePtr.getVectorData();
+    auto overrideData = std::dynamic_pointer_cast<ScaleDomainRangeData<RangeType>>(this->_rangeOverrideData);
+    auto data = (overrideData ? overrideData->getVectorData() : this->_rangePtr.getVectorData());
     data.push_back(_defaultVal);
 
     // nulls will be last here. The ordinal scale shader accounds for this by doing a
@@ -1235,7 +1257,8 @@ class QuantizeScale : public Scale<DomainType, RangeType> {
     RUNTIME_EX_ASSERT(this->_rangePtr.getType() == QueryDataType::COLOR,
                       "Colors are currently the only supported accumulation range types.");
 
-    auto data = this->_rangePtr.getVectorData();
+    auto overrideData = std::dynamic_pointer_cast<ScaleDomainRangeData<RangeType>>(this->_rangeOverrideData);
+    auto data = (overrideData ? overrideData->getVectorData() : this->_rangePtr.getVectorData());
     if (this->_useNullVal) {
       data.push_back(this->_nullVal);
     }

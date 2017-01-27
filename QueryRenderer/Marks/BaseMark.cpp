@@ -22,8 +22,7 @@ BaseMark::BaseMark(GeomType geomType, const QueryRendererContextShPtr& ctx)
       _vboProps(),
       _uboProps(),
       _uniformProps(),
-      _decimalProps(),
-      _activeAccumulatorScaleName("") {}
+      _decimalProps() {}
 
 BaseMark::BaseMark(GeomType geomType,
                    const QueryRendererContextShPtr& ctx,
@@ -37,13 +36,34 @@ BaseMark::BaseMark(GeomType geomType,
 
 BaseMark::~BaseMark() {}
 
-void BaseMark::setAccumulatorScale(const std::string& accumulatorScaleName) {
+bool BaseMark::hasAccumulator() const {
+  return !_activeAccumulator.expired();
+}
+
+std::string BaseMark::getAccumulatorScaleName() const {
+  auto scale = _activeAccumulator.lock();
+  if (scale) {
+    return scale->getName();
+  }
+  return "";
+}
+
+ScaleShPtr BaseMark::getAccumulatorScale() const {
+  return _activeAccumulator.lock();
+}
+
+void BaseMark::setAccumulatorScale(const ScaleShPtr& scalePtr, const ScaleRefShPtr& scaleRefPtr) {
+  CHECK(scalePtr);
   RUNTIME_EX_ASSERT(
-      !_activeAccumulatorScaleName.size() || _activeAccumulatorScaleName == accumulatorScaleName,
-      std::string(*this) + ": An accumulator scale named: \"" + _activeAccumulatorScaleName +
+      _activeAccumulator.expired() || _activeAccumulator.lock()->getName() == scalePtr->getName(),
+      std::string(*this) + ": An accumulator scale named: \"" + _activeAccumulator.lock()->getName() +
           "\" is already set active on the mark. Only one accumulator scale per mark is currently supported.");
 
-  _activeAccumulatorScaleName = accumulatorScaleName;
+  _activeAccumulator = scalePtr;
+}
+
+void BaseMark::clearAccumulatorScale() {
+  _activeAccumulator.reset();
 }
 
 void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,

@@ -63,7 +63,7 @@ class BaseScaleRef {
   std::string _getDataColumnName();
   std::string _getRndrPropName();
 
-  void _initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr);
+  void _initScalePtr(const ScaleDomainRangeDataShPtr& domainDataPtr, const ScaleDomainRangeDataShPtr& rangeDataPtr);
   void _deleteScalePtr();
 
   QueryRendererContextShPtr _ctx;
@@ -138,7 +138,7 @@ class ScaleRef : public BaseScaleRef {
   ScaleRef(const QueryRendererContextShPtr& ctx, const ScaleShPtr& scalePtr, BaseRenderProperty* rndrProp)
       : BaseScaleRef(ctx, scalePtr, rndrProp), _coercedDomainData(nullptr), _coercedRangeData(nullptr), _sorted(false) {
     _updateDomainRange(true, true);
-    _initScalePtr(_coercedDomainData);
+    _initScalePtr(_coercedDomainData, _coercedRangeData);
   }
 
   ~ScaleRef() {}
@@ -193,7 +193,7 @@ class ScaleRef : public BaseScaleRef {
 
     // if we get to this point, that means the scale is going to be used by a mark.
     // So we'll initialize any gpu resources the scale may use now.
-    _initScalePtr(_coercedDomainData);
+    _initScalePtr(_coercedDomainData, _coercedRangeData);
   }
 
   void bindUniformsToRenderer(::Rendering::GL::Resources::GLShader* activeShader,
@@ -283,7 +283,7 @@ class ScaleRef : public BaseScaleRef {
     _sorted = false;
 
     if (updateDomain) {
-      BaseScaleDomainRangeData* domainDataPtr = _scalePtr->getDomainData();
+      BaseScaleDomainRangeData* domainDataPtr = _scalePtr->getDomainData(true);
       bool isQuantScale = isQuantitativeScale(_scalePtr->getType());
       const auto& theirDomainType = domainDataPtr->getTypeInfo();
       const auto& ourDomainType = typeid(DomainType);
@@ -316,7 +316,7 @@ class ScaleRef : public BaseScaleRef {
 
     // make sure to un-sort the range if it was previously sorted
     if (updateRange || (!doSort && prevSorted)) {
-      BaseScaleDomainRangeData* rangeDataPtr = _scalePtr->getRangeData();
+      BaseScaleDomainRangeData* rangeDataPtr = _scalePtr->getRangeData(true);
       if (force || rangeDataPtr->getTypeInfo() != typeid(RangeType)) {
         if ((uintDomain = dynamic_cast<ScaleDomainRangeData<unsigned int>*>(rangeDataPtr))) {
           ConvertDomainRangeData<RangeType, unsigned int>()(_ctx, _coercedRangeData, uintDomain);

@@ -253,7 +253,7 @@ const QueryDataType ScaleDomainRangeData<int64_t>::dataType = QueryDataType::INT
 
 template <>
 int64_t ScaleDomainRangeData<int64_t>::getNullValue() {
-  return NULL_BIGINT;
+  return NULL_INT;
 }
 
 /*

@@ -23,7 +23,7 @@ class BaseScaleDomainRangeData {
   virtual int size() const = 0;
   virtual QueryDataType getType() const = 0;
   virtual const ::Rendering::GL::TypeGLShPtr& getTypeGL() = 0;
-  virtual const std::type_info& getTypeInfo() = 0;
+  virtual const std::type_info& getTypeInfo() const = 0;
 
   std::string getName() { return _name; }
   bool useString() { return _useString; }
@@ -183,7 +183,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
   }
 
   std::vector<T>& getVectorDataRef() { return *_vectorPtr; }
-  std::vector<T> getVectorData() { return *_vectorPtr; }
+  std::vector<T> getVectorData() const { return *_vectorPtr; }
 
   QueryDataType getType() const final { return dataType; }
   static T getNullValue() {
@@ -200,7 +200,7 @@ class ScaleDomainRangeData : public BaseScaleDomainRangeData {
     return _cachedTypeGL;
   }
 
-  inline const std::type_info& getTypeInfo() { return typeid(T); }
+  inline const std::type_info& getTypeInfo() const { return typeid(T); }
 
   static T getDataValueFromJSONObj(const rapidjson::Value& obj) { return RapidJSONUtils::getNumValFromJSONObj<T>(obj); }
 
