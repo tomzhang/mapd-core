@@ -1,4 +1,4 @@
-if (ENABLE_LICENSING_AWS)
+if(ENABLE_LICENSING_AWS)
   find_package(CURL REQUIRED)
   find_package(OpenSSL REQUIRED)
 

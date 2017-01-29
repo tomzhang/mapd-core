@@ -1,6 +1,3 @@
-cmake_minimum_required(VERSION 2.8)
-#set(CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wno-attributes -O3")
-
 set(string_dictionary_service_thrift_files
     ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/RemoteStringDictionary.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/string_dictionary_constants.cpp

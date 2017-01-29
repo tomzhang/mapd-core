@@ -18,11 +18,11 @@ list(APPEND QUERY_RENDERER_SOURCES Marks/BaseMark.cpp Marks/PointMark.cpp Marks/
 
 list(APPEND QUERY_RENDERER_SOURCES Rendering/QueryAccumTxPool.cpp Rendering/QueryFramebuffer.cpp Rendering/QueryIdMapPixelBuffer.cpp Rendering/QueryRenderCompositor.cpp Rendering/QueryRenderSMAAPass.cpp)
 
-if (_MAPDGL_X11)
+if(_MAPDGL_X11)
   list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${X11_X11_INCLUDE_PATH}")
   list(APPEND QUERY_RENDERER_LIBS "${X11_X11_LIB}")
   list(APPEND QUERY_RENDERER_SOURCES Rendering/glx/GlxQueryRenderCompositorImpl.cpp)
-elseif (_MAPDGL_EGL)
+elseif(_MAPDGL_EGL)
   list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${EGL_INCLUDE_DIR}")
   list(APPEND QUERY_RENDERER_LIBS "${EGL_LIBRARY}")
   list(APPEND QUERY_RENDERER_SOURCES Rendering/egl/EglQueryRenderCompositorImpl.cpp)
