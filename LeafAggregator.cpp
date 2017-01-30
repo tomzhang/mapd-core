@@ -164,6 +164,40 @@ TColumnRanges aggregate_leaf_ranges(const std::vector<TPendingQuery>& pending_qu
   return aggregated_ranges;
 }
 
+void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>& leaf_results) {
+  if (leaf_results.empty()) {
+    return;
+  }
+  const auto& leaf_result = leaf_results.front();
+  const auto& ref_layout = leaf_result->getQueryMemDesc();
+  for (const auto& rs : leaf_results) {
+    const auto& layout = rs->getQueryMemDesc();
+    CHECK(ref_layout.hash_type == layout.hash_type);
+    CHECK_EQ(ref_layout.keyless_hash, layout.keyless_hash);
+    CHECK(!layout.interleaved_bins_on_gpu);
+    CHECK_EQ(ref_layout.idx_target_as_key, layout.idx_target_as_key);
+    CHECK_EQ(ref_layout.init_val, layout.init_val);
+    CHECK(ref_layout.group_col_widths == layout.group_col_widths);
+    CHECK(ref_layout.agg_col_widths == layout.agg_col_widths);
+    CHECK(ref_layout.target_groupby_indices == layout.target_groupby_indices);
+    if (layout.hash_type != GroupByColRangeType::MultiCol &&
+        layout.hash_type != GroupByColRangeType::OneColGuessedRange) {
+      CHECK_EQ(ref_layout.entry_count, layout.entry_count);
+    }
+    CHECK_EQ(ref_layout.entry_count_small, layout.entry_count_small);
+    CHECK_EQ(ref_layout.min_val, layout.min_val);
+    CHECK_EQ(ref_layout.max_val, layout.max_val);
+    CHECK_EQ(ref_layout.bucket, layout.bucket);
+    CHECK_EQ(ref_layout.has_nulls, layout.has_nulls);
+    CHECK(ref_layout.sharing == layout.sharing);
+    CHECK(ref_layout.count_distinct_descriptors_ == layout.count_distinct_descriptors_);
+    CHECK(!layout.sort_on_gpu_);
+    CHECK(!layout.output_columnar);
+    CHECK(ref_layout.key_column_pad_bytes == layout.key_column_pad_bytes);
+    CHECK(ref_layout.target_column_pad_bytes == layout.target_column_pad_bytes);
+  }
+}
+
 }  // namespace
 
 // TODO(alex): split and clean-up this method
@@ -268,6 +302,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
         }
       }
     } else {
+      check_leaf_layout_consistency(leaf_results);
       std::vector<ResultSet*> leaf_results_ptrs;
       for (auto& result : leaf_results) {
         leaf_results_ptrs.push_back(result.get());
