@@ -42,7 +42,7 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
   }
 
   int32_t get(const std::string& str, const int32_t dict_id) noexcept override {
-    return getStringDictionary(dict_id)->get(str);
+    return getStringDictionary(dict_id)->getIdOfString(str);
   }
 
   void get_string(std::string& _return, const int32_t string_id, const int32_t dict_id) noexcept override {
