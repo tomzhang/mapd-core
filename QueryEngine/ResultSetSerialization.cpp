@@ -60,6 +60,7 @@ TAggKind::type agg_kind_to_thrift(const SQLAgg agg) {
     THRIFT_AGGKIND_CASE(MAX)
     THRIFT_AGGKIND_CASE(MIN)
     THRIFT_AGGKIND_CASE(SUM)
+    THRIFT_AGGKIND_CASE(APPROX_COUNT_DISTINCT)
     default:
       CHECK(false);
   }
@@ -79,6 +80,7 @@ SQLAgg agg_kind_from_thrift(const TAggKind::type agg) {
     UNTHRIFT_AGGKIND_CASE(MAX)
     UNTHRIFT_AGGKIND_CASE(MIN)
     UNTHRIFT_AGGKIND_CASE(SUM)
+    UNTHRIFT_AGGKIND_CASE(APPROX_COUNT_DISTINCT)
     default:
       CHECK(false);
   }
@@ -100,7 +102,7 @@ TTypeInfo type_info_to_thrift(const SQLTypeInfo& ti) {
 }
 
 bool takes_arg(const TargetInfo& target_info) {
-  return target_info.is_agg && (target_info.agg_kind != kCOUNT || target_info.is_distinct);
+  return target_info.is_agg && (target_info.agg_kind != kCOUNT || is_distinct_target(target_info));
 }
 
 TTargetInfo target_info_to_thrift(const TargetInfo& target_info) {
@@ -165,6 +167,9 @@ TCountDistinctDescriptor count_distinct_descriptor_to_thrift(const CountDistinct
   thrift_count_distinct_descriptor.impl_type = count_distinct_impl_type_to_thrift(count_distinct_descriptor.impl_type_);
   thrift_count_distinct_descriptor.min_val = count_distinct_descriptor.min_val;
   thrift_count_distinct_descriptor.bitmap_sz_bits = count_distinct_descriptor.bitmap_sz_bits;
+  thrift_count_distinct_descriptor.approximate = count_distinct_descriptor.approximate;
+  thrift_count_distinct_descriptor.device_type =
+      count_distinct_descriptor.device_type == ExecutorDeviceType::GPU ? TDeviceType::GPU : TDeviceType::CPU;
   return thrift_count_distinct_descriptor;
 }
 
@@ -192,6 +197,10 @@ CountDistinctDescriptor count_distinct_descriptor_from_thrift(
       count_distinct_impl_type_from_thrift(thrift_count_distinct_descriptor.impl_type);
   count_distinct_descriptor.min_val = thrift_count_distinct_descriptor.min_val;
   count_distinct_descriptor.bitmap_sz_bits = thrift_count_distinct_descriptor.bitmap_sz_bits;
+  count_distinct_descriptor.approximate = thrift_count_distinct_descriptor.approximate;
+  count_distinct_descriptor.device_type = thrift_count_distinct_descriptor.device_type == TDeviceType::GPU
+                                              ? ExecutorDeviceType::GPU
+                                              : ExecutorDeviceType::CPU;
   return count_distinct_descriptor;
 }
 
@@ -411,12 +420,27 @@ std::string ResultSet::serializeProjection() const {
 }
 
 void ResultSet::serializeCountDistinctColumns(TSerializedRows& serialized_rows) const {
+  // If the count distinct query ran on GPU, all bitmaps come from a single,
+  // contiguous buffer which needs to be skipped since the beginning of the first
+  // logical bitmap buffer is the same as this contiguous buffer.
+  const auto bitmap_pool_buffers =
+      std::count_if(row_set_mem_owner_->count_distinct_bitmaps_.begin(),
+                    row_set_mem_owner_->count_distinct_bitmaps_.end(),
+                    [](const RowSetMemoryOwner::CountDistinctBitmapBuffer& count_distinct_buffer) {
+                      return !count_distinct_buffer.system_allocated;
+                    });
+  if (bitmap_pool_buffers) {
+    CHECK_EQ(row_set_mem_owner_->count_distinct_bitmaps_.size(), bitmap_pool_buffers + 1);
+  }
   for (const auto& bitmap : row_set_mem_owner_->count_distinct_bitmaps_) {
+    if (bitmap_pool_buffers && bitmap.system_allocated) {
+      continue;
+    }
     TCountDistinctSet thrift_bitmap;
     thrift_bitmap.type = TCountDistinctImplType::Bitmap;
-    thrift_bitmap.storage.bitmap = std::string(reinterpret_cast<const char*>(bitmap.first), bitmap.second);
+    thrift_bitmap.storage.bitmap = std::string(reinterpret_cast<const char*>(bitmap.ptr), bitmap.size);
     const auto it_ok =
-        serialized_rows.count_distinct_sets.emplace(reinterpret_cast<int64_t>(bitmap.first), thrift_bitmap);
+        serialized_rows.count_distinct_sets.emplace(reinterpret_cast<int64_t>(bitmap.ptr), thrift_bitmap);
     CHECK(it_ok.second);
   }
   for (const auto sparse_set : row_set_mem_owner_->count_distinct_sets_) {
@@ -463,7 +487,7 @@ void ResultSet::unserializeCountDistinctColumns(const TSerializedRows& serialize
         const auto bitmap_byte_sz = kv.second.storage.bitmap.size();
         auto count_distinct_buffer = static_cast<int8_t*>(checked_malloc(bitmap_byte_sz));
         memcpy(count_distinct_buffer, &kv.second.storage.bitmap[0], bitmap_byte_sz);
-        row_set_mem_owner_->addCountDistinctBuffer(count_distinct_buffer, bitmap_byte_sz);
+        row_set_mem_owner_->addCountDistinctBuffer(count_distinct_buffer, bitmap_byte_sz, true);
         storage_->addCountDistinctSetPointerMapping(kv.first, reinterpret_cast<int64_t>(count_distinct_buffer));
         break;
       }

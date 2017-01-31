@@ -19,10 +19,17 @@ enum TCountDistinctImplType {
   StdSet
 }
 
+enum TDeviceType {
+  CPU,
+  GPU
+}
+
 struct TCountDistinctDescriptor {
   1: TCountDistinctImplType impl_type,
   2: i64 min_val,
-  3: i64 bitmap_sz_bits
+  3: i64 bitmap_sz_bits,
+  4: bool approximate,
+  5: TDeviceType device_type
 }
 
 typedef list<TCountDistinctDescriptor> TCountDistinctDescriptors
@@ -43,7 +50,7 @@ struct TResultSetBufferDescriptor {
 }
 
 enum TAggKind {
-  AVG, MIN, MAX, SUM, COUNT
+  AVG, MIN, MAX, SUM, COUNT, APPROX_COUNT_DISTINCT
 }
 
 struct TTargetInfo {
