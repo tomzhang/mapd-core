@@ -157,14 +157,17 @@ class BaseColorPacked4f : public BaseOpacityConvertToFloat, public BaseColor4f<C
     auto num = typeGL->numComponents();
     auto baseType = typeGL->baseGLType();
 
-    return (num == 4 && baseType == GL_FLOAT) || (num == 1 && (baseType == GL_INT || baseType == GL_UNSIGNED_INT));
+    return (num == 4 && baseType == GL_FLOAT) ||
+           (num == 1 && (baseType == GL_INT || baseType == GL_UNSIGNED_INT || baseType == GL_INT64_NV ||
+                         baseType == GL_UNSIGNED_INT64_NV));
   }
 
   static bool isPackedTypeGL(const ::Rendering::GL::TypeGLShPtr& typeGL) {
     CHECK(typeGL);
     auto num = typeGL->numComponents();
     auto baseType = typeGL->baseGLType();
-    return (num == 1 && (baseType == GL_INT || baseType == GL_UNSIGNED_INT));
+    return (num == 1 && (baseType == GL_INT || baseType == GL_UNSIGNED_INT || baseType == GL_INT64_NV ||
+                         baseType == GL_UNSIGNED_INT64_NV));
   }
 
   static ::Rendering::GL::TypeGL<uint32_t, 1> getPackedTypeGL(const std::set<std::string>& supportedExtensions) {

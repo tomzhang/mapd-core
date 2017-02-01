@@ -177,6 +177,8 @@ const std::string LineTemplate_Vert::source =
     "outTstrokeColor getstrokeColor(in inTstrokeColor strokeColor) {\n"
     "#if (inTstrokeColorEnum == INT || inTstrokeColorEnum == UNSIGNED_INT) && outTstrokeColorEnum == FLOAT_VEC4\n"
     "    return unpackColor(strokeColor);\n"
+    "#elif inTstrokeColorEnum == INT64_NV || inTstrokeColorEnum == UNSIGNED_INT64_NV\n"
+    "    return unpackColor(uint(strokeColor));\n"
     "#else\n"
     "    return strokeColor;\n"
     "#endif\n"

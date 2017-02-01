@@ -169,6 +169,8 @@ const std::string PolyTemplate_Vert::source =
     "outTfillColor getfillColor(in inTfillColor fillColor) {\n"
     "#if (inTfillColorEnum == INT || inTfillColorEnum == UNSIGNED_INT) && outTfillColorEnum == FLOAT_VEC4\n"
     "    return unpackColor(fillColor);\n"
+    "#elif inTfillColorEnum == INT64_NV || inTfillColorEnum == UNSIGNED_INT64_NV\n"
+    "    return unpackColor(uint(fillColor));\n"
     "#else\n"
     "    return fillColor;\n"
     "#endif\n"
