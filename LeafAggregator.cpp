@@ -191,7 +191,7 @@ void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>
     CHECK_EQ(ref_layout.has_nulls, layout.has_nulls);
     CHECK(ref_layout.sharing == layout.sharing);
     CHECK_EQ(ref_layout.count_distinct_descriptors_.size(), layout.count_distinct_descriptors_.size());
-    // Count distinct descriptors can legitimately be differ in device only.
+    // Count distinct descriptors can legitimately differ in device only.
     for (size_t i = 0; i < ref_layout.count_distinct_descriptors_.size(); ++i) {
       auto ref_count_distinct_desc = ref_layout.count_distinct_descriptors_[i];
       auto count_distinct_desc = layout.count_distinct_descriptors_[i];
