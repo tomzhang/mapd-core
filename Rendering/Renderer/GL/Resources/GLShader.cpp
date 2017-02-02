@@ -351,56 +351,56 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
         } else {
           blockLayoutPtr->addAttribute<int64_t>(attrName, idx);
         }
-        break;
+        return;
       case GL_INT64_VEC2_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<int64_t, 2>(attrName);
         } else {
           blockLayoutPtr->addAttribute<int64_t, 2>(attrName, idx);
         }
-        break;
+        return;
       case GL_INT64_VEC3_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<int64_t, 3>(attrName);
         } else {
           blockLayoutPtr->addAttribute<int64_t, 3>(attrName, idx);
         }
-        break;
+        return;
       case GL_INT64_VEC4_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<int64_t, 4>(attrName);
         } else {
           blockLayoutPtr->addAttribute<int64_t, 4>(attrName, idx);
         }
-        break;
+        return;
       case GL_UNSIGNED_INT64_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<uint64_t>(attrName);
         } else {
           blockLayoutPtr->addAttribute<uint64_t>(attrName, idx);
         }
-        break;
+        return;
       case GL_UNSIGNED_INT64_VEC2_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<uint64_t, 2>(attrName);
         } else {
           blockLayoutPtr->addAttribute<uint64_t, 2>(attrName, idx);
         }
-        break;
+        return;
       case GL_UNSIGNED_INT64_VEC3_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<uint64_t, 3>(attrName);
         } else {
           blockLayoutPtr->addAttribute<uint64_t, 3>(attrName, idx);
         }
-        break;
+        return;
       case GL_UNSIGNED_INT64_VEC4_NV:
         if (usePublicAddAttr) {
           blockLayoutPtr->addAttribute<uint64_t, 4>(attrName);
         } else {
           blockLayoutPtr->addAttribute<uint64_t, 4>(attrName, idx);
         }
-        break;
+        return;
     }
   }
 
@@ -411,28 +411,28 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
       } else {
         blockLayoutPtr->addAttribute<unsigned int>(attrName, idx);
       }
-      break;
+      return;
     case GL_UNSIGNED_INT_VEC2:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<unsigned int, 2>(attrName);
       } else {
         blockLayoutPtr->addAttribute<unsigned int, 2>(attrName, idx);
       }
-      break;
+      return;
     case GL_UNSIGNED_INT_VEC3:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<unsigned int, 3>(attrName);
       } else {
         blockLayoutPtr->addAttribute<unsigned int, 3>(attrName, idx);
       }
-      break;
+      return;
     case GL_UNSIGNED_INT_VEC4:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<unsigned int, 4>(attrName);
       } else {
         blockLayoutPtr->addAttribute<unsigned int, 4>(attrName, idx);
       }
-      break;
+      return;
 
     case GL_INT:
       if (usePublicAddAttr) {
@@ -440,28 +440,28 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
       } else {
         blockLayoutPtr->addAttribute<int>(attrName, idx);
       }
-      break;
+      return;
     case GL_INT_VEC2:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<int, 2>(attrName);
       } else {
         blockLayoutPtr->addAttribute<int, 2>(attrName, idx);
       }
-      break;
+      return;
     case GL_INT_VEC3:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<int, 3>(attrName);
       } else {
         blockLayoutPtr->addAttribute<int, 3>(attrName, idx);
       }
-      break;
+      return;
     case GL_INT_VEC4:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<int, 4>(attrName);
       } else {
         blockLayoutPtr->addAttribute<int, 4>(attrName, idx);
       }
-      break;
+      return;
 
     case GL_FLOAT:
       if (usePublicAddAttr) {
@@ -469,28 +469,28 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
       } else {
         blockLayoutPtr->addAttribute<float>(attrName, idx);
       }
-      break;
+      return;
     case GL_FLOAT_VEC2:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<float, 2>(attrName);
       } else {
         blockLayoutPtr->addAttribute<float, 2>(attrName, idx);
       }
-      break;
+      return;
     case GL_FLOAT_VEC3:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<float, 3>(attrName);
       } else {
         blockLayoutPtr->addAttribute<float, 3>(attrName, idx);
       }
-      break;
+      return;
     case GL_FLOAT_VEC4:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<float, 4>(attrName);
       } else {
         blockLayoutPtr->addAttribute<float, 4>(attrName, idx);
       }
-      break;
+      return;
 
     case GL_DOUBLE:
       if (usePublicAddAttr) {
@@ -498,28 +498,28 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
       } else {
         blockLayoutPtr->addAttribute<double>(attrName, idx);
       }
-      break;
+      return;
     case GL_DOUBLE_VEC2:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<double, 2>(attrName);
       } else {
         blockLayoutPtr->addAttribute<double, 2>(attrName, idx);
       }
-      break;
+      return;
     case GL_DOUBLE_VEC3:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<double, 3>(attrName);
       } else {
         blockLayoutPtr->addAttribute<double, 3>(attrName, idx);
       }
-      break;
+      return;
     case GL_DOUBLE_VEC4:
       if (usePublicAddAttr) {
         blockLayoutPtr->addAttribute<double, 4>(attrName);
       } else {
         blockLayoutPtr->addAttribute<double, 4>(attrName, idx);
       }
-      break;
+      return;
 
     // case GL_SAMPLER_1D:
     // case GL_SAMPLER_1D_ARRAY:
@@ -578,7 +578,6 @@ void UniformBlockAttrInfo::addActiveAttr(const std::string& attrName, GLint type
     default:
       // TODO(croot): throw an error instead?
       LOG(WARNING) << "GL type: " << type << " is not a currently supported type for buffer-backed uniform block.";
-      break;
   }
 }
 
