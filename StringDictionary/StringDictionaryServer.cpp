@@ -49,6 +49,10 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
     _return = getStringDictionary(dict_id)->getString(string_id);
   }
 
+  int64_t storage_entry_count(const int32_t dict_id) noexcept override {
+    return getStringDictionary(dict_id)->storageEntryCount();
+  }
+
  private:
   StringDictionary* getStringDictionary(const int32_t dict_id) const {
     mapd_shared_lock<mapd_shared_mutex> read_lock(string_dictionaries_mutex_);

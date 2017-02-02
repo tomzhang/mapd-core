@@ -15,6 +15,8 @@ class StringDictionaryClient {
 
   void get_string(std::string& _return, const int32_t string_id);
 
+  int64_t storage_entry_count();
+
  private:
   void setupClient();
 

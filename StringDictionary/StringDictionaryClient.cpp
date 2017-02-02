@@ -40,6 +40,17 @@ void StringDictionaryClient::get_string(std::string& _return, const int32_t stri
   client_->get_string(_return, string_id, dict_id_);
 }
 
+int64_t StringDictionaryClient::storage_entry_count() {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  CHECK(client_);
+  try {
+    return client_->storage_entry_count(dict_id_);
+  } catch (const TTransportException&) {
+    setupClient();
+  }
+  return client_->storage_entry_count(dict_id_);
+}
+
 void StringDictionaryClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(server_host_.getHost(), server_host_.getPort());
   const auto transport = boost::make_shared<TBufferedTransport>(socket);

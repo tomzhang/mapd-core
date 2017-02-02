@@ -164,6 +164,37 @@ TColumnRanges aggregate_leaf_ranges(const std::vector<TPendingQuery>& pending_qu
   return aggregated_ranges;
 }
 
+typedef std::vector<TDictionaryGeneration> TDictionaryGenerations;
+
+TDictionaryGenerations aggregate_two_leaf_dictionary_generations(const TDictionaryGenerations& lhs,
+                                                                 const TDictionaryGenerations& rhs) {
+  CHECK_EQ(lhs.size(), rhs.size());
+  TDictionaryGenerations result;
+  for (const auto& lhs_dictionary_generation : lhs) {
+    const auto it = std::find_if(rhs.begin(), rhs.end(), [&lhs_dictionary_generation](const TDictionaryGeneration& r) {
+      return r.dict_id == lhs_dictionary_generation.dict_id;
+    });
+    CHECK(it != rhs.end());
+    const auto& rhs_dictionary_generation = *it;
+    TDictionaryGeneration dictionary_generation;
+    dictionary_generation.dict_id = lhs_dictionary_generation.dict_id;
+    dictionary_generation.entry_count =
+        std::min(lhs_dictionary_generation.entry_count, rhs_dictionary_generation.entry_count);
+    result.push_back(dictionary_generation);
+  }
+  return result;
+}
+
+TDictionaryGenerations aggregate_dictionary_generations(const std::vector<TPendingQuery>& pending_queries) {
+  CHECK(!pending_queries.empty());
+  auto dictionary_generations = pending_queries.front().dictionary_generations;
+  for (size_t i = 1; i < pending_queries.size(); ++i) {
+    dictionary_generations =
+        aggregate_two_leaf_dictionary_generations(dictionary_generations, pending_queries[i].dictionary_generations);
+  }
+  return dictionary_generations;
+}
+
 void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>& leaf_results) {
   if (leaf_results.empty()) {
     return;
@@ -213,8 +244,10 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra);
   const auto column_ranges = aggregate_leaf_ranges(pending_queries);
+  const auto string_dictionary_generations = aggregate_dictionary_generations(pending_queries);
   for (auto& pending_query : pending_queries) {
     pending_query.column_ranges = column_ranges;
+    pending_query.dictionary_generations = string_dictionary_generations;
   }
   bool execution_finished = false;
   unsigned node_id{0};
@@ -222,7 +255,8 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   const auto& cat = parent_session_info.get_catalog();
   auto executor = Executor::getExecutor(cat.get_currentDB().dbId);
   RelAlgExecutor ra_executor(executor.get(), cat);
-  ra_executor.prepareLeafExecution(column_ranges_from_thrift(column_ranges));
+  ra_executor.prepareLeafExecution(column_ranges_from_thrift(column_ranges),
+                                   string_dictionary_generations_from_thrift(string_dictionary_generations));
   const auto ra = deserialize_ra_dag(query_ra, cat, &ra_executor);
   std::mutex leaves_mutex;
   ssize_t crt_subquery_idx = -1;
