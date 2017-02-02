@@ -407,9 +407,7 @@ void QueryRenderer::_initFromJSON(const std::shared_ptr<rapidjson::Document>& js
           } else {
             // do an update
             if (_ctx->_geomConfigs[i]->getType() != getMarkTypeFromJSONObj(*vitr)) {
-              // TODO(croot): need to do a replace
-              THROW_RUNTIME_EX("The type of mark " + RapidJSONUtils::getPointerPath(markObjPath) +
-                               " has changed in-place in the json. This has yet to be implemented.");
+              _ctx->_geomConfigs[i] = createMark(*vitr, markObjPath, _ctx);
             } else {
               _ctx->_geomConfigs[i]->updateFromJSONObj(*vitr, markObjPath);
             }
