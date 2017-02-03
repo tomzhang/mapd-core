@@ -26,8 +26,7 @@ GLUniformBuffer::GLUniformBuffer(const RendererWkPtr& rendererPtr,
                                           GLBufferType::UNIFORM_BUFFER,
                                           GL_UNIFORM_BUFFER,
                                           accessType,
-                                          accessFreq) {
-}
+                                          accessFreq) {}
 
 GLUniformBuffer::GLUniformBuffer(const RendererWkPtr& rendererPtr,
                                  size_t numBytes,
@@ -68,75 +67,6 @@ void GLUniformBuffer::_validateBufferLayout(size_t numBytes,
   RUNTIME_EX_ASSERT(sblayoutPtr, "GLUniformBuffers only support GLShaderBlockLayout. Validation failed.");
 }
 
-// void GLUniformBuffer::_bufferSubData(const std::string& attrName,
-//                                      const void* data,
-//                                      size_t bytesPerComponent,
-//                                      size_t numComponents,
-//                                      int idx) {
-//   RUNTIME_EX_ASSERT(_shaderBlockLayoutPtr != nullptr,
-//                     "Cannot access attribute " + attrName +
-//                         " in uniform buffer object. It has not been properly initialized with "
-//                         "a shader block layout.");
-
-//   RUNTIME_EX_ASSERT(
-//       _shaderBlockLayoutPtr->hasAttribute(attrName),
-//       "Attribute " + attrName + " does not exist in the shader block layout of the uniform buffer object.");
-
-//   const GLBufferAttrInfo& attrInfo = _shaderBlockLayoutPtr->getAttributeInfo(attrName);
-//   BaseTypeGL* typeInfo = attrInfo.typeInfo;
-
-//   RUNTIME_EX_ASSERT(numComponents == static_cast<size_t>(typeInfo->numComponents()),
-//                     "Wrong number of components for attribute " + attrName + ". " + std::to_string(numComponents) +
-//                         " components were supplied but the shader block layout expects " +
-//                         std::to_string(typeInfo->numComponents()) + ".");
-
-//   size_t offset = 0;
-//   size_t totalNumBytes = bytesPerComponent * numComponents;
-
-//   // the following should always be true if all the prior checks passed??
-//   CHECK(totalNumBytes <= _shaderBlockLayoutPtr->getNumBytesInBlock());
-
-//   GLint currBuff;
-//   GLuint id = getId();
-
-//   MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_UNIFORM_BUFFER_BINDING, &currBuff));
-
-//   bool bind = (currBuff != static_cast<GLint>(id));
-
-//   size_t totalNumItems = numItems();
-//   size_t numBytesPerItem = getNumBytesPerItem();
-//   if (idx < 0) {
-//     RUNTIME_EX_ASSERT(
-//         !totalNumItems,
-//         "Cannot set data in uniform buffer for attribute " + attrName +
-//             ". The buffer hasn't had memory allocated to it yet. Call bufferData() to allocated memory first.");
-
-//     if (bind) {
-//       MAPD_CHECK_GL_ERROR(glBindBuffer(GL_UNIFORM_BUFFER, id));
-//     }
-
-//     for (size_t i = 0; i < totalNumItems; ++i) {
-//       offset = numBytesPerItem * idx + attrInfo.offset;
-//       MAPD_CHECK_GL_ERROR(glBufferSubData(GL_UNIFORM_BUFFER, offset, totalNumBytes, data));
-//     }
-//   } else {
-//     RUNTIME_EX_ASSERT(static_cast<size_t>(idx) < totalNumItems,
-//                       "Cannot set attribute " + attrName + " for item " + std::to_string(idx) + ". There are only " +
-//                           std::to_string(numItems()) + " items available.");
-
-//     if (bind) {
-//       MAPD_CHECK_GL_ERROR(glBindBuffer(GL_UNIFORM_BUFFER, id));
-//     }
-
-//     offset = numBytesPerItem * idx + attrInfo.offset;
-//     MAPD_CHECK_GL_ERROR(glBufferSubData(GL_UNIFORM_BUFFER, offset, totalNumBytes, data));
-//   }
-
-//   if (bind) {
-//     MAPD_CHECK_GL_ERROR(glBindBuffer(GL_UNIFORM_BUFFER, currBuff));
-//   }
-// }
-
 size_t GLUniformBuffer::getNumBytesInBlock(const GLShaderBlockLayoutShPtr& layoutPtr) const {
   auto layout = _getBufferLayoutToUse(layoutPtr, "Cannot get number of bytes in uniform buffer block. ");
   return (layout ? layout->getNumBytesInBlock() : 0);
@@ -149,16 +79,6 @@ size_t GLUniformBuffer::getNumBytesPerItem(const GLShaderBlockLayoutShPtr& layou
 size_t GLUniformBuffer::getNumAlignmentBytes() const {
   return GLShaderBlockLayout::getNumAlignmentBytes();
 }
-
-// const GLBufferAttrInfo& GLUniformBuffer::operator[](size_t i) const {
-//   RUNTIME_EX_ASSERT(_shaderBlockLayoutPtr != nullptr,
-//                     "The uniform buffer has not been properly initialized with a GLShaderBlockLayout. Cannot retrieve
-//                     "
-//                     "attribute at index " +
-//                         std::to_string(i) + ".");
-
-//   return (*_shaderBlockLayoutPtr)[i];
-// }
 
 void GLUniformBuffer::bufferData(void* data, const size_t numBytes, const GLShaderBlockLayoutShPtr& layoutPtr) {
   auto fullNumBytesToUse = numBytes;
@@ -194,10 +114,6 @@ void GLUniformBuffer::bufferData(void* data, const size_t numBytes, const GLShad
 
   GLLayoutBuffer<GLShaderBlockLayout>::bufferData(data, fullNumBytesToUse, layoutPtr);
 }
-
-// void GLUniformBuffer::_bindToShaderInternal(GLShader* activeShader, const std::string& attr = "", const std::string&
-// shaderAttr =
-// "");
 
 }  // namespace Resources
 }  // namespace GL

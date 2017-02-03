@@ -44,8 +44,7 @@ GLIndexBuffer::GLIndexBuffer(const RendererWkPtr& rendererPtr,
                    accessType,
                    accessFreq),
       _indexType(indexType),
-      _numItems(0) {
-}
+      _numItems(0) {}
 
 GLIndexBuffer::GLIndexBuffer(const RendererWkPtr& rendererPtr,
                              size_t numBytes,
@@ -86,6 +85,7 @@ GLIndexBuffer::~GLIndexBuffer() {
 
 void GLIndexBuffer::_makeEmpty() {
   _numItems = 0;
+  GLVertexArrayResource::_cleanupResource();
 }
 
 size_t GLIndexBuffer::getIndexTypeByteSize() const {
@@ -99,6 +99,11 @@ void GLIndexBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarg
                         std::to_string(numBytes) + " bytes. The size of the buffer must be a multiple of " +
                         std::to_string(typesz));
 
+  RUNTIME_EX_ASSERT(_vaoSize() == 0,
+                    "There are existing vertex array objects that are currently making use of the index buffer. "
+                    "Cannot buffer a full set of new data as it would invalidate those vaos. Delete/clear those vaos "
+                    "first.");
+
   GLBaseBuffer::bufferData(data, numBytes, altTarget);
 
   _numItems = numBytes / typesz;
@@ -108,6 +113,10 @@ void GLIndexBuffer::bufferData(const std::vector<unsigned char>& indices) {
   RUNTIME_EX_ASSERT(_indexType == IndexType::UNSIGNED_BYTE,
                     "Cannot set data of type " + to_string(IndexType::UNSIGNED_BYTE) +
                         " for an index buffer of type: " + to_string(_indexType) + ".");
+  RUNTIME_EX_ASSERT(_vaoSize() == 0,
+                    "There are existing vertex array objects that are currently making use of the index buffer. "
+                    "Cannot buffer a full set of new data as it would invalidate those vaos. Delete/clear those vaos "
+                    "first.");
   GLBaseBuffer::bufferData(&indices[0], indices.size() * sizeof(unsigned char));
   _numItems = indices.size();
 }
@@ -116,6 +125,10 @@ void GLIndexBuffer::bufferData(const std::vector<unsigned short>& indices) {
   RUNTIME_EX_ASSERT(_indexType == IndexType::UNSIGNED_SHORT,
                     "Cannot set data of type " + to_string(IndexType::UNSIGNED_SHORT) +
                         " for an index buffer of type: " + to_string(_indexType) + ".");
+  RUNTIME_EX_ASSERT(_vaoSize() == 0,
+                    "There are existing vertex array objects that are currently making use of the index buffer. "
+                    "Cannot buffer a full set of new data as it would invalidate those vaos. Delete/clear those vaos "
+                    "first.");
   GLBaseBuffer::bufferData(&indices[0], indices.size() * sizeof(unsigned short));
   _numItems = indices.size();
 }
@@ -124,8 +137,21 @@ void GLIndexBuffer::bufferData(const std::vector<unsigned int>& indices) {
   RUNTIME_EX_ASSERT(_indexType == IndexType::UNSIGNED_INT,
                     "Cannot set data of type " + to_string(IndexType::UNSIGNED_INT) + " for an index buffer of type: " +
                         to_string(_indexType) + ".");
+  RUNTIME_EX_ASSERT(_vaoSize() == 0,
+                    "There are existing vertex array objects that are currently making use of the index buffer. "
+                    "Cannot buffer a full set of new data as it would invalidate those vaos. Delete/clear those vaos "
+                    "first.");
   GLBaseBuffer::bufferData(&indices[0], indices.size() * sizeof(unsigned int));
   _numItems = indices.size();
+}
+
+bool GLIndexBuffer::_doesVaoUseThisResource(const GLVertexArrayShPtr& vao) {
+  CHECK(vao);
+  return vao->hasIbo(this);
+}
+
+void GLIndexBuffer::_setVaoDirtyFlag(GLVertexArrayShPtr& vao, const bool dirtyFlag) {
+  vao->_setDirtyFlag(dirtyFlag);
 }
 
 }  // namespace Resources

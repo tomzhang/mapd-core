@@ -4,12 +4,13 @@
 #include "Types.h"
 #include "GLBaseBuffer.h"
 #include "../TypeGL.h"
+#include "GLVertexArrayResource.h"
 
 namespace Rendering {
 namespace GL {
 namespace Resources {
 
-class GLIndexBuffer : public GLBaseBuffer {
+class GLIndexBuffer : public GLVertexArrayResource<>, public GLBaseBuffer {
  public:
   enum class IndexType {
     UNSIGNED_BYTE = GL_UNSIGNED_BYTE,
@@ -27,21 +28,6 @@ class GLIndexBuffer : public GLBaseBuffer {
   void bufferData(const std::vector<unsigned char>& indices);
   void bufferData(const std::vector<unsigned short>& indices);
   void bufferData(const std::vector<unsigned int>& indices);
-
-  // template <typename T>
-  // void setAttrData(size_t idx, const std::string& attrName, T attrValue) {
-  //   _bufferSubData(attrName, &attrValue, sizeof(T), 1, idx);
-  // }
-
-  // template <typename T>
-  // void setAttrData(size_t idx, const std::string& attrName, const std::vector<T>& attrValue) {
-  //   _bufferSubData(attrName, &attrValue[0], sizeof(T), attrValue.size(), idx);
-  // }
-
-  // template <typename T, size_t N>
-  // void setAttrData(size_t idx, const std::string& attrName, const std::array<T, N>& attrValue) {
-  //   _bufferSubData(attrName, &attrValue[0], sizeof(T), N, idx);
-  // }
 
  private:
   explicit GLIndexBuffer(const RendererWkPtr& rendererPtr,
@@ -72,11 +58,11 @@ class GLIndexBuffer : public GLBaseBuffer {
 
   void _makeEmpty() final;
 
-  // void _bindToShaderInternal(GLShader* activeShader, const std::string& attr = "", const std::string& shaderAttr =
-  // "");
-
   IndexType _indexType;
   size_t _numItems;
+
+  bool _doesVaoUseThisResource(const GLVertexArrayShPtr& vao) final;
+  void _setVaoDirtyFlag(GLVertexArrayShPtr& vao, const bool dirtyFlag) final;
 
   friend class ::Rendering::GL::GLResourceManager;
 };

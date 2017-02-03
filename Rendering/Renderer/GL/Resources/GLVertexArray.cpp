@@ -58,7 +58,7 @@ void GLVertexArray::_makeEmpty() {
 }
 
 void GLVertexArray::_clearCaches() {
-  _deleteAllVertexBuffers();
+  _deleteAllBufferRsrcs();
 
   _numVertices = 0;
   _numVerticesVbo.first.reset();
@@ -67,6 +67,7 @@ void GLVertexArray::_clearCaches() {
   _boundVboPtr.first.reset();
   _boundVboPtr.second.reset();
 
+  _useIbo = false;
   _boundIboPtr.reset();
 }
 
@@ -80,7 +81,7 @@ void GLVertexArray::validateBuffers() {
   GLBufferLayoutShPtr layoutToUse;
   for (auto& vboDataItem : _usedVbos) {
     std::vector<std::pair<GLBufferLayoutShPtr, GLBufferLayoutShPtr>> bufferReplacements;
-    auto vbo = vboDataItem.first.lock();
+    auto vbo = vboDataItem.second.vboPtr.lock();
     if (!vbo) {
       THROW_RUNTIME_EX("A vbo used by vertex array " + std::to_string(getId()) +
                        " has been removed. The vertex array is now unusable. The vertex "
@@ -90,7 +91,7 @@ void GLVertexArray::validateBuffers() {
       break;
     }
 
-    for (auto& boundLayoutData : vboDataItem.second) {
+    for (auto& boundLayoutData : vboDataItem.second.layouts) {
       if (!vbo->hasBufferLayout(boundLayoutData.first)) {
         layoutToUse = vbo->getBufferLayoutAtOffset(boundLayoutData.second.second);
         if (*layoutToUse != *boundLayoutData.first) {
@@ -139,9 +140,9 @@ void GLVertexArray::validateBuffers() {
     }
 
     for (auto replacePair : bufferReplacements) {
-      auto itr = vboDataItem.second.find(replacePair.first);
-      vboDataItem.second.emplace(replacePair.second, itr->second);
-      vboDataItem.second.erase(itr);
+      auto itr = vboDataItem.second.layouts.find(replacePair.first);
+      vboDataItem.second.layouts.emplace(replacePair.second, itr->second);
+      vboDataItem.second.layouts.erase(itr);
     }
   }
 
@@ -160,20 +161,40 @@ void GLVertexArray::validateBuffers() {
   _setDirtyFlag(false);
 }
 
-bool GLVertexArray::hasVbo(const GLVertexBufferShPtr& vbo, const GLBufferLayoutShPtr& layout) {
+bool GLVertexArray::hasVbo(const GLVertexBufferShPtr& vbo, const GLBufferLayoutShPtr& layout) const {
+  if (!vbo) {
+    return false;
+  }
+
+  return hasVbo(vbo.get(), layout);
+}
+
+bool GLVertexArray::hasVbo(const GLVertexBuffer* vbo, const GLBufferLayoutShPtr& layout) const {
   auto itr = _usedVbos.find(vbo);
-  if (itr != _usedVbos.end()) {
+  if (itr != _usedVbos.end() && !itr->second.vboPtr.expired()) {
     if (!layout) {
       return true;
     }
 
-    return (itr->second.find(layout) != itr->second.end());
+    return (itr->second.layouts.find(layout) != itr->second.layouts.end());
   }
   return false;
 }
 
-bool GLVertexArray::hasVbo(const GLVertexBuffer* vbo, const GLBufferLayoutShPtr& layout) {
-  return hasVbo(getSharedResourceFromTypePtr(vbo), layout);
+bool GLVertexArray::hasIbo(const GLIndexBufferShPtr& ibo) const {
+  if (!ibo) {
+    return false;
+  }
+
+  return hasIbo(ibo.get());
+}
+
+bool GLVertexArray::hasIbo(const GLIndexBuffer* ibo) const {
+  if (_boundIboPtr.expired()) {
+    return false;
+  }
+  auto iboPtr = _boundIboPtr.lock();
+  return iboPtr.get() == ibo;
 }
 
 size_t GLVertexArray::numIndices() const {
@@ -201,6 +222,10 @@ void GLVertexArray::initialize(const VboAttrToShaderAttrMap& vboAttrToShaderAttr
   for (auto& item : vboAttrToShaderAttrMap) {
     item.first->_addVertexArray(myRsrc);
   }
+
+  if (iboPtr) {
+    iboPtr->_addVertexArray(myRsrc);
+  }
 }
 
 void GLVertexArray::initialize(const VboLayoutAttrToShaderAttrMap& vboLayoutAttrToShaderAttrMap,
@@ -222,6 +247,10 @@ void GLVertexArray::initialize(const VboLayoutAttrToShaderAttrMap& vboLayoutAttr
 
   for (auto& item : vboLayoutAttrToShaderAttrMap) {
     item.first.first->_addVertexArray(myRsrc);
+  }
+
+  if (iboPtr) {
+    iboPtr->_addVertexArray(myRsrc);
   }
 }
 
@@ -326,13 +355,17 @@ void GLVertexArray::_initialize(const VboLayoutAttrToShaderAttrMap& vboLayoutAtt
 }
 
 void GLVertexArray::_addVertexBuffer(const GLVertexBufferShPtr& vbo, const GLBufferLayoutShPtr& layout) {
-  auto itr = _usedVbos.find(vbo);
+  auto itr = _usedVbos.find(vbo.get());
   auto data = vbo->getBufferLayoutData(layout);
   if (itr != _usedVbos.end()) {
-    itr->second.insert({layout, std::move(data)});
+    CHECK(!itr->second.vboPtr.expired());
+    itr->second.layouts.insert({layout, std::move(data)});
   } else {
-    std::map<GLBufferLayoutShPtr, std::pair<size_t, size_t>> layoutmap({{layout, std::move(data)}});
-    _usedVbos.emplace(vbo, std::move(layoutmap));
+    auto emplacertn =
+        _usedVbos.emplace(std::piecewise_construct, std::forward_as_tuple(vbo.get()), std::forward_as_tuple());
+    CHECK(emplacertn.second);
+    emplacertn.first->second.vboPtr = vbo;
+    emplacertn.first->second.layouts.insert({layout, std::move(data)});
   }
 
   auto numVboVertices = vbo->numVertices(layout);
@@ -343,82 +376,16 @@ void GLVertexArray::_addVertexBuffer(const GLVertexBufferShPtr& vbo, const GLBuf
   }
 }
 
-// void GLVertexArray::_deleteVertexBuffer(const GLVertexBuffer* vbo, const GLBufferLayoutShPtr& layout) {
-//   GLVertexBufferShPtr vboPtr;
-//   std::vector<const GLVertexBufferWkPtr*> vbosToDelete;
-//   bool resync = false;
-
-//   for (auto& itr : _usedVbos) {
-//     vboPtr = itr.first.lock();
-//     if (vboPtr && vboPtr.get() == vbo) {
-//       if (!layout) {
-//         vbosToDelete.push_back(&itr.first);
-//         if (vboPtr == _numVerticesVbo.first.lock()) {
-//           resync = true;
-//         }
-//       } else {
-//         itr.second.erase(layout);
-
-//         if (!itr.second.size()) {
-//           vbosToDelete.push_back(&itr.first);
-//           if (vboPtr == _numVerticesVbo.first.lock()) {
-//             resync = true;
-//           }
-//         } else if (vboPtr == _numVerticesVbo.first.lock() && layout == _numVerticesVbo.second.lock()) {
-//           resync = true;
-//         }
-//       }
-//     } else if (!vboPtr) {
-//       vbosToDelete.push_back(&itr.first);
-//     }
-//   }
-
-//   for (auto vboInfo : vbosToDelete) {
-//     _usedVbos.erase(*vboInfo);
-//   }
-
-//   if (resync || _numVerticesVbo.first.expired() || _numVerticesVbo.second.expired()) {
-//     _syncWithVBOs();
-//   }
-// }
-
-void GLVertexArray::_deleteAllVertexBuffers() {
+void GLVertexArray::_deleteAllBufferRsrcs() {
   GLVertexBufferShPtr vboPtr;
   for (auto& vboInfo : _usedVbos) {
-    vboPtr = vboInfo.first.lock();
+    vboPtr = vboInfo.second.vboPtr.lock();
     if (vboPtr) {
       vboPtr->_deleteVertexArray(this);
     }
   }
   _usedVbos.clear();
 }
-
-// void GLVertexArray::_vboUpdated(const GLVertexBufferShPtr& vboPtr,
-//                                 const GLBufferLayoutShPtr& layoutPtr,
-//                                 const GLBufferLayoutShPtr& replacementLayoutPtr) {
-//   auto itr = _usedVbos.find(vboPtr);
-//   CHECK(itr != _usedVbos.end());
-
-//   if (replacementLayoutPtr && replacementLayoutPtr != layoutPtr) {
-//     itr->second.erase(layoutPtr);
-//     itr->second.insert(replacementLayoutPtr);
-//   }
-//   size_t numVboVertices = vboPtr->numVertices(replacementLayoutPtr ? replacementLayoutPtr : layoutPtr);
-
-//   if (vboPtr == _numVerticesVbo.first.lock() && _numVerticesVbo.second.lock() == layoutPtr) {
-//     if (numVboVertices != _numVertices) {
-//       _syncWithVBOs();
-//     } else if (replacementLayoutPtr) {
-//       _numVerticesVbo.second = replacementLayoutPtr;
-//     }
-//   } else {
-//     if (_numVertices == 0 || numVboVertices < _numVertices) {
-//       _numVertices = numVboVertices;
-//       _numVerticesVbo.first = vboPtr;
-//       _numVerticesVbo.second = replacementLayoutPtr ? replacementLayoutPtr : layoutPtr;
-//     }
-//   }
-// }
 
 void GLVertexArray::_syncWithVBOs() {
   // TODO(croot): We currently don't maintain any synchronization
@@ -436,11 +403,11 @@ void GLVertexArray::_syncWithVBOs() {
 
   GLVertexBufferShPtr vboPtr;
 
-  std::vector<const GLVertexBufferWkPtr*> vbosToDelete;
+  std::vector<const GLVertexBuffer*> vbosToDelete;
   for (auto& vboData : _usedVbos) {
-    vboPtr = vboData.first.lock();
+    vboPtr = vboData.second.vboPtr.lock();
     if (vboPtr) {
-      for (auto& layoutData : vboData.second) {
+      for (auto& layoutData : vboData.second.layouts) {
         numVboVertices = vboPtr->numVertices(layoutData.first);
 
         if (_numVertices == 0 || numVboVertices < _numVertices) {
@@ -450,12 +417,12 @@ void GLVertexArray::_syncWithVBOs() {
         }
       }
     } else {
-      vbosToDelete.push_back(&vboData.first);
+      vbosToDelete.push_back(vboData.first);
     }
   }
 
   for (auto vboData : vbosToDelete) {
-    _usedVbos.erase(*vboData);
+    _usedVbos.erase(vboData);
   }
 }
 

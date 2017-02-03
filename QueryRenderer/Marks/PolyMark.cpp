@@ -580,8 +580,13 @@ void PolyMark::_buildVAOData(const GpuId& gpuId,
 
   CHECK(_dataPtr);
   QueryPolyDataTableShPtr polyTable = std::dynamic_pointer_cast<BaseQueryPolyDataTable>(_dataPtr);
+  if (!polyTable) {
+    auto sqlTable = std::dynamic_pointer_cast<SqlQueryPolyDataTableJSON>(_dataPtr);
+    CHECK(sqlTable);
+    polyTable = sqlTable->getPolyCacheTable();
+  }
   CHECK(polyTable);
-  ibo = polyTable->getGLIndexBuffer(gpuId);
+  ibo = polyTable->getGLIndexBuffer(gpuId).lock();
 }
 
 void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* activeShader,
@@ -698,6 +703,11 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
 
   CHECK(_dataPtr);
   QueryPolyDataTableShPtr polyTable = std::dynamic_pointer_cast<BaseQueryPolyDataTable>(_dataPtr);
+  if (!polyTable) {
+    auto sqlTable = std::dynamic_pointer_cast<SqlQueryPolyDataTableJSON>(_dataPtr);
+    CHECK(sqlTable);
+    polyTable = sqlTable->getPolyCacheTable();
+  }
   CHECK(polyTable);
 
   ::Rendering::GL::Resources::GLUniformBufferShPtr ubo;
@@ -721,7 +731,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
       ubo = (*_uboProps.begin())->getUboPtr(gpuId)->getGLUniformBufferPtr();
     }
 
-    ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr indibo = polyTable->getGLIndirectDrawIndexBuffer(gpuId);
+    auto indibo = polyTable->getGLIndirectDrawIndexBuffer(gpuId).lock();
     CHECK(indibo && (!ubo || indibo->numItems() == ubo->numItems()));
 
     renderer->bindIndirectDrawBuffer(indibo);
@@ -771,8 +781,7 @@ void PolyMark::draw(::Rendering::GL::GLRenderer* renderer, const GpuId& gpuId) {
       rowDataPtr = polyTable->getRowDataPtr(gpuId);
     }
 
-    ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr indvbo =
-        polyTable->getGLIndirectDrawVertexBuffer(gpuId);
+    auto indvbo = polyTable->getGLIndirectDrawVertexBuffer(gpuId).lock();
 
     CHECK(indvbo && (!ubo || (rowDataPtr && ubo->numItems() == rowDataPtr->size())));
 

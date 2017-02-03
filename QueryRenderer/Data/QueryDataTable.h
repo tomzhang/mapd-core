@@ -124,8 +124,8 @@ class SqlQueryDataTableJSON : public BaseQueryDataTableVBO, public BaseQueryData
   ~SqlQueryDataTableJSON() {}
 
   bool hasAttribute(const std::string& attrName) final;
-  QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
-  std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) final;
+  QueryBufferWkPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
+  std::map<GpuId, QueryBufferWkPtr> getAttributeDataBuffers(const std::string& attrName) final;
   QueryDataType getAttributeType(const std::string& attrName) final;
 
   int numRows(const GpuId& gpuId) final;
@@ -318,8 +318,8 @@ class DataTable : public BaseQueryDataTableVBO, public BaseQueryDataTableJSON {
   QueryDataType getAttributeType(const std::string& attrName) final;
   DataColumnShPtr getColumn(const std::string& columnName);
 
-  QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
-  std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) final;
+  QueryBufferWkPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) final;
+  std::map<GpuId, QueryBufferWkPtr> getAttributeDataBuffers(const std::string& attrName) final;
 
   int numRows(const GpuId& gpuId) final { return _numRows; }
 

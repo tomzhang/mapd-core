@@ -605,11 +605,14 @@ void QueryRenderer::_createPbo(const std::set<GpuId>& usedGpus, int width, int h
 
     auto widthToUse = (width < 0 ? _ctx->getWidth() : width);
     auto heightToUse = (height < 0 ? _ctx->getHeight() : height);
-    _pbo1A = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+    _pbo1Awk = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+    _pbo1A = _pbo1Awk.lock();
     if (_ctx->supportsInt64()) {
-      _pbo1B = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+      _pbo1Bwk = (*qrmItr)->getInactiveRowIdMapPbo(widthToUse, heightToUse);
+      _pbo1B = _pbo1Bwk.lock();
     }
-    _pbo2 = (*qrmItr)->getInactiveTableIdMapPbo(widthToUse, heightToUse);
+    _pbo2wk = (*qrmItr)->getInactiveTableIdMapPbo(widthToUse, heightToUse);
+    _pbo2 = _pbo2wk.lock();
 
     _pboGpu = (*qrmItr)->gpuId;
 
@@ -632,20 +635,20 @@ void QueryRenderer::_releasePbo(bool makeContextInactive) {
         (*itr)->makeActiveOnCurrentThread();
 
         if (_pbo1A) {
-          (*itr)->setRowIdMapPboInactive(_pbo1A);
+          _pbo1A = nullptr;
+          (*itr)->setRowIdMapPboInactive(_pbo1Awk);
         }
 
         if (_pbo1B) {
-          (*itr)->setRowIdMapPboInactive(_pbo1B);
+          _pbo1B = nullptr;
+          (*itr)->setRowIdMapPboInactive(_pbo1Bwk);
         }
 
         if (_pbo2) {
-          (*itr)->setTableIdMapPboInactive(_pbo2);
+          _pbo2 = nullptr;
+          (*itr)->setTableIdMapPboInactive(_pbo2wk);
         }
 
-        _pbo1A = nullptr;
-        _pbo1B = nullptr;
-        _pbo2 = nullptr;
         _pboGpu = EMPTY_GPUID;
 
         if (makeContextInactive) {

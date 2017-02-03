@@ -81,27 +81,35 @@ class QueryRenderManager {
 
   int getPolyDataBufferAlignmentBytes(const size_t gpuIdx) const;
   bool hasPolyTableGpuCache(const std::string& polyTableName, const size_t gpuIdx) const;
+  bool hasPolyTableGpuCache(const std::string& polyTableName, const std::string& sqlStr) const;
   bool hasPolyTableGpuCache(const std::string& polyTableName, const std::string& sqlStr, const size_t gpuIdx) const;
-  PolyTableByteData getPolyTableCacheByteInfo(const std::string& polyTableName, const size_t gpuIdx) const;
-  PolyTableDataInfo getPolyTableCacheDataInfo(const std::string& polyTableName, const size_t gpuIdx) const;
+  int getPolyTableCacheGpuIdx(const std::string& polyTableName);
+  PolyTableByteData getPolyTableCacheByteInfo(const std::string& polyTableName,
+                                              const std::string& queryStr,
+                                              const size_t gpuIdx) const;
+  PolyTableDataInfo getPolyTableCacheDataInfo(const std::string& polyTableName,
+                                              const std::string& queryStr,
+                                              const size_t gpuIdx) const;
   void createPolyTableCache(const std::string& polyTableName,
+                            const std::string& queryStr,
                             const size_t gpuIdx,
                             const PolyTableByteData& initTableData,
                             const QueryDataLayoutShPtr& vertLayoutPtr,
                             const PolyRowDataShPtr& rowDataPtr = nullptr);
   void updatePolyTableCache(const std::string& polyTableName,
+                            const std::string& queryStr,
                             const size_t gpuIdx,
                             const PolyTableByteData& initTableData,
                             const QueryDataLayoutShPtr& vertLayoutPtr = nullptr,
                             const PolyRowDataShPtr& rowDataPtr = nullptr);
-  void deletePolyTableCache(const std::string& polyTableName);
+  void deletePolyTableCache(const std::string& polyTableName, const std::string& queryStr = "");
   void deleteAllPolyTableCaches();
 
   PolyCudaHandles getPolyTableCudaHandles(const std::string& polyTableName,
-                                          const size_t gpuIdx,
-                                          const PolyTableByteData* initTableData = nullptr);
+                                          const std::string& queryStr,
+                                          const size_t gpuIdx);
 
-  void setPolyTableReadyForRender(const std::string& polyTableName,
+  void setPolyQueryReadyForRender(const std::string& polyTableName,
                                   const std::string& queryStr,
                                   size_t gpuIdx,
                                   const QueryDataLayoutShPtr& uniformLayoutPtr,

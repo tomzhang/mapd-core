@@ -13,7 +13,9 @@ template <typename T>
 class QueryIdMapPixelBuffer;
 
 typedef std::shared_ptr<QueryIdMapPixelBuffer<unsigned int>> QueryIdMapPixelBufferUIntShPtr;
+typedef std::weak_ptr<QueryIdMapPixelBuffer<unsigned int>> QueryIdMapPixelBufferUIntWkPtr;
 typedef std::shared_ptr<QueryIdMapPixelBuffer<int>> QueryIdMapPixelBufferIntShPtr;
+typedef std::weak_ptr<QueryIdMapPixelBuffer<int>> QueryIdMapPixelBufferIntWkPtr;
 
 template <typename T>
 class QueryIdMapPboPool;

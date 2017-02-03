@@ -21,8 +21,8 @@ class BaseQueryDataTable {
 
   virtual int numRows(const GpuId& gpuId) = 0;
   virtual bool hasAttribute(const std::string& attrName) = 0;
-  virtual QueryBufferShPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) = 0;
-  virtual std::map<GpuId, QueryBufferShPtr> getAttributeDataBuffers(const std::string& attrName) = 0;
+  virtual QueryBufferWkPtr getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) = 0;
+  virtual std::map<GpuId, QueryBufferWkPtr> getAttributeDataBuffers(const std::string& attrName) = 0;
   virtual QueryDataType getAttributeType(const std::string& attrName) = 0;
 
   QueryDataTableType getType() const { return _type; }

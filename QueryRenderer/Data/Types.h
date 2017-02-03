@@ -28,6 +28,12 @@ class BaseQueryPolyDataTable;
 typedef std::unique_ptr<BaseQueryPolyDataTable> QueryPolyDataTableUqPtr;
 typedef std::shared_ptr<BaseQueryPolyDataTable> QueryPolyDataTableShPtr;
 
+class SqlQueryPolyDataTableJSON;
+typedef std::shared_ptr<SqlQueryPolyDataTableJSON> SqlQueryPolyDataTableShPtr;
+
+class SqlQueryPolyDataTableCache;
+typedef std::shared_ptr<SqlQueryPolyDataTableCache> SqlQueryPolyDataTableCacheShPtr;
+
 std::string to_string(QueryDataType dataType);
 std::string to_string(QueryDataTableType dataTableType);
 std::string to_string(QueryDataTableBaseType dataTableBaseType);

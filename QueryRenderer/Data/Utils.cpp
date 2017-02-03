@@ -85,7 +85,7 @@ QueryDataTableShPtr createDataTable(const rapidjson::Value& obj,
         case QueryDataTableBaseType::BASIC_VBO:
           return QueryDataTableVBOShPtr(new SqlQueryDataTableJSON(ctx, tableName, obj, objPath));
         case QueryDataTableBaseType::POLY:
-          return QueryPolyDataTableShPtr(new SqlQueryPolyDataTableJSON(ctx, tableName, obj, objPath));
+          return SqlQueryPolyDataTableShPtr(new SqlQueryPolyDataTableJSON(ctx, tableName, obj, objPath));
 
         default:
           THROW_RUNTIME_EX(RapidJSONUtils::getJsonParseErrorStr(obj,

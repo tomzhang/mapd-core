@@ -320,19 +320,8 @@ class Executor {
 
   struct LineDrawData {
     std::vector<::Rendering::GL::Resources::IndirectDrawVertexData> data;
-    const std::vector<size_t> offsets;
+    std::vector<size_t> offsets;
   };
-
-  LineDrawData getShapeLineDrawData(const Catalog_Namespace::SessionInfo& session,
-                                    const TableDescriptor* td,
-                                    const std::string& shape_col_group,
-                                    QueryRenderer::PolyRowDataShPtr& rowDataPtr);
-
-  std::vector<::Rendering::GL::Resources::IndirectDrawIndexData> getShapePolyDrawData(
-      const Catalog_Namespace::SessionInfo& session,
-      const TableDescriptor* td,
-      const std::string& shape_col_group,
-      QueryRenderer::PolyRowDataShPtr& rowDataPtr);
 
   struct PolyRenderDataQueryResult {
     std::shared_ptr<::QueryRenderer::QueryDataLayout> poly_render_data_layout;
@@ -350,7 +339,6 @@ class Executor {
   void setPolyRenderDataEntry(PolyRenderDataQueryResult& render_data,
                               const std::vector<TargetValue>& row,
                               const std::vector<TargetMetaInfo>& row_shape,
-                              const size_t polyidx,
                               const size_t rowidx,
                               const size_t rowid_idx,
                               const size_t align_bytes,

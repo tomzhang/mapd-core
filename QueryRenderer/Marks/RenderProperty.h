@@ -117,10 +117,10 @@ class BaseRenderProperty {
   std::string _vboAttrName;
 
   struct PerGpuData : BasePerGpuData {
-    QueryVertexBufferShPtr vbo;
-    QueryUniformBufferShPtr ubo;
+    QueryVertexBufferWkPtr vbo;
+    QueryUniformBufferWkPtr ubo;
 
-    PerGpuData() : BasePerGpuData(), vbo(nullptr), ubo(nullptr) {}
+    PerGpuData() : BasePerGpuData() {}
     explicit PerGpuData(const RootPerGpuDataShPtr& rootData,
                         const QueryVertexBufferShPtr& vbo = nullptr,
                         const QueryUniformBufferShPtr& ubo = nullptr)
@@ -192,9 +192,9 @@ class BaseRenderProperty {
   std::string _printInfo() const;
 
  private:
-  std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
+  std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferWkPtr>& bufferMap);
   std::set<GpuId> _initUnusedGpus(const std::set<GpuId>& usedGpus);
-  void _initBuffers(const std::map<GpuId, QueryBufferShPtr>& bufferMap);
+  void _initBuffers(const std::map<GpuId, QueryBufferWkPtr>& bufferMap);
   bool _internalInitFromData(const std::string& attrName,
                              const QueryDataTableShPtr& dataPtr,
                              const bool hasScale,
@@ -400,7 +400,8 @@ class RenderProperty : public BaseRenderProperty {
           new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
 
       for (auto& itr : _perGpuData) {
-        itr.second.vbo = nullptr;
+        itr.second.vbo.reset();
+        itr.second.ubo.reset();
       }
 
       if (_vboInitType == VboInitType::FROM_DATAREF) {
@@ -452,8 +453,9 @@ class RenderProperty : public BaseRenderProperty {
       return std::make_pair(inchanged, outchanged);
     }
 
-    QueryBufferShPtr bufToUse = (itr->second.vbo ? std::dynamic_pointer_cast<QueryBuffer>(itr->second.vbo)
-                                                 : std::dynamic_pointer_cast<QueryBuffer>(itr->second.ubo));
+    QueryBufferShPtr bufToUse =
+        (!itr->second.vbo.expired() ? std::dynamic_pointer_cast<QueryBuffer>(itr->second.vbo.lock())
+                                    : std::dynamic_pointer_cast<QueryBuffer>(itr->second.ubo.lock()));
     RUNTIME_EX_ASSERT(bufToUse != nullptr,
                       std::string(*this) +
                           ": Vertex/uniform buffer is uninitialized. Cannot initialize type for mark property \"" +

@@ -9,8 +9,7 @@
 
 namespace QueryRenderer {
 
-RootPerGpuData::RootPerGpuData(GpuId gpuId) : gpuId(gpuId) {
-}
+RootPerGpuData::RootPerGpuData(GpuId gpuId) : gpuId(gpuId) {}
 
 RootPerGpuData::~RootPerGpuData() {
   // need to make active to properly destroy gpu resources
@@ -42,6 +41,10 @@ void RootPerGpuData::makeInactive() const {
   }
 
   return nullptr;
+}
+
+::Rendering::GL::GLRendererShPtr RootPerGpuData::getGLRendererShPtr() {
+  return std::dynamic_pointer_cast<::Rendering::GL::GLRenderer>(rendererPtr);
 }
 
 void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) {
@@ -105,24 +108,24 @@ GpuId RootPerGpuData::getCompositorGpuId() {
   return renderer->getGpuId();
 }
 
-QueryIdMapPixelBufferUIntShPtr RootPerGpuData::getInactiveRowIdMapPbo(size_t width, size_t height) {
+QueryIdMapPixelBufferUIntWkPtr RootPerGpuData::getInactiveRowIdMapPbo(size_t width, size_t height) {
   CHECK(pboPoolUIntPtr);
-  return pboPoolUIntPtr->getInactiveIdMapPbo(width, height);
+  return pboPoolUIntPtr->getInactiveRsrc(width, height);
 }
 
-void RootPerGpuData::setRowIdMapPboInactive(QueryIdMapPixelBufferUIntShPtr& pbo) {
+void RootPerGpuData::setRowIdMapPboInactive(QueryIdMapPixelBufferUIntWkPtr& pbo) {
   CHECK(pboPoolUIntPtr);
-  pboPoolUIntPtr->setIdMapPboInactive(pbo);
+  pboPoolUIntPtr->setRsrcInactive(pbo);
 }
 
-QueryIdMapPixelBufferIntShPtr RootPerGpuData::getInactiveTableIdMapPbo(size_t width, size_t height) {
+QueryIdMapPixelBufferIntWkPtr RootPerGpuData::getInactiveTableIdMapPbo(size_t width, size_t height) {
   CHECK(pboPoolIntPtr);
-  return pboPoolIntPtr->getInactiveIdMapPbo(width, height);
+  return pboPoolIntPtr->getInactiveRsrc(width, height);
 }
 
-void RootPerGpuData::setTableIdMapPboInactive(QueryIdMapPixelBufferIntShPtr& pbo) {
+void RootPerGpuData::setTableIdMapPboInactive(QueryIdMapPixelBufferIntWkPtr& pbo) {
   CHECK(pboPoolIntPtr);
-  pboPoolIntPtr->setIdMapPboInactive(pbo);
+  pboPoolIntPtr->setRsrcInactive(pbo);
 }
 
 QueryAccumTxPoolUqPtr& RootPerGpuData::getAccumTxPool() {
@@ -133,6 +136,13 @@ QueryAccumTxPoolUqPtr& RootPerGpuData::getAccumTxPool() {
   }
 
   return accumTxPoolPtr;
+}
+
+GpuId BasePerGpuData::getGpuId() const {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+
+  RUNTIME_EX_ASSERT(qrmGpuDataShPtr, "Cannot get gpu id. Root gpu info has been deleted.");
+  return qrmGpuDataShPtr->gpuId;
 }
 
 void BasePerGpuData::makeActiveOnCurrentThread() const {
@@ -162,6 +172,15 @@ void BasePerGpuData::makeInactive() const {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   if (qrmGpuDataShPtr) {
     return qrmGpuDataShPtr->getGLRenderer();
+  }
+
+  return nullptr;
+}
+
+::Rendering::GL::GLRendererShPtr BasePerGpuData::getGLRendererShPtr() {
+  RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
+  if (qrmGpuDataShPtr) {
+    return qrmGpuDataShPtr->getGLRendererShPtr();
   }
 
   return nullptr;
@@ -204,26 +223,26 @@ GpuId BasePerGpuData::getCompositorGpuId() {
   return renderer->getGpuId();
 }
 
-QueryIdMapPixelBufferUIntShPtr BasePerGpuData::getInactiveRowIdMapPbo(size_t width, size_t height) {
+QueryIdMapPixelBufferUIntWkPtr BasePerGpuData::getInactiveRowIdMapPbo(size_t width, size_t height) {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
   return qrmGpuDataShPtr->getInactiveRowIdMapPbo(width, height);
 }
 
-void BasePerGpuData::setRowIdMapPboInactive(QueryIdMapPixelBufferUIntShPtr& pbo) {
+void BasePerGpuData::setRowIdMapPboInactive(QueryIdMapPixelBufferUIntWkPtr& pbo) {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   if (qrmGpuDataShPtr) {
     qrmGpuDataShPtr->setRowIdMapPboInactive(pbo);
   }
 }
 
-QueryIdMapPixelBufferIntShPtr BasePerGpuData::getInactiveTableIdMapPbo(size_t width, size_t height) {
+QueryIdMapPixelBufferIntWkPtr BasePerGpuData::getInactiveTableIdMapPbo(size_t width, size_t height) {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
   return qrmGpuDataShPtr->getInactiveTableIdMapPbo(width, height);
 }
 
-void BasePerGpuData::setTableIdMapPboInactive(QueryIdMapPixelBufferIntShPtr& pbo) {
+void BasePerGpuData::setTableIdMapPboInactive(QueryIdMapPixelBufferIntWkPtr& pbo) {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   if (qrmGpuDataShPtr) {
     qrmGpuDataShPtr->setTableIdMapPboInactive(pbo);

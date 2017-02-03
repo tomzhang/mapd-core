@@ -247,12 +247,17 @@ void BaseMark::_buildVertexArrayObjectFromProperties() {
   if (!_perGpuData.size()) {
     return;
   } else if (!_propsDirty) {
-    if (!_dataPtr) {
-      return;
-    }
     dataPtr = std::dynamic_pointer_cast<SqlQueryDataTableJSON>(_dataPtr);
     if (!dataPtr || (!(force = dataPtr->hasLayoutChanged()) && !dataPtr->hasLayoutOffsetChanged())) {
-      return;
+      for (auto& itr : _perGpuData) {
+        if (itr.second.vaoPtr && itr.second.vaoPtr->isDirty()) {
+          force = true;
+          break;
+        }
+      }
+      if (!force) {
+        return;
+      }
     }
   }
 

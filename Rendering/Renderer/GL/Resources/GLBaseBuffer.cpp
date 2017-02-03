@@ -36,7 +36,10 @@ void GLBaseBuffer::_initResource() {
 
 void GLBaseBuffer::_cleanupResource() {
   if (_bufferId) {
+    // TODO(croot): If this buffer is bound to a target, should
+    // it be cleared?
     MAPD_CHECK_GL_ERROR(glDeleteBuffers(1, &_bufferId));
+    _bufferId = 0;
   }
 
   _makeEmpty();
@@ -45,6 +48,22 @@ void GLBaseBuffer::_cleanupResource() {
 void GLBaseBuffer::_makeEmpty() {
   _bufferId = 0;
   _numBytes = 0;
+}
+
+void GLBaseBuffer::rebuild(const void* data, size_t numBytes) {
+  GLint currArrayBuf;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(_getBufferBinding(_target), &currArrayBuf));
+  bool bind = (currArrayBuf == static_cast<GLint>(_bufferId));
+  if (bind) {
+    // need to clear out resource from renderer
+    MAPD_CHECK_GL_ERROR(glBindBuffer(_target, 0));
+  }
+  _cleanupResource();
+  _initResource();
+  if (bind) {
+    MAPD_CHECK_GL_ERROR(glBindBuffer(_target, _bufferId));
+  }
+  bufferData(data, numBytes);
 }
 
 void GLBaseBuffer::bufferData(const void* data, size_t numBytes, GLenum altTarget) {

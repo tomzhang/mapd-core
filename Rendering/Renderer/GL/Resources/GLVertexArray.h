@@ -23,7 +23,6 @@ class GLVertexArray : public GLResource {
  public:
   ~GLVertexArray();
 
-  // size_t numItems() const { return _numItems; }
   size_t numVertices() const { return _numVertices; }
   size_t numIndices() const;
 
@@ -40,10 +39,14 @@ class GLVertexArray : public GLResource {
 
   void validateBuffers();
 
-  bool hasVbo(const GLVertexBufferShPtr& vbo, const GLBufferLayoutShPtr& layout);
-  bool hasVbo(const GLVertexBuffer* vbo, const GLBufferLayoutShPtr& layout);
+  bool hasVbo(const GLVertexBufferShPtr& vbo, const GLBufferLayoutShPtr& layout) const;
+  bool hasVbo(const GLVertexBuffer* vbo, const GLBufferLayoutShPtr& layout) const;
+  bool hasIbo(const GLIndexBufferShPtr& ibo) const;
+  bool hasIbo(const GLIndexBuffer* ibo) const;
   GLVertexBufferShPtr getLastBoundVbo() const { return _boundVboPtr.first.lock(); }
   GLIndexBufferShPtr getLastBoundIbo() const { return _boundIboPtr.lock(); }
+
+  bool isDirty() const { return _dirty; }
 
  private:
   explicit GLVertexArray(const RendererWkPtr& rendererPtr);
@@ -88,19 +91,19 @@ class GLVertexArray : public GLResource {
 
   void _setDirtyFlag(const bool dirtyFlag) { _dirty = dirtyFlag; }
   void _addVertexBuffer(const GLVertexBufferShPtr& vbo, const GLBufferLayoutShPtr& layout);
-  // void _deleteVertexBuffer(const GLVertexBuffer* vbo, const GLBufferLayoutShPtr& layout = nullptr);
-  void _deleteAllVertexBuffers();
-  // void _vboUpdated(const GLVertexBufferShPtr& vboPtr,
-  //                  const GLBufferLayoutShPtr& layoutPtr,
-  //                  const GLBufferLayoutShPtr& replacementLayoutPtr = nullptr);
+  void _deleteAllBufferRsrcs();
   void _syncWithVBOs();
 
-  std::map<GLVertexBufferWkPtr,
-           std::map<GLBufferLayoutShPtr, std::pair<size_t, size_t>>,
-           std::owner_less<GLVertexBufferWkPtr>> _usedVbos;
+  struct VboPtrs {
+    GLVertexBufferWkPtr vboPtr;
+    std::map<GLBufferLayoutShPtr, std::pair<size_t, size_t>> layouts;
+  };
+
+  std::map<const GLVertexBuffer*, VboPtrs> _usedVbos;
 
   friend class ::Rendering::GL::GLResourceManager;
   friend class ::Rendering::GL::Resources::GLVertexBuffer;
+  friend class ::Rendering::GL::Resources::GLIndexBuffer;
 };
 
 }  // namespace Resources

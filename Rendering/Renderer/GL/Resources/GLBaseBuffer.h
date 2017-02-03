@@ -33,6 +33,7 @@ class GLBaseBuffer : public GLResource {
             _accessType == BufferAccessType::COPY);
   }
 
+  virtual void rebuild(const void* data, size_t numBytes);
   virtual void bufferData(const void* data, size_t numBytes, GLenum altTarget = 0);
   virtual void bufferSubData(const void* data, size_t numBytes, size_t byteOffset, GLenum altTarget = 0);
   virtual void getBufferData(void* data, size_t dataSzBytes, size_t byteOffset = 0);

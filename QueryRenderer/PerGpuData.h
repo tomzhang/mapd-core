@@ -43,6 +43,7 @@ struct RootPerGpuData {
 
   ::Rendering::Renderer* getRenderer();
   ::Rendering::GL::GLRenderer* getGLRenderer();
+  ::Rendering::GL::GLRendererShPtr getGLRendererShPtr();
 
   void resize(size_t width, size_t height, bool resizeCompositor = true);
 
@@ -53,12 +54,12 @@ struct RootPerGpuData {
   GpuId getCompositorGpuId();
 
   QueryIdMapPboPoolUIntUqPtr& getRowIdMapPboPool() { return pboPoolUIntPtr; }
-  QueryIdMapPixelBufferUIntShPtr getInactiveRowIdMapPbo(size_t width, size_t height);
-  void setRowIdMapPboInactive(QueryIdMapPixelBufferUIntShPtr& pbo);
+  QueryIdMapPixelBufferUIntWkPtr getInactiveRowIdMapPbo(size_t width, size_t height);
+  void setRowIdMapPboInactive(QueryIdMapPixelBufferUIntWkPtr& pbo);
 
   QueryIdMapPboPoolIntUqPtr& getTableIdMapPboPool() { return pboPoolIntPtr; }
-  QueryIdMapPixelBufferIntShPtr getInactiveTableIdMapPbo(size_t width, size_t height);
-  void setTableIdMapPboInactive(QueryIdMapPixelBufferIntShPtr& pbo);
+  QueryIdMapPixelBufferIntWkPtr getInactiveTableIdMapPbo(size_t width, size_t height);
+  void setTableIdMapPboInactive(QueryIdMapPixelBufferIntWkPtr& pbo);
 
   bool hasAccumTxPool() const { return accumTxPoolPtr != nullptr; }
   QueryAccumTxPoolUqPtr& getAccumTxPool();
@@ -96,6 +97,7 @@ struct BasePerGpuData {
     // makeActiveOnCurrentThread();
   }
 
+  GpuId getGpuId() const;
   RootPerGpuDataShPtr getRootPerGpuData() const { return rootPerGpuData.lock(); }
 
   void makeActiveOnCurrentThread() const;
@@ -103,6 +105,7 @@ struct BasePerGpuData {
 
   ::Rendering::Renderer* getRenderer();
   ::Rendering::GL::GLRenderer* getGLRenderer();
+  ::Rendering::GL::GLRendererShPtr getGLRendererShPtr();
 
   virtual void resize(size_t width, size_t height);
 
@@ -112,11 +115,11 @@ struct BasePerGpuData {
   std::shared_ptr<QueryRenderCompositor>& getCompositor();
   GpuId getCompositorGpuId();
 
-  QueryIdMapPixelBufferUIntShPtr getInactiveRowIdMapPbo(size_t width, size_t height);
-  void setRowIdMapPboInactive(QueryIdMapPixelBufferUIntShPtr& pbo);
+  QueryIdMapPixelBufferUIntWkPtr getInactiveRowIdMapPbo(size_t width, size_t height);
+  void setRowIdMapPboInactive(QueryIdMapPixelBufferUIntWkPtr& pbo);
 
-  QueryIdMapPixelBufferIntShPtr getInactiveTableIdMapPbo(size_t width, size_t height);
-  void setTableIdMapPboInactive(QueryIdMapPixelBufferIntShPtr& pbo);
+  QueryIdMapPixelBufferIntWkPtr getInactiveTableIdMapPbo(size_t width, size_t height);
+  void setTableIdMapPboInactive(QueryIdMapPixelBufferIntWkPtr& pbo);
 
   bool hasAccumTxPool() const;
   QueryAccumTxPoolUqPtr& getAccumTxPool();

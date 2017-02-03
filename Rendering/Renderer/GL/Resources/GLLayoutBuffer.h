@@ -81,11 +81,6 @@ class GLLayoutManagerBuffer : public GLBaseBuffer {
   void _deleteBufferLayoutsExcept(const GLBufferLayoutShPtr& layout);
   void _deleteBufferLayout(const GLBufferLayoutShPtr& layout);
 
-  //   // void _addVertexArray(GLVertexArrayShPtr& vao);
-  //   // void _deleteVertexArray(GLVertexArray* vao);
-  //   // void _deleteAllVertexArrays(const GLBaseBufferLayout* layout = nullptr);
-  //   // void _updateVertexArrays(const GLBufferLayoutShPtr& layoutPtr);
-
  private:
   virtual void _layoutAddedCB(const BoundLayoutData& layoutData) {}
   virtual void _layoutUpdatedCB(const BoundLayoutData& preUpdateLayoutData,

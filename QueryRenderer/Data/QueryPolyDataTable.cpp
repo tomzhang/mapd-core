@@ -28,10 +28,15 @@ using ::Rendering::GL::Resources::ShaderBlockLayoutType;
 using ::Rendering::GL::Resources::GLShaderBlockLayout;
 using ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr;
 using ::Rendering::GL::Resources::GLVertexBufferShPtr;
+using ::Rendering::GL::Resources::GLVertexBufferWkPtr;
 using ::Rendering::GL::Resources::GLIndexBufferShPtr;
+using ::Rendering::GL::Resources::GLIndexBufferWkPtr;
 using ::Rendering::GL::Resources::GLUniformBufferShPtr;
+using ::Rendering::GL::Resources::GLUniformBufferWkPtr;
 using ::Rendering::GL::Resources::GLIndirectDrawVertexBufferShPtr;
+using ::Rendering::GL::Resources::GLIndirectDrawVertexBufferWkPtr;
 using ::Rendering::GL::Resources::GLIndirectDrawIndexBufferShPtr;
+using ::Rendering::GL::Resources::GLIndirectDrawIndexBufferWkPtr;
 using ::Rendering::GL::Resources::IndirectDrawIndexData;
 using ::Rendering::GL::Resources::IndirectDrawVertexData;
 
@@ -100,7 +105,7 @@ std::string transform_to_poly_render_query(const std::string& query_str,
 std::string BaseQueryPolyDataTable::xcoordName = "x";
 std::string BaseQueryPolyDataTable::ycoordName = "y";
 
-GLVertexBufferShPtr BaseQueryPolyDataTable::getGLVertexBuffer(const GpuId& gpuId) const {
+GLVertexBufferWkPtr BaseQueryPolyDataTable::getGLVertexBuffer(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
@@ -108,7 +113,7 @@ GLVertexBufferShPtr BaseQueryPolyDataTable::getGLVertexBuffer(const GpuId& gpuId
   return (itr->second.vbo ? itr->second.vbo->getGLVertexBufferPtr() : nullptr);
 }
 
-GLIndexBufferShPtr BaseQueryPolyDataTable::getGLIndexBuffer(const GpuId& gpuId) const {
+GLIndexBufferWkPtr BaseQueryPolyDataTable::getGLIndexBuffer(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
@@ -116,7 +121,7 @@ GLIndexBufferShPtr BaseQueryPolyDataTable::getGLIndexBuffer(const GpuId& gpuId) 
   return (itr->second.ibo ? itr->second.ibo->getGLIndexBufferPtr() : nullptr);
 }
 
-GLUniformBufferShPtr BaseQueryPolyDataTable::getGLUniformBuffer(const GpuId& gpuId) const {
+GLUniformBufferWkPtr BaseQueryPolyDataTable::getGLUniformBuffer(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
@@ -124,7 +129,7 @@ GLUniformBufferShPtr BaseQueryPolyDataTable::getGLUniformBuffer(const GpuId& gpu
   return (itr->second.ubo ? itr->second.ubo->getGLUniformBufferPtr() : nullptr);
 }
 
-GLIndirectDrawVertexBufferShPtr BaseQueryPolyDataTable::getGLIndirectDrawVertexBuffer(const GpuId& gpuId) const {
+GLIndirectDrawVertexBufferWkPtr BaseQueryPolyDataTable::getGLIndirectDrawVertexBuffer(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
@@ -132,7 +137,7 @@ GLIndirectDrawVertexBufferShPtr BaseQueryPolyDataTable::getGLIndirectDrawVertexB
   return (itr->second.indvbo ? itr->second.indvbo->getGLIndirectVboPtr() : nullptr);
 }
 
-GLIndirectDrawIndexBufferShPtr BaseQueryPolyDataTable::getGLIndirectDrawIndexBuffer(const GpuId& gpuId) const {
+GLIndirectDrawIndexBufferWkPtr BaseQueryPolyDataTable::getGLIndirectDrawIndexBuffer(const GpuId& gpuId) const {
   auto itr = _perGpuData.find(gpuId);
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
@@ -164,11 +169,11 @@ PolyTableByteData BaseQueryPolyDataTable::getPolyBufferByteData(const GpuId& gpu
                     _printInfo(true) + ": Cannot find gpu id: " + std::to_string(gpuId) + " in per-gpu resources.");
 
   return {
-      (itr->second.vbo ? itr->second.vbo->getNumBytes() : 0),
-      (itr->second.ibo ? itr->second.ibo->getNumBytes() : 0),
-      (itr->second.indvbo ? itr->second.indvbo->getNumBytes() : 0),
-      (itr->second.indibo ? itr->second.indibo->getNumBytes() : 0),
-      (itr->second.ubo ? itr->second.ubo->getNumBytes() : 0),
+      (itr->second.vbo ? static_cast<int>(itr->second.vbo->getNumBytes()) : 0),
+      (itr->second.ibo ? static_cast<int>(itr->second.ibo->getNumBytes()) : 0),
+      (itr->second.indvbo ? static_cast<int>(itr->second.indvbo->getNumBytes()) : 0),
+      (itr->second.indibo ? static_cast<int>(itr->second.indibo->getNumBytes()) : 0),
+      (itr->second.ubo ? static_cast<int>(itr->second.ubo->getNumBytes()) : 0),
   };
 }
 
@@ -216,71 +221,86 @@ std::string BaseQueryPolyDataTable::_printInfo(bool useClassSuffix) const {
 }
 
 bool SqlQueryPolyDataTableCache::hasAttribute(const std::string& attrName) {
+  return hasAttributeFromLayout(attrName);
+}
+
+bool SqlQueryPolyDataTableCache::hasAttributeFromLayout(const std::string& attrName,
+                                                        const QueryDataLayoutShPtr& vboLayout,
+                                                        const QueryDataLayoutShPtr& uboLayout) {
   // poly data across all gpus should be the same, so only
   // checking the first one.
   if (_perGpuData.empty()) {
     return false;
   }
 
+  QueryDataLayoutShPtr layout = nullptr;
   auto itr = _perGpuData.begin();
   if (attrName == xcoordName || attrName == ycoordName) {
-    return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName) : false);
+    return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName, vboLayout) : false);
   } else {
-    return (itr->second.ubo ? itr->second.ubo->hasAttribute(attrName) : false);
+    return (itr->second.ubo ? itr->second.ubo->hasAttribute(attrName, uboLayout) : false);
   }
 }
 
-QueryBufferShPtr SqlQueryPolyDataTableCache::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+QueryBufferWkPtr SqlQueryPolyDataTableCache::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+  return getAttributeDataBufferFromLayout(gpuId, attrName);
+}
+
+QueryBufferWkPtr SqlQueryPolyDataTableCache::getAttributeDataBufferFromLayout(const GpuId& gpuId,
+                                                                              const std::string& attrName,
+                                                                              const QueryDataLayoutShPtr& vboLayout,
+                                                                              const QueryDataLayoutShPtr& uboLayout) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
                     _printInfo(true) + ": Cannot get attribute data buffer for gpu " + std::to_string(gpuId));
 
-  QueryDataLayoutShPtr vbolayout = nullptr, ubolayout = nullptr;
-  auto sqlDataTable = dynamic_cast<SqlQueryPolyDataTableJSON*>(this);
-  if (sqlDataTable) {
-    vbolayout = sqlDataTable->getVboQueryDataLayout();
-    ubolayout = sqlDataTable->getUboQueryDataLayout();
-  }
-  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName, vbolayout)) {
+  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName, vboLayout)) {
     return itr->second.vbo;
-  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName, ubolayout)) {
+  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName, uboLayout)) {
     return itr->second.ubo;
   } else {
     THROW_RUNTIME_EX(_printInfo(true) + " getAttributeDataBuffer(): attribute \"" + attrName + "\" does not exist.");
   }
 
-  return nullptr;
+  return QueryBufferWkPtr();
 }
 
-std::map<GpuId, QueryBufferShPtr> SqlQueryPolyDataTableCache::getAttributeDataBuffers(const std::string& attrName) {
-  std::map<GpuId, QueryBufferShPtr> rtn;
-  std::map<GpuId, QueryBufferShPtr>::iterator insertedItr;
+std::map<GpuId, QueryBufferWkPtr> SqlQueryPolyDataTableCache::getAttributeDataBuffers(const std::string& attrName) {
+  return getAttributeDataBuffersFromLayout(attrName);
+}
 
-  QueryDataLayoutShPtr vbolayout = nullptr, ubolayout = nullptr;
-  auto sqlDataTable = dynamic_cast<SqlQueryPolyDataTableJSON*>(this);
-  if (sqlDataTable) {
-    vbolayout = sqlDataTable->getVboQueryDataLayout();
-    ubolayout = sqlDataTable->getUboQueryDataLayout();
-  }
+std::map<GpuId, QueryBufferWkPtr> SqlQueryPolyDataTableCache::getAttributeDataBuffersFromLayout(
+    const std::string& attrName,
+    const QueryDataLayoutShPtr& vboLayout,
+    const QueryDataLayoutShPtr& uboLayout) {
+  std::map<GpuId, QueryBufferWkPtr> rtn;
+  std::map<GpuId, QueryBufferWkPtr>::iterator insertedItr;
 
   for (auto& itr : _perGpuData) {
-    if (itr.second.vbo && itr.second.vbo->hasAttribute(attrName, vbolayout)) {
+    if (itr.second.vbo && itr.second.vbo->hasAttribute(attrName, vboLayout)) {
       insertedItr = rtn.insert({itr.first, itr.second.vbo}).first;
-    } else if (itr.second.ubo && itr.second.ubo->hasAttribute(attrName, ubolayout)) {
+    } else if (itr.second.ubo && itr.second.ubo->hasAttribute(attrName, uboLayout)) {
       insertedItr = rtn.insert({itr.first, itr.second.ubo}).first;
     } else {
       THROW_RUNTIME_EX(_printInfo(true) + " getAttributeDataBuffer(): attribute \"" + attrName +
                        "\" does not exist in the poly data.");
     }
 
-    CHECK(rtn.begin()->second->getGLResourceType() == insertedItr->second->getGLResourceType());
+    CHECK(!rtn.begin()->second.expired() && !insertedItr->second.expired() &&
+          rtn.begin()->second.lock()->getGLResourceType() == insertedItr->second.lock()->getGLResourceType());
   }
 
   return rtn;
 }
 
 QueryDataType SqlQueryPolyDataTableCache::getAttributeType(const std::string& attrName) {
+  return getAttributeTypeFromLayout(attrName);
+}
+
+QueryDataType SqlQueryPolyDataTableCache::getAttributeTypeFromLayout(const std::string& attrName,
+                                                                     const QueryDataLayoutShPtr& vboLayout,
+                                                                     const QueryDataLayoutShPtr& uboLayout) {
   // all buffers should have the same set of attributes, so only need to check the first one.
   auto itr = _perGpuData.begin();
   RUNTIME_EX_ASSERT(
@@ -288,9 +308,9 @@ QueryDataType SqlQueryPolyDataTableCache::getAttributeType(const std::string& at
       _printInfo(true) + ": Cannot get attribute type for attribute " + attrName + ". There is no poly data defined.");
 
   GLBufferAttrType attrType;
-  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName)) {
+  if (itr->second.vbo && itr->second.vbo->hasAttribute(attrName, vboLayout)) {
     attrType = itr->second.vbo->getAttributeType(attrName);
-  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName)) {
+  } else if (itr->second.ubo && itr->second.ubo->hasAttribute(attrName, uboLayout)) {
     attrType = itr->second.ubo->getAttributeType(attrName);
   } else {
     THROW_RUNTIME_EX(_printInfo(true) + " getAttributeType(): attribute \"" + attrName +
@@ -323,89 +343,27 @@ int SqlQueryPolyDataTableCache::numRows(const GpuId& gpuId) {
   return (itr->second.indibo ? itr->second.indibo->numItems() : 0);
 }
 
-void SqlQueryPolyDataTableCache::allocBuffers(const GpuId& gpuId,
-                                              const PolyTableByteData& initData,
-                                              const QueryDataLayoutShPtr& vertLayoutPtr,
-                                              const PolyRowDataShPtr& rowDataPtr,
-                                              const QueryDataLayoutShPtr& uniformLayoutPtr) {
-  auto qrmGpuCache = _qrmGpuCache.lock();
-  CHECK(qrmGpuCache);
+BaseQueryPolyDataTable::PerGpuData& SqlQueryPolyDataTableCache::getQueryBuffers(const GpuId& gpuId) {
   auto itr = _perGpuData.find(gpuId);
+  RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
+                    _printInfo(true) + ": Cannot find poly data on gpu " + std::to_string(gpuId));
 
-  if (itr == _perGpuData.end()) {
-    auto qrmItr = qrmGpuCache->perGpuData->find(gpuId);
-    CHECK(qrmItr != qrmGpuCache->perGpuData->end());
+  return itr->second;
+}
 
-    auto insertItr =
-        _perGpuData.emplace(std::piecewise_construct, std::forward_as_tuple(gpuId), std::forward_as_tuple(*qrmItr));
-    itr = insertItr.first;
+BaseQueryPolyDataTable::PerGpuData& SqlQueryPolyDataTableCache::setUsedGpu(const RootPerGpuDataShPtr& rootData) {
+  // NOTE: currently only supports rendering polys on a single gpu
+  // TODO(croot): support multi-gpu poly rendering?
+  auto itr = _perGpuData.find(rootData->gpuId);
+  if (itr != _perGpuData.end()) {
+    return itr->second;
   }
 
-  itr->second.makeActiveOnCurrentThread();
-  auto renderer = itr->second.getGLRenderer();
-  CHECK(renderer);
-
-  if (initData.numVertBytes) {
-    if (!itr->second.vbo) {
-      itr->second.vbo.reset(new QueryResultVertexBuffer(renderer, initData.numVertBytes));
-    } else {
-      itr->second.vbo->resize(initData.numVertBytes);
-    }
-
-    if (vertLayoutPtr) {
-      itr->second.vbo->setBufferLayout(
-          vertLayoutPtr->convertToBufferLayout(qrmGpuCache->supportedExtensions), initData.numVertBytes, 0);
-    }
-  } else {
-    itr->second.vbo = nullptr;
-  }
-
-  if (initData.numDataBytes) {
-    if (!itr->second.ubo) {
-      itr->second.ubo.reset(new QueryResultUniformBuffer(renderer, initData.numDataBytes));
-    } else {
-      itr->second.ubo->resize(initData.numDataBytes);
-    }
-
-    if (uniformLayoutPtr) {
-      itr->second.ubo->setBufferLayout(
-          uniformLayoutPtr->convertToUniformBufferLayout(qrmGpuCache->supportedExtensions), initData.numDataBytes, 0);
-    }
-  } else {
-    itr->second.ubo = nullptr;
-  }
-
-  if (initData.numIndexBytes) {
-    if (!itr->second.ibo) {
-      itr->second.ibo.reset(new QueryResultIndexBuffer(renderer, initData.numIndexBytes));
-    } else {
-      itr->second.ibo->resize(initData.numIndexBytes);
-    }
-  } else {
-    itr->second.ibo = nullptr;
-  }
-
-  if (initData.numLineLoopBytes) {
-    if (!itr->second.indvbo) {
-      itr->second.indvbo.reset(new QueryResultIndirectVbo(renderer, initData.numLineLoopBytes));
-    } else {
-      itr->second.indvbo->resize(initData.numLineLoopBytes);
-    }
-  } else {
-    itr->second.indvbo = nullptr;
-  }
-
-  if (initData.numPolyBytes) {
-    if (!itr->second.indibo) {
-      itr->second.indibo.reset(new QueryResultIndirectIbo(renderer, initData.numPolyBytes));
-    } else {
-      itr->second.indibo->resize(initData.numPolyBytes);
-    }
-  } else {
-    itr->second.indibo = nullptr;
-  }
-
-  itr->second.rowDataPtr = rowDataPtr;
+  _perGpuData.clear();
+  auto insertItr = _perGpuData.emplace(
+      std::piecewise_construct, std::forward_as_tuple(rootData->gpuId), std::forward_as_tuple(rootData));
+  CHECK(insertItr.second);
+  return insertItr.first->second;
 }
 
 void SqlQueryPolyDataTableCache::reset() {
@@ -430,6 +388,10 @@ void SqlQueryPolyDataTableCache::reset() {
       itr.second.indibo->reset();
     }
   }
+}
+
+void SqlQueryPolyDataTableCache::clear() {
+  _perGpuData.clear();
 }
 
 #ifdef HAVE_CUDA
@@ -527,10 +489,59 @@ SqlQueryPolyDataTableJSON::SqlQueryPolyDataTableJSON(const QueryRendererContextS
                                                      const std::string& name,
                                                      const rapidjson::Value& obj,
                                                      const rapidjson::Pointer& objPath)
-    : SqlQueryPolyDataTableCache(ctx->getRootGpuCache()),
+    : BaseQueryDataTable(QueryDataTableType::SQLQUERY, QueryDataTableBaseType::POLY),
       BaseQueryDataTableSQLJSON(ctx, name, obj, objPath, true),
-      _justInitialized(false) {
+      _justInitialized(false),
+      _rootCachePtr(ctx->getRootGpuCache()) {
   _updateFromJSONObj(obj, objPath);
+}
+
+SqlQueryPolyDataTableJSON::~SqlQueryPolyDataTableJSON() {
+  if (_sqlCache) {
+    _rootCachePtr->polyCacheMap->notifyCacheRelease(_sqlCache);
+  }
+}
+
+bool SqlQueryPolyDataTableJSON::hasAttribute(const std::string& attrName) {
+  if (!_sqlCache) {
+    return false;
+  }
+
+  return _sqlCache->hasAttributeFromLayout(attrName, getVboQueryDataLayout(), getUboQueryDataLayout());
+}
+
+QueryBufferWkPtr SqlQueryPolyDataTableJSON::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+  RUNTIME_EX_ASSERT(_sqlCache,
+                    "Cannot get attribute data buffer for attr \"" + attrName + "\". The poly cache is undefined.");
+
+  return _sqlCache->getAttributeDataBufferFromLayout(gpuId, attrName, getVboQueryDataLayout(), getUboQueryDataLayout());
+}
+
+std::map<GpuId, QueryBufferWkPtr> SqlQueryPolyDataTableJSON::getAttributeDataBuffers(const std::string& attrName) {
+  RUNTIME_EX_ASSERT(_sqlCache,
+                    "Cannot get attribute data buffers for attr \"" + attrName + "\". The poly cache is undefined.");
+
+  return _sqlCache->getAttributeDataBuffersFromLayout(attrName, getVboQueryDataLayout(), getUboQueryDataLayout());
+}
+
+QueryDataType SqlQueryPolyDataTableJSON::getAttributeType(const std::string& attrName) {
+  RUNTIME_EX_ASSERT(_sqlCache, "Cannot get attribute type for attr \"" + attrName + "\". The poly cache is undefined.");
+
+  return _sqlCache->getAttributeTypeFromLayout(attrName, getVboQueryDataLayout(), getUboQueryDataLayout());
+}
+
+int SqlQueryPolyDataTableJSON::numRows(const GpuId& gpuId) {
+  if (!_sqlCache) {
+    return 0;
+  }
+
+  return _sqlCache->numRows(gpuId);
+}
+
+std::set<GpuId> SqlQueryPolyDataTableJSON::getUsedGpuIds() const {
+  RUNTIME_EX_ASSERT(_sqlCache, "Cannot get used gpus. The poly cache is undefined.");
+
+  return _sqlCache->getUsedGpuIds();
 }
 
 SqlQueryPolyDataTableJSON::operator std::string() const {
@@ -538,7 +549,7 @@ SqlQueryPolyDataTableJSON::operator std::string() const {
 }
 
 std::string SqlQueryPolyDataTableJSON::_printInfo(bool useClassSuffix) const {
-  std::string rtn = BaseQueryPolyDataTable::_printInfo() + ", " + BaseQueryDataTableSQLJSON::_printInfo();
+  std::string rtn = (_sqlCache ? _sqlCache->printInfo() + ", " : "") + BaseQueryDataTableSQLJSON::_printInfo();
 
   if (useClassSuffix) {
     rtn = "SqlQueryPolyDataTableJSON(" + rtn + ")";
@@ -550,7 +561,7 @@ std::string SqlQueryPolyDataTableJSON::_printInfo(bool useClassSuffix) const {
 bool SqlQueryPolyDataTableJSON::_isInternalCacheUpToDate() {
   auto rootCache = _ctx->getRootGpuCache();
   CHECK(rootCache);
-  return rootCache->hasPolyTableGpuCache(_tableName, _sqlQueryStr);
+  return rootCache->hasPolyTableGpuCache(_tableName, *(_getSqlStrToUse()));
 }
 
 void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
@@ -679,26 +690,37 @@ void SqlQueryPolyDataTableJSON::_updateFromJSONObj(const rapidjson::Value& obj,
 
     // TODO(croot): validate the query here?
     // sql changed, re-run the query
-    _runQueryAndInitResources(_ctx->getRootGpuCache(), true, &obj);
+    _runQueryAndInitResources(true, &obj);
   }
 }
 
-void SqlQueryPolyDataTableJSON::_runQueryAndInitResources(const RootCacheShPtr& qrmPerGpuDataPtr,
-                                                          bool isInitializing,
-                                                          const rapidjson::Value* dataObj) {
+const std::string* SqlQueryPolyDataTableJSON::_getSqlStrToUse() const {
+  return (_sqlQueryStrOverride.length() ? &_sqlQueryStrOverride : &_sqlQueryStr);
+}
+
+void SqlQueryPolyDataTableJSON::_runQueryAndInitResources(bool isInitializing, const rapidjson::Value* dataObj) {
   if (!_justInitialized) {
     // first run the sql query, then initialize resources
+    bool resetCache = false;
+    auto sqlStrToUse = _getSqlStrToUse();
+    if (!_sqlCache || _sqlCache->getPolyTableNameRef() != _tableName ||
+        (resetCache = _sqlCache->getSqlQueryStrRef() != *sqlStrToUse)) {
+      if (_sqlCache) {
+        _rootCachePtr->polyCacheMap->notifyCacheRelease(_sqlCache, resetCache ? sqlStrToUse : nullptr);
+      }
+      resetCache = true;
+      CHECK(isInitializing) << "Can only reset the poly cache during init/update of json. "
+                            << (_sqlCache ? (_tableName + " " + _sqlCache->getPolyTableNameRef() + " " + *sqlStrToUse +
+                                             " " + _sqlCache->getSqlQueryStrRef())
+                                          : "nullptr");
+    }
+
     _executeQuery(dataObj, _sqlQueryStrOverride);
 
-    // now initialize resources
-    auto& polyCacheMap = qrmPerGpuDataPtr->polyCacheMap;
-
-    auto itr = polyCacheMap.find(_tableName);
-
-    RUNTIME_EX_ASSERT(itr != polyCacheMap.end(),
-                      std::string(*this) + ": cache does not exist for poly table " + _tableName);
-
-    BaseQueryPolyDataTable::operator=(itr->second.second);
+    if (resetCache) {
+      // now initialize resources
+      _sqlCache = _rootCachePtr->polyCacheMap->getPolyTableCache(_tableName, *sqlStrToUse);
+    }
   }
 
   _justInitialized = isInitializing;
@@ -710,7 +732,7 @@ void SqlQueryPolyDataTableJSON::_initGpuResources(const RootCacheShPtr& qrmGpuCa
   // but what if the tables themselves have changed? Should re-run query in that case
   // here.
   if (!_isInternalCacheUpToDate()) {
-    _runQueryAndInitResources(qrmGpuCache, false);
+    _runQueryAndInitResources(false);
   } else {
     _justInitialized = false;
   }
@@ -1232,7 +1254,7 @@ bool PolyDataTable::hasAttribute(const std::string& attrName) {
   }
 }
 
-QueryBufferShPtr PolyDataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+QueryBufferWkPtr PolyDataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
@@ -1248,12 +1270,12 @@ QueryBufferShPtr PolyDataTable::getAttributeDataBuffer(const GpuId& gpuId, const
     THROW_RUNTIME_EX(std::string(*this) + " getAttributeDataBuffer(): attribute \"" + attrName + "\" does not exist.");
   }
 
-  return nullptr;
+  return QueryBufferWkPtr();
 }
 
-std::map<GpuId, QueryBufferShPtr> PolyDataTable::getAttributeDataBuffers(const std::string& attrName) {
-  std::map<GpuId, QueryBufferShPtr> rtn;
-  std::map<GpuId, QueryBufferShPtr>::iterator insertedItr;
+std::map<GpuId, QueryBufferWkPtr> PolyDataTable::getAttributeDataBuffers(const std::string& attrName) {
+  std::map<GpuId, QueryBufferWkPtr> rtn;
+  std::map<GpuId, QueryBufferWkPtr>::iterator insertedItr;
   std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData;
 
   for (auto& itr : _perGpuData) {
@@ -1268,7 +1290,8 @@ std::map<GpuId, QueryBufferShPtr> PolyDataTable::getAttributeDataBuffers(const s
                        "\" does not exist in table.");
     }
 
-    CHECK(rtn.begin()->second->getGLResourceType() == insertedItr->second->getGLResourceType());
+    CHECK(!rtn.begin()->second.expired() && !insertedItr->second.expired() &&
+          rtn.begin()->second.lock()->getGLResourceType() == insertedItr->second.lock()->getGLResourceType());
   }
 
   return rtn;

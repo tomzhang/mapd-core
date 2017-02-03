@@ -4,23 +4,18 @@
 #include "Types.h"
 #include "GLBufferLayout.h"
 #include "GLLayoutBuffer.h"
-#include "GLVertexArray.h"
-#include "../TypeGL.h"
+#include "GLVertexArrayResource.h"
 
 namespace Rendering {
 namespace GL {
 namespace Resources {
 
-class GLVertexBuffer : public GLLayoutBuffer<GLBaseBufferLayout> {
+class GLVertexBuffer : public GLVertexArrayResource<const GLBufferLayoutShPtr&>,
+                       public GLLayoutBuffer<GLBaseBufferLayout> {
  public:
   ~GLVertexBuffer();
 
-  // int numAttributes() const;
-  // int numItems() const;
   size_t numVertices(const GLBufferLayoutShPtr& layoutPtr = nullptr) const;
-
-  // const GLBufferAttrInfo& operator[](size_t i) const;
-  // void bindToShader(GLShader* activeShader, const std::string& attr = "", const std::string& shaderAttr = "");
 
   void bufferData(void* data, const size_t numBytes, const GLBufferLayoutShPtr& layoutPtr = nullptr) final;
 
@@ -52,15 +47,10 @@ class GLVertexBuffer : public GLLayoutBuffer<GLBaseBufferLayout> {
     _markVertexArraysDirty(replacedLayoutData.layoutPtr);
   }
   void _layoutDeletedCB(const BoundLayoutData& layoutData) final { _markVertexArraysDirty(layoutData.layoutPtr); }
-  void _allLayoutsDeletedCB() final { _markVertexArraysDirty(); }
+  void _allLayoutsDeletedCB() final { _markVertexArraysDirty(nullptr); }
 
-  void _addVertexArray(GLVertexArrayShPtr& vao);
-  void _deleteVertexArray(GLVertexArray* vao);
-  void _deleteAllVertexArrays();
-  void _markVertexArraysDirty(const GLBufferLayoutShPtr& layoutPtr = nullptr);
-
-  void _cleanupVaoRefs();
-  std::set<GLVertexArrayWkPtr, std::owner_less<GLVertexArrayWkPtr>> _vaoRefs;
+  bool _doesVaoUseThisResource(const GLVertexArrayShPtr& vao, const GLBufferLayoutShPtr& layout) final;
+  void _setVaoDirtyFlag(GLVertexArrayShPtr& vao, const bool dirtyFlag) final;
 
   friend class ::Rendering::GL::GLResourceManager;
   friend class ::Rendering::GL::Resources::GLVertexArray;

@@ -120,15 +120,50 @@ void QueryBuffer::updatePostQuery(size_t numUsedBytes) {
 }
 
 void QueryBuffer::resize(size_t numBytes) {
+  // NOTE: it is not suggested to use this method frequently.
+  // It seems there is a mismanagement of the memory on
+  // the device side if a handful of buffers are resizing
+  // frequently at around the same time -- I (croot) have run into
+  // eventual Xid memory errors doing this. Rebuild is the
+  // perferred method in such a case.
   RUNTIME_EX_ASSERT(!_isActive, "Cannot resize a buffer while it is currently mapped for cuda.");
 
   if (_bufRsrc) {
     if (numBytes != _bufRsrc->getNumBytes()) {
+#ifdef HAVE_CUDA
+      if (_type == BufType::QUERY_RESULT_BUFFER) {
+        _removeCudaGraphicsResource();
+      }
+#endif  // HAVE_CUDA
+
       _bufRsrc->bufferData(nullptr, numBytes);
 
 #ifdef HAVE_CUDA
       if (_type == BufType::QUERY_RESULT_BUFFER) {
+        _initCudaGraphicsResource();
+      }
+#endif  // HAVE_CUDA
+    }
+
+    reset();
+  }
+}
+
+void QueryBuffer::rebuild(size_t numBytes) {
+  RUNTIME_EX_ASSERT(!_isActive, "Cannot rebuild a buffer while it is currently mapped for cuda.");
+
+  if (_bufRsrc) {
+    if (numBytes != _bufRsrc->getNumBytes()) {
+#ifdef HAVE_CUDA
+      if (_type == BufType::QUERY_RESULT_BUFFER) {
         _removeCudaGraphicsResource();
+      }
+#endif  // HAVE_CUDA
+
+      _bufRsrc->rebuild(nullptr, numBytes);
+
+#ifdef HAVE_CUDA
+      if (_type == BufType::QUERY_RESULT_BUFFER) {
         _initCudaGraphicsResource();
       }
 #endif  // HAVE_CUDA
@@ -268,8 +303,7 @@ void QueryBuffer::_unmapCudaGraphicsResource(CUgraphicsResource& rsrc) {
 #endif  // HAVE_CUDA
 
 QueryVertexBuffer::QueryVertexBuffer(QueryBuffer::BufType type)
-    : QueryLayoutBuffer<::Rendering::GL::Resources::GLVertexBuffer>(type) {
-}
+    : QueryLayoutBuffer<::Rendering::GL::Resources::GLVertexBuffer>(type) {}
 
 QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
                                      Rendering::GL::Resources::BufferAccessType accessType,
@@ -288,17 +322,7 @@ QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
   _initBuffer(renderer, accessType, accessFreq, numBytes);
 }
 
-// QueryVertexBuffer::QueryVertexBuffer(Rendering::GL::GLRenderer* renderer,
-//                                      const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr,
-//                                      Rendering::GL::Resources::BufferAccessType accessType,
-//                                      Rendering::GL::Resources::BufferAccessFreq accessFreq,
-//                                      QueryBuffer::BufType type)
-//     : QueryLayoutBuffer<::Rendering::GL::Resources::GLVertexBuffer>(type) {
-//   _initLayoutBuffer(renderer, accessType, accessFreq, layoutPtr);
-// }
-
-QueryVertexBuffer::~QueryVertexBuffer() {
-}
+QueryVertexBuffer::~QueryVertexBuffer() {}
 
 void QueryVertexBuffer::_initBuffer(Rendering::GL::GLRenderer* renderer,
                                     Rendering::GL::Resources::BufferAccessType accessType,
@@ -315,17 +339,6 @@ void QueryVertexBuffer::_initBuffer(Rendering::GL::GLRenderer* renderer,
   }
 }
 
-// void QueryVertexBuffer::_initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-//                                           Rendering::GL::Resources::BufferAccessType accessType,
-//                                           Rendering::GL::Resources::BufferAccessFreq accessFreq,
-//                                           const Rendering::GL::Resources::GLBufferLayoutShPtr& layoutPtr) {
-//   if (!_bufRsrc) {
-//     Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
-
-//     _bufRsrc = rsrcMgr->createVertexBuffer(layoutPtr, accessType, accessFreq);
-//   }
-// }
-
 QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* renderer,
                                                  size_t numBytes,
                                                  Rendering::GL::Resources::BufferAccessType accessType,
@@ -336,11 +349,9 @@ QueryResultVertexBuffer::QueryResultVertexBuffer(Rendering::GL::GLRenderer* rend
 #endif
 }
 
-QueryResultVertexBuffer::~QueryResultVertexBuffer() {
-}
+QueryResultVertexBuffer::~QueryResultVertexBuffer() {}
 
-QueryIndexBuffer::QueryIndexBuffer(QueryBuffer::BufType type) : QueryBuffer(type) {
-}
+QueryIndexBuffer::QueryIndexBuffer(QueryBuffer::BufType type) : QueryBuffer(type) {}
 
 QueryIndexBuffer::QueryIndexBuffer(Rendering::GL::GLRenderer* renderer,
                                    size_t numBytes,
@@ -382,8 +393,7 @@ QueryIndexBuffer::QueryIndexBuffer(::Rendering::GL::GLRenderer* renderer,
   _bufRsrc = rsrcMgr->createIndexBuffer(items, accessType, accessFreq);
 }
 
-QueryIndexBuffer::~QueryIndexBuffer() {
-}
+QueryIndexBuffer::~QueryIndexBuffer() {}
 
 void QueryIndexBuffer::_initBuffer(::Rendering::GL::GLRenderer* renderer,
                                    ::Rendering::GL::Resources::GLIndexBuffer::IndexType indexType,
@@ -417,13 +427,11 @@ QueryResultIndexBuffer::QueryResultIndexBuffer(Rendering::GL::GLRenderer* render
 #endif
 }
 
-QueryResultIndexBuffer::~QueryResultIndexBuffer() {
-}
+QueryResultIndexBuffer::~QueryResultIndexBuffer() {}
 
 QueryUniformBuffer::QueryUniformBuffer(QueryBuffer::BufType type)
     : QueryLayoutBuffer<::Rendering::GL::Resources::GLUniformBuffer, ::Rendering::GL::Resources::GLShaderBlockLayout>(
-          type) {
-}
+          type) {}
 
 QueryUniformBuffer::QueryUniformBuffer(Rendering::GL::GLRenderer* renderer,
                                        Rendering::GL::Resources::BufferAccessType accessType,
@@ -443,19 +451,7 @@ QueryUniformBuffer::QueryUniformBuffer(Rendering::GL::GLRenderer* renderer,
   _initBuffer(renderer, accessType, accessFreq, numBytes);
 }
 
-// QueryUniformBuffer::QueryUniformBuffer(::Rendering::GL::GLRenderer* renderer,
-//                                        const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr,
-//                                        ::Rendering::GL::Resources::BufferAccessType accessType,
-//                                        ::Rendering::GL::Resources::BufferAccessFreq accessFreq,
-//                                        QueryBuffer::BufType type)
-//     : QueryLayoutBuffer<::Rendering::GL::Resources::GLUniformBuffer,
-//     ::Rendering::GL::Resources::GLShaderBlockLayout>(
-//           type) {
-//   _initLayoutBuffer(renderer, accessType, accessFreq, layoutPtr);
-// }
-
-QueryUniformBuffer::~QueryUniformBuffer() {
-}
+QueryUniformBuffer::~QueryUniformBuffer() {}
 
 void QueryUniformBuffer::_initBuffer(::Rendering::GL::GLRenderer* renderer,
                                      ::Rendering::GL::Resources::BufferAccessType accessType,
@@ -472,16 +468,6 @@ void QueryUniformBuffer::_initBuffer(::Rendering::GL::GLRenderer* renderer,
   }
 }
 
-// void QueryUniformBuffer::_initLayoutBuffer(Rendering::GL::GLRenderer* renderer,
-//                                            Rendering::GL::Resources::BufferAccessType accessType,
-//                                            Rendering::GL::Resources::BufferAccessFreq accessFreq,
-//                                            const ::Rendering::GL::Resources::GLShaderBlockLayoutShPtr& layoutPtr) {
-//   if (!_bufRsrc) {
-//     Rendering::GL::GLResourceManagerShPtr rsrcMgr = renderer->getResourceManager();
-//     _bufRsrc = rsrcMgr->createUniformBuffer(layoutPtr, 0, accessType, accessFreq);
-//   }
-// }
-
 QueryResultUniformBuffer::QueryResultUniformBuffer(Rendering::GL::GLRenderer* renderer,
                                                    size_t numBytes,
                                                    Rendering::GL::Resources::BufferAccessType accessType,
@@ -492,11 +478,9 @@ QueryResultUniformBuffer::QueryResultUniformBuffer(Rendering::GL::GLRenderer* re
 #endif
 }
 
-QueryResultUniformBuffer::~QueryResultUniformBuffer() {
-}
+QueryResultUniformBuffer::~QueryResultUniformBuffer() {}
 
-QueryIndirectVbo::QueryIndirectVbo(QueryBuffer::BufType type) : QueryBuffer(type) {
-}
+QueryIndirectVbo::QueryIndirectVbo(QueryBuffer::BufType type) : QueryBuffer(type) {}
 
 QueryIndirectVbo::QueryIndirectVbo(Rendering::GL::GLRenderer* renderer,
                                    size_t numBytes,
@@ -517,8 +501,7 @@ QueryIndirectVbo::QueryIndirectVbo(::Rendering::GL::GLRenderer* renderer,
   _bufRsrc = rsrcMgr->createIndirectDrawVertexBuffer(items, accessType, accessFreq);
 }
 
-QueryIndirectVbo::~QueryIndirectVbo() {
-}
+QueryIndirectVbo::~QueryIndirectVbo() {}
 
 void QueryIndirectVbo::_initBuffer(::Rendering::GL::GLRenderer* renderer,
                                    ::Rendering::GL::Resources::BufferAccessType accessType,
@@ -545,11 +528,9 @@ QueryResultIndirectVbo::QueryResultIndirectVbo(Rendering::GL::GLRenderer* render
 #endif
 }
 
-QueryResultIndirectVbo::~QueryResultIndirectVbo() {
-}
+QueryResultIndirectVbo::~QueryResultIndirectVbo() {}
 
-QueryIndirectIbo::QueryIndirectIbo(QueryBuffer::BufType type) : QueryBuffer(type) {
-}
+QueryIndirectIbo::QueryIndirectIbo(QueryBuffer::BufType type) : QueryBuffer(type) {}
 
 QueryIndirectIbo::QueryIndirectIbo(Rendering::GL::GLRenderer* renderer,
                                    size_t numBytes,
@@ -570,8 +551,7 @@ QueryIndirectIbo::QueryIndirectIbo(::Rendering::GL::GLRenderer* renderer,
   _bufRsrc = rsrcMgr->createIndirectDrawIndexBuffer(items, accessType, accessFreq);
 }
 
-QueryIndirectIbo::~QueryIndirectIbo() {
-}
+QueryIndirectIbo::~QueryIndirectIbo() {}
 
 void QueryIndirectIbo::_initBuffer(::Rendering::GL::GLRenderer* renderer,
                                    ::Rendering::GL::Resources::BufferAccessType accessType,
@@ -598,7 +578,6 @@ QueryResultIndirectIbo::QueryResultIndirectIbo(Rendering::GL::GLRenderer* render
 #endif
 }
 
-QueryResultIndirectIbo::~QueryResultIndirectIbo() {
-}
+QueryResultIndirectIbo::~QueryResultIndirectIbo() {}
 
 }  // namespace QueryRenderer

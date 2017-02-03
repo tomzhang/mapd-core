@@ -192,7 +192,7 @@ bool SqlQueryDataTableJSON::hasAttribute(const std::string& attrName) {
   return (itr->second.vbo ? itr->second.vbo->hasAttribute(attrName, getVboQueryDataLayout()) : false);
 }
 
-QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+QueryBufferWkPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
@@ -210,8 +210,8 @@ QueryBufferShPtr SqlQueryDataTableJSON::getAttributeDataBuffer(const GpuId& gpuI
   return itr->second.vbo;
 }
 
-std::map<GpuId, QueryBufferShPtr> SqlQueryDataTableJSON::getAttributeDataBuffers(const std::string& attrName) {
-  std::map<GpuId, QueryBufferShPtr> rtn;
+std::map<GpuId, QueryBufferWkPtr> SqlQueryDataTableJSON::getAttributeDataBuffers(const std::string& attrName) {
+  std::map<GpuId, QueryBufferWkPtr> rtn;
 
   for (auto& itr : _perGpuData) {
     rtn.insert({itr.first, itr.second.vbo});
@@ -804,7 +804,7 @@ void DataTable::_initGpuResources(const RootCacheShPtr& qrmPerGpuDataPtr) {
   BaseQueryDataTableVBO::_initGpuResourcesFromBuffers(qrmPerGpuDataPtr);
 }
 
-QueryBufferShPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
+QueryBufferWkPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std::string& attrName) {
   auto itr = _perGpuData.find(gpuId);
 
   RUNTIME_EX_ASSERT(itr != _perGpuData.end(),
@@ -819,8 +819,8 @@ QueryBufferShPtr DataTable::getAttributeDataBuffer(const GpuId& gpuId, const std
   return itr->second.vbo;
 }
 
-std::map<GpuId, QueryBufferShPtr> DataTable::getAttributeDataBuffers(const std::string& attrName) {
-  std::map<GpuId, QueryBufferShPtr> rtn;
+std::map<GpuId, QueryBufferWkPtr> DataTable::getAttributeDataBuffers(const std::string& attrName) {
+  std::map<GpuId, QueryBufferWkPtr> rtn;
   std::pair<GLBufferLayoutShPtr, std::pair<std::unique_ptr<char[]>, size_t>> vboData;
 
   RootPerGpuDataShPtr qrmGpuData;

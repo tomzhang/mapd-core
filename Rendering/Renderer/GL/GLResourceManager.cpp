@@ -402,6 +402,10 @@ GLVertexArrayShPtr GLResourceManager::createVertexArray(const VboAttrToShaderAtt
     item.first->_addVertexArray(rtn);
   }
 
+  if (iboPtr) {
+    iboPtr->_addVertexArray(rtn);
+  }
+
   return rtn;
 }
 
@@ -416,6 +420,10 @@ GLVertexArrayShPtr GLResourceManager::createVertexArray(
 
   for (auto& item : vboLayoutAttrToShaderAttrMap) {
     item.first.first->_addVertexArray(rtn);
+  }
+
+  if (iboPtr) {
+    iboPtr->_addVertexArray(rtn);
   }
 
   return rtn;

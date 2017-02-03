@@ -41,7 +41,7 @@ class PolyMark : public BaseMark {
   RenderProperty<float> miterLimit;
   rapidjson::Pointer _miterLimitJsonPath;
 
-  RenderProperty<unsigned int> id;
+  RenderProperty<uint64_t> id;
   rapidjson::Pointer _idJsonPath;
 
   std::set<BaseRenderProperty*> _usedProps;

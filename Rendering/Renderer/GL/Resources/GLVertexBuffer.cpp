@@ -17,8 +17,7 @@ GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
                                          GLBufferType::VERTEX_BUFFER,
                                          GL_ARRAY_BUFFER,
                                          accessType,
-                                         accessFreq) {
-}
+                                         accessFreq) {}
 
 GLVertexBuffer::GLVertexBuffer(const RendererWkPtr& rendererPtr,
                                size_t numBytes,
@@ -34,7 +33,7 @@ GLVertexBuffer::~GLVertexBuffer() {
 
 void GLVertexBuffer::_makeEmpty() {
   GLLayoutManagerBuffer::_makeEmpty();
-  _deleteAllVertexArrays();
+  GLVertexArrayResource::_cleanupResource();
 }
 
 size_t GLVertexBuffer::numVertices(const GLBufferLayoutShPtr& layoutPtr) const {
@@ -48,8 +47,7 @@ void GLVertexBuffer::bufferData(void* data, const size_t numBytes, const GLBuffe
   // the vao and throw an error at the point it is attempted to be used
   // again (i.e. vao->setUsable(false))?
 
-  _cleanupVaoRefs();
-  RUNTIME_EX_ASSERT(!_vaoRefs.size() || (_vaoRefs.size() == 1 && _vaoRefs.begin()->lock()->hasVbo(this, layoutPtr)),
+  RUNTIME_EX_ASSERT(_validateOneVaoInUse(layoutPtr),
                     "There are existing vertex array objects that are currently making use of the vertex buffer. "
                     "Cannot buffer a full set of new data as it would invalidate those vaos. Delete/clear those vaos "
                     "first.");
@@ -129,62 +127,12 @@ void GLVertexBuffer::debugPrintData(void* data, const GLBufferLayoutShPtr& layou
   }
 }
 
-void GLVertexBuffer::_addVertexArray(GLVertexArrayShPtr& vao) {
-  _vaoRefs.emplace(vao);
+bool GLVertexBuffer::_doesVaoUseThisResource(const GLVertexArrayShPtr& vao, const GLBufferLayoutShPtr& layout) {
+  return vao->hasVbo(this, layout);
 }
 
-void GLVertexBuffer::_deleteVertexArray(GLVertexArray* vao) {
-  _cleanupVaoRefs();
-
-  auto vaoRsrc = getSharedResourceFromTypePtr(vao);
-  if (vaoRsrc) {
-    _vaoRefs.erase(vaoRsrc);
-  }
-}
-
-void GLVertexBuffer::_deleteAllVertexArrays() {
-  GLVertexArrayShPtr vaoPtr;
-
-  for (auto& vao : _vaoRefs) {
-    vaoPtr = vao.lock();
-    if (vaoPtr) {
-      // vaoPtr->_deleteVertexBuffer(this);
-      vaoPtr->_setDirtyFlag(true);
-    }
-  }
-
-  _vaoRefs.clear();
-}
-
-void GLVertexBuffer::_markVertexArraysDirty(const GLBufferLayoutShPtr& layoutPtr) {
-  GLVertexArrayShPtr vaoPtr;
-  std::vector<GLVertexArrayWkPtr> vaosToDelete;
-  for (auto& vao : _vaoRefs) {
-    vaoPtr = vao.lock();
-    if (vaoPtr && vaoPtr->hasVbo(this, layoutPtr)) {
-      vaoPtr->_setDirtyFlag(true);
-    } else {
-      vaosToDelete.push_back(vao);
-    }
-  }
-
-  for (auto& vaoWkPtr : vaosToDelete) {
-    _vaoRefs.erase(vaoWkPtr);
-  }
-}
-
-void GLVertexBuffer::_cleanupVaoRefs() {
-  GLVertexArrayShPtr vaoPtr;
-  std::vector<GLVertexArrayWkPtr> vaosToDelete;
-  for (auto& vaoWkPtr : _vaoRefs) {
-    if (vaoWkPtr.expired()) {
-      vaosToDelete.push_back(vaoWkPtr);
-    }
-  }
-
-  for (auto& vaoWkPtr : vaosToDelete) {
-    _vaoRefs.erase(vaoWkPtr);
-  }
+void GLVertexBuffer::_setVaoDirtyFlag(GLVertexArrayShPtr& vao, const bool dirtyFlag) {
+  vao->_setDirtyFlag(dirtyFlag);
 }
 
 }  // namespace Resources

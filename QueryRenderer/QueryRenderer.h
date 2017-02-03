@@ -95,8 +95,11 @@ class QueryRenderer {
 
   GpuId _pboGpu;
   QueryIdMapPixelBufferUIntShPtr _pbo1A;  // need a pbo for each of the id buffers
-  QueryIdMapPixelBufferUIntShPtr _pbo1B;  // The row id is a 64-bit int, so its packed into 2 32-bit textures
-  QueryIdMapPixelBufferIntShPtr _pbo2;    // 2 id buffers - one for the row id, the other for table id
+  QueryIdMapPixelBufferUIntWkPtr _pbo1Awk;
+  QueryIdMapPixelBufferUIntShPtr _pbo1B;    // The row id is a 64-bit int, so its packed into 2 32-bit textures
+  QueryIdMapPixelBufferUIntWkPtr _pbo1Bwk;  // The row id is a 64-bit int, so its packed into 2 32-bit textures
+  QueryIdMapPixelBufferIntShPtr _pbo2;      // 2 id buffers - one for the row id, the other for table id
+  QueryIdMapPixelBufferIntWkPtr _pbo2wk;    // 2 id buffers - one for the row id, the other for table id
 
   typedef ::Rendering::Objects::Array2d<unsigned int> Array2dui;
   typedef ::Rendering::Objects::Array2d<int> Array2di;
