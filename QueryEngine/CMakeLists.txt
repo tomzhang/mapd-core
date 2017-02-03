@@ -82,7 +82,7 @@ else()
 endif()
 
 add_custom_command(
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/serialized_result_set.thrift
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/serialized_result_set.thrift ${CMAKE_SOURCE_DIR}/mapd.thrift
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/serialized_result_set_types.cpp
     COMMAND ${Thrift_EXECUTABLE}
     ARGS -gen cpp -r -I ${CMAKE_SOURCE_DIR} -o ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/serialized_result_set.thrift)
