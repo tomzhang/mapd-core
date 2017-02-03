@@ -619,7 +619,7 @@ ResultRows Executor::execute(const Planner::RootPlan* root_plan,
 
 namespace {
 
-::QueryRenderer::QueryDataLayout::AttrType sql_type_to_render_type(const SQLTypeInfo& ti) {
+::QueryRenderer::QueryDataLayout::AttrType sql_type_to_render_type(const std::string& attr, const SQLTypeInfo& ti) {
   if (ti.is_fp()) {
     return ::QueryRenderer::QueryDataLayout::AttrType::DOUBLE;
   }
@@ -630,7 +630,8 @@ namespace {
     CHECK_EQ(kENCODING_DICT, ti.get_compression());
     return ::QueryRenderer::QueryDataLayout::AttrType::INT64;
   }
-  CHECK(false);
+  throw std::runtime_error("The attr \"" + attr + "\" has a sql type of " + ti.get_type_name() +
+                           " which is not supported in render queries.");
   return ::QueryRenderer::QueryDataLayout::AttrType::INT64;
 }
 
@@ -659,7 +660,7 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
     attr_names.push_back(alias);
     const auto target_expr = te->get_expr();
     const auto type_info = target_expr->get_type_info();
-    attr_types.push_back(sql_type_to_render_type(type_info));
+    attr_types.push_back(sql_type_to_render_type(alias, type_info));
     if (type_info.is_decimal()) {
       decimal_to_scale.insert(std::make_pair(alias, exp_to_scale(type_info.get_scale())));
     }
@@ -1171,7 +1172,7 @@ Executor::PolyRenderDataQueryResult Executor::getPolyRenderDataTemplate(const st
       attr_types.push_back(::QueryRenderer::QueryDataLayout::AttrType::UINT64);
     } else {
       const auto type_info = target_meta_info.get_type_info();
-      attr_types.push_back(sql_type_to_render_type(type_info));
+      attr_types.push_back(sql_type_to_render_type(alias, type_info));
       if (type_info.is_decimal()) {
         decimal_to_scale.insert(std::make_pair(alias, exp_to_scale(type_info.get_scale())));
       }
