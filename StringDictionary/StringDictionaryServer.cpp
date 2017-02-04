@@ -53,6 +53,26 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
     return getStringDictionary(dict_id)->storageEntryCount();
   }
 
+  void get_like(std::vector<std::string>& _return,
+                const std::string& pattern,
+                const bool icase,
+                const bool is_simple,
+                const std::string& escape,
+                const int64_t generation,
+                const int32_t dict_id) {
+    CHECK_EQ(size_t(1), escape.size());
+    _return = getStringDictionary(dict_id)->getLike(pattern, icase, is_simple, escape.front(), generation);
+  }
+
+  void get_regexp_like(std::vector<std::string>& _return,
+                       const std::string& pattern,
+                       const std::string& escape,
+                       const int64_t generation,
+                       const int32_t dict_id) {
+    CHECK_EQ(size_t(1), escape.size());
+    _return = getStringDictionary(dict_id)->getRegexpLike(pattern, escape.front(), generation);
+  }
+
  private:
   StringDictionary* getStringDictionary(const int32_t dict_id) const {
     mapd_shared_lock<mapd_shared_mutex> read_lock(string_dictionaries_mutex_);

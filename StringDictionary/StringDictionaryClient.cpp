@@ -51,6 +51,42 @@ int64_t StringDictionaryClient::storage_entry_count() {
   return client_->storage_entry_count(dict_id_);
 }
 
+std::vector<std::string> StringDictionaryClient::get_like(const std::string& pattern,
+                                                          const bool icase,
+                                                          const bool is_simple,
+                                                          const char escape,
+                                                          const int64_t generation) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  CHECK(client_);
+  std::string escape_str(1, escape);
+  std::vector<std::string> _return;
+  try {
+    client_->get_like(_return, pattern, icase, is_simple, escape_str, generation, dict_id_);
+    return _return;
+  } catch (const TTransportException&) {
+    setupClient();
+  }
+  client_->get_like(_return, pattern, icase, is_simple, escape_str, generation, dict_id_);
+  return _return;
+}
+
+std::vector<std::string> StringDictionaryClient::get_regexp_like(const std::string& pattern,
+                                                                 const char escape,
+                                                                 const int64_t generation) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  CHECK(client_);
+  std::string escape_str(1, escape);
+  std::vector<std::string> _return;
+  try {
+    client_->get_regexp_like(_return, pattern, escape_str, generation, dict_id_);
+    return _return;
+  } catch (const TTransportException&) {
+    setupClient();
+  }
+  client_->get_regexp_like(_return, pattern, escape_str, generation, dict_id_);
+  return _return;
+}
+
 void StringDictionaryClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(server_host_.getHost(), server_host_.getPort());
   const auto transport = boost::make_shared<TBufferedTransport>(socket);

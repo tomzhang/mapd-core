@@ -17,6 +17,14 @@ class StringDictionaryClient {
 
   int64_t storage_entry_count();
 
+  std::vector<std::string> get_like(const std::string& pattern,
+                                    const bool icase,
+                                    const bool is_simple,
+                                    const char escape,
+                                    const int64_t generation);
+
+  std::vector<std::string> get_regexp_like(const std::string& pattern, const char escape, const int64_t generation);
+
  private:
   void setupClient();
 
