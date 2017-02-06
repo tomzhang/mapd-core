@@ -1255,9 +1255,9 @@ int32_t Executor::getStringId(const std::string& table_name,
     row_set_mem_owner = row_set_mem_owner_;
   }
 
-  auto sdp = getStringDictionaryProxyNoGeneration(dict_id, row_set_mem_owner);
+  auto sdp = getStringDictionaryProxy(dict_id, row_set_mem_owner);
   CHECK(sdp);
-  return sdp->getIdOfString(col_val);
+  return sdp->getIdOfStringNoGeneration(col_val);
 }
 
 #endif  // HAVE_RENDERING
