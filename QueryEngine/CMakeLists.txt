@@ -161,6 +161,7 @@ add_custom_command(
         ${MAPD_DEFINITIONS}
         --device-link
         -arch sm_30
+        -std=c++11
         -c ${CMAKE_CURRENT_SOURCE_DIR}/cuda_mapd_rt.cu
     )
 
@@ -205,6 +206,7 @@ add_custom_command(
         ${MAPD_DEFINITIONS}
         -O3
         -arch sm_30
+        -std=c++11
         -c ${CMAKE_CURRENT_SOURCE_DIR}/GpuInitGroups.cu
     )
 
@@ -219,6 +221,7 @@ add_custom_command(
         ${MAPD_DEFINITIONS}
         -O3
         -arch sm_30
+        -std=c++11
         -c ${CMAKE_CURRENT_SOURCE_DIR}/HashJoinRuntimeGpu.cu
     )
 
