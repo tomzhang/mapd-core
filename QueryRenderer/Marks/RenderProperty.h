@@ -171,7 +171,7 @@ class BaseRenderProperty {
                                      const bool resetTypes = false) = 0;
   virtual void _validateValue(const bool hasScale) = 0;
   virtual void _resetValue() = 0;
-  virtual bool _resetTypes() = 0;
+  virtual bool _resetTypes(const bool resetInType = true, const bool resetOutType = true) = 0;
   virtual std::pair<bool, bool> _initTypeFromBuffer(const bool hasScale = false) = 0;
   virtual void _validateScale() = 0;
   virtual void _scaleRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) = 0;
@@ -180,6 +180,7 @@ class BaseRenderProperty {
   void _dataRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr);
   void _clearFieldPath();
   void _clearDataPtr();
+  void _clearScalePtr();
 
   bool _checkAccumulator(const ScaleShPtr& scalePtr);
   void _setAccumulatorFromScale(const ScaleShPtr& scalePtr);
@@ -389,14 +390,13 @@ class RenderProperty : public BaseRenderProperty {
     // }
   }
 
-  bool _resetTypes() {
-    if (_vboInitType != VboInitType::FROM_VALUE) {
-      auto rootGpuCache = _ctx->getRootGpuCache();
-      CHECK(rootGpuCache);
+  bool _resetTypes(const bool resetInType = true, const bool resetOutType = true) {
+    bool rtn = false;
+    auto rootGpuCache = _ctx->getRootGpuCache();
+    CHECK(rootGpuCache);
 
+    if (resetInType && _vboInitType != VboInitType::FROM_VALUE) {
       ::Rendering::GL::TypeGLShPtr newInType(
-          new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
-      ::Rendering::GL::TypeGLShPtr newOutType(
           new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
 
       for (auto& itr : _perGpuData) {
@@ -407,19 +407,27 @@ class RenderProperty : public BaseRenderProperty {
       if (_vboInitType == VboInitType::FROM_DATAREF) {
         _setPropsDirty();
       }
-
       _vboInitType = VboInitType::FROM_VALUE;
 
-      if (!_inType || !_outType || (*_inType) != (*newInType) || (*_outType) != (*newOutType)) {
+      if (!_inType || (*_inType) != (*newInType)) {
         _setShaderDirty();
-
         _inType = newInType;
-        _outType = newOutType;
-
-        return true;
+        rtn = true;
       }
     }
-    return false;
+
+    if (resetOutType) {
+      ::Rendering::GL::TypeGLShPtr newOutType(
+          new ::Rendering::GL::TypeGL<T, numComponents>(rootGpuCache->supportedExtensions));
+
+      if (!_outType || (*_outType) != (*newOutType)) {
+        _setShaderDirty();
+        _outType = newOutType;
+        rtn = true;
+      }
+    }
+
+    return rtn;
   }
 
   void _initValueFromJSONObj(const rapidjson::Value& obj, const bool hasScale, const bool resetTypes = false) final {
@@ -473,6 +481,7 @@ class RenderProperty : public BaseRenderProperty {
       }
     }
     auto vboType = bufToUse->getAttributeTypeGL(_vboAttrName, layout);
+    auto typeToUse = vboType;
 
     _decimalExpScale = 0;
     if (!_flexibleType && (!_useScale || !hasScale)) {
@@ -482,7 +491,6 @@ class RenderProperty : public BaseRenderProperty {
       // in/out types match the vbo
       _validateType(vboType);
     } else {
-      auto typeToUse = vboType;
       if (layout && layout->isDecimalAttr(_vboAttrName)) {
         auto rootGpuCache = _ctx->getRootGpuCache();
         typeToUse.reset(new ::Rendering::GL::TypeGL<double, 1>(rootGpuCache->supportedExtensions));
@@ -490,16 +498,19 @@ class RenderProperty : public BaseRenderProperty {
         // NOTE: decimal types are only determined via data buffers.
         _decimalExpScale = layout->getDecimalExp(_vboAttrName);
       }
-      if (!_outType || *_outType != *typeToUse) {
-        outchanged = true;
-      }
-      _outType = typeToUse;
     }
 
     if (!_inType || *_inType != *vboType) {
       inchanged = true;
     }
     _inType = vboType;
+
+    if (!hasScale) {
+      if (!_outType || *_outType != *typeToUse) {
+        outchanged = true;
+      }
+      _outType = typeToUse;
+    }
 
     return std::make_pair(inchanged, outchanged);
   }
@@ -575,7 +586,7 @@ template <>
 void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_updateScalePtr(const ScaleShPtr& scalePtr);
 
 template <>
-bool RenderProperty<::Rendering::Colors::ColorUnion, 1>::_resetTypes();
+bool RenderProperty<::Rendering::Colors::ColorUnion, 1>::_resetTypes(const bool resetInType, const bool resetOutType);
 
 template <>
 void RenderProperty<::Rendering::Colors::ColorUnion, 1>::_resetValue();

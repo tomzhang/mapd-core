@@ -17,6 +17,7 @@ using ::Rendering::GL::TypeGLShPtr;
 
 BaseRenderProperty::~BaseRenderProperty() {
   _unsubscribeFromDataEvent();
+  _unsubscribeFromScaleEvent(_scalePtr);
 }
 
 void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
@@ -55,7 +56,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
       // need to clear out the value path
       _valueJsonPath = rapidjson::Pointer();
 
-      if (!_ctx->isJSONCacheUpToDate(_fieldJsonPath, mitr->value)) {
+      if (!_ctx->isJSONCacheUpToDate(_fieldJsonPath, mitr->value) || dataPtr != _dataPtr) {
         RUNTIME_EX_ASSERT(dataPtr != nullptr,
                           RapidJSONUtils::getJsonParseErrorStr(
                               _ctx->getUserWidgetIds(),
@@ -65,21 +66,7 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
                           RapidJSONUtils::getJsonParseErrorStr(
                               _ctx->getUserWidgetIds(), obj, "\"field\" property for mark must be a string."));
 
-        bool dataPtrChanged = dataPtr != _dataPtr;
-        if (dataPtrChanged) {
-          _unsubscribeFromDataEvent();
-        }
-
         _internalInitFromData(mitr->value.GetString(), dataPtr, hasScale, updateScale);
-
-        if (dataPtrChanged) {
-          // setup callbacks for data updates
-          auto dataJSONPtr = std::dynamic_pointer_cast<BaseQueryDataTableJSON>(dataPtr);
-          CHECK(dataJSONPtr);
-          auto cb =
-              std::bind(&BaseRenderProperty::_dataRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
-          _dataRefSubscriptionId = _ctx->subscribeToRefEvent(RefEventType::ALL, dataJSONPtr, cb);
-        }
       }
 
       _fieldJsonPath = objPath.Append(fieldProp.c_str(), fieldProp.length());
@@ -93,6 +80,13 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
     if ((mitr = obj.FindMember(valueProp.c_str())) != obj.MemberEnd()) {
       if (!_ctx->isJSONCacheUpToDate(_valueJsonPath, mitr->value)) {
         _initValueFromJSONObj(mitr->value, hasScale, !hasData);
+      } else if (!hasData && _vboInitType == VboInitType::FROM_DATAREF) {
+        if (!hasScale) {
+          _resetTypes();
+        } else {
+          _resetTypes(true, false);
+        }
+        _validateValue(hasScale);
       }
       _valueJsonPath = objPath.Append(valueProp.c_str(), valueProp.length());
 
@@ -104,8 +98,11 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
 
     if (updateScale) {
       // initialize according to the scale
-      _scaleConfigPtr = nullptr;
-      _scalePtr = nullptr;
+      _clearScalePtr();
+
+      // NOTE: not resetting the in/out types as they will be set in
+      // the following _initScaleFromJSONobj() call
+
       _initScaleFromJSONObj(scalemitr->value);
       _validateScale();
     }
@@ -120,20 +117,15 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
                             "or "
                             "a \"value\" property."));
 
-      // TODO(croot): If a scale was used previously but now it's not, we need to
-      // indicate that a shader rebuild is needed. Two possible approaches:
-      // 1) have a local pointer that points back to the mark that encapsulates
-      //    this render property and have a public function on the mark object
-      //    to mark the shader as dirty.
-      // 2) mark a local dirty flag and leave it up to the mark to traverse
-      //    all its render properties looking for the dirty flag.
-
-      _scaleConfigPtr = nullptr;
-      _scalePtr = nullptr;
-
+      _clearScalePtr();
       if (_vboInitType == VboInitType::FROM_SCALEREF) {
         _resetTypes();
         _validateValue(false);
+      } else if (_vboInitType == VboInitType::FROM_DATAREF && (!_outType || !_inType || *_outType != *_inType)) {
+        _outType = _inType;
+        _setShaderDirty();
+      } else {
+        _resetTypes(false, true);
       }
     }
 
@@ -142,12 +134,10 @@ void BaseRenderProperty::initializeFromJSONObj(const rapidjson::Value& obj,
   } else {
     // need to clear out the object paths
     _clearFieldPath();
+    _clearScalePtr();
+
     _valueJsonPath = rapidjson::Pointer();
     _scaleJsonPath = rapidjson::Pointer();
-
-    _scaleConfigPtr = nullptr;
-    _scalePtr = nullptr;
-
     _initValueFromJSONObj(obj, false, true);
   }
 }
@@ -164,6 +154,11 @@ bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
                     std::string(*this) + ": Cannot initialize mark property " + _name +
                         " from data. A valid data reference hasn't been initialized.");
 
+  bool dataPtrChanged = dataPtr != _dataPtr;
+  if (dataPtrChanged) {
+    _unsubscribeFromDataEvent();
+  }
+
   _dataPtr = dataPtr;
   _vboAttrName = attrName;
 
@@ -173,12 +168,20 @@ bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
   bool inchanged, outchanged;
   std::tie(inchanged, outchanged) = _initTypeFromBuffer(hasScale);
   if (inchanged || outchanged) {
-    if (inchanged && !updatingScale && _scalePtr) {
+    if (inchanged && hasScale && !updatingScale && _scalePtr) {
       // need to make sure our scale reference is properly
       // adjusted for a possible new data type
       _updateScalePtr(_scalePtr);
     }
     _setPropsDirty();
+  }
+
+  if (dataPtrChanged) {
+    // setup callbacks for data updates
+    auto dataJSONPtr = std::dynamic_pointer_cast<BaseQueryDataTableJSON>(dataPtr);
+    CHECK(dataJSONPtr);
+    auto cb = std::bind(&BaseRenderProperty::_dataRefUpdateCB, this, std::placeholders::_1, std::placeholders::_2);
+    _dataRefSubscriptionId = _ctx->subscribeToRefEvent(RefEventType::ALL, dataJSONPtr, cb);
   }
 
   return inchanged || outchanged;
@@ -375,6 +378,7 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
     // before a complete update was performed, so clearing everything out first.
     LOG(WARNING) << "Possible sync issue when updating render property " << _printInfo();
     _clearFieldPath();
+    _clearScalePtr();
     _resetTypes();
   }
 }
@@ -496,6 +500,16 @@ void BaseRenderProperty::_clearDataPtr() {
   _dataPtr = nullptr;
 }
 
+void BaseRenderProperty::_clearScalePtr() {
+  if (_scaleConfigPtr || _scalePtr) {
+    _setShaderDirty();
+  }
+
+  _unsubscribeFromScaleEvent(_scalePtr);
+  _scaleConfigPtr = nullptr;
+  _scalePtr = nullptr;
+}
+
 bool BaseRenderProperty::_checkAccumulator(const ScaleShPtr& scalePtr) {
   bool scaleAccumulation = scalePtr->hasAccumulator();
   RUNTIME_EX_ASSERT(_allowsAccumulatorScale || !scaleAccumulation,
@@ -563,12 +577,13 @@ RenderProperty<ColorUnion, 1>::RenderProperty(BaseMark* prntMark,
 }
 
 template <>
-bool RenderProperty<ColorUnion, 1>::_resetTypes() {
-  if (_vboInitType != VboInitType::FROM_VALUE) {
-    auto rootGpuCache = _ctx->getRootGpuCache();
-    CHECK(rootGpuCache);
+bool RenderProperty<ColorUnion, 1>::_resetTypes(const bool resetInType, const bool resetOutType) {
+  bool rtn = false;
+  auto rootGpuCache = _ctx->getRootGpuCache();
+  CHECK(rootGpuCache);
+
+  if (resetInType && _vboInitType != VboInitType::FROM_VALUE) {
     auto newInType = ColorUnion::getTypeGLPtr(rootGpuCache->supportedExtensions);
-    auto newOutType = ColorUnion::getTypeGLPtr(rootGpuCache->supportedExtensions);
 
     for (auto& itr : _perGpuData) {
       itr.second.vbo.reset();
@@ -580,14 +595,24 @@ bool RenderProperty<ColorUnion, 1>::_resetTypes() {
     }
     _vboInitType = VboInitType::FROM_VALUE;
 
-    if (!_inType || !_outType || (*_inType) != (*newInType) || (*_outType) != (*newOutType)) {
+    if (!_inType || (*_inType) != (*newInType)) {
       _setShaderDirty();
       _inType = newInType;
-      _outType = newOutType;
-      return true;
+      rtn = true;
     }
   }
-  return false;
+
+  if (resetOutType) {
+    auto newOutType = ColorUnion::getTypeGLPtr(rootGpuCache->supportedExtensions);
+
+    if (!_outType || (*_outType) != (*newOutType)) {
+      _setShaderDirty();
+      _outType = newOutType;
+      rtn = true;
+    }
+  }
+
+  return rtn;
 }
 
 template <>
