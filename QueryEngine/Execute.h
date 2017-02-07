@@ -359,7 +359,8 @@ class Executor {
 #endif  // HAVE_RENDERING
 
   StringDictionaryProxy* getStringDictionaryProxy(const int dictId,
-                                                  const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner) const;
+                                                  const std::shared_ptr<RowSetMemoryOwner> row_set_mem_owner,
+                                                  const bool with_generation) const;
 
   bool isCPUOnly() const;
 
