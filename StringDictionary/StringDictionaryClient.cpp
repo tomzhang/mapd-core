@@ -34,6 +34,7 @@ void StringDictionaryClient::get_string(std::string& _return, const int32_t stri
   CHECK(client_);
   try {
     client_->get_string(_return, string_id, dict_id_);
+    return;
   } catch (const TTransportException&) {
     setupClient();
   }
