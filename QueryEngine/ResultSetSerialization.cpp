@@ -303,7 +303,7 @@ void serialize_projected_column(int8_t* col_ptr,
     return;
   }
   int64_t int_val{0};
-  if (ti.is_integer() || ti.is_decimal() || ti.is_boolean() || ti.is_time() || ti.is_string()) {
+  if (ti.is_integer() || ti.is_decimal() || ti.is_boolean() || ti.is_time() || ti.is_timeinterval() || ti.is_string()) {
     const auto scalar_tv = boost::get<ScalarTargetValue>(&tv);
     CHECK(scalar_tv);
     const auto i64_p = boost::get<int64_t>(scalar_tv);
@@ -347,7 +347,9 @@ void serialize_projected_column(int8_t* col_ptr,
     case kDECIMAL:
     case kDATE:
     case kTIMESTAMP:
-    case kTIME: {
+    case kTIME:
+    case kINTERVAL_DAY_TIME:
+    case kINTERVAL_YEAR_MONTH: {
       *reinterpret_cast<int64_t*>(col_ptr) = int_val;
       break;
     }
