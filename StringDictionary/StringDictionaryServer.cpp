@@ -8,10 +8,8 @@
 #include <boost/smart_ptr/make_shared_object.hpp>
 #include <boost/smart_ptr/make_unique.hpp>
 #include <glog/logging.h>
-#include <thrift/concurrency/PlatformThreadFactory.h>
-#include <thrift/concurrency/ThreadManager.h>
 #include <thrift/protocol/TBinaryProtocol.h>
-#include <thrift/server/TThreadPoolServer.h>
+#include <thrift/server/TThreadedServer.h>
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TServerSocket.h>
 
@@ -118,14 +116,10 @@ int main(int argc, char** argv) {
   using namespace ::apache::thrift::server;
   using namespace ::apache::thrift::transport;
 
-  boost::shared_ptr<ThreadManager> thread_manager = ThreadManager::newSimpleThreadManager(8);
-  thread_manager->threadFactory(boost::make_shared<PlatformThreadFactory>());
-  thread_manager->start();
-
   auto server_socket = boost::make_shared<TServerSocket>(port);
   auto transport_factory = boost::make_shared<TBufferedTransportFactory>();
   auto protocol_factory = boost::make_shared<TBinaryProtocolFactory>();
-  TThreadPoolServer server(processor, server_socket, transport_factory, protocol_factory, thread_manager);
+  TThreadedServer server(processor, server_socket, transport_factory, protocol_factory);
 
   server.serve();
 
