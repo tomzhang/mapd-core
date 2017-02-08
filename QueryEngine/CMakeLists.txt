@@ -45,6 +45,7 @@ set(query_engine_source_files
     ResultSetSort.cpp
     RuntimeFunctions.cpp
     RuntimeFunctions.bc
+    DynamicWatchdog.cpp
     SpeculativeTopN.cpp
     StringDictionaryGenerations.cpp
     StringFunctions.cpp
@@ -59,6 +60,7 @@ set(query_engine_source_files
 set(group_by_hash_test_files
     GroupByHashTest.cpp
     MurmurHash.cpp
+    DynamicWatchdog.cpp
     RuntimeFunctions.cpp
 )
 
