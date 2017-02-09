@@ -42,11 +42,15 @@ class PresistentLeafClient {
   std::unique_ptr<MapDClient> client_;
 };
 
+struct ExecutionOptions;
+
 class LeafAggregator {
  public:
   LeafAggregator(const std::vector<LeafHostInfo>& leaves);
 
-  AggregatedResult execute(const Catalog_Namespace::SessionInfo& parent_session_info, const std::string& query_ra);
+  AggregatedResult execute(const Catalog_Namespace::SessionInfo& parent_session_info,
+                           const std::string& query_ra,
+                           const ExecutionOptions& eo);
 
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,
