@@ -278,21 +278,6 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     std::vector<TargetInfo> target_infos;
     std::vector<std::future<std::unique_ptr<ResultSet>>> leaf_futures;
     for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-      if (replicated) {
-        TStepResult step_result;
-        const auto& leaf = leaves_[leaf_idx];
-        leaf->execute_first_step(step_result, pending_queries[leaf_idx]);
-        auto result_set = ResultSet::unserialize(step_result.serialized_rows, ra_executor.getExecutor());
-        target_infos = result_set->getTargetInfos();
-        if (!result_set->definitelyHasNoRows()) {
-          leaf_results.emplace_back(result_set.release());
-        }
-        execution_finished = step_result.execution_finished;
-        merge_type = step_result.merge_type;
-        row_desc = step_result.row_desc;
-        node_id = step_result.node_id;
-        break;
-      }
       leaf_futures.emplace_back(std::async(std::launch::async,
                                            [&execution_finished,
                                             &leaves_mutex,
@@ -324,10 +309,14 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     for (auto& leaf_future : leaf_futures) {
       leaf_future.wait();
     }
-    for (auto& leaf_future : leaf_futures) {
+    for (size_t leaf_idx = 0; leaf_idx < leaf_futures.size(); ++leaf_idx) {
+      auto& leaf_future = leaf_futures[leaf_idx];
       auto result_set = leaf_future.get();
       if (!result_set->definitelyHasNoRows()) {
         leaf_results.emplace_back(result_set.release());
+      }
+      if (replicated) {
+        break;
       }
     }
     QueryMemoryDescriptor empty_query_mem_desc{};
