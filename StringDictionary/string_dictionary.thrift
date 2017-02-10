@@ -5,4 +5,6 @@ service RemoteStringDictionary {
   i64 storage_entry_count(1: i32 dict_id)
   list<string> get_like(1: string pattern, 2: bool icase, 3: bool is_simple, 4: string escape, 5: i64 generation, 6: i32 dict_id)
   list<string> get_regexp_like(1: string pattern, 2: string escape, 3: i64 generation, 4: i32 dict_id)
+  list<i32> get_or_add_bulk(1: list<string> strings, 2: i32 dict_id)
+  bool checkpoint(1: i32 dict_id)
 }

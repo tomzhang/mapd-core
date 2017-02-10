@@ -88,6 +88,31 @@ std::vector<std::string> StringDictionaryClient::get_regexp_like(const std::stri
   return _return;
 }
 
+void StringDictionaryClient::get_or_add_bulk(std::vector<int32_t>& string_ids,
+                                             const std::vector<std::string>& strings) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  CHECK(client_);
+  string_ids.resize(strings.size());
+  try {
+    client_->get_or_add_bulk(string_ids, strings, dict_id_);
+    return;
+  } catch (const TTransportException&) {
+    setupClient();
+  }
+  client_->get_or_add_bulk(string_ids, strings, dict_id_);
+}
+
+bool StringDictionaryClient::checkpoint() {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  CHECK(client_);
+  try {
+    return client_->checkpoint(dict_id_);
+  } catch (const TTransportException&) {
+    setupClient();
+  }
+  return client_->checkpoint(dict_id_);
+}
+
 void StringDictionaryClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(server_host_.getHost(), server_host_.getPort());
   const auto transport = boost::make_shared<TBufferedTransport>(socket);

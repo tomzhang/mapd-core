@@ -71,6 +71,16 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
     _return = getStringDictionary(dict_id)->getRegexpLike(pattern, escape.front(), generation);
   }
 
+  void get_or_add_bulk(std::vector<int32_t>& _return, const std::vector<std::string>& strings, const int32_t dict_id) {
+    if (strings.empty()) {
+      return;
+    }
+    _return.resize(strings.size());
+    getStringDictionary(dict_id)->getOrAddBulk(strings, &_return[0]);
+  }
+
+  bool checkpoint(const int32_t dict_id) { return getStringDictionary(dict_id)->checkpoint(); }
+
  private:
   StringDictionary* getStringDictionary(const int32_t dict_id) const {
     mapd_shared_lock<mapd_shared_mutex> read_lock(string_dictionaries_mutex_);

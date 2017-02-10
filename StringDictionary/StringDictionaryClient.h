@@ -25,6 +25,10 @@ class StringDictionaryClient {
 
   std::vector<std::string> get_regexp_like(const std::string& pattern, const char escape, const int64_t generation);
 
+  void get_or_add_bulk(std::vector<int32_t>& string_ids, const std::vector<std::string>& strings);
+
+  bool checkpoint();
+
  private:
   void setupClient();
 
