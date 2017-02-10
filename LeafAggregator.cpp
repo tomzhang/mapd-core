@@ -86,23 +86,43 @@ std::vector<const TableDescriptor*> get_dag_inputs(const RelAlgNode* ra) {
   return result;
 }
 
+void check_replication_constraints(const RelAlgNode* ra) {
+  CHECK(ra);
+  const auto scan = dynamic_cast<const RelScan*>(ra);
+  if (scan) {
+    return;
+  }
+  const auto join = dynamic_cast<const RelJoin*>(ra);
+  if (!join) {
+    CHECK_EQ(size_t(1), ra->inputCount());
+    check_replication_constraints(ra->getInput(0));
+    return;
+  }
+  for (size_t i = 0; i < join->inputCount(); ++i) {
+    const auto input = ra->getInput(i);
+    CHECK(input);
+    const auto input_scan = dynamic_cast<const RelScan*>(input);
+    if (!input_scan) {
+      check_replication_constraints(input);
+    } else {
+      const auto td = input_scan->getTableDescriptor();
+      if (td->partitions != "SHARDED" && td->partitions != "REPLICATED") {
+        LOG(WARNING) << "Partitioning not properly specified for table '" << td->tableName + "', assuming sharded";
+      }
+      if (i > 0) {
+        if (td->partitions != "REPLICATED") {
+          throw std::runtime_error("Join table " + td->tableName + " must be replicated");
+        }
+      }
+    }
+  }
+}
+
 bool input_is_replicated(const RelAlgNode* ra) {
   CHECK(ra);
   const auto inputs = get_dag_inputs(ra);
   CHECK(!inputs.empty());
-  if (inputs.front()->partitions == "REPLICATED") {
-    return true;
-  }
-  for (size_t i = 1; i < inputs.size(); ++i) {
-    if (inputs[i]->partitions != "REPLICATED") {
-      throw std::runtime_error("Join table " + inputs[i]->tableName + " must be replicated");
-    }
-  }
-  if (inputs.front()->partitions != "SHARDED" && inputs.front()->partitions != "REPLICATED") {
-    LOG(WARNING) << "Partitioning not properly specified for table '"
-                 << inputs.front()->tableName + "', assuming sharded";
-  }
-  return false;
+  return inputs.front()->partitions == "REPLICATED";
 }
 
 typedef std::vector<TColumnRange> TColumnRanges;
@@ -268,10 +288,13 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
     bool replicated = false;
     if (crt_subquery_idx >= static_cast<ssize_t>(subqueries.size())) {
       CHECK_EQ(static_cast<ssize_t>(subqueries.size()), crt_subquery_idx);
+      check_replication_constraints(ra.get());
       replicated = input_is_replicated(ra.get());
     } else {
       CHECK_GE(crt_subquery_idx, 0);
-      replicated = input_is_replicated(subqueries[crt_subquery_idx]->getRelAlg());
+      const auto subquery_ra = subqueries[crt_subquery_idx]->getRelAlg();
+      check_replication_constraints(subquery_ra);
+      replicated = input_is_replicated(subquery_ra);
     }
     std::vector<std::shared_ptr<ResultSet>> leaf_results;
     TRowDescriptor row_desc;
