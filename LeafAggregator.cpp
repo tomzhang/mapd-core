@@ -27,6 +27,7 @@ PresistentLeafClient::PresistentLeafClient(const LeafHostInfo& leaf_host) : leaf
 TSessionId PresistentLeafClient::connect(const std::string& user,
                                          const std::string& passwd,
                                          const std::string& dbname) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
   try {
     return client_->connect(user, passwd, dbname);
   } catch (const TTransportException&) {
@@ -36,20 +37,24 @@ TSessionId PresistentLeafClient::connect(const std::string& user,
 }
 
 void PresistentLeafClient::disconnect(const TSessionId session) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
   client_->disconnect(session);
 }
 
 void PresistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
   client_->start_query(_return, session, query_ra);
 }
 
 void PresistentLeafClient::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
   client_->execute_first_step(_return, pending_query);
 }
 
 void PresistentLeafClient::broadcast_serialized_rows(const std::string& serialized_rows,
                                                      const TRowDescriptor& row_desc,
                                                      const TQueryId query_id) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
   client_->broadcast_serialized_rows(serialized_rows, row_desc, query_id);
 }
 
@@ -262,6 +267,7 @@ void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
                                          const std::string& query_ra,
                                          const ExecutionOptions& eo) {
+  std::lock_guard<std::mutex> execution_lock(execution_mutex_);
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra);
   const auto column_ranges = aggregate_leaf_ranges(pending_queries);

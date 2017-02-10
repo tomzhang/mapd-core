@@ -40,6 +40,7 @@ class PresistentLeafClient {
 
   const LeafHostInfo leaf_host_;
   std::unique_ptr<MapDClient> client_;
+  std::mutex client_mutex_;
 };
 
 struct ExecutionOptions;
@@ -83,6 +84,7 @@ class LeafAggregator {
   SessionMap leaf_sessions_;  // map from aggregator session to leaf sessions
   std::unordered_map<TSessionId, Credentials> session_credentials_;
   mapd_shared_mutex leaf_sessions_mutex_;
+  std::mutex execution_mutex_;
 };
 
 #endif  // LEAFAGGREGATOR_H
