@@ -237,7 +237,8 @@ void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>
     CHECK(ref_layout.agg_col_widths == layout.agg_col_widths);
     CHECK(ref_layout.target_groupby_indices == layout.target_groupby_indices);
     if (layout.hash_type != GroupByColRangeType::MultiCol &&
-        layout.hash_type != GroupByColRangeType::OneColGuessedRange) {
+        layout.hash_type != GroupByColRangeType::OneColGuessedRange &&
+        layout.hash_type != GroupByColRangeType::Projection) {
       CHECK_EQ(ref_layout.entry_count, layout.entry_count);
     }
     CHECK_EQ(ref_layout.entry_count_small, layout.entry_count_small);
