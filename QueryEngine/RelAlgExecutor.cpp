@@ -121,7 +121,10 @@ FirstStepExecutionResult RelAlgExecutor::executeRelAlgQueryFirstStep(const RelAl
   if (sort) {
     // No point in sorting on the leaf, only execute the input to the sort node.
     CHECK_EQ(size_t(1), sort->inputCount());
-    first_exec_desc = RaExecutionDesc(sort->getInput(0));
+    const auto source = sort->getInput(0);
+    if (sort->collationCount() || node_is_aggregate(source)) {
+      first_exec_desc = RaExecutionDesc(source);
+    }
   }
   std::vector<RaExecutionDesc> first_exec_desc_singleton_list{first_exec_desc};
   const auto merge_type = node_is_aggregate(first_exec_desc.getBody()) ? MergeType::Reduce : MergeType::Union;
@@ -899,6 +902,24 @@ ExecutionResult RelAlgExecutor::executeSort(const RelSort* sort,
     throw std::runtime_error("Sort node not supported as input to another sort");
   }
   const bool is_aggregate = node_is_aggregate(source);
+  auto it = leaf_results_.find(sort->getId());
+  if (it != leaf_results_.end()) {
+    // Handle push-down for LIMIT for multi-node
+    CHECK(!is_aggregate && !sort->collationCount());
+    auto& aggregated_result = it->second;
+    ResultRows result_rows(aggregated_result.rs);
+    const size_t limit = sort->getLimit();
+    const size_t offset = sort->getOffset();
+    if (limit || offset) {
+      result_rows.dropFirstN(offset);
+      if (limit) {
+        result_rows.keepFirstN(limit);
+      }
+    }
+    ExecutionResult result(result_rows, aggregated_result.targets_meta);
+    sort->setOutputMetainfo(aggregated_result.targets_meta);
+    return result;
+  }
   while (true) {
     std::list<std::shared_ptr<Analyzer::Expr>> groupby_exprs;
     bool is_desc{false};
