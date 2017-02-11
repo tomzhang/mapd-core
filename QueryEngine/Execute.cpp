@@ -4469,6 +4469,7 @@ RowSetPtr Executor::executeResultPlan(const Planner::Result* result_plan,
                                    multi_frag_col_buffers,
                                    {{static_cast<int64_t>(result_columns.size())}},
                                    {{0}},
+                                   1u,
                                    0,
                                    init_agg_vals,
                                    error_code,
@@ -5017,6 +5018,7 @@ void Executor::ExecutionDispatch::runImpl(const ExecutorDeviceType chosen_device
                                                query_exe_context,
                                                fetch_result.num_rows,
                                                fetch_result.frag_offsets,
+                                               getFragmentStride(frag_ids),
                                                &cat_.get_dataMgr(),
                                                chosen_device_id,
                                                start_rowid,
@@ -5033,6 +5035,7 @@ void Executor::ExecutionDispatch::runImpl(const ExecutorDeviceType chosen_device
                                             query_exe_context,
                                             fetch_result.num_rows,
                                             fetch_result.frag_offsets,
+                                            getFragmentStride(frag_ids),
                                             &cat_.get_dataMgr(),
                                             chosen_device_id,
                                             ra_exe_unit_.scan_limit,
@@ -5142,6 +5145,20 @@ const int8_t* Executor::ExecutionDispatch::getScanColumn(
     CHECK(ab->getMemoryPtr());
     return ab->getMemoryPtr();  // @TODO(alex) change to use ChunkIter
   }
+}
+
+uint32_t Executor::ExecutionDispatch::getFragmentStride(const std::map<int, std::vector<size_t>>& frag_ids) const {
+#ifdef ENABLE_MULFRAG_JOIN
+  const bool is_hash_join = executor_->plan_state_->join_info_.join_impl_type_ == Executor::JoinImplType::HashOneToOne;
+  if (is_hash_join) {
+    CHECK_EQ(ra_exe_unit_.input_descs.size(), size_t(2));
+    const auto inner_table_id = ra_exe_unit_.input_descs.back().getTableId();
+    const auto inner_it = frag_ids.find(inner_table_id);
+    CHECK(inner_it != frag_ids.end());
+    return static_cast<uint32_t>(inner_it->second.size());
+  }
+#endif
+  return 1u;
 }
 
 std::vector<const ColumnarResults*> Executor::ExecutionDispatch::getAllScanColumnFrags(
@@ -5997,6 +6014,7 @@ int32_t Executor::executePlanWithoutGroupBy(const RelAlgExecutionUnit& ra_exe_un
                                             QueryExecutionContext* query_exe_context,
                                             const std::vector<std::vector<int64_t>>& num_rows,
                                             const std::vector<std::vector<uint64_t>>& frag_offsets,
+                                            const uint32_t frag_stride,
                                             Data_Namespace::DataMgr* data_mgr,
                                             const int device_id,
                                             const uint32_t start_rowid,
@@ -6020,6 +6038,7 @@ int32_t Executor::executePlanWithoutGroupBy(const RelAlgExecutionUnit& ra_exe_un
                                                col_buffers,
                                                num_rows,
                                                frag_offsets,
+                                               frag_stride,
                                                0,
                                                query_exe_context->init_agg_vals_,
                                                &error_code,
@@ -6035,6 +6054,7 @@ int32_t Executor::executePlanWithoutGroupBy(const RelAlgExecutionUnit& ra_exe_un
                                                  col_buffers,
                                                  num_rows,
                                                  frag_offsets,
+                                                 frag_stride,
                                                  0,
                                                  query_exe_context->init_agg_vals_,
                                                  data_mgr,
@@ -6063,7 +6083,10 @@ int32_t Executor::executePlanWithoutGroupBy(const RelAlgExecutionUnit& ra_exe_un
     return 0;
   }
   std::vector<int64_t> reduced_outs;
-  const size_t entry_count = device_type == ExecutorDeviceType::GPU ? col_buffers.size() * blockSize() * gridSize() : 1;
+  CHECK_EQ(col_buffers.size() % frag_stride, size_t(0));
+  const auto num_out_frags = col_buffers.size() / frag_stride;
+  const size_t entry_count =
+      device_type == ExecutorDeviceType::GPU ? num_out_frags * blockSize() * gridSize() : num_out_frags;
   if (size_t(1) == entry_count) {
     for (auto out : out_vec) {
       CHECK(out);
@@ -6155,6 +6178,7 @@ int32_t Executor::executePlanWithGroupBy(const RelAlgExecutionUnit& ra_exe_unit,
                                          QueryExecutionContext* query_exe_context,
                                          const std::vector<std::vector<int64_t>>& num_rows,
                                          const std::vector<std::vector<uint64_t>>& frag_offsets,
+                                         const uint32_t frag_stride,
                                          Data_Namespace::DataMgr* data_mgr,
                                          const int device_id,
                                          const int64_t scan_limit,
@@ -6186,6 +6210,7 @@ int32_t Executor::executePlanWithGroupBy(const RelAlgExecutionUnit& ra_exe_unit,
                                      col_buffers,
                                      num_rows,
                                      frag_offsets,
+                                     frag_stride,
                                      scan_limit,
                                      query_exe_context->init_agg_vals_,
                                      &error_code,
@@ -6200,6 +6225,7 @@ int32_t Executor::executePlanWithGroupBy(const RelAlgExecutionUnit& ra_exe_unit,
                                        col_buffers,
                                        num_rows,
                                        frag_offsets,
+                                       frag_stride,
                                        scan_limit,
                                        query_exe_context->init_agg_vals_,
                                        data_mgr,
@@ -7066,7 +7092,7 @@ void Executor::allocateInnerScansIterators(const std::vector<InputDescriptor>& i
     }
   }
 }
-#ifndef ENABLE_MULFRAG_JOIN
+
 namespace {
 
 std::string get_self_joined_table_name(const std::vector<InputTableInfo>& query_infos,
@@ -7082,7 +7108,6 @@ std::string get_self_joined_table_name(const std::vector<InputTableInfo>& query_
 }
 
 }  // namespace
-#endif
 
 Executor::JoinInfo Executor::chooseJoinType(const std::list<std::shared_ptr<Analyzer::Expr>>& join_quals,
                                             const std::vector<InputTableInfo>& query_infos,
@@ -7090,7 +7115,7 @@ Executor::JoinInfo Executor::chooseJoinType(const std::list<std::shared_ptr<Anal
                                             const ExecutorDeviceType device_type) {
   CHECK(device_type != ExecutorDeviceType::Hybrid);
   std::string hash_join_fail_reason{"No equijoin expression found"};
-#ifndef ENABLE_MULFRAG_JOIN
+
   const MemoryLevel memory_level{device_type == ExecutorDeviceType::GPU ? MemoryLevel::GPU_LEVEL
                                                                         : MemoryLevel::CPU_LEVEL};
   for (auto qual : join_quals) {
@@ -7123,7 +7148,7 @@ Executor::JoinInfo Executor::chooseJoinType(const std::list<std::shared_ptr<Anal
   if (!self_joined_table_name.empty()) {
     hash_join_fail_reason = "Self joins not supported yet, table: " + self_joined_table_name;
   }
-#endif
+
   return Executor::JoinInfo(
       JoinImplType::Loop, std::vector<std::shared_ptr<Analyzer::BinOper>>{}, nullptr, hash_join_fail_reason);
 }
