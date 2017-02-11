@@ -11,7 +11,7 @@ set(RENDERING_DEFS "" PARENT_SCOPE)
 set(RENDERING_INCLUDE_DIRS "")
 set(RENDERING_LIBS "")
 
-find_package(Boost COMPONENTS filesystem system regex REQUIRED)
+find_package(Boost COMPONENTS filesystem system regex REQUIRED QUIET)
 list(APPEND RENDERING_INCLUDE_DIRS "${Boost_INCLUDE_DIR}")
 list(APPEND RENDERING_LIBS "${Boost_LIBRARIES}")
 
