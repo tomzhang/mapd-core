@@ -431,9 +431,6 @@ void ResultSet::serializeCountDistinctColumns(TSerializedRows& serialized_rows) 
                     [](const RowSetMemoryOwner::CountDistinctBitmapBuffer& count_distinct_buffer) {
                       return !count_distinct_buffer.system_allocated;
                     });
-  if (bitmap_pool_buffers) {
-    CHECK_EQ(row_set_mem_owner_->count_distinct_bitmaps_.size(), bitmap_pool_buffers + 1);
-  }
   for (const auto& bitmap : row_set_mem_owner_->count_distinct_bitmaps_) {
     if (bitmap_pool_buffers && bitmap.system_allocated) {
       continue;
