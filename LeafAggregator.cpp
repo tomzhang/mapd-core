@@ -268,8 +268,10 @@ void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>
 AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& parent_session_info,
                                          const std::string& query_ra,
                                          const ExecutionOptions& eo) {
+  const auto clock_begin = timer_start();
   std::lock_guard<std::mutex> execution_lock(execution_mutex_);
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto queue_time_ms = timer_stop(clock_begin);
   auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra);
   const auto column_ranges = aggregate_leaf_ranges(pending_queries);
   const auto string_dictionary_generations = aggregate_dictionary_generations(pending_queries);
@@ -392,6 +394,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       auto aggregated_rs =
           aggregated_result_rows.definitelyHasNoRows() ? empty_result_set : aggregated_result_rows.getResultSet();
       CHECK(aggregated_rs);
+      aggregated_rs->setQueueTime(queue_time_ms);
       return {aggregated_rs, aggregated_result.getTargetsMeta()};
     } else {
       CHECK_GE(crt_subquery_idx, 0);
