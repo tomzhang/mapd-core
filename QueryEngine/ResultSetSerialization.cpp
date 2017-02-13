@@ -265,6 +265,7 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
 }  // namespace
 
 std::string ResultSet::serialize() const {
+  CHECK(permutation_.empty());
   if (query_mem_desc_.hash_type == GroupByColRangeType::Projection) {
     return serializeProjection();
   }
