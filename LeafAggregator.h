@@ -23,9 +23,9 @@ struct AggregatedResult {
   const std::vector<TargetMetaInfo> targets_meta;
 };
 
-class PresistentLeafClient {
+class PersistentLeafClient {
  public:
-  PresistentLeafClient(const LeafHostInfo& leaf_host) noexcept;
+  PersistentLeafClient(const LeafHostInfo& leaf_host) noexcept;
 
   TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
   void disconnect(const TSessionId session);
@@ -81,7 +81,7 @@ class LeafAggregator {
     const std::string dbname;
   };
 
-  std::vector<std::unique_ptr<PresistentLeafClient>> leaves_;
+  std::vector<std::unique_ptr<PersistentLeafClient>> leaves_;
   SessionMap leaf_sessions_;  // map from aggregator session to leaf sessions
   std::unordered_map<TSessionId, Credentials> session_credentials_;
   mapd_shared_mutex leaf_sessions_mutex_;

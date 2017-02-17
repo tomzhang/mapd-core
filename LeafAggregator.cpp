@@ -20,7 +20,7 @@ using apache::thrift::transport::TBufferedTransport;
 using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
-PresistentLeafClient::PresistentLeafClient(const LeafHostInfo& leaf_host) noexcept : leaf_host_(leaf_host) {
+PersistentLeafClient::PersistentLeafClient(const LeafHostInfo& leaf_host) noexcept : leaf_host_(leaf_host) {
   try {
     setupClient();
   } catch (const TTransportException&) {
@@ -28,7 +28,7 @@ PresistentLeafClient::PresistentLeafClient(const LeafHostInfo& leaf_host) noexce
   }
 }
 
-TSessionId PresistentLeafClient::connect(const std::string& user,
+TSessionId PersistentLeafClient::connect(const std::string& user,
                                          const std::string& passwd,
                                          const std::string& dbname) {
   std::lock_guard<std::mutex> lock(client_mutex_);
@@ -41,25 +41,25 @@ TSessionId PresistentLeafClient::connect(const std::string& user,
   return client_->connect(user, passwd, dbname);
 }
 
-void PresistentLeafClient::disconnect(const TSessionId session) {
+void PersistentLeafClient::disconnect(const TSessionId session) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
   client_->disconnect(session);
 }
 
-void PresistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
+void PersistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
   client_->start_query(_return, session, query_ra);
 }
 
-void PresistentLeafClient::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query) {
+void PersistentLeafClient::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
   client_->execute_first_step(_return, pending_query);
 }
 
-void PresistentLeafClient::broadcast_serialized_rows(const std::string& serialized_rows,
+void PersistentLeafClient::broadcast_serialized_rows(const std::string& serialized_rows,
                                                      const TRowDescriptor& row_desc,
                                                      const TQueryId query_id) {
   std::lock_guard<std::mutex> lock(client_mutex_);
@@ -67,7 +67,7 @@ void PresistentLeafClient::broadcast_serialized_rows(const std::string& serializ
   client_->broadcast_serialized_rows(serialized_rows, row_desc, query_id);
 }
 
-void PresistentLeafClient::setupClient() {
+void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
   const auto transport = boost::make_shared<TBufferedTransport>(socket);
   transport->open();
@@ -75,7 +75,7 @@ void PresistentLeafClient::setupClient() {
   client_.reset(new MapDClient(protocol));
 }
 
-void PresistentLeafClient::setupClientIfNull() {
+void PersistentLeafClient::setupClientIfNull() {
   if (!client_) {
     setupClient();
   }
@@ -83,7 +83,7 @@ void PresistentLeafClient::setupClientIfNull() {
 
 LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
   for (const auto& leaf : leaves) {
-    leaves_.emplace_back(new PresistentLeafClient(leaf));
+    leaves_.emplace_back(new PersistentLeafClient(leaf));
   }
 }
 
