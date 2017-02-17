@@ -115,6 +115,9 @@ bool StringDictionaryClient::checkpoint() {
 
 void StringDictionaryClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(server_host_.getHost(), server_host_.getPort());
+  socket->setConnTimeout(5000);
+  socket->setRecvTimeout(10000);
+  socket->setSendTimeout(10000);
   const auto transport = boost::make_shared<TBufferedTransport>(socket);
   transport->open();
   const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
