@@ -20,14 +20,19 @@ using apache::thrift::transport::TBufferedTransport;
 using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
-PresistentLeafClient::PresistentLeafClient(const LeafHostInfo& leaf_host) : leaf_host_(leaf_host) {
-  setupClient();
+PresistentLeafClient::PresistentLeafClient(const LeafHostInfo& leaf_host) noexcept : leaf_host_(leaf_host) {
+  try {
+    setupClient();
+  } catch (const TTransportException&) {
+    LOG(INFO) << "Couldn't connect to leaf " << leaf_host.getHost() << ":" << leaf_host.getPort();
+  }
 }
 
 TSessionId PresistentLeafClient::connect(const std::string& user,
                                          const std::string& passwd,
                                          const std::string& dbname) {
   std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
   try {
     return client_->connect(user, passwd, dbname);
   } catch (const TTransportException&) {
@@ -38,16 +43,19 @@ TSessionId PresistentLeafClient::connect(const std::string& user,
 
 void PresistentLeafClient::disconnect(const TSessionId session) {
   std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
   client_->disconnect(session);
 }
 
 void PresistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
   std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
   client_->start_query(_return, session, query_ra);
 }
 
 void PresistentLeafClient::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query) {
   std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
   client_->execute_first_step(_return, pending_query);
 }
 
@@ -55,6 +63,7 @@ void PresistentLeafClient::broadcast_serialized_rows(const std::string& serializ
                                                      const TRowDescriptor& row_desc,
                                                      const TQueryId query_id) {
   std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
   client_->broadcast_serialized_rows(serialized_rows, row_desc, query_id);
 }
 
@@ -64,6 +73,12 @@ void PresistentLeafClient::setupClient() {
   transport->open();
   const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
   client_.reset(new MapDClient(protocol));
+}
+
+void PresistentLeafClient::setupClientIfNull() {
+  if (!client_) {
+    setupClient();
+  }
 }
 
 LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {

@@ -25,7 +25,7 @@ struct AggregatedResult {
 
 class PresistentLeafClient {
  public:
-  PresistentLeafClient(const LeafHostInfo& leaf_host);
+  PresistentLeafClient(const LeafHostInfo& leaf_host) noexcept;
 
   TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
   void disconnect(const TSessionId session);
@@ -36,6 +36,7 @@ class PresistentLeafClient {
                                  const TQueryId query_id);
 
  private:
+  void setupClientIfNull();
   void setupClient();
 
   const LeafHostInfo leaf_host_;
