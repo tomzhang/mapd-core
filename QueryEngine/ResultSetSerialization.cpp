@@ -362,6 +362,9 @@ void serialize_projected_column(int8_t* col_ptr,
       *reinterpret_cast<double*>(col_ptr) = double_val;
       break;
     }
+    case kARRAY: {
+      throw std::runtime_error("Array in projection not supported yet for distributed queries");
+    }
     default:
       CHECK(false);
   }
