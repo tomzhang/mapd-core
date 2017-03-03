@@ -2938,7 +2938,8 @@ void MapDHandler::execute_first_step(TStepResult& _return, const TPendingQuery& 
     const auto first_step_result = PendingExecutionClosure::executeNextStep(
         pending_query.id,
         column_ranges_from_thrift(pending_query.column_ranges),
-        string_dictionary_generations_from_thrift(pending_query.dictionary_generations));
+        string_dictionary_generations_from_thrift(pending_query.dictionary_generations),
+        table_generations_from_thrift(pending_query.table_generations));
     const auto& result_rows = first_step_result.result.getRows();
     auto result_set = result_rows.getResultSet();
     if (!result_set) {
@@ -2986,6 +2987,7 @@ void MapDHandler::start_query(TPendingQuery& _return, const TSessionId session, 
   _return.id = closure->getId();
   _return.column_ranges = column_ranges_to_thrift(closure->getColRangeCache());
   _return.dictionary_generations = string_dictionary_generations_to_thrift(closure->getStringDictionaryGenerations());
+  _return.table_generations = table_generations_to_thrift(closure->getTableGenerations());
 #else
   CHECK(false);
 #endif  // HAVE_RAVM
@@ -3036,6 +3038,18 @@ std::vector<TDictionaryGeneration> MapDHandler::string_dictionary_generations_to
     thrift_dictionary_generations.push_back(thrift_dictionary_generation);
   }
   return thrift_dictionary_generations;
+}
+
+std::vector<TTableGeneration> MapDHandler::table_generations_to_thrift(const TableGenerations& table_generations) {
+  std::vector<TTableGeneration> thrift_table_generations;
+  for (const auto& kv : table_generations.asMap()) {
+    TTableGeneration table_generation;
+    table_generation.table_id = kv.first;
+    table_generation.start_rowid = kv.second.start_rowid;
+    table_generation.tuple_count = kv.second.tuple_count;
+    thrift_table_generations.push_back(table_generation);
+  }
+  return thrift_table_generations;
 }
 
 void MapDHandler::broadcast_serialized_rows(const std::string& serialized_rows,

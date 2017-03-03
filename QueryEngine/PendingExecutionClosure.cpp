@@ -13,7 +13,8 @@ PendingExecutionClosure::PendingExecutionClosure(std::shared_ptr<const RelAlgNod
       ra_executor_(std::move(ra_executor)),
       rel_alg_eo_(rel_alg_eo),
       col_range_cache_(ra_executor_->computeColRangesCache(ra.get())),
-      string_dictionary_generations_(ra_executor_->computeStringDictionaryGenerations(ra.get())) {}
+      string_dictionary_generations_(ra_executor_->computeStringDictionaryGenerations(ra.get())),
+      table_generations_(ra_executor_->computeTableGenerations(ra.get())) {}
 
 PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const RelAlgNode> ra,
                                                          std::unique_ptr<RelAlgExecutor>& ra_executor,
@@ -40,9 +41,10 @@ PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const R
 FirstStepExecutionResult PendingExecutionClosure::executeNextStep(
     const int64_t query_id,
     const AggregatedColRange& col_ranges,
-    const StringDictionaryGenerations& string_dictionary_generations) {
+    const StringDictionaryGenerations& string_dictionary_generations,
+    const TableGenerations& table_generations) {
   auto closure = getClosureById(query_id);
-  const auto result = closure->executeNextStep(col_ranges, string_dictionary_generations);
+  const auto result = closure->executeNextStep(col_ranges, string_dictionary_generations, table_generations);
   if (result.is_outermost_query) {
     std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
     pending_queries_.erase(closure->id_);
@@ -73,12 +75,17 @@ const StringDictionaryGenerations& PendingExecutionClosure::getStringDictionaryG
   return string_dictionary_generations_;
 }
 
+const TableGenerations& PendingExecutionClosure::getTableGenerations() const {
+  return table_generations_;
+}
+
 FirstStepExecutionResult PendingExecutionClosure::executeNextStep(
     const AggregatedColRange& col_ranges,
-    const StringDictionaryGenerations& string_dictionary_generations) {
+    const StringDictionaryGenerations& string_dictionary_generations,
+    const TableGenerations& table_generations) {
   ++crt_subquery_idx_;
   if (crt_subquery_idx_ == 0) {
-    ra_executor_->prepareLeafExecution(col_ranges, string_dictionary_generations);
+    ra_executor_->prepareLeafExecution(col_ranges, string_dictionary_generations, table_generations);
   }
   const auto subqueries = ra_executor_->getSubqueries();
   if (crt_subquery_idx_ >= static_cast<ssize_t>(subqueries.size())) {

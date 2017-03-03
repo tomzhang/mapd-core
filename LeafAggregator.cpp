@@ -151,6 +151,10 @@ std::vector<const TableDescriptor*> get_dag_inputs(const RelAlgNode* ra) {
   return result;
 }
 
+bool table_is_replicated(const TableDescriptor* td) {
+  return td->partitions == "REPLICATED";
+}
+
 void check_replication_constraints(const RelAlgNode* ra) {
   CHECK(ra);
   const auto scan = dynamic_cast<const RelScan*>(ra);
@@ -175,7 +179,7 @@ void check_replication_constraints(const RelAlgNode* ra) {
         LOG(WARNING) << "Partitioning not properly specified for table '" << td->tableName + "', assuming sharded";
       }
       if (i > 0) {
-        if (td->partitions != "REPLICATED") {
+        if (!table_is_replicated(td)) {
           throw std::runtime_error("Join table " + td->tableName + " must be replicated");
         }
       }
@@ -187,27 +191,58 @@ bool input_is_replicated(const RelAlgNode* ra) {
   CHECK(ra);
   const auto inputs = get_dag_inputs(ra);
   CHECK(!inputs.empty());
-  return inputs.front()->partitions == "REPLICATED";
+  return table_is_replicated(inputs.front());
+}
+
+typedef std::vector<TTableGeneration> TTableGenerations;
+
+const TTableGeneration& find_table_generation(const TTableGenerations& table_generations, const int table_id) {
+  const auto it = std::find_if(table_generations.begin(),
+                               table_generations.end(),
+                               [table_id](const TTableGeneration& needle) { return table_id == needle.table_id; });
+  CHECK(it != table_generations.end());
+  return *it;
 }
 
 typedef std::vector<TColumnRange> TColumnRanges;
 
-TColumnRanges aggregate_two_leaf_ranges(const TColumnRanges& lhs, const TColumnRanges& rhs) {
-  CHECK_EQ(lhs.size(), rhs.size());
+const TColumnRange& find_column_range(const TColumnRanges& column_ranges, const int col_id, const int table_id) {
+  const auto it = std::find_if(column_ranges.begin(), column_ranges.end(), [col_id, table_id](const TColumnRange& r) {
+    return r.col_id == col_id && r.table_id == table_id;
+  });
+  CHECK(it != column_ranges.end());
+  return *it;
+}
+
+TColumnRanges aggregate_two_leaf_ranges(const TColumnRanges& acc_ranges,
+                                        const size_t leaf_idx,
+                                        const Catalog_Namespace::Catalog& cat,
+                                        const std::vector<TPendingQuery>& pending_queries) {
+  CHECK_GT(leaf_idx, 0);
+  CHECK_LT(leaf_idx, pending_queries.size());
+  const auto& leaf_ranges = pending_queries[leaf_idx].column_ranges;
+  CHECK_EQ(acc_ranges.size(), leaf_ranges.size());
   TColumnRanges result;
-  for (const auto& lhs_column_range : lhs) {
-    const auto it = std::find_if(rhs.begin(), rhs.end(), [&lhs_column_range](const TColumnRange& r) {
+  for (const auto& lhs_column_range : acc_ranges) {
+    const auto it = std::find_if(leaf_ranges.begin(), leaf_ranges.end(), [&lhs_column_range](const TColumnRange& r) {
       return r.col_id == lhs_column_range.col_id && r.table_id == lhs_column_range.table_id;
     });
-    CHECK(it != rhs.end());
+    CHECK(it != leaf_ranges.end());
     const auto& rhs_column_range = *it;
     CHECK_EQ(lhs_column_range.type, rhs_column_range.type);
+    const auto td = cat.getMetadataForTable(lhs_column_range.table_id);
+    CHECK(td);
+    if (table_is_replicated(td)) {
+      result.push_back(
+          find_column_range(pending_queries[0].column_ranges, lhs_column_range.col_id, lhs_column_range.table_id));
+      continue;
+    }
     TColumnRange column_range;
     column_range.type = lhs_column_range.type;
     column_range.col_id = lhs_column_range.col_id;
     column_range.table_id = lhs_column_range.table_id;
     switch (column_range.type) {
-      case TExpressionRangeType::INTEGER:
+      case TExpressionRangeType::INTEGER: {
         // handle empty lhs range
         if (lhs_column_range.int_min > lhs_column_range.int_max) {
           column_range = rhs_column_range;
@@ -220,10 +255,25 @@ TColumnRanges aggregate_two_leaf_ranges(const TColumnRanges& lhs, const TColumnR
         }
         CHECK_EQ(lhs_column_range.bucket, rhs_column_range.bucket);
         column_range.bucket = lhs_column_range.bucket;
-        column_range.int_min = std::min(lhs_column_range.int_min, rhs_column_range.int_min);
-        column_range.int_max = std::max(lhs_column_range.int_max, rhs_column_range.int_max);
+        int64_t start_rowid{0};
+        const auto cd = cat.getMetadataForColumn(column_range.table_id, column_range.col_id);
+        CHECK(cd);
+        if (cd && cd->isVirtualCol) {
+          CHECK(cd->columnName == "rowid");
+          CHECK_EQ(kBIGINT, cd->columnType.get_type());
+          const auto& table_generation =
+              find_table_generation(pending_queries[leaf_idx].table_generations, column_range.table_id);
+          const auto& acc_table_generation =
+              find_table_generation(pending_queries[0].table_generations, column_range.table_id);
+          // The first leaf rowid's always start from 0, makes this range aggregation logic easier.
+          CHECK_EQ(0, acc_table_generation.start_rowid);
+          start_rowid = table_generation.start_rowid;
+        }
+        column_range.int_min = std::min(lhs_column_range.int_min, rhs_column_range.int_min + start_rowid);
+        column_range.int_max = std::max(lhs_column_range.int_max, rhs_column_range.int_max + start_rowid);
         column_range.has_nulls = lhs_column_range.has_nulls || rhs_column_range.has_nulls;
         break;
+      }
       case TExpressionRangeType::FLOAT:
       case TExpressionRangeType::DOUBLE:
         column_range.fp_min = std::min(lhs_column_range.fp_min, rhs_column_range.fp_min);
@@ -240,11 +290,12 @@ TColumnRanges aggregate_two_leaf_ranges(const TColumnRanges& lhs, const TColumnR
   return result;
 }
 
-TColumnRanges aggregate_leaf_ranges(const std::vector<TPendingQuery>& pending_queries) {
+TColumnRanges aggregate_leaf_ranges(const Catalog_Namespace::Catalog& cat,
+                                    const std::vector<TPendingQuery>& pending_queries) {
   CHECK(!pending_queries.empty());
   auto aggregated_ranges = pending_queries.front().column_ranges;
   for (size_t i = 1; i < pending_queries.size(); ++i) {
-    aggregated_ranges = aggregate_two_leaf_ranges(aggregated_ranges, pending_queries[i].column_ranges);
+    aggregated_ranges = aggregate_two_leaf_ranges(aggregated_ranges, i, cat, pending_queries);
   }
   return aggregated_ranges;
 }
@@ -278,6 +329,45 @@ TDictionaryGenerations aggregate_dictionary_generations(const std::vector<TPendi
         aggregate_two_leaf_dictionary_generations(dictionary_generations, pending_queries[i].dictionary_generations);
   }
   return dictionary_generations;
+}
+
+TTableGenerations aggregate_two_leaf_table_generations(const TTableGenerations& lhs,
+                                                       const TTableGenerations& rhs,
+                                                       const Catalog_Namespace::Catalog& cat,
+                                                       const int64_t start_rowid) {
+  CHECK_EQ(lhs.size(), rhs.size());
+  TTableGenerations result;
+  for (const auto& lhs_table_generation : lhs) {
+    const auto& rhs_table_generation = find_table_generation(rhs, lhs_table_generation.table_id);
+    const auto td = cat.getMetadataForTable(lhs_table_generation.table_id);
+    CHECK(td);
+    TTableGeneration table_generation;
+    table_generation.table_id = lhs_table_generation.table_id;
+    if (table_is_replicated(td)) {
+      table_generation.tuple_count = rhs_table_generation.tuple_count;
+      table_generation.start_rowid = 0;
+    } else {
+      table_generation.tuple_count = rhs_table_generation.tuple_count;
+#ifdef HAVE_RENDERING
+      table_generation.start_rowid = start_rowid;
+#else
+      table_generation.start_rowid = lhs_table_generation.start_rowid + lhs_table_generation.tuple_count;
+#endif  // HAVE_RENDERING
+    }
+    result.push_back(table_generation);
+  }
+  return result;
+}
+
+void aggregate_table_generations(std::vector<TPendingQuery>& pending_queries, const Catalog_Namespace::Catalog& cat) {
+  CHECK(!pending_queries.empty());
+  for (size_t i = 1; i < pending_queries.size(); ++i) {
+    pending_queries[i].table_generations =
+        aggregate_two_leaf_table_generations(pending_queries[i - 1].table_generations,
+                                             pending_queries[i].table_generations,
+                                             cat,
+                                             i * 100 * 1000 * 1000 * 1000L);
+  }
 }
 
 void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>& leaf_results) {
@@ -322,6 +412,34 @@ void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>
   }
 }
 
+void check_replicated_table_consistency(const std::vector<TPendingQuery>& pending_queries,
+                                        const Catalog_Namespace::Catalog& cat,
+                                        const int table_id) {
+  CHECK(!pending_queries.empty());
+  const auto td = cat.getMetadataForTable(table_id);
+  CHECK(td);
+  if (!table_is_replicated(td)) {
+    return;
+  }
+  const auto& ref_table_generation = find_table_generation(pending_queries.front().table_generations, table_id);
+  for (const auto& pending_query : pending_queries) {
+    const auto& crt_table_generation = find_table_generation(pending_query.table_generations, table_id);
+    if (crt_table_generation.tuple_count != ref_table_generation.tuple_count) {
+      throw std::runtime_error("Inconsistent size for replicated table " + td->tableName +
+                               " across leaves not supported yet");
+    }
+  }
+}
+
+void check_replicated_tables_consistency(const std::vector<TPendingQuery>& pending_queries,
+                                         const Catalog_Namespace::Catalog& cat) {
+  CHECK(!pending_queries.empty());
+  const TPendingQuery& pending_query = pending_queries.front();
+  for (const TTableGeneration& table_generation : pending_query.table_generations) {
+    check_replicated_table_consistency(pending_queries, cat, table_generation.table_id);
+  }
+}
+
 }  // namespace
 
 // TODO(alex): split and clean-up this method
@@ -333,7 +451,11 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto queue_time_ms = timer_stop(clock_begin);
   auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra);
-  const auto column_ranges = aggregate_leaf_ranges(pending_queries);
+  // Don't support inconsistent replicated table size across leaves, we need to
+  // add an API for retrieving tables at a given generation in the fragmenter.
+  check_replicated_tables_consistency(pending_queries, parent_session_info.get_catalog());
+  aggregate_table_generations(pending_queries, parent_session_info.get_catalog());
+  const auto column_ranges = aggregate_leaf_ranges(parent_session_info.get_catalog(), pending_queries);
   const auto string_dictionary_generations = aggregate_dictionary_generations(pending_queries);
   for (auto& pending_query : pending_queries) {
     pending_query.column_ranges = column_ranges;
@@ -346,7 +468,8 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   auto executor = Executor::getExecutor(cat.get_currentDB().dbId);
   RelAlgExecutor ra_executor(executor.get(), cat);
   ra_executor.prepareLeafExecution(column_ranges_from_thrift(column_ranges),
-                                   string_dictionary_generations_from_thrift(string_dictionary_generations));
+                                   string_dictionary_generations_from_thrift(string_dictionary_generations),
+                                   {});
   const auto ra = deserialize_ra_dag(query_ra, cat, &ra_executor);
   std::mutex leaves_mutex;
   ssize_t crt_subquery_idx = -1;

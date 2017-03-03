@@ -49,6 +49,7 @@ set(query_engine_source_files
     DynamicWatchdog.cpp
     SpeculativeTopN.cpp
     StringDictionaryGenerations.cpp
+    TableGenerations.cpp
     StringFunctions.cpp
     RegexpFunctions.cpp
     JoinHashTable.cpp

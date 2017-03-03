@@ -30,7 +30,8 @@ class PendingExecutionClosure {
 
   static FirstStepExecutionResult executeNextStep(const int64_t query_id,
                                                   const AggregatedColRange& col_ranges,
-                                                  const StringDictionaryGenerations& string_dictionary_generations);
+                                                  const StringDictionaryGenerations& string_dictionary_generations,
+                                                  const TableGenerations& table_generations);
 
   static void setCurrentSubqueryResult(const int64_t query_id, const std::shared_ptr<const ExecutionResult> result);
 
@@ -42,6 +43,8 @@ class PendingExecutionClosure {
 
   const StringDictionaryGenerations& getStringDictionaryGenerations() const;
 
+  const TableGenerations& getTableGenerations() const;
+
  private:
   PendingExecutionClosure(std::shared_ptr<const RelAlgNode> ra,
                           const int64_t id,
@@ -50,7 +53,8 @@ class PendingExecutionClosure {
                           const RelAlgExecutionOptions& rel_alg_eo);
 
   FirstStepExecutionResult executeNextStep(const AggregatedColRange& col_ranges,
-                                           const StringDictionaryGenerations& string_dictionary_generations);
+                                           const StringDictionaryGenerations& string_dictionary_generations,
+                                           const TableGenerations& table_generations);
 
   void setCurrentSubqueryResult(const std::shared_ptr<const ExecutionResult> result);
 
@@ -63,6 +67,7 @@ class PendingExecutionClosure {
   RelAlgExecutionOptions rel_alg_eo_;
   AggregatedColRange col_range_cache_;
   StringDictionaryGenerations string_dictionary_generations_;
+  TableGenerations table_generations_;
 
   static std::unordered_map<int64_t, std::unique_ptr<PendingExecutionClosure>> pending_queries_;
   static int64_t pending_query_next_id_;
