@@ -1338,7 +1338,7 @@ void MapDHandler::load_table_binary(const TSessionId session,
     }
   }
   if (loader.load(import_buffers, rows.size()))
-    loader.checkpoint();
+    loader.checkpoint(loader.get_catalog().get_currentDB().dbId, loader.get_table_desc()->tableId);
 }
 
 void MapDHandler::load_table(const TSessionId session,
@@ -1383,7 +1383,7 @@ void MapDHandler::load_table(const TSessionId session,
     }
   }
   if (loader.load(import_buffers, rows.size()))
-    loader.checkpoint();
+    loader.checkpoint(loader.get_catalog().get_currentDB().dbId, loader.get_table_desc()->tableId);
 }
 
 char MapDHandler::unescape_char(std::string str) {
