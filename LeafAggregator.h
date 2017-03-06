@@ -34,6 +34,20 @@ class PersistentLeafClient {
   void broadcast_serialized_rows(const std::string& serialized_rows,
                                  const TRowDescriptor& row_desc,
                                  const TQueryId query_id);
+  void render_vega(TRenderResult& _return,
+                   const TSessionId session,
+                   const int64_t widget_id,
+                   const std::string& vega_json,
+                   const int compressionLevel,
+                   const std::string& nonce);
+  void get_result_row_for_pixel(TPixelTableRowResult& _return,
+                                const TSessionId session,
+                                const int64_t widget_id,
+                                const TPixel& pixel,
+                                const std::map<std::string, std::vector<std::string>>& table_col_names,
+                                const bool column_format,
+                                const int32_t pixel_radius,
+                                const std::string& nonce);
 
  private:
   void setupClientIfNull();
@@ -53,6 +67,18 @@ class LeafAggregator {
   AggregatedResult execute(const Catalog_Namespace::SessionInfo& parent_session_info,
                            const std::string& query_ra,
                            const ExecutionOptions& eo);
+
+  std::string render(const Catalog_Namespace::SessionInfo& parent_session_info,
+                     const std::string& vega_json,
+                     const int64_t widget_id,
+                     const int compressionLevel);
+
+  TPixelTableRowResult getResultRowForPixel(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                            const int64_t widget_id,
+                                            const TPixel& pixel,
+                                            const std::map<std::string, std::vector<std::string>>& table_col_names,
+                                            const bool column_format,
+                                            const int32_t pixelRadius);
 
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,

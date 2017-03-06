@@ -773,6 +773,12 @@ void MapDHandler::get_result_row_for_pixel(TPixelTableRowResult& _return,
     LOG(ERROR) << ex.error_msg;
     throw ex;
   }
+  if (leaf_aggregator_.leafCount() > 0) {
+    const auto session_info = MapDHandler::get_session(session);
+    _return = leaf_aggregator_.getResultRowForPixel(
+        session_info, widget_id, pixel, table_col_names, column_format, pixelRadius);
+    _return.nonce = nonce;
+  }
 #ifdef HAVE_RENDERING
   try {
     std::lock_guard<std::mutex> render_lock(render_mutex_);
@@ -1668,6 +1674,16 @@ void MapDHandler::render_vega(TRenderResult& _return,
                               const std::string& vega_json,
                               const int compressionLevel,
                               const std::string& nonce) {
+  if (leaf_aggregator_.leafCount() > 0) {
+#ifdef HAVE_RAVM
+    const auto session_info = MapDHandler::get_session(session);
+    _return.image = leaf_aggregator_.render(session_info, vega_json, widget_id, compressionLevel);
+    _return.nonce = nonce;
+    return;
+#else
+    CHECK(false);
+#endif  // HAVE_RAVM
+  }
   _return.total_time_ms = measure<>::execution([&]() {
     _return.execution_time_ms = 0;
     _return.render_time_ms = 0;

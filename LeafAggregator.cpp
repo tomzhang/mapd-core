@@ -67,6 +67,32 @@ void PersistentLeafClient::broadcast_serialized_rows(const std::string& serializ
   client_->broadcast_serialized_rows(serialized_rows, row_desc, query_id);
 }
 
+void PersistentLeafClient::render_vega(TRenderResult& _return,
+                                       const TSessionId session,
+                                       const int64_t widget_id,
+                                       const std::string& vega_json,
+                                       const int compressionLevel,
+                                       const std::string& nonce) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->render_vega(_return, session, widget_id, vega_json, compressionLevel, nonce);
+}
+
+void PersistentLeafClient::get_result_row_for_pixel(
+    TPixelTableRowResult& _return,
+    const TSessionId session,
+    const int64_t widget_id,
+    const TPixel& pixel,
+    const std::map<std::string, std::vector<std::string>>& table_col_names,
+    const bool column_format,
+    const int32_t pixelRadius,
+    const std::string& nonce) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->get_result_row_for_pixel(
+      _return, session, widget_id, pixel, table_col_names, column_format, pixelRadius, nonce);
+}
+
 void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
   socket->setConnTimeout(5000);
@@ -432,6 +458,72 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   }
   CHECK(false);
   return {nullptr, {}};
+}
+
+std::string LeafAggregator::render(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                   const std::string& vega_json,
+                                   const int64_t widget_id,
+                                   const int compressionLevel) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  std::vector<std::future<std::string>> leaf_futures;
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    leaf_futures.emplace_back(
+        std::async(std::launch::async, [&leaf_session_ids, &vega_json, leaf_idx, widget_id, compressionLevel, this] {
+          TRenderResult render_result;
+          leaves_[leaf_idx]->render_vega(
+              render_result, leaf_session_ids[leaf_idx], widget_id, vega_json, compressionLevel, "");
+          return render_result.image;
+        }));
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.wait();
+  }
+  for (auto& leaf_future : leaf_futures) {
+    // TODO(alex): composite
+    return leaf_future.get();
+  }
+  CHECK(false);
+  return "";
+}
+
+TPixelTableRowResult LeafAggregator::getResultRowForPixel(
+    const Catalog_Namespace::SessionInfo& parent_session_info,
+    const int64_t widget_id,
+    const TPixel& pixel,
+    const std::map<std::string, std::vector<std::string>>& table_col_names,
+    const bool column_format,
+    const int32_t pixel_radius) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  std::vector<std::future<TPixelTableRowResult>> leaf_futures;
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    leaf_futures.emplace_back(std::async(
+        std::launch::async,
+        [&leaf_session_ids, &pixel, &table_col_names, column_format, leaf_idx, pixel_radius, widget_id, this] {
+          TPixelTableRowResult lookup_result;
+          leaves_[leaf_idx]->get_result_row_for_pixel(lookup_result,
+                                                      leaf_session_ids[leaf_idx],
+                                                      widget_id,
+                                                      pixel,
+                                                      table_col_names,
+                                                      column_format,
+                                                      pixel_radius,
+                                                      "");
+          return lookup_result;
+        }));
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.wait();
+  }
+  for (auto& leaf_future : leaf_futures) {
+    // TODO(alex): composite
+    return leaf_future.get();
+  }
+  CHECK(false);
+  return {};
 }
 
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
