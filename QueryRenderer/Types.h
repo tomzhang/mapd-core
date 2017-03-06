@@ -79,7 +79,14 @@ typedef std::shared_ptr<RootCache> RootCacheShPtr;
 struct NonProjectionRenderQueryCache;
 typedef std::shared_ptr<NonProjectionRenderQueryCache> NPRQueryCacheShPtr;
 
-typedef std::pair<TableId, uint64_t> TableIdRowIdPair;
+struct HitInfo {
+  TableId tableId;
+  uint64_t rowId;
+  uint8_t vegaDataId;
+
+  HitInfo(const TableId tableId, const uint64_t rowId, const uint8_t vegaDataId)
+      : tableId(tableId), rowId(rowId), vegaDataId(vegaDataId) {}
+};
 typedef std::pair<TableId, decltype(TableDescriptor::tableName)> TableIdNamePair;
 typedef std::function<std::tuple<std::shared_ptr<ResultRows>,
                                  std::vector<TargetMetaInfo>,

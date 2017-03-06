@@ -20,6 +20,7 @@ const std::string PointTemplate_Frag::source =
     "#define inTidEnum <inTidEnum>\n"
     "\n"
     "uniform int uTableId;\n"
+    "uniform int uDataId;\n"
     "flat in inTid fPrimitiveId;\n"
     "flat in vec4 fColor;\n"
     "flat in float fPointSize;\n"
@@ -58,7 +59,7 @@ const std::string PointTemplate_Frag::source =
     "    idA = fPrimitiveId;\n"
     "    idB = 0;\n"
     "#endif\n"
-    "    tableId = uTableId + 1;\n"
+    "    tableId = sign(uTableId) * ((abs(uTableId + 1) << 5) | (uDataId + 1));\n"
     "}\n";
 }  // namespace QueryRenderer
 

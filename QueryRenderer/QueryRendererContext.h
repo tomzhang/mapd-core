@@ -55,6 +55,7 @@ class QueryRendererContext {
 
   bool hasDataTable(const std::string& tableName) const;
   QueryDataTableShPtr getDataTable(const std::string& tableName) const;
+  int getDataIndex(const std::string& tableName) const;
 
   bool hasScale(const std::string& scaleConfigName) const;
   ScaleShPtr getScale(const std::string& scaleConfigName) const;

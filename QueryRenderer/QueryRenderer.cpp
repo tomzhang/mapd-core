@@ -1139,13 +1139,13 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   }
 }
 
-TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
+HitInfo QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   RUNTIME_EX_ASSERT(_ctx->doHitTest(),
                     "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + " was not initialized for hit-testing.");
 
   try {
     uint64_t id = 0;
-    unsigned int tableId = 0;
+    int tableId = 0;
 
     if (_id1APixels && _id2Pixels) {
       size_t width = _ctx->getWidth();
@@ -1290,7 +1290,9 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
       }
     }
 
-    return std::make_pair(tableId, id);
+    auto rtnTableId = static_cast<TableId>((std::abs(tableId) >> 5) * (std::signbit(tableId) ? -1 : 1));
+    auto dataId = static_cast<uint8_t>(std::abs(tableId) & 31);
+    return HitInfo(rtnTableId, id, dataId);
   } catch (const ::Rendering::OutOfGpuMemoryError& e) {
     _clearAll();
     throw e;
@@ -1303,29 +1305,12 @@ TableIdRowIdPair QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) 
   }
 }
 
-std::string QueryRenderer::getVegaTableNameWithTableId(const TableId tableId) const {
-  if (tableId == NonProjectionRenderQueryCacheMap::emptyTableId) {
+std::string QueryRenderer::getVegaTableNameFromIndex(const int8_t dataId) const {
+  if (dataId < 0 || static_cast<size_t>(dataId) >= _ctx->_dataTableMap.size()) {
     return "";
   }
 
-  // TODO(croot): improve the performance here with a different data structure
-  // for the data objects that is query-able by table id?
-  // I don't expect the number of tables in a vega to be very many, so just iterating
-  // over them all shouldn't be a big deal for now.
-  std::vector<std::string> vega_table_names;
-  vega_table_names.reserve(_ctx->_dataTableMap.size());
-  std::for_each(_ctx->_dataTableMap.begin(), _ctx->_dataTableMap.end(), [&](const auto& dataTablePtr) {
-    auto sqlTablePtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(dataTablePtr);
-    if (sqlTablePtr && sqlTablePtr->getTableId() == tableId) {
-      vega_table_names.push_back(dataTablePtr->getName());
-    }
-  });
-
-  RUNTIME_EX_ASSERT(vega_table_names.size() <= 1,
-                    "There are more than 1 tables in the vega with the same table id: " + std::to_string(tableId) +
-                        ". The vega tables are: " + boost::algorithm::join(vega_table_names, ","));
-
-  return (vega_table_names.size() ? vega_table_names[0] : "");
+  return _ctx->_dataTableMap[dataId]->getName();
 }
 
 QueryDataTableBaseType QueryRenderer::getVegaTableTypeWithTableId(const TableId tableId) const {

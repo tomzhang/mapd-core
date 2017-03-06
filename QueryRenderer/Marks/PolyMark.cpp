@@ -629,9 +629,14 @@ void PolyMark::_bindUniformProperties(::Rendering::GL::Resources::GLShader* acti
 
   // TODO(croot): fold this into the base class
   if (_ctx->doHitTest() && _dataPtr) {
-    auto dataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(_dataPtr);
-    if (dataPtr) {
-      activeShader->setUniformAttribute("uTableId", dataPtr->getTableId());
+    auto sqlDataPtr = std::dynamic_pointer_cast<BaseQueryDataTableSQL>(_dataPtr);
+    auto jsonDataPtr = std::dynamic_pointer_cast<BaseQueryDataTableJSON>(_dataPtr);
+    if (sqlDataPtr && jsonDataPtr) {
+      auto tableId = sqlDataPtr->getTableId();
+      auto idx = _ctx->getDataIndex(jsonDataPtr->getNameRef());
+      CHECK(idx >= 0 && idx < 31);
+      activeShader->setUniformAttribute("uTableId", tableId);
+      activeShader->setUniformAttribute("uDataId", idx);
     }
   }
 

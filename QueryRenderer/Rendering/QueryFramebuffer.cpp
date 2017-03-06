@@ -511,14 +511,6 @@ GLTexture2dShPtr QueryFramebuffer::createFboTexture2d(GLResourceManagerShPtr& rs
     case FboColorBuffer::ID2_BUFFER:
       // The ID2_BUFFER is used to store the table-id of the id stored in ID_BUFFER.
       // We need the table id hit-testing in multi-layer rendering.
-
-      // TODO(croot): there is an issue where the ids are currently stored in a 32-bit unsigned integer
-      // texture, but the id could certainly exceed the max number for a 32-bit uint.
-      // A couple things we could do - 1) use a 64-bit int texture when fully supported (currently only
-      // in an extension, I believe).
-      // 2) use a second texture - since we already need a 2nd texture for the table id, and that probably only
-      //    needs 8-16 bits, we could create a full 32-bit texture and use the remaining bits to pack
-      //    more bits for the main id buffer.
       return rsrcMgr->createTexture2d(width, height, GL_R32I, GL_RED_INTEGER, GL_INT, numSamples);
     default:
       CHECK(false);

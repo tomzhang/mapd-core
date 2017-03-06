@@ -17,6 +17,7 @@ const std::string LineTemplate_Frag::source =
     "layout(location = 3) out int finalTableId;\n"
     "\n"
     "uniform int uTableId;\n"
+    "uniform int uDataId;\n"
     "\n"
     "#define inTid <inTidType>\n"
     "#define inTidEnum <inTidEnum>\n"
@@ -235,7 +236,7 @@ const std::string LineTemplate_Frag::source =
     "#elif useUniformBuffer == 1\n"
     "  finalColor = transformColorToRGB(getstrokeColor(lineData.<strokeColor>));\n"
     "#endif\n"
-    "  finalTableId = uTableId + 1;\n"
+    "  finalTableId = sign(uTableId) * ((abs(uTableId + 1) << 5) | (uDataId + 1));\n"
     "\n"
     "}\n";
 

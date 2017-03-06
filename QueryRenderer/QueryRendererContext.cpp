@@ -104,6 +104,16 @@ QueryDataTableShPtr QueryRendererContext::getDataTable(const std::string& tableN
   return rtn;
 }
 
+int QueryRendererContext::getDataIndex(const std::string& tableName) const {
+  auto& nameLookup = _dataTableMap.get<DataTableName>();
+  auto itr = nameLookup.find(tableName);
+  if (itr != nameLookup.end()) {
+    auto seqitr = _dataTableMap.project<0>(itr);
+    return seqitr - _dataTableMap.begin();
+  }
+  return -1;
+}
+
 bool QueryRendererContext::hasScale(const std::string& scaleConfigName) const {
   auto& nameLookup = _scaleConfigMap.get<ScaleName>();
   return (nameLookup.find(scaleConfigName) != nameLookup.end());

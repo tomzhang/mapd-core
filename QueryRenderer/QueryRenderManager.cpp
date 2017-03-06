@@ -868,17 +868,16 @@ std::tuple<int32_t, int64_t, std::string> QueryRenderManager::getIdAt(size_t x, 
 
   ActiveRendererGuard activeRendererGuard;
 
-  decltype(TableIdRowIdPair::first) tableId;
-  decltype(TableIdRowIdPair::second) rowId;
-  std::tie(tableId, rowId) = _activeItr->renderer->getIdAt(x, y, pixelRadius);
+  auto hitInfo = _activeItr->renderer->getIdAt(x, y, pixelRadius);
 
   // ids go from 0 to numitems-1, but since we're storing
   // the ids as unsigned ints, and there isn't a way to specify the
   // clear value for secondary buffers, we need to account for that
   // offset here
-  int32_t rtnTableId = tableId - 1;
-  auto rtnRowId = static_cast<int64_t>(rowId) - 1;
-  std::string vega_table_name = _activeItr->renderer->getVegaTableNameWithTableId(rtnTableId);
+  int32_t rtnTableId = hitInfo.tableId - 1;
+  auto rtnRowId = static_cast<int64_t>(hitInfo.rowId) - 1;
+  auto idx = static_cast<int8_t>(hitInfo.vegaDataId) - 1;
+  std::string vega_table_name = _activeItr->renderer->getVegaTableNameFromIndex(idx);
   _updateActiveLastRenderTime();
 
   return std::make_tuple(rtnTableId, rtnRowId, vega_table_name);

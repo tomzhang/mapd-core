@@ -66,8 +66,8 @@ class QueryRenderer {
   void render(bool inactivateRendererOnThread = true);
   PngData renderToPng(int compressionLevel = -1);
 
-  TableIdRowIdPair getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
-  std::string getVegaTableNameWithTableId(const TableId tableId) const;
+  HitInfo getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
+  std::string getVegaTableNameFromIndex(const int8_t dataId) const;
   QueryDataTableBaseType getVegaTableTypeWithTableId(const TableId tableId) const;
 
   QueryRendererContext* getContext() { return _ctx.get(); }
