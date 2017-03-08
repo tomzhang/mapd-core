@@ -20,7 +20,8 @@ LdapServer::LdapServer(const LdapMetadata& ldapMetadata) {
   if (ldapMetadata.uri.empty()) {
     ldapInUse = false;
   } else {
-    LOG(INFO) << "LDAP being used for Authentication, uri: " << ldapMetadata.uri << " ou: " << ldapMetadata.orgUnit;
+    LOG(INFO) << "LDAP being used for Authentication, uri: " << ldapMetadata.uri
+              << " DN: " << ldapMetadata.distinguishedName;
     ldapInUse = true;
     ldapMetadata_ = ldapMetadata;
   }
@@ -34,10 +35,10 @@ bool LdapServer::authenticate_user(const std::string& userName, const std::strin
   LDAP* ldp;
   int rc, version;
   berval creds;
-  int maxLength = userName.length() + ldapMetadata_.orgUnit.length() + 10;
+  int maxLength = userName.length() + ldapMetadata_.distinguishedName.length() + 10;
   char bind_dn[maxLength];
 
-  snprintf(bind_dn, maxLength, "cn=%s,%s", userName.c_str(), ldapMetadata_.orgUnit.c_str());
+  snprintf(bind_dn, maxLength, ldapMetadata_.distinguishedName.c_str(), userName.c_str());
   LOG(INFO) << "User " << userName << " connecting as " << bind_dn;
 
   /* Open LDAP Connection */

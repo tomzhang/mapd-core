@@ -21,11 +21,11 @@
  * @brief ldap data for using ldap server for authentication
  */
 struct LdapMetadata {
-  LdapMetadata(const std::string& uri, const std::string& orgUnit) : uri(uri), orgUnit(orgUnit) {}
+  LdapMetadata(const std::string& uri, const std::string& dn) : uri(uri), distinguishedName(dn) {}
   LdapMetadata() {}
   int32_t port;
   std::string uri;
-  std::string orgUnit;
+  std::string distinguishedName;
   std::string domainComp;
 };
 
