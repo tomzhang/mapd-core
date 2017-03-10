@@ -24,6 +24,7 @@ class HAHandler : public MapDIf {
 
   TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
   void disconnect(const TSessionId session);
+  void interrupt(const TSessionId session);
   void get_server_status(TServerStatus& _return, const TSessionId session);
   void sql_execute(TQueryResult& _return,
                    const TSessionId session,

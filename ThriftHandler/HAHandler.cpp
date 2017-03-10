@@ -25,6 +25,8 @@ TSessionId HAHandler::connect(const std::string& user, const std::string& passwd
 
 void HAHandler::disconnect(const TSessionId session){};
 
+void HAHandler::interrupt(const TSessionId session){};
+
 void HAHandler::get_server_status(TServerStatus& _return, const TSessionId session){};
 
 void HAHandler::sql_execute(TQueryResult& _return,
