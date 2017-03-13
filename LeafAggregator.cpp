@@ -47,6 +47,12 @@ void PersistentLeafClient::disconnect(const TSessionId session) {
   client_->disconnect(session);
 }
 
+void PersistentLeafClient::interrupt(const TSessionId session) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->interrupt(session);
+}
+
 void PersistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
@@ -592,6 +598,17 @@ void LeafAggregator::disconnect(const TSessionId session) {
   }
   leaf_sessions_.erase(session);
   session_credentials_.erase(session);
+}
+
+void LeafAggregator::interrupt(const TSessionId session) {
+  mapd_lock_guard<mapd_shared_mutex> write_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(session);
+  const auto& leaf_session_ids = session_it->second;
+  CHECK_EQ(leaves_.size(), leaf_session_ids.size());
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    const auto& leaf = leaves_[leaf_idx];
+    leaf->interrupt(leaf_session_ids[leaf_idx]);
+  }
 }
 
 size_t LeafAggregator::leafCount() const {

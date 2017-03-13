@@ -29,6 +29,7 @@ class PersistentLeafClient {
 
   TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
   void disconnect(const TSessionId session);
+  void interrupt(const TSessionId session);
   void start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra);
   void execute_first_step(TStepResult& _return, const TPendingQuery& pending_query);
   void broadcast_serialized_rows(const std::string& serialized_rows,
@@ -86,6 +87,8 @@ class LeafAggregator {
                const std::string& dbname);
 
   void disconnect(const TSessionId session);
+
+  void interrupt(const TSessionId session);
 
   size_t leafCount() const;
 
