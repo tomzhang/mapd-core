@@ -99,6 +99,16 @@ void PersistentLeafClient::get_result_row_for_pixel(
       _return, session, widget_id, pixel, table_col_names, column_format, pixelRadius, nonce);
 }
 
+void PersistentLeafClient::sql_execute(TQueryResult& _return,
+                                       const TSessionId session,
+                                       const std::string& query_str,
+                                       const bool column_format,
+                                       const std::string& nonce) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->sql_execute(_return, session, query_str, column_format, nonce);
+}
+
 void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
   socket->setConnTimeout(5000);
@@ -530,6 +540,30 @@ TPixelTableRowResult LeafAggregator::getResultRowForPixel(
   }
   CHECK(false);
   return {};
+}
+
+std::vector<TQueryResult> LeafAggregator::forwardQueryToLeaves(
+    const Catalog_Namespace::SessionInfo& parent_session_info,
+    const std::string& query_str) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  std::vector<std::future<TQueryResult>> leaf_futures;
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    leaf_futures.emplace_back(std::async(std::launch::async, [&leaf_session_ids, &query_str, leaf_idx, this] {
+      TQueryResult query_result;
+      leaves_[leaf_idx]->sql_execute(query_result, leaf_session_ids[leaf_idx], query_str, true, "");
+      return query_result;
+    }));
+  }
+  for (auto& leaf_future : leaf_futures) {
+    leaf_future.wait();
+  }
+  std::vector<TQueryResult> results;
+  for (auto& leaf_future : leaf_futures) {
+    results.push_back(leaf_future.get());
+  }
+  return results;
 }
 
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,

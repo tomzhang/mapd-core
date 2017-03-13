@@ -49,6 +49,11 @@ class PersistentLeafClient {
                                 const bool column_format,
                                 const int32_t pixel_radius,
                                 const std::string& nonce);
+  void sql_execute(TQueryResult& _return,
+                   const TSessionId session,
+                   const std::string& query_str,
+                   const bool column_format,
+                   const std::string& nonce);
 
  private:
   void setupClientIfNull();
@@ -80,6 +85,10 @@ class LeafAggregator {
                                             const std::map<std::string, std::vector<std::string>>& table_col_names,
                                             const bool column_format,
                                             const int32_t pixelRadius);
+
+  // Used for DDL statements
+  std::vector<TQueryResult> forwardQueryToLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                                 const std::string& query_str);
 
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,

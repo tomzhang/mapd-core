@@ -64,6 +64,7 @@
 #include <boost/program_options.hpp>
 #include <boost/regex.hpp>
 #include <boost/tokenizer.hpp>
+#include <future>
 #include <memory>
 #include <string>
 #include <fstream>
@@ -596,7 +597,26 @@ void MapDHandler::sql_execute(TQueryResult& _return,
   const auto session_info = MapDHandler::get_session(session);
   if (leaf_aggregator_.leafCount() > 0) {
 #ifdef HAVE_RAVM
-    try {
+    cluster_execute(_return, session_info, query_str, column_format, nonce);
+    _return.nonce = nonce;
+#else
+    CHECK(false);
+#endif  // HAVE_RAVM
+  } else {
+    MapDHandler::sql_execute_impl(
+        _return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
+  }
+}
+
+#ifdef HAVE_RAVM
+void MapDHandler::cluster_execute(TQueryResult& _return,
+                                  const Catalog_Namespace::SessionInfo& session_info,
+                                  const std::string& query_str,
+                                  const bool column_format,
+                                  const std::string& nonce) {
+  try {
+    ParserWrapper pw{query_str};
+    if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
       const auto query_ra = MapDHandler::parse_to_ra(query_str, session_info);
       ExecutionOptions eo = {false,
                              allow_multifrag_,
@@ -612,21 +632,39 @@ void MapDHandler::sql_execute(TQueryResult& _return,
       _return.total_time_ms = timer_stop(clock_begin);
       _return.execution_time_ms = _return.total_time_ms - result.rs->getQueueTime();
       MapDHandler::convert_rows(_return, result.targets_meta, *(result.rs), column_format);
-    } catch (std::exception& e) {
-      const auto mapd_exception = dynamic_cast<const TMapDException*>(&e);
-      TMapDException ex;
-      ex.error_msg = mapd_exception ? mapd_exception->error_msg : (std::string("Exception: ") + e.what());
-      LOG(ERROR) << ex.error_msg;
-      throw ex;
+    } else {
+      std::future<TQueryResult> aggregator_future{
+          std::async(std::launch::async, [column_format, &nonce, &query_str, &session_info, this] {
+            TQueryResult result;
+            MapDHandler::sql_execute_impl(
+                result, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
+            return result;
+          })};
+      auto all_results = leaf_aggregator_.forwardQueryToLeaves(session_info, query_str);
+      all_results.push_back(aggregator_future.get());
+      for (const auto& result : all_results) {
+        CHECK(result.row_set.rows.empty() && result.row_set.columns.empty());
+      }
+      const auto max_execution_time_it = std::max_element(
+          all_results.begin(), all_results.end(), [](const TQueryResult& lhs, const TQueryResult& rhs) {
+            return lhs.execution_time_ms < rhs.execution_time_ms;
+          });
+      const auto max_total_time_it = std::max_element(
+          all_results.begin(), all_results.end(), [](const TQueryResult& lhs, const TQueryResult& rhs) {
+            return lhs.total_time_ms < rhs.total_time_ms;
+          });
+      _return.execution_time_ms = max_execution_time_it->execution_time_ms;
+      _return.total_time_ms = max_total_time_it->total_time_ms;
     }
-#else
-    CHECK(false);
-#endif  // HAVE_RAVM
-  } else {
-    MapDHandler::sql_execute_impl(
-        _return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
+  } catch (std::exception& e) {
+    const auto mapd_exception = dynamic_cast<const TMapDException*>(&e);
+    TMapDException ex;
+    ex.error_msg = mapd_exception ? mapd_exception->error_msg : (std::string("Exception: ") + e.what());
+    LOG(ERROR) << ex.error_msg;
+    throw ex;
   }
 }
+#endif  // HAVE_RAVM
 
 void MapDHandler::sql_validate(TTableDescriptor& _return, const TSessionId session, const std::string& query_str) {
   std::unique_ptr<const Planner::RootPlan> root_plan;

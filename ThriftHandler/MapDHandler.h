@@ -265,6 +265,12 @@ class MapDHandler : public MapDIf {
                         const std::string& nonce,
                         const ExecutorDeviceType executor_device_type);
 
+  void cluster_execute(TQueryResult& _return,
+                       const Catalog_Namespace::SessionInfo& session_info,
+                       const std::string& query_str,
+                       const bool column_format,
+                       const std::string& nonce);
+
   void validate_rel_alg(TTableDescriptor& _return,
                         const std::string& query_str,
                         const Catalog_Namespace::SessionInfo& session_info);
