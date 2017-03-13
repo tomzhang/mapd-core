@@ -534,6 +534,7 @@ TPixelTableRowResult LeafAggregator::getResultRowForPixel(
 
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
                                                               const std::string& query_ra) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   auto& leaf_session_ids = session_it->second;
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
@@ -601,7 +602,7 @@ void LeafAggregator::disconnect(const TSessionId session) {
 }
 
 void LeafAggregator::interrupt(const TSessionId session) {
-  mapd_lock_guard<mapd_shared_mutex> write_lock(leaf_sessions_mutex_);
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(session);
   const auto& leaf_session_ids = session_it->second;
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
