@@ -566,6 +566,18 @@ std::vector<TQueryResult> LeafAggregator::forwardQueryToLeaves(
   return results;
 }
 
+TQueryResult LeafAggregator::forwardQueryToLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                                const std::string& query_str,
+                                                const size_t leaf_idx) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  CHECK_LT(leaf_idx, leaves_.size());
+  TQueryResult query_result;
+  leaves_[leaf_idx]->sql_execute(query_result, leaf_session_ids[leaf_idx], query_str, true, "");
+  return query_result;
+}
+
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
                                                               const std::string& query_ra) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);

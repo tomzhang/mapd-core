@@ -90,6 +90,10 @@ class LeafAggregator {
   std::vector<TQueryResult> forwardQueryToLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
                                                  const std::string& query_str);
 
+  TQueryResult forwardQueryToLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                  const std::string& query_str,
+                                  const size_t leaf_idx);
+
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,
                const std::string& passwd,

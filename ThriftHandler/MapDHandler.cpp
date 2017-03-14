@@ -608,7 +608,45 @@ void MapDHandler::sql_execute(TQueryResult& _return,
   }
 }
 
+namespace {
+
+std::string apply_copy_to_shim(const std::string& query_str) {
+  auto result = query_str;
+  {
+    // boost::regex copy_to{R"(COPY\s\((.*)\)\sTO\s(.*))", boost::regex::extended | boost::regex::icase};
+    boost::regex copy_to{R"(COPY\s*\(([^#])(.+)\)\s+TO\s)", boost::regex::extended | boost::regex::icase};
+    apply_shim(result, copy_to, [](std::string& result, const boost::smatch& what) {
+      result.replace(what.position(), what.length(), "COPY (#~#" + what[1] + what[2] + "#~#) TO  ");
+    });
+  }
+  return result;
+}
+
+}  // namespace
+
 #ifdef HAVE_RAVM
+namespace {
+
+TQueryResult aggregate_execution_times(const std::vector<TQueryResult>& all_results) {
+  for (const auto& result : all_results) {
+    CHECK(result.row_set.rows.empty() && result.row_set.columns.empty());
+  }
+  const auto max_execution_time_it =
+      std::max_element(all_results.begin(), all_results.end(), [](const TQueryResult& lhs, const TQueryResult& rhs) {
+        return lhs.execution_time_ms < rhs.execution_time_ms;
+      });
+  const auto max_total_time_it =
+      std::max_element(all_results.begin(), all_results.end(), [](const TQueryResult& lhs, const TQueryResult& rhs) {
+        return lhs.total_time_ms < rhs.total_time_ms;
+      });
+  TQueryResult agggregated_result;
+  agggregated_result.execution_time_ms = max_execution_time_it->execution_time_ms;
+  agggregated_result.total_time_ms = max_total_time_it->total_time_ms;
+  return agggregated_result;
+}
+
+}  // namespace
+
 void MapDHandler::cluster_execute(TQueryResult& _return,
                                   const Catalog_Namespace::SessionInfo& session_info,
                                   const std::string& query_str,
@@ -632,6 +670,24 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
       _return.total_time_ms = timer_stop(clock_begin);
       _return.execution_time_ms = _return.total_time_ms - result.rs->getQueueTime();
       MapDHandler::convert_rows(_return, result.targets_meta, *(result.rs), column_format);
+    } else if (pw.is_update_dml) {
+      std::unique_ptr<Planner::RootPlan> plan_ptr(
+          parse_to_plan_legacy(apply_copy_to_shim(query_str), session_info, "validate"));
+      const auto stmt_type = plan_ptr->get_stmt_type();
+      CHECK_EQ(kINSERT, stmt_type);
+      const auto td = session_info.get_catalog().getMetadataForTable(plan_ptr->get_result_table_id());
+      CHECK(td);
+      if (td->partitions == "REPLICATED") {
+        // This is just a placeholder, we need real replication.
+        auto all_results = leaf_aggregator_.forwardQueryToLeaves(session_info, query_str);
+        _return = aggregate_execution_times(all_results);
+      } else {
+        std::random_device rd;
+        std::mt19937_64 gen(rd());
+        std::uniform_int_distribution<size_t> dis;
+        const auto leaf_idx = dis(gen) % leaf_aggregator_.leafCount();
+        _return = leaf_aggregator_.forwardQueryToLeaf(session_info, query_str, leaf_idx);
+      }
     } else {
       std::future<TQueryResult> aggregator_future{
           std::async(std::launch::async, [column_format, &nonce, &query_str, &session_info, this] {
@@ -642,19 +698,7 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
           })};
       auto all_results = leaf_aggregator_.forwardQueryToLeaves(session_info, query_str);
       all_results.push_back(aggregator_future.get());
-      for (const auto& result : all_results) {
-        CHECK(result.row_set.rows.empty() && result.row_set.columns.empty());
-      }
-      const auto max_execution_time_it = std::max_element(
-          all_results.begin(), all_results.end(), [](const TQueryResult& lhs, const TQueryResult& rhs) {
-            return lhs.execution_time_ms < rhs.execution_time_ms;
-          });
-      const auto max_total_time_it = std::max_element(
-          all_results.begin(), all_results.end(), [](const TQueryResult& lhs, const TQueryResult& rhs) {
-            return lhs.total_time_ms < rhs.total_time_ms;
-          });
-      _return.execution_time_ms = max_execution_time_it->execution_time_ms;
-      _return.total_time_ms = max_total_time_it->total_time_ms;
+      _return = aggregate_execution_times(all_results);
     }
   } catch (std::exception& e) {
     const auto mapd_exception = dynamic_cast<const TMapDException*>(&e);
@@ -1655,7 +1699,6 @@ Planner::RootPlan* MapDHandler::parse_to_plan_legacy(const std::string& query_st
   auto dml = static_cast<Parser::DMLStmt*>(stmt);
   Analyzer::Query query;
   dml->analyze(cat, query);
-  CHECK_EQ(kSELECT, query.get_stmt_type());
   Planner::Optimizer optimizer(query, cat);
   return optimizer.optimize();
 }
@@ -2789,14 +2832,7 @@ void MapDHandler::sql_execute_impl(TQueryResult& _return,
 #endif  // HAVE_CALCITE
     try {
       // check for COPY TO stmt replace as required parser expects #~# markers
-      auto result = query_str;
-      {
-        // boost::regex copy_to{R"(COPY\s\((.*)\)\sTO\s(.*))", boost::regex::extended | boost::regex::icase};
-        boost::regex copy_to{R"(COPY\s*\(([^#])(.+)\)\s+TO\s)", boost::regex::extended | boost::regex::icase};
-        apply_shim(result, copy_to, [](std::string& result, const boost::smatch& what) {
-          result.replace(what.position(), what.length(), "COPY (#~#" + what[1] + what[2] + "#~#) TO  ");
-        });
-      }
+      const auto result = apply_copy_to_shim(query_str);
       num_parse_errors = parser.parse(result, parse_trees, last_parsed);
     } catch (std::exception& e) {
       TMapDException ex;
