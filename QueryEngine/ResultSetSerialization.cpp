@@ -266,20 +266,24 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
 
 std::string ResultSet::serialize() const {
   CHECK(permutation_.empty());
-  if (query_mem_desc_.hash_type == GroupByColRangeType::Projection) {
+  if (explanation_.empty() && query_mem_desc_.hash_type == GroupByColRangeType::Projection) {
     return serializeProjection();
   }
   auto buffer = boost::make_shared<apache::thrift::transport::TMemoryBuffer>();
   auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
   TSerializedRows serialized_rows;
-  if (storage_) {
-    const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
-    serialized_rows.buffer = std::string(storage_buffer, storage_->query_mem_desc_.getBufferSizeBytes(device_type_));
-    serialized_rows.target_init_vals = storage_->target_init_vals_;
-    serializeCountDistinctColumns(serialized_rows);
+  if (explanation_.empty()) {
+    if (storage_) {
+      const auto storage_buffer = reinterpret_cast<const char*>(storage_->getUnderlyingBuffer());
+      serialized_rows.buffer = std::string(storage_buffer, storage_->query_mem_desc_.getBufferSizeBytes(device_type_));
+      serialized_rows.target_init_vals = storage_->target_init_vals_;
+      serializeCountDistinctColumns(serialized_rows);
+    }
+    serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
+    serialized_rows.targets = target_infos_to_thrift(targets_);
+  } else {
+    serialized_rows.explanation = explanation_;
   }
-  serialized_rows.descriptor = query_mem_desc_to_thrift(query_mem_desc_);
-  serialized_rows.targets = target_infos_to_thrift(targets_);
   serialized_rows.write(proto.get());
   return buffer->getBufferAsString();
 }
@@ -462,6 +466,9 @@ std::unique_ptr<ResultSet> ResultSet::unserialize(const std::string& str, const 
   auto proto = boost::make_shared<apache::thrift::protocol::TBinaryProtocol>(buffer);
   TSerializedRows serialized_rows;
   serialized_rows.read(proto.get());
+  if (!serialized_rows.explanation.empty()) {
+    return boost::make_unique<ResultSet>(serialized_rows.explanation);
+  }
   const auto target_infos = target_infos_from_thrift(serialized_rows.targets);
   const auto query_mem_desc = query_mem_desc_from_thrift(serialized_rows.descriptor);
   CHECK(executor);

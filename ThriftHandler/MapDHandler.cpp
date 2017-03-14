@@ -656,7 +656,7 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
       const auto query_ra = MapDHandler::parse_to_ra(query_str, session_info);
       ExecutionOptions eo = {false,
                              allow_multifrag_,
-                             false,
+                             pw.is_select_explain,
                              allow_loop_joins_,
                              g_enable_watchdog,
                              jit_debug_,
@@ -2962,14 +2962,17 @@ void MapDHandler::execute_first_step(TStepResult& _return, const TPendingQuery& 
 #endif  // HAVE_RAVM
 }
 
-void MapDHandler::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
+void MapDHandler::start_query(TPendingQuery& _return,
+                              const TSessionId session,
+                              const std::string& query_ra,
+                              const bool just_explain) {
 #ifdef HAVE_RAVM
   const auto session_info = get_session(session);
   const auto& cat = session_info.get_catalog();
   CompilationOptions co = {executor_device_type_, true, ExecutorOptLevel::Default, g_enable_dynamic_watchdog};
   ExecutionOptions eo = {false,
                          allow_multifrag_,
-                         false,
+                         just_explain,
                          allow_loop_joins_,
                          g_enable_watchdog,
                          jit_debug_,

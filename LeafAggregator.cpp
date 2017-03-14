@@ -53,10 +53,13 @@ void PersistentLeafClient::interrupt(const TSessionId session) {
   client_->interrupt(session);
 }
 
-void PersistentLeafClient::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra) {
+void PersistentLeafClient::start_query(TPendingQuery& _return,
+                                       const TSessionId session,
+                                       const std::string& query_ra,
+                                       const bool just_explain) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
-  client_->start_query(_return, session, query_ra);
+  client_->start_query(_return, session, query_ra, just_explain);
 }
 
 void PersistentLeafClient::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query) {
@@ -450,7 +453,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   std::lock_guard<std::mutex> execution_lock(execution_mutex_);
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto queue_time_ms = timer_stop(clock_begin);
-  auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra);
+  auto pending_queries = startQueryOnLeaves(parent_session_info, query_ra, eo.just_explain);
   // Don't support inconsistent replicated table size across leaves, we need to
   // add an API for retrieving tables at a given generation in the fragmenter.
   check_replicated_tables_consistency(pending_queries, parent_session_info.get_catalog());
@@ -474,6 +477,9 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   std::mutex leaves_mutex;
   ssize_t crt_subquery_idx = -1;
   const auto subqueries = ra_executor.getSubqueries();
+  if (eo.just_explain && !subqueries.empty()) {
+    throw std::runtime_error("EXPLAIN is not supported with sub-queries");
+  }
   while (!execution_finished) {
     ++crt_subquery_idx;
     // new execution step
@@ -528,6 +534,11 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       auto& leaf_future = leaf_futures[leaf_idx];
       auto result_set = leaf_future.get();
       if (!result_set->definitelyHasNoRows()) {
+        if (eo.just_explain) {
+          const auto explanation_rs = std::shared_ptr<ResultSet>(result_set.release());
+          TargetMetaInfo explanation_meta_info("Explanation", SQLTypeInfo(kTEXT, true));
+          return {explanation_rs, {explanation_meta_info}};
+        }
         leaf_results.emplace_back(result_set.release());
       }
       if (replicated) {
@@ -702,25 +713,26 @@ TQueryResult LeafAggregator::forwardQueryToLeaf(const Catalog_Namespace::Session
 }
 
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
-                                                              const std::string& query_ra) {
+                                                              const std::string& query_ra,
+                                                              const bool just_explain) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   auto& leaf_session_ids = session_it->second;
   CHECK_EQ(leaves_.size(), leaf_session_ids.size());
   std::vector<std::future<TPendingQuery>> leaf_futures;
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
-    leaf_futures.emplace_back(
-        std::async(std::launch::async, [leaf_idx, &leaf_session_ids, &parent_session_info, &query_ra, this] {
+    leaf_futures.emplace_back(std::async(
+        std::launch::async, [just_explain, leaf_idx, &leaf_session_ids, &parent_session_info, &query_ra, this] {
           TPendingQuery pending_query;
           try {
-            leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+            leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra, just_explain);
           } catch (const TException&) {
             const auto credentials_it = session_credentials_.find(parent_session_info.get_session_id());
             CHECK(credentials_it != session_credentials_.end());
             const auto& credentials = credentials_it->second;
             leaf_session_ids[leaf_idx] =
                 leaves_[leaf_idx]->connect(credentials.user, credentials.passwd, credentials.dbname);
-            leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra);
+            leaves_[leaf_idx]->start_query(pending_query, leaf_session_ids[leaf_idx], query_ra, just_explain);
           }
           return pending_query;
         }));

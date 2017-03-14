@@ -154,7 +154,10 @@ void HAHandler::import_geo_table(const TSessionId session,
                                  const TCopyParams& copy_params,
                                  const TRowDescriptor& row_desc){};
 
-void HAHandler::start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra){};
+void HAHandler::start_query(TPendingQuery& _return,
+                            const TSessionId session,
+                            const std::string& query_ra,
+                            const bool just_explain){};
 
 void HAHandler::execute_first_step(TStepResult& _return, const TPendingQuery& pending_query){};
 

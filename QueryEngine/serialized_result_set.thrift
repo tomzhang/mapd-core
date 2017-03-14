@@ -78,5 +78,6 @@ struct TSerializedRows {
   3: list<TTargetInfo> targets,
   4: list<i64> target_init_vals,
   5: list<string> none_encoded_strings,
-  6: map<i64, TCountDistinctSet> count_distinct_sets
+  6: map<i64, TCountDistinctSet> count_distinct_sets,
+  7: string explanation
 }

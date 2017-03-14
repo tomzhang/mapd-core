@@ -30,7 +30,10 @@ class PersistentLeafClient {
   TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
   void disconnect(const TSessionId session);
   void interrupt(const TSessionId session);
-  void start_query(TPendingQuery& _return, const TSessionId session, const std::string& query_ra);
+  void start_query(TPendingQuery& _return,
+                   const TSessionId session,
+                   const std::string& query_ra,
+                   const bool just_explain);
   void execute_first_step(TStepResult& _return, const TPendingQuery& pending_query);
   void broadcast_serialized_rows(const std::string& serialized_rows,
                                  const TRowDescriptor& row_desc,
@@ -107,7 +110,8 @@ class LeafAggregator {
 
  private:
   std::vector<TPendingQuery> startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
-                                                const std::string& query_ra);
+                                                const std::string& query_ra,
+                                                const bool just_explain);
 
   void broadcastResultSet(const ResultSet* result_set,
                           const TRowDescriptor& row_desc,
