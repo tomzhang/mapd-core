@@ -654,6 +654,11 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
     ParserWrapper pw{query_str};
     if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
       const auto query_ra = MapDHandler::parse_to_ra(query_str, session_info);
+      if (pw.is_select_calcite_explain) {
+        // return the ra as the result
+        convert_explain(_return, ResultRows(query_ra, 0), true);
+        return;
+      }
       ExecutionOptions eo = {false,
                              allow_multifrag_,
                              pw.is_select_explain,
