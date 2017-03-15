@@ -112,6 +112,12 @@ void PersistentLeafClient::sql_execute(TQueryResult& _return,
   client_->sql_execute(_return, session, query_str, column_format, nonce);
 }
 
+void PersistentLeafClient::set_execution_mode(const TSessionId session, const TExecuteMode::type mode) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->set_execution_mode(session, mode);
+}
+
 void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
   socket->setConnTimeout(5000);
@@ -790,6 +796,17 @@ void LeafAggregator::interrupt(const TSessionId session) {
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
     const auto& leaf = leaves_[leaf_idx];
     leaf->interrupt(leaf_session_ids[leaf_idx]);
+  }
+}
+
+void LeafAggregator::set_execution_mode(const TSessionId session, const TExecuteMode::type mode) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(session);
+  const auto& leaf_session_ids = session_it->second;
+  CHECK_EQ(leaves_.size(), leaf_session_ids.size());
+  for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
+    const auto& leaf = leaves_[leaf_idx];
+    leaf->set_execution_mode(leaf_session_ids[leaf_idx], mode);
   }
 }
 

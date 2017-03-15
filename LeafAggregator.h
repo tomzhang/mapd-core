@@ -57,6 +57,7 @@ class PersistentLeafClient {
                    const std::string& query_str,
                    const bool column_format,
                    const std::string& nonce);
+  void set_execution_mode(const TSessionId session, const TExecuteMode::type mode);
 
  private:
   void setupClientIfNull();
@@ -105,6 +106,8 @@ class LeafAggregator {
   void disconnect(const TSessionId session);
 
   void interrupt(const TSessionId session);
+
+  void set_execution_mode(const TSessionId session, const TExecuteMode::type mode);
 
   size_t leafCount() const;
 
