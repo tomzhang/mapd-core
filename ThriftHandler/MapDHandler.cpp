@@ -885,13 +885,14 @@ void MapDHandler::get_result_row_for_pixel(TPixelTableRowResult& _return,
     LOG(ERROR) << ex.error_msg;
     throw ex;
   }
+#ifdef HAVE_RENDERING
   if (leaf_aggregator_.leafCount() > 0) {
     const auto session_info = MapDHandler::get_session(session);
     _return = leaf_aggregator_.getResultRowForPixel(
         session_info, widget_id, pixel, table_col_names, column_format, pixelRadius);
     _return.nonce = nonce;
+    return;
   }
-#ifdef HAVE_RENDERING
   try {
     std::lock_guard<std::mutex> render_lock(render_mutex_);
     auto session_it = get_session_it(session);
