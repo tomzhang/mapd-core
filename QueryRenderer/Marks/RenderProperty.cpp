@@ -162,7 +162,9 @@ bool BaseRenderProperty::_internalInitFromData(const std::string& attrName,
   _dataPtr = dataPtr;
   _vboAttrName = attrName;
 
-  _initBuffers(_dataPtr->getAttributeDataBuffers(attrName));
+  RUNTIME_EX_ASSERT(_initBuffers(_dataPtr->getAttributeDataBuffers(attrName)),
+                    "Cannot initialize mark property " + _name + " from data. The attr \"" + attrName +
+                        "\" does not exist in the data buffers.");
   _vboInitType = VboInitType::FROM_DATAREF;
 
   bool inchanged, outchanged;
@@ -333,7 +335,7 @@ void BaseRenderProperty::bindUniformScaleToRenderer(::Rendering::GL::Resources::
   }
 }
 
-void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
+bool BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
                                           const std::set<GpuId>& usedGpus,
                                           const std::set<GpuId>& unusedGpus) {
   auto qrmPerGpuData = ctx->getRootGpuCache()->perGpuData;
@@ -364,6 +366,7 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
           }
         } else {
           reset = true;
+          break;
         }
       }
     }
@@ -381,6 +384,8 @@ void BaseRenderProperty::initGpuResources(const QueryRendererContext* ctx,
     _clearScalePtr();
     _resetTypes();
   }
+
+  return !reset;
 }
 
 void BaseRenderProperty::_setShaderDirty() {
@@ -416,18 +421,21 @@ std::set<GpuId> BaseRenderProperty::_initUnusedGpus(const std::set<GpuId>& usedG
   return unusedGpus;
 }
 
-void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferWkPtr>& bufferMap) {
+bool BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferWkPtr>& bufferMap) {
   std::set<GpuId> usedGpus;
   for (auto itr : bufferMap) {
     usedGpus.insert(itr.first);
   }
   auto unusedGpus = _initUnusedGpus(bufferMap);
 
-  initGpuResources(_ctx.get(), usedGpus, unusedGpus);
+  auto rtn = initGpuResources(_ctx.get(), usedGpus, unusedGpus);
+  if (!rtn) {
+    return false;
+  }
   CHECK(bufferMap.size() == _perGpuData.size());
 
   if (!bufferMap.size()) {
-    return;
+    return true;
   }
 
   auto firstItem = bufferMap.begin();
@@ -462,6 +470,8 @@ void BaseRenderProperty::_initBuffers(const std::map<GpuId, QueryBufferWkPtr>& b
     default:
       CHECK(false) << "Unsupported resource type " << rsrcType << " for render properties.";
   }
+
+  return true;
 }
 
 void BaseRenderProperty::_dataRefUpdateCB(RefEventType refEventType, const RefObjShPtr& refObjPtr) {

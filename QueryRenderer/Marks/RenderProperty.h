@@ -98,7 +98,7 @@ class BaseRenderProperty {
   std::string getDataColumnName() { return _vboAttrName; }
   const QueryDataTableShPtr& getDataTablePtr() { return _dataPtr; }
 
-  void initGpuResources(const QueryRendererContext* ctx,
+  bool initGpuResources(const QueryRendererContext* ctx,
                         const std::set<GpuId>& usedGpus,
                         const std::set<GpuId>& unusedGpus);
 
@@ -195,7 +195,7 @@ class BaseRenderProperty {
  private:
   std::set<GpuId> _initUnusedGpus(const std::map<GpuId, QueryBufferWkPtr>& bufferMap);
   std::set<GpuId> _initUnusedGpus(const std::set<GpuId>& usedGpus);
-  void _initBuffers(const std::map<GpuId, QueryBufferWkPtr>& bufferMap);
+  bool _initBuffers(const std::map<GpuId, QueryBufferWkPtr>& bufferMap);
   bool _internalInitFromData(const std::string& attrName,
                              const QueryDataTableShPtr& dataPtr,
                              const bool hasScale,
