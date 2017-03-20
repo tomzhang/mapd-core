@@ -165,6 +165,10 @@ void HAHandler::broadcast_serialized_rows(const std::string& serialized_rows,
                                           const TRowDescriptor& row_desc,
                                           const TQueryId query_id){};
 
+void HAHandler::insert_data(const TSessionId session, const TInsertData& insert_data){};
+
+void HAHandler::checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id){};
+
 void HAHandler::get_table_details(TTableDetails& _return, const TSessionId session, const std::string& table_name){};
 
 void HAHandler::clear_gpu_memory(const TSessionId session){};
