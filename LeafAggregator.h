@@ -25,7 +25,7 @@ struct AggregatedResult {
 
 class PersistentLeafClient {
  public:
-  PersistentLeafClient(const LeafHostInfo& leaf_host) noexcept;
+  PersistentLeafClient(const LeafHostInfo& leaf_host, const bool with_timeout) noexcept;
 
   TSessionId connect(const std::string& user, const std::string& passwd, const std::string& dbname);
   void disconnect(const TSessionId session);
@@ -38,6 +38,8 @@ class PersistentLeafClient {
   void broadcast_serialized_rows(const std::string& serialized_rows,
                                  const TRowDescriptor& row_desc,
                                  const TQueryId query_id);
+  void insert_data(const TSessionId session, const TInsertData& thrift_insert_data);
+  void checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id);
   void render_vega(TRenderResult& _return,
                    const TSessionId session,
                    const int64_t widget_id,
@@ -64,6 +66,7 @@ class PersistentLeafClient {
   void setupClient();
 
   const LeafHostInfo leaf_host_;
+  const bool with_timeout_;
   std::unique_ptr<MapDClient> client_;
   std::mutex client_mutex_;
 };
@@ -98,6 +101,15 @@ class LeafAggregator {
                                   const std::string& query_str,
                                   const size_t leaf_idx);
 
+  void insertDataToLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
+                        const size_t leaf_idx,
+                        const TInsertData& thrift_insert_data);
+
+  void checkpointLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
+                      const size_t leaf_idx,
+                      const int32_t db_id,
+                      const int32_t table_id);
+
   void connect(const Catalog_Namespace::SessionInfo& parent_session_info,
                const std::string& user,
                const std::string& passwd,
@@ -131,6 +143,7 @@ class LeafAggregator {
   };
 
   std::vector<std::unique_ptr<PersistentLeafClient>> leaves_;
+  std::vector<std::unique_ptr<PersistentLeafClient>> leaves_no_timeout_;
   SessionMap leaf_sessions_;  // map from aggregator session to leaf sessions
   std::unordered_map<TSessionId, Credentials> session_credentials_;
   mapd_shared_mutex leaf_sessions_mutex_;

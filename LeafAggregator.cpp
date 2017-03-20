@@ -20,7 +20,9 @@ using apache::thrift::transport::TBufferedTransport;
 using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
-PersistentLeafClient::PersistentLeafClient(const LeafHostInfo& leaf_host) noexcept : leaf_host_(leaf_host) {
+PersistentLeafClient::PersistentLeafClient(const LeafHostInfo& leaf_host, const bool with_timeout) noexcept
+    : leaf_host_(leaf_host),
+      with_timeout_(with_timeout) {
   try {
     setupClient();
   } catch (const TTransportException&) {
@@ -76,6 +78,18 @@ void PersistentLeafClient::broadcast_serialized_rows(const std::string& serializ
   client_->broadcast_serialized_rows(serialized_rows, row_desc, query_id);
 }
 
+void PersistentLeafClient::insert_data(const TSessionId session, const TInsertData& thrift_insert_data) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->insert_data(session, thrift_insert_data);
+}
+
+void PersistentLeafClient::checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id) {
+  std::lock_guard<std::mutex> lock(client_mutex_);
+  setupClientIfNull();
+  client_->checkpoint(session, db_id, table_id);
+}
+
 void PersistentLeafClient::render_vega(TRenderResult& _return,
                                        const TSessionId session,
                                        const int64_t widget_id,
@@ -120,9 +134,11 @@ void PersistentLeafClient::set_execution_mode(const TSessionId session, const TE
 
 void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
-  socket->setConnTimeout(5000);
-  socket->setRecvTimeout(10000);
-  socket->setSendTimeout(10000);
+  if (with_timeout_) {
+    socket->setConnTimeout(5000);
+    socket->setRecvTimeout(10000);
+    socket->setSendTimeout(10000);
+  }
   const auto transport = boost::make_shared<TBufferedTransport>(socket);
   transport->open();
   const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
@@ -137,7 +153,10 @@ void PersistentLeafClient::setupClientIfNull() {
 
 LeafAggregator::LeafAggregator(const std::vector<LeafHostInfo>& leaves) {
   for (const auto& leaf : leaves) {
-    leaves_.emplace_back(new PersistentLeafClient(leaf));
+    leaves_.emplace_back(new PersistentLeafClient(leaf, true));
+  }
+  for (const auto& leaf : leaves) {
+    leaves_no_timeout_.emplace_back(new PersistentLeafClient(leaf, false));
   }
 }
 
@@ -716,6 +735,27 @@ TQueryResult LeafAggregator::forwardQueryToLeaf(const Catalog_Namespace::Session
   TQueryResult query_result;
   leaves_[leaf_idx]->sql_execute(query_result, leaf_session_ids[leaf_idx], query_str, true, "");
   return query_result;
+}
+
+void LeafAggregator::insertDataToLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                      const size_t leaf_idx,
+                                      const TInsertData& thrift_insert_data) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  CHECK_LT(leaf_idx, leaves_no_timeout_.size());
+  leaves_no_timeout_[leaf_idx]->insert_data(leaf_session_ids[leaf_idx], thrift_insert_data);
+}
+
+void LeafAggregator::checkpointLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
+                                    const size_t leaf_idx,
+                                    const int32_t db_id,
+                                    const int32_t table_id) {
+  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
+  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
+  auto& leaf_session_ids = session_it->second;
+  CHECK_LT(leaf_idx, leaves_no_timeout_.size());
+  leaves_no_timeout_[leaf_idx]->checkpoint(leaf_session_ids[leaf_idx], db_id, table_id);
 }
 
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,
