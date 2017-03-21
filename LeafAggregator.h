@@ -4,7 +4,7 @@
 #include "LeafHostInfo.h"
 #include "QueryEngine/TargetMetaInfo.h"
 #include "Shared/mapd_shared_mutex.h"
-#include "gen-cpp/mapd_types.h"
+#include "gen-cpp/MapD.h"
 
 #include <cstdint>
 #include <memory>
