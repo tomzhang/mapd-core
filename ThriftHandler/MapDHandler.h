@@ -270,6 +270,8 @@ class MapDHandler : public MapDIf {
                         const std::string& nonce,
                         const ExecutorDeviceType executor_device_type);
 
+  void execute_distributed_copy_statement(Parser::CopyTableStmt*, const Catalog_Namespace::SessionInfo& session_info);
+
   void cluster_execute(TQueryResult& _return,
                        const Catalog_Namespace::SessionInfo& session_info,
                        const std::string& query_str,
