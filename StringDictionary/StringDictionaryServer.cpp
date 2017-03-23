@@ -35,7 +35,7 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
 
   void create(const int32_t dict_id, const int32_t db_id) noexcept override {
     auto dict_path = base_path_ / ("DB_" + std::to_string(db_id) + "_DICT_" + std::to_string(dict_id));
-    CHECK(boost::filesystem::create_directory(dict_path));
+    boost::filesystem::create_directory(dict_path);
     createDictionaryFromPath(dict_id, dict_path);
   }
 
@@ -91,6 +91,9 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
 
   void createDictionaryFromPath(const int32_t dict_id, const boost::filesystem::path& dict_path) {
     mapd_lock_guard<mapd_shared_mutex> write_lock(string_dictionaries_mutex_);
+    if (string_dictionaries_.count(dict_id)) {
+      return;
+    }
     const auto it_ok = string_dictionaries_.emplace(dict_id, boost::make_unique<StringDictionary>(dict_path.string()));
     CHECK(it_ok.second);
   }
