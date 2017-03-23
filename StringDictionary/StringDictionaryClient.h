@@ -9,7 +9,7 @@
 
 class StringDictionaryClient {
  public:
-  StringDictionaryClient(const LeafHostInfo& server_host, const int dict_id);
+  StringDictionaryClient(const LeafHostInfo& server_host, const int dict_id, const bool with_timeout);
 
   void create(const int32_t dict_id, const int32_t db_id);
 
@@ -36,6 +36,7 @@ class StringDictionaryClient {
 
   const LeafHostInfo server_host_;
   const int dict_id_;
+  const bool with_timeout_;
   std::unique_ptr<RemoteStringDictionaryClient> client_;
   std::mutex client_mutex_;
 };

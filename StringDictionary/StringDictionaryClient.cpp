@@ -13,8 +13,10 @@ using apache::thrift::transport::TBufferedTransport;
 using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
-StringDictionaryClient::StringDictionaryClient(const LeafHostInfo& server_host, const int dict_id)
-    : server_host_(server_host), dict_id_(dict_id) {
+StringDictionaryClient::StringDictionaryClient(const LeafHostInfo& server_host,
+                                               const int dict_id,
+                                               const bool with_timeout)
+    : server_host_(server_host), dict_id_(dict_id), with_timeout_(with_timeout) {
   setupClient();
 }
 
@@ -128,9 +130,11 @@ bool StringDictionaryClient::checkpoint() {
 
 void StringDictionaryClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(server_host_.getHost(), server_host_.getPort());
-  socket->setConnTimeout(5000);
-  socket->setRecvTimeout(10000);
-  socket->setSendTimeout(10000);
+  if (with_timeout_) {
+    socket->setConnTimeout(5000);
+    socket->setRecvTimeout(10000);
+    socket->setSendTimeout(10000);
+  }
   const auto transport = boost::make_shared<TBufferedTransport>(socket);
   transport->open();
   const auto protocol = boost::make_shared<TBinaryProtocol>(transport);
