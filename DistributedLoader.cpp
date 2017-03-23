@@ -45,6 +45,23 @@ bool DistributedLoader::load(const std::vector<std::unique_ptr<Importer_NS::Type
     }
     thrift_insert_data.data.push_back(p);
   }
+  if (table_desc->partitions == "REPLICATED") {
+    for (size_t leaf_idx = 0; leaf_idx < aggregator_->leafCount(); ++leaf_idx) {
+      try {
+        aggregator_->insertDataToLeaf(parent_session_info_, leaf_idx, thrift_insert_data);
+      } catch (const std::exception& e) {
+        LOG(ERROR) << "DistributedLoader Insert Exception: " << e.what();
+        return false;
+      }
+    }
+    {
+      std::lock_guard<std::mutex> lock(leaves_pending_checkpoint_mutex_);
+      for (size_t leaf_idx = 0; leaf_idx < aggregator_->leafCount(); ++leaf_idx) {
+        leaves_pending_checkpoint_.insert(leaf_idx);
+      }
+    }
+    return true;
+  }
   const auto old_call_count = load_call_count_.fetch_add(1);
   const size_t leaf_idx = old_call_count % aggregator_->leafCount();
   try {
