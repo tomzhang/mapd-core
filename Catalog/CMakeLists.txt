@@ -8,7 +8,7 @@ set(catalog_source_files
 add_library(Catalog ${catalog_source_files})
 
 if(ENABLE_CALCITE)
-  target_link_libraries(Catalog SqliteConnector StringDictionary Fragmenter ldap Calcite)
+  target_link_libraries(Catalog SqliteConnector Fragmenter ldap Calcite)
 else()
-  target_link_libraries(Catalog SqliteConnector StringDictionary Fragmenter ldap)
+  target_link_libraries(Catalog SqliteConnector Fragmenter ldap)
 endif()

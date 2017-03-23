@@ -18,19 +18,6 @@ StringDictionaryClient::StringDictionaryClient(const LeafHostInfo& server_host, 
   setupClient();
 }
 
-void StringDictionaryClient::create(const int32_t dict_id, const int32_t db_id) {
-  CHECK_EQ(-1, dict_id_);
-  std::lock_guard<std::mutex> lock(client_mutex_);
-  CHECK(client_);
-  try {
-    client_->create(dict_id, db_id);
-    return;
-  } catch (const TTransportException&) {
-    setupClient();
-  }
-  client_->create(dict_id, db_id);
-}
-
 int32_t StringDictionaryClient::get(const std::string& str) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   CHECK(client_);
