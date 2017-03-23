@@ -41,7 +41,25 @@ bool DistributedLoader::load(const std::vector<std::unique_ptr<Importer_NS::Type
       }
     } else {
       CHECK(import_buff->getTypeInfo().get_type() == kARRAY);
-      CHECK(false);
+      std::vector<ArrayDatum>* arrays_ptr{nullptr};
+      if (IS_STRING(import_buff->getTypeInfo().get_subtype())) {
+        CHECK(import_buff->getTypeInfo().get_compression() == kENCODING_DICT);
+        import_buff->addDictEncodedStringArray(*import_buff->getStringArrayBuffer());
+        arrays_ptr = import_buff->getStringArrayDictBuffer();
+      } else {
+        arrays_ptr = import_buff->getArrayBuffer();
+      }
+      for (const auto& arr_datum : *arrays_ptr) {
+        TVarLen t_arr_datum;
+        if (arr_datum.is_null) {
+          t_arr_datum.is_null = true;
+        } else {
+          CHECK(arr_datum.pointer);
+          t_arr_datum.payload = std::string(reinterpret_cast<const char*>(arr_datum.pointer), arr_datum.length);
+          t_arr_datum.is_null = false;
+        }
+        p.var_len_data.push_back(t_arr_datum);
+      }
     }
     thrift_insert_data.data.push_back(p);
   }
