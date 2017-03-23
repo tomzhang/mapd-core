@@ -11,6 +11,8 @@ class StringDictionaryClient {
  public:
   StringDictionaryClient(const LeafHostInfo& server_host, const int dict_id);
 
+  void create(const int32_t dict_id, const int32_t db_id);
+
   int32_t get(const std::string& str);
 
   void get_string(std::string& _return, const int32_t string_id);
