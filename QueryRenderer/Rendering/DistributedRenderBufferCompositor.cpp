@@ -107,7 +107,8 @@ void DistributedRenderBufferCompositor::render(const std::vector<RawPixelData>& 
   bool doHitTest = false;
   bool doDepthTest = false;
   size_t numBuffers = 0;
-  int width, height;
+  int width = 0;
+  int height = 0;
 
   // TODO(croot): handle depth buffering
   for (auto& bufferData : pixelData) {
