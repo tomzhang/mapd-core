@@ -361,6 +361,7 @@ struct RootCache {
   }
 
   bool supportsInt64() const;
+  DistributedRenderBufferCompositorShPtr getDistributedCompositorPtr();
 
  private:
   mutable std::shared_ptr<bool> _supportsInt64Ptr;

@@ -317,6 +317,58 @@ void GLTexture2dArray::updateFromTextures() {
   }
 }
 
+void GLTexture2dArray::uploadPixelsToBufferIndex(const size_t width,
+                                                 const size_t height,
+                                                 const GLenum pixelFormat,
+                                                 const GLenum pixelType,
+                                                 const GLvoid* pixelData,
+                                                 const int arrayIdx,
+                                                 const size_t startx,
+                                                 const size_t starty) {
+  // TODO(croot): check that the pixel format/type of the pbo is compatible with
+  // the internal format of the GLTexture2dArray
+
+  RUNTIME_EX_ASSERT(arrayIdx < static_cast<int>(_depth),
+                    "Invalid index " + std::to_string(arrayIdx) + ". The texture array only has " +
+                        std::to_string(_depth) + " textures.");
+  RUNTIME_EX_ASSERT(_textureReferences.size() == 0,
+                    "Cannot copy pixels to a 2d texture array that is referencing existing 2d textures.");
+  RUNTIME_EX_ASSERT(_numSamples == 1, "Cannot copy pixels from to a multi-sampled 2d texture array");
+
+  auto myWidth = getWidth();
+  auto myHeight = getHeight();
+  RUNTIME_EX_ASSERT(startx < myWidth && startx + width <= myWidth && starty < myHeight && starty + height <= myHeight,
+                    "The area of pixels to set: " + std::to_string(width) + "x" + std::to_string(height) +
+                        " starting at [" + std::to_string(startx) + ", " + std::to_string(starty) +
+                        "] extends beyond the bounds of the textures in the GLTexture2dArray: " +
+                        std::to_string(myWidth) + "x" + std::to_string(myHeight) + ".");
+
+  // TODO(croot): do something to verify that the pixel format uploaded matches that of the internal texture?
+
+  // TODO(croot): support mipmaps
+  // TODO(croot): support byte offset into pbo data?
+
+  CHECK(_target == GL_TEXTURE_2D_ARRAY);
+  GLint currTex;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY, &currTex));
+  MAPD_CHECK_GL_ERROR(glBindTexture(_target, _textureArrayId));
+
+  if (arrayIdx < 0) {
+    for (int i = 0; i < static_cast<int>(_depth); ++i) {
+      MAPD_CHECK_GL_ERROR(
+          glTexSubImage3D(_target, 0, startx, starty, i, width, height, 1, pixelFormat, pixelType, pixelData));
+    }
+  } else {
+    MAPD_CHECK_GL_ERROR(
+        glTexSubImage3D(_target, 0, startx, starty, arrayIdx, width, height, 1, pixelFormat, pixelType, pixelData));
+  }
+
+  if (currTex != static_cast<GLint>(_textureArrayId)) {
+    // now reset the context bound state back
+    MAPD_CHECK_GL_ERROR(glBindTexture(_target, currTex));
+  }
+}
+
 }  // namespace Resources
 }  // namespace GL
 }  // namespace Rendering

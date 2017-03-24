@@ -80,23 +80,19 @@ static void resizeTexture2d(GLenum& target,
 }
 
 GLTexture2dSampleProps::GLTexture2dSampleProps()
-    : minFilter(GL_NEAREST), magFilter(GL_LINEAR), wrapS(GL_CLAMP_TO_EDGE), wrapT(GL_CLAMP_TO_EDGE) {
-}
+    : minFilter(GL_NEAREST), magFilter(GL_LINEAR), wrapS(GL_CLAMP_TO_EDGE), wrapT(GL_CLAMP_TO_EDGE) {}
 
 GLTexture2dSampleProps::GLTexture2dSampleProps(GLint minFilter, GLint magFilter, GLint wrapS, GLint wrapT)
-    : minFilter(minFilter), magFilter(magFilter), wrapS(wrapS), wrapT(wrapT) {
-}
+    : minFilter(minFilter), magFilter(magFilter), wrapS(wrapS), wrapT(wrapT) {}
 
 GLTexture2dSampleProps::GLTexture2dSampleProps(const GLTexture2dSampleProps& props)
-    : minFilter(props.minFilter), magFilter(props.magFilter), wrapS(props.wrapS), wrapT(props.wrapT) {
-}
+    : minFilter(props.minFilter), magFilter(props.magFilter), wrapS(props.wrapS), wrapT(props.wrapT) {}
 
 GLTexture2dSampleProps::GLTexture2dSampleProps(GLTexture2dSampleProps&& props)
     : minFilter(std::move(props.minFilter)),
       magFilter(std::move(props.magFilter)),
       wrapS(std::move(props.wrapS)),
-      wrapT(std::move(props.wrapT)) {
-}
+      wrapT(std::move(props.wrapT)) {}
 
 bool GLTexture2dSampleProps::operator==(const GLTexture2dSampleProps& rhs) const {
   return (minFilter == rhs.minFilter && magFilter == rhs.magFilter && wrapS == rhs.wrapS && wrapT == rhs.wrapT);
@@ -253,6 +249,45 @@ void GLTexture2d::copyPixelsFromPixelBuffer(const GLPixelBuffer2dShPtr& pbo,
   }
 
   glRenderer->bindReadPixelBuffer(nullptr);
+}
+
+void GLTexture2d::uploadPixelsToTexture(const size_t width,
+                                        const size_t height,
+                                        const GLenum pixelFormat,
+                                        const GLenum pixelType,
+                                        const GLvoid* pixelData,
+                                        const int arrayIdx,
+                                        const size_t startx,
+                                        const size_t starty) {
+  // TODO(croot): check that the pixel format/type of the pbo is compatible with
+  // the internal format of the GLTexture2dArray
+  CHECK(pixelFormat == _pixelFormat && pixelType == _pixelType);
+
+  RUNTIME_EX_ASSERT(_numSamples == 1, "Cannot copy pixels from to a multi-sampled 2d texture");
+
+  auto myWidth = getWidth();
+  auto myHeight = getHeight();
+  RUNTIME_EX_ASSERT(startx < myWidth && startx + width <= myWidth && starty < myHeight && starty + height <= myHeight,
+                    "The area of pixels to set: " + std::to_string(width) + "x" + std::to_string(height) +
+                        " starting at [" + std::to_string(startx) + ", " + std::to_string(starty) +
+                        "] extends beyond the bounds of the textures in the GLTexture2d: " + std::to_string(myWidth) +
+                        "x" + std::to_string(myHeight) + ".");
+
+  // TODO(croot): do something to verify that the pixel format uploaded matches that of the internal texture?
+
+  // TODO(croot): support mipmaps
+  // TODO(croot): support byte offset into pbo data?
+
+  CHECK(_target == GL_TEXTURE_2D);
+  GLint currTex;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTex));
+  MAPD_CHECK_GL_ERROR(glBindTexture(_target, _textureId));
+  MAPD_CHECK_GL_ERROR(glTexSubImage2D(_target, 0, startx, starty, width, height, _pixelFormat, _pixelType, pixelData));
+
+  if (currTex != static_cast<GLint>(_textureId)) {
+    // now reset the context bound state back
+    MAPD_CHECK_GL_ERROR(glBindTexture(_target, currTex));
+  }
 }
 
 }  // namespace Resources

@@ -16,7 +16,7 @@ list(APPEND QUERY_RENDERER_SOURCES Interop/QueryBuffer.cpp)
 
 list(APPEND QUERY_RENDERER_SOURCES Marks/BaseMark.cpp Marks/PointMark.cpp Marks/PolyMark.cpp Marks/RenderProperty.cpp Marks/Utils.cpp Marks/Enums.cpp)
 
-list(APPEND QUERY_RENDERER_SOURCES Rendering/QueryAccumTxPool.cpp Rendering/QueryFramebuffer.cpp Rendering/QueryIdMapPixelBuffer.cpp Rendering/QueryRenderCompositor.cpp Rendering/QueryRenderSMAAPass.cpp)
+list(APPEND QUERY_RENDERER_SOURCES Rendering/QueryAccumTxPool.cpp Rendering/QueryFramebuffer.cpp Rendering/QueryIdMapPixelBuffer.cpp Rendering/QueryRenderCompositor.cpp Rendering/QueryRenderSMAAPass.cpp Rendering/DistributedRenderBufferCompositor.cpp)
 
 if(_MAPDGL_X11)
   list(APPEND QUERY_RENDERER_INCLUDE_DIRS "${X11_X11_INCLUDE_PATH}")

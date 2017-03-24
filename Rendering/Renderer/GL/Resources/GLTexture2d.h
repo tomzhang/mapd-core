@@ -55,6 +55,15 @@ class GLTexture2d : public GLResource {
                                  int width = -1,
                                  int height = -1);
 
+  void uploadPixelsToTexture(const size_t width,
+                             const size_t height,
+                             const GLenum pixelFormat,
+                             const GLenum pixelType,
+                             const GLvoid* pixelData,
+                             const int arrayIdx = -1,
+                             const size_t startx = 0,
+                             const size_t starty = 0);
+
  private:
   explicit GLTexture2d(const RendererWkPtr& rendererPtr,
                        size_t width,

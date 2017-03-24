@@ -1018,4 +1018,10 @@ bool RootCache::supportsInt64() const {
   return *_supportsInt64Ptr;
 }
 
+DistributedRenderBufferCompositorShPtr RootCache::getDistributedCompositorPtr() {
+  RUNTIME_EX_ASSERT(perGpuData && perGpuData->size(),
+                    "Cannot get a distributed render compositor. There are no render contexts initialized.");
+  return (*perGpuData->begin())->getDistributedCompositorPtr(supportsInt64());
+}
+
 }  // namespace QueryRenderer

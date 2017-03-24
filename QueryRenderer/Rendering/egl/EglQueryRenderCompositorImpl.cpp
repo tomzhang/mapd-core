@@ -454,7 +454,7 @@ void EglQueryRenderCompositorImpl::unregisterAccumulatorTexture(const ::Renderin
 }
 
 void EglQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
-                                                     QueryFramebufferUqPtr& framebufferPtr,
+                                                     QueryFramebufferShPtr& framebufferPtr,
                                                      size_t width,
                                                      size_t height,
                                                      bool doHitTest,

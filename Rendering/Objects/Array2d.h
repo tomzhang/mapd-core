@@ -15,7 +15,7 @@ template <typename T>
 class Array2d {
  public:
   Array2d(size_t width, size_t height, T defaultVal = T())
-      : defaultVal(defaultVal), width(0), height(0), data(), rows() {
+      : defaultVal(defaultVal), width(0), height(0), data(nullptr), rows() {
     _initialize(width, height);
   }
 
@@ -266,18 +266,32 @@ class Array2d {
     return rows[rowidx];
   }
 
+  std::shared_ptr<T> getDataShPtr() {
+    RUNTIME_EX_ASSERT(
+        data,
+        "The 2d array is empty (" + std::to_string(width) + "x" + std::to_string(height) + "). Cannot retrieve data.");
+    return data;
+  }
+
+  const std::shared_ptr<T> getDataShPtr() const {
+    RUNTIME_EX_ASSERT(
+        data,
+        "The 2d array is empty (" + std::to_string(width) + "x" + std::to_string(height) + "). Cannot retrieve data.");
+    return data;
+  }
+
   T* getDataPtr() {
     RUNTIME_EX_ASSERT(
-        data.size() > 0,
+        data,
         "The 2d array is empty (" + std::to_string(width) + "x" + std::to_string(height) + "). Cannot retrieve data.");
-    return &data[0];
+    return data.get();
   }
 
   const T* getDataPtr() const {
     RUNTIME_EX_ASSERT(
-        data.size() > 0,
+        data,
         "The 2d array is empty (" + std::to_string(width) + "x" + std::to_string(height) + "). Cannot retrieve data.");
-    return &data[0];
+    return data.get();
   }
 
   operator std::string() const {
@@ -303,7 +317,7 @@ class Array2d {
       defaultVal = *newDefaultVal;
     }
 
-    std::fill(data.begin(), data.end(), defaultVal);
+    std::memset(data.get(), defaultVal, width * height);
   }
 
  private:
@@ -311,7 +325,7 @@ class Array2d {
   size_t width;
   size_t height;
 
-  std::vector<T> data;
+  std::shared_ptr<T> data;
   std::vector<T*> rows;
 
   void _initialize(size_t newWidth, size_t newHeight) {
@@ -321,9 +335,6 @@ class Array2d {
       newWidth = (numElems > 0 ? newWidth : 0);
       newHeight = (numElems > 0 ? newHeight : 0);
 
-      data.resize(numElems);
-      rows.resize(newHeight);
-
       // TODO(croot): Should we do a shrink_to_fit() to clear out unused memory
       // when necessary? Would this be costly? If so, perhaps find a metric by
       // which shrink_to_fit is called?
@@ -332,13 +343,19 @@ class Array2d {
         // TODO(croot): preserve as much of the original data
         // as possible on a resize or just reset everything?
         // Note: right now we're just resetting everything
-        std::fill(data.begin(), data.end(), defaultVal);
+        data.reset(new T[numElems], std::default_delete<T[]>());
+        auto rawDataPtr = data.get();
+        rows.resize(newHeight);
+        std::memset(rawDataPtr, defaultVal, newWidth * newHeight);
 
         for (size_t i = 0; i < newHeight; ++i) {
           // TODO(croot): expose a simple Row class that will handle the [] operators,
           // and thus handle any out-of-bounds indices
-          rows[i] = &data[i * newWidth];
+          rows[i] = &rawDataPtr[i * newWidth];
         }
+      } else {
+        data.reset();
+        rows.resize(0);
       }
 
       width = newWidth;

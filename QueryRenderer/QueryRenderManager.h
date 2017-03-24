@@ -119,10 +119,29 @@ class QueryRenderManager {
   void configureRender(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, Executor* executor = nullptr);
 
   void render();
+
+  RawPixelData renderAndGetPixelData();
   PngData renderToPng(int compressionLevel = -1);
 
-  std::tuple<std::string, int64_t, int64_t> runRenderRequest(int userId,
-                                                             int widgetId,
+  std::tuple<RawPixelData, int64_t, int64_t> runPixelDataRenderRequest(const int userId,
+                                                                       const int widgetId,
+                                                                       const std::string& jsonStr,
+                                                                       Executor* executor,
+                                                                       RenderInfo* renderInfo,
+                                                                       QueryExecCB queryExecFunc,
+                                                                       bool doHitTest = false,
+                                                                       bool doDepthTest = false);
+
+  std::tuple<RawPixelData, int64_t, int64_t> runPixelDataRenderRequest(const UserWidgetPair& userWidgetPair,
+                                                                       const std::string& jsonStr,
+                                                                       Executor* executor,
+                                                                       RenderInfo* renderInfo,
+                                                                       QueryExecCB queryExecFunc,
+                                                                       bool doHitTest = false,
+                                                                       bool doDepthTest = false);
+
+  std::tuple<std::string, int64_t, int64_t> runRenderRequest(const int userId,
+                                                             const int widgetId,
                                                              const std::string& jsonStr,
                                                              Executor* executor,
                                                              RenderInfo* renderInfo,
@@ -130,6 +149,14 @@ class QueryRenderManager {
                                                              int compressionLevel = -1,
                                                              bool doHitTest = false,
                                                              bool doDepthTest = false);
+
+  PngData compositeRenderBuffersToPng(const UserWidgetPair& userWidgetPair,
+                                      const std::vector<RawPixelData>& buffers,
+                                      int compressionLevel = -1);
+  PngData compositeRenderBuffersToPng(const int userId,
+                                      const int widgetId,
+                                      const std::vector<RawPixelData>& buffers,
+                                      int compressionLevel = -1);
 
   // get the id at a specific pixel
   std::tuple<int32_t, int64_t, std::string> getIdAt(size_t x, size_t y, size_t pixelRadius = 0);

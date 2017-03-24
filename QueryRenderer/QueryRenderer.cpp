@@ -9,6 +9,7 @@
 #include "Rendering/QueryFramebuffer.h"
 #include "Rendering/QueryRenderCompositor.h"
 #include "Rendering/QueryRenderSMAAPass.h"
+#include "Rendering/DistributedRenderBufferCompositor.h"
 #include <Rendering/Window.h>
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
@@ -20,9 +21,6 @@
 #include <cstring>
 #include "rapidjson/error/en.h"
 #include <boost/algorithm/string/join.hpp>
-
-// #include <Shared/measure.h>
-// #include <iostream>
 
 namespace QueryRenderer {
 
@@ -686,7 +684,7 @@ void QueryRenderer::renderPasses(
     const std::set<GpuId>& usedGpus,
     bool clearFboEveryPass,
     std::function<
-        void(::Rendering::GL::GLRenderer*, QueryFramebufferUqPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
+        void(::Rendering::GL::GLRenderer*, QueryFramebufferShPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
         perPassGpuCB,
     std::function<void(const std::set<GpuId>&, size_t, size_t, bool, bool, int, ScaleShPtr&)> passCompleteCB) {
   ScaleShPtr activeScale, prevScale, currScale;
@@ -793,7 +791,6 @@ void QueryRenderer::renderPasses(
 
       perPassGpuCB(
           renderer, framebufferPtr, width, height, doHitTest, doDepthTest, gpuCnt++, activeScale, accumulatorCnt);
-      // postGpuCallback(gpuId, passCnt, activeScale.size());
     }
 
     if (!activeScale) {
@@ -801,7 +798,6 @@ void QueryRenderer::renderPasses(
     }
 
     // NOTE: We're not swapping buffers because we're using pbuffers
-    // qrmGpuData->windowPtr->swapBuffers();
 
     // CROOT testing code
     // int width = ctx->getWidth();
@@ -826,7 +822,7 @@ void QueryRenderer::renderPasses(
   }
 }
 
-QueryFramebufferUqPtr& QueryRenderer::renderGpu(GpuId gpuId,
+QueryFramebufferShPtr& QueryRenderer::renderGpu(GpuId gpuId,
                                                 const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
                                                 QueryRendererContext* ctx,
                                                 int r,
@@ -922,9 +918,6 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
       _createPbo(usedGpus);
     }
 
-    // int64_t time_ms;
-    // auto clock_begin = timer_start();
-
     int numGpusToRender = usedGpus.size();
     if (numGpusToRender) {
       auto qrmGpuCache = _ctx->getRootGpuCache();
@@ -944,10 +937,6 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
           usedFramebuffer = blitFramebuffer.get();
         }
 
-        // time_ms = timer_stop(clock_begin);
-        // std::cerr << "\t\t\tCROOT - render gpu " << itr->first << ": " << time_ms << "ms" << std::endl;
-        // clock_begin = timer_start();
-
         if (_ctx->doHitTest()) {
           CHECK(_id1APixels && _id2Pixels && _pbo1A && _pbo2 &&
                 usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
@@ -956,10 +945,6 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
             usedFramebuffer->copyRowIdBufferToPbo(_pbo1B, false);
           }
           usedFramebuffer->copyTableIdBufferToPbo(_pbo2);
-
-          // time_ms = timer_stop(clock_begin);
-          // std::cerr << "\t\t\tCROOT - pbo idmap copy: " << time_ms << "ms" << std::endl;
-          // clock_begin = timer_start();
         }
       } else {
         auto compId = (*qrmItr)->getCompositorGpuId();
@@ -985,10 +970,6 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
 
         auto aaFramebuffer = _runAntialiasingPass(*qrmItr, usedFramebuffer);
 
-        // time_ms = timer_stop(clock_begin);
-        // std::cerr << "\t\t\tCROOT - compositor render : " << time_ms << "ms" << std::endl;
-        // clock_begin = timer_start();
-
         if (_ctx->doHitTest()) {
           CHECK(_id1APixels && _id2Pixels && _pbo1A && _pbo2 &&
                 usedFramebuffer->getGLRenderer()->getGpuId() == _pboGpu);
@@ -1000,10 +981,6 @@ void QueryRenderer::_render(const std::set<GpuId>& usedGpus, bool inactivateRend
             usedFramebuffer->copyRowIdBufferToPbo(_pbo1B, false);
           }
           usedFramebuffer->copyTableIdBufferToPbo(_pbo2);
-
-          // time_ms = timer_stop(clock_begin);
-          // std::cerr << "\t\t\tCROOT - compositor pbo idmap copy : " << time_ms << "ms" << std::endl;
-          // clock_begin = timer_start();
         }
       }
 
@@ -1042,21 +1019,10 @@ QueryFramebufferShPtr& QueryRenderer::_runAntialiasingPass(const RootPerGpuDataS
   return outputFbo;
 }
 
-PngData QueryRenderer::renderToPng(int compressionLevel) {
-  RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
-                    "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + ": Invalid compression level " +
-                        std::to_string(compressionLevel) + ". It must be a " +
-                        "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
-
-  // int64_t time_ms;
-  // auto clock_begin = timer_start();
-
+QueryRenderer::RenderedPixels QueryRenderer::_renderAndGetPixels() {
   auto usedGpus = _ctx->getUsedGpus();
   _render(usedGpus, false);
-
-  // time_ms = timer_stop(clock_begin);
-  // std::cerr << "\t\tCROOT - render frame: " << time_ms << "ms." << std::endl;
-  // clock_begin = timer_start();
+  bool empty = false;
 
   try {
     int width = getWidth();
@@ -1108,23 +1074,138 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
 
         renderer->makeInactive();
       }
-    } else if (width > 0 && height > 0) {
-      pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
-      std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
+    } else {
+      empty = true;
+      if (width > 0 && height > 0) {
+        pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
+        std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
 
-      if (_ctx->doHitTest()) {
-        // clear out the id buffer
-        _id1APixels->resetToDefault();
-        if (_id1BPixels) {
-          _id1BPixels->resetToDefault();
+        if (_ctx->doHitTest()) {
+          // clear out the id buffer
+          _id1APixels->resetToDefault();
+          if (_id1BPixels) {
+            _id1BPixels->resetToDefault();
+          }
+          _id2Pixels->resetToDefault();
         }
-        _id2Pixels->resetToDefault();
       }
     }
 
-    // time_ms = timer_stop(clock_begin);
-    // std::cerr << "\t\tCROOT - read color buffer: " << time_ms << "ms." << std::endl;
-    // clock_begin = timer_start();
+    return RenderedPixels(pixelsPtr, empty);
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
+    _clearAll(true);
+    throw e;
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw std::runtime_error(e.what());
+  }
+}
+
+RawPixelData QueryRenderer::renderRawData() {
+  auto renderedPixels = _renderAndGetPixels();
+  // make sure our cached ids are updated post-render
+  _updateIdBuffers();
+  if (renderedPixels.pixels && !renderedPixels.isEmptyRender) {
+    return RawPixelData(getWidth(),
+                        getHeight(),
+                        4,
+                        renderedPixels.pixels,
+                        (_id1APixels ? _id1APixels->getDataShPtr() : nullptr),
+                        (_id1BPixels ? _id1BPixels->getDataShPtr() : nullptr),
+                        (_id2Pixels ? _id2Pixels->getDataShPtr() : nullptr));
+  } else {
+    return RawPixelData(getWidth(), getHeight());
+  }
+}
+
+PngData QueryRenderer::renderToPng(int compressionLevel) {
+  RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
+                    "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + ": Invalid compression level " +
+                        std::to_string(compressionLevel) + ". It must be a " +
+                        "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
+
+  auto renderedPixels = _renderAndGetPixels();
+
+  try {
+    return PngData(getWidth(), getHeight(), renderedPixels.pixels, compressionLevel);
+  } catch (const ::Rendering::OutOfGpuMemoryError& e) {
+    _clearAll();
+    throw e;
+  } catch (const ::Rendering::RenderError& e) {
+    _clearAll(true);
+    throw e;
+  } catch (const std::exception& e) {
+    _clearAll(true);
+    throw std::runtime_error(e.what());
+  }
+}
+
+PngData QueryRenderer::compositeRenderBuffersToPng(const std::vector<RawPixelData>& buffers, int compressionLevel) {
+  RUNTIME_EX_ASSERT(compressionLevel >= -1 && compressionLevel <= 9,
+                    "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + ": Invalid compression level " +
+                        std::to_string(compressionLevel) + ". It must be a " +
+                        "value between 0 (no zlib compression) to 9 (most zlib compression), or -1 (use default).");
+
+  try {
+    // update everything marked dirty before rendering
+    _update();
+
+    if (_ctx->doHitTest() && ((!_pbo1A || !_pbo2) || (_ctx->supportsInt64() && !_pbo1B))) {
+      auto usedGpus = _ctx->getUsedGpus();
+      _createPbo(usedGpus);
+    }
+
+    std::shared_ptr<unsigned char> pixelsPtr = nullptr;
+    auto gpuCache = _ctx->getRootGpuCache();
+    auto distCompositorPtr = gpuCache->getDistributedCompositorPtr();
+
+    size_t width = getWidth(), height = getHeight();
+    if (buffers.size()) {
+      width = buffers[0].width;
+      height = buffers[0].height;
+    }
+
+    if (width > 0 && height > 0) {
+      setWidthHeight(width, height);
+      if (buffers.size()) {
+        auto renderer = distCompositorPtr->getGLRenderer();
+        renderer->makeActiveOnCurrentThread();
+        distCompositorPtr->render(buffers);
+
+        auto fbo = distCompositorPtr->getFramebufferPtr();
+        CHECK(fbo);
+        if (_ctx->doHitTest()) {
+          // copy row/table id data over to the pbos for lazy device->host transfer
+          CHECK(_id1APixels && _id2Pixels && _pbo1A && _pbo2 && renderer->getGpuId() == _pboGpu);
+          fbo->copyRowIdBufferToPbo(_pbo1A, true);
+          if (_id1BPixels && _pbo1B) {
+            fbo->copyRowIdBufferToPbo(_pbo1B, false);
+          }
+          fbo->copyTableIdBufferToPbo(_pbo2);
+        }
+
+        // now read the color buffer from the render to png encode
+        fbo->bindToRenderer(distCompositorPtr->getGLRenderer(), FboBind::READ);
+        pixelsPtr = fbo->readColorBuffer(0, 0, width, height);
+
+        // mark the host row id/table id caches as dirty.
+        _idPixelsDirty = true;
+      } else {
+        pixelsPtr.reset(new unsigned char[width * height * 4], std::default_delete<unsigned char[]>());
+        std::memset(pixelsPtr.get(), 0, width * height * 4 * sizeof(unsigned char));
+        if (_ctx->doHitTest()) {
+          // clear out the id buffer
+          _id1APixels->resetToDefault();
+          if (_id1BPixels) {
+            _id1BPixels->resetToDefault();
+          }
+          _id2Pixels->resetToDefault();
+        }
+      }
+    }
 
     return PngData(width, height, pixelsPtr, compressionLevel);
   } catch (const ::Rendering::OutOfGpuMemoryError& e) {
@@ -1139,6 +1220,41 @@ PngData QueryRenderer::renderToPng(int compressionLevel) {
   }
 }
 
+bool QueryRenderer::_updateIdBuffers() {
+  if (_id1APixels && _id2Pixels) {
+    if (_idPixelsDirty) {
+      size_t width = _ctx->getWidth();
+      size_t height = _ctx->getHeight();
+      CHECK(_id1APixels->getWidth() == width && _id1APixels->getHeight() == height && _id2Pixels->getWidth() == width &&
+            _id2Pixels->getHeight() == height);
+
+      unsigned int* rawIds1A = _id1APixels->getDataPtr();
+      int* rawIds2 = _id2Pixels->getDataPtr();
+
+      auto qrmGpuCache = _ctx->getRootGpuCache();
+      auto qrmPerGpuData = qrmGpuCache->perGpuData;
+      CHECK(qrmPerGpuData);
+      auto itr = qrmPerGpuData->find(_pboGpu);
+
+      if (itr != qrmPerGpuData->end()) {
+        (*itr)->makeActiveOnCurrentThread();
+        _pbo1A->readIdBuffer(width, height, rawIds1A);
+        if (_id1BPixels && _pbo1B) {
+          auto rawIds1B = _id1BPixels->getDataPtr();
+          _pbo1B->readIdBuffer(width, height, rawIds1B);
+        }
+        _pbo2->readIdBuffer(width, height, rawIds2);
+        _releasePbo();
+        (*itr)->makeInactive();
+      }
+
+      _idPixelsDirty = false;
+    }
+    return true;
+  }
+  return false;
+}
+
 HitInfo QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
   RUNTIME_EX_ASSERT(_ctx->doHitTest(),
                     "QueryRenderer " + to_string(_ctx->getUserWidgetIds()) + " was not initialized for hit-testing.");
@@ -1151,38 +1267,8 @@ HitInfo QueryRenderer::getIdAt(size_t x, size_t y, size_t pixelRadius) {
       size_t width = _ctx->getWidth();
       size_t height = _ctx->getHeight();
       if (x < width && y < height) {
-        CHECK(_id1APixels->getWidth() == width && _id1APixels->getHeight() == height &&
-              _id2Pixels->getWidth() == width && _id2Pixels->getHeight() == height);
-
-        if (_idPixelsDirty) {
-          unsigned int* rawIds1A = _id1APixels->getDataPtr();
-          int* rawIds2 = _id2Pixels->getDataPtr();
-
-          auto qrmGpuCache = _ctx->getRootGpuCache();
-          auto qrmPerGpuData = qrmGpuCache->perGpuData;
-          CHECK(qrmPerGpuData);
-          auto itr = qrmPerGpuData->find(_pboGpu);
-
-          if (itr != qrmPerGpuData->end()) {
-            // int64_t time_ms;
-            // auto clock_begin = timer_start();
-
-            (*itr)->makeActiveOnCurrentThread();
-            _pbo1A->readIdBuffer(width, height, rawIds1A);
-            if (_id1BPixels && _pbo1B) {
-              auto rawIds1B = _id1BPixels->getDataPtr();
-              _pbo1B->readIdBuffer(width, height, rawIds1B);
-            }
-            _pbo2->readIdBuffer(width, height, rawIds2);
-            _releasePbo();
-            (*itr)->makeInactive();
-
-            // time_ms = timer_stop(clock_begin);
-            // std::cerr << "CROOT - getIdAt::readIdBuffer from pbo: " << time_ms << " ms" << std::endl;
-          }
-
-          _idPixelsDirty = false;
-        }
+        // make sure we have fully updated our cached ids first before accessing
+        _updateIdBuffers();
 
         if (pixelRadius == 0) {
           id = static_cast<uint64_t>(_id1APixels->get(x, y));

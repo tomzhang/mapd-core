@@ -4,7 +4,7 @@
 #include "Rendering/QueryIdMapPboPool.h"
 #include "Rendering/QueryAccumTxPool.h"
 #include "Rendering/QueryRenderSMAAPass.h"
-
+#include "Rendering/DistributedRenderBufferCompositor.h"
 #include <Rendering/Renderer/GL/GLRenderer.h>
 
 namespace QueryRenderer {
@@ -62,37 +62,33 @@ void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) 
   ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
   bool reset = false;
 
-  // TODO(croot): only resize the compositor if we're on the same gpu unless specified otherwise?
-  if (resizeCompositor && compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
-    ::Rendering::GL::GLRenderer* renderer = compositorPtr->getGLRenderer();
+  auto setRenderer = [prevRenderer, &reset](::Rendering::GL::GLRenderer* renderer) {
     CHECK(renderer);
-    if (renderer != prevRenderer) {
+    if (!reset && renderer != prevRenderer) {
       reset = true;
       renderer->makeActiveOnCurrentThread();
-      prevRenderer = renderer;
     }
+  };
+
+  // TODO(croot): only resize the compositor if we're on the same gpu unless specified otherwise?
+  if (resizeCompositor && compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
+    setRenderer(compositorPtr->getGLRenderer());
     compositorPtr->resize(width, height);
   }
 
   if (aaFramebufferPtr && (aaFramebufferPtr->getWidth() < width || aaFramebufferPtr->getHeight() < height)) {
-    ::Rendering::GL::GLRenderer* renderer = aaFramebufferPtr->getGLRenderer();
-    CHECK(renderer);
-    if (renderer != prevRenderer) {
-      reset = true;
-      renderer->makeActiveOnCurrentThread();
-      prevRenderer = renderer;
-    }
+    setRenderer(aaFramebufferPtr->getGLRenderer());
     aaFramebufferPtr->resize(width, height);
   }
 
   if (smaaPassPtr && (smaaPassPtr->getWidth() < width || smaaPassPtr->getHeight() < height)) {
-    ::Rendering::GL::GLRenderer* renderer = smaaPassPtr->getGLRenderer();
-    CHECK(renderer);
-    if (renderer != prevRenderer) {
-      reset = true;
-      renderer->makeActiveOnCurrentThread();
-    }
+    setRenderer(smaaPassPtr->getGLRenderer());
     smaaPassPtr->resize(width, height);
+  }
+
+  if (distCompPtr && (distCompPtr->getWidth() < width || distCompPtr->getHeight() < height)) {
+    setRenderer(distCompPtr->getGLRenderer());
+    distCompPtr->resize(width, height);
   }
 
   if (reset) {
@@ -136,6 +132,22 @@ QueryAccumTxPoolUqPtr& RootPerGpuData::getAccumTxPool() {
   }
 
   return accumTxPoolPtr;
+}
+
+DistributedRenderBufferCompositorShPtr RootPerGpuData::getDistributedCompositorPtr(const bool supportsInt64) {
+  if (!distCompPtr) {
+    auto fbo = aaFramebufferPtr;
+    if (!fbo) {
+      fbo = msFramebufferPtr;
+    }
+    RUNTIME_EX_ASSERT(fbo && fbo->getNumSamples() == 1,
+                      "Cannot create distributed render buffer compositor. Framebuffer to use for the compositor has " +
+                          std::to_string(fbo->getNumSamples()) + " samples. It needs to be a 1 sample fbo.");
+    // TODO(croot): pass thru the flag that indicates whether this gpu context supports
+    // 64-bit ints
+    distCompPtr.reset(new DistributedRenderBufferCompositor(fbo, supportsInt64));
+  }
+  return distCompPtr;
 }
 
 GpuId BasePerGpuData::getGpuId() const {
@@ -193,7 +205,7 @@ void BasePerGpuData::resize(size_t width, size_t height) {
   }
 }
 
-QueryFramebufferUqPtr& BasePerGpuData::getRenderFramebuffer() {
+QueryFramebufferShPtr& BasePerGpuData::getRenderFramebuffer() {
   RootPerGpuDataShPtr qrmGpuDataShPtr = rootPerGpuData.lock();
   CHECK(qrmGpuDataShPtr);
   return qrmGpuDataShPtr->getRenderFramebuffer();

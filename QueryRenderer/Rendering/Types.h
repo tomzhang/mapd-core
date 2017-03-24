@@ -32,6 +32,9 @@ typedef std::shared_ptr<QueryRenderCompositor> QueryRenderCompositorShPtr;
 class QueryRenderSMAAPass;
 typedef std::shared_ptr<QueryRenderSMAAPass> QueryRenderSMAAPassShPtr;
 
+class DistributedRenderBufferCompositor;
+typedef std::shared_ptr<DistributedRenderBufferCompositor> DistributedRenderBufferCompositorShPtr;
+
 }  // namespace QueryRenderer
 
 #endif  // QUERYRENDERER_RENDERING_TYPES_H_

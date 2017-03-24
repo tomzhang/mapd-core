@@ -75,7 +75,7 @@ class EglQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   void _cleanupAccumResources();
 
   void _postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
-                         QueryFramebufferUqPtr& framebufferPtr,
+                         QueryFramebufferShPtr& framebufferPtr,
                          size_t width,
                          size_t height,
                          bool doHitTest,

@@ -791,6 +791,18 @@ PngData QueryRenderManager::_renderToPngInternal(int compressionLevel) {
   return rtn;
 }
 
+RawPixelData QueryRenderManager::renderAndGetPixelData() {
+  // DEPRECATED
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard(nullptr, this);
+
+  RUNTIME_EX_ASSERT(_activeItr != _rendererMap.end(),
+                    "There is no active user/widget id. Must set a user/widget id active before rendering.");
+
+  return _activeItr->renderer->renderRawData();
+}
+
 PngData QueryRenderManager::renderToPng(int compressionLevel) {
   // DEPRECATED
   std::lock_guard<std::mutex> render_lock(_renderMtx);
@@ -803,8 +815,76 @@ PngData QueryRenderManager::renderToPng(int compressionLevel) {
   return _renderToPngInternal(compressionLevel);
 }
 
-std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(int userId,
-                                                                               int widgetId,
+std::tuple<RawPixelData, int64_t, int64_t> QueryRenderManager::runPixelDataRenderRequest(
+    const UserWidgetPair& userWidgetPair,
+    const std::string& jsonStr,
+    Executor* executor,
+    RenderInfo* renderInfo,
+    QueryExecCB queryExecFunc,
+    bool doHitTest,
+    bool doDepthTest) {
+  return runPixelDataRenderRequest(userWidgetPair.first,
+                                   userWidgetPair.second,
+                                   jsonStr,
+                                   executor,
+                                   renderInfo,
+                                   queryExecFunc,
+                                   doHitTest,
+                                   doDepthTest);
+}
+
+std::tuple<RawPixelData, int64_t, int64_t> QueryRenderManager::runPixelDataRenderRequest(const int userId,
+                                                                                         const int widgetId,
+                                                                                         const std::string& jsonStr,
+                                                                                         Executor* executor,
+                                                                                         RenderInfo* renderInfo,
+                                                                                         QueryExecCB queryExecFunc,
+                                                                                         bool doHitTest,
+                                                                                         bool doDepthTest) {
+  auto renderTimerPtr = std::make_shared<RenderQueryExecuteTimer>();
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+
+  ActiveRendererGuard activeRendererGuard(nullptr, this);
+
+  auto clock_begin = timer_start();
+  if (!_hasUserWidgetInternal(userId, widgetId)) {
+    _addUserWidgetInternal(userId, widgetId, doHitTest, doDepthTest);
+  }
+
+  _setActiveUserWidgetInternal(userId, widgetId);
+
+  _activeItr->renderer->setQueryExecutionParams(executor, queryExecFunc, renderTimerPtr);
+
+  try {
+    _configureRenderInternal(jsonStr);
+
+    CHECK(renderInfo);
+
+    if (renderInfo->render_allocator_map_ptr) {
+      // unmap any used buffers from cuda back to opengl
+      renderInfo->render_allocator_map_ptr->prepForRendering(nullptr);
+    }
+
+    auto bufferdata = _activeItr->renderer->renderRawData();
+    _updateActiveLastRenderTime();
+
+    // Note: this time includes query queue time
+    int64_t render_time_ms = timer_stop(clock_begin);
+
+    _activeItr->renderer->unsetQueryExecutionParams();
+
+    auto executionTime = renderTimerPtr->execution_time_ms;
+    auto renderTime = render_time_ms - renderTimerPtr->execution_time_ms - renderTimerPtr->queue_time_ms;
+
+    return std::make_tuple(bufferdata, executionTime, renderTime);
+  } catch (const std::exception& e) {
+    _activeItr->renderer->unsetQueryExecutionParams();
+    throw std::runtime_error(e.what());
+  }
+}
+
+std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(const int userId,
+                                                                               const int widgetId,
                                                                                const std::string& jsonStr,
                                                                                Executor* executor,
                                                                                RenderInfo* renderInfo,
@@ -857,6 +937,33 @@ std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(i
     _activeItr->renderer->unsetQueryExecutionParams();
     throw std::runtime_error(e.what());
   }
+}
+
+PngData QueryRenderManager::compositeRenderBuffersToPng(const UserWidgetPair& userWidgetPair,
+                                                        const std::vector<RawPixelData>& buffers,
+                                                        int compressionLevel) {
+  return compositeRenderBuffersToPng(userWidgetPair.first, userWidgetPair.second, buffers, compressionLevel);
+}
+
+PngData QueryRenderManager::compositeRenderBuffersToPng(const int userId,
+                                                        const int widgetId,
+                                                        const std::vector<RawPixelData>& buffers,
+                                                        int compressionLevel) {
+  std::lock_guard<std::mutex> render_lock(_renderMtx);
+  ActiveRendererGuard activeRendererGuard(nullptr, this);
+  if (!_hasUserWidgetInternal(userId, widgetId)) {
+    bool doHitTest = false;
+    bool doDepthTest = false;
+    for (auto& pixelData : buffers) {
+      if (pixelData.rowIdsA) {
+        doHitTest = true;
+        break;
+      }
+    }
+    _addUserWidgetInternal(userId, widgetId, doHitTest, doDepthTest);
+  }
+  _setActiveUserWidgetInternal(userId, widgetId);
+  return _activeItr->renderer->compositeRenderBuffersToPng(buffers, compressionLevel);
 }
 
 std::tuple<int32_t, int64_t, std::string> QueryRenderManager::getIdAt(size_t x, size_t y, size_t pixelRadius) {

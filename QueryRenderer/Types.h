@@ -8,6 +8,7 @@
 #include "rapidjson/pointer.h"
 #include <memory>
 #include <vector>
+#include <Rendering/Objects/Array2d.h>
 
 class Executor;
 
@@ -78,6 +79,37 @@ typedef std::shared_ptr<RootCache> RootCacheShPtr;
 
 struct NonProjectionRenderQueryCache;
 typedef std::shared_ptr<NonProjectionRenderQueryCache> NPRQueryCacheShPtr;
+
+struct RawPixelData {
+  int width;
+  int height;
+  int numChannels;
+  const std::shared_ptr<unsigned char> pixels;
+  const std::shared_ptr<uint32_t> rowIdsA;
+  const std::shared_ptr<uint32_t> rowIdsB;
+  const std::shared_ptr<int32_t> tableIds;
+
+  RawPixelData()
+      : width(0), height(0), numChannels(4), pixels(nullptr), rowIdsA(nullptr), rowIdsB(nullptr), tableIds(nullptr) {}
+  RawPixelData(const int width, const int height)
+      : width(width), height(height), numChannels(4), rowIdsA(nullptr), rowIdsB(nullptr), tableIds(nullptr) {}
+  RawPixelData(const int width,
+               const int height,
+               const int numChannels,
+               const std::shared_ptr<unsigned char> pixels,
+               const std::shared_ptr<uint32_t> rowIdsA,
+               const std::shared_ptr<uint32_t> rowIdsB,
+               const std::shared_ptr<int32_t> tableIds)
+      : width(width),
+        height(height),
+        numChannels(numChannels),
+        pixels(pixels),
+        rowIdsA(rowIdsA),
+        rowIdsB(rowIdsB),
+        tableIds(tableIds) {}
+
+  bool isEmpty() const { return (!pixels || width == 0 || height == 0); }
+};
 
 struct HitInfo {
   TableId tableId;

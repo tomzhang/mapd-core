@@ -26,7 +26,7 @@ struct RootPerGpuData {
   // This would be necessary if we ever support asynchronous
   // queries, even partially (i.e. the cuda part of the query
   // may be serialized, but the render part could run asynchronously.)
-  QueryFramebufferUqPtr msFramebufferPtr;
+  QueryFramebufferShPtr msFramebufferPtr;
   QueryFramebufferShPtr aaFramebufferPtr;
   QueryRenderCompositorShPtr compositorPtr;
   QueryIdMapPboPoolUIntUqPtr pboPoolUIntPtr;
@@ -34,6 +34,7 @@ struct RootPerGpuData {
   QueryAccumTxPoolUqPtr accumTxPoolPtr;
 
   QueryRenderSMAAPassShPtr smaaPassPtr;
+  DistributedRenderBufferCompositorShPtr distCompPtr;
 
   RootPerGpuData(GpuId gpuId);
   ~RootPerGpuData();
@@ -47,7 +48,7 @@ struct RootPerGpuData {
 
   void resize(size_t width, size_t height, bool resizeCompositor = true);
 
-  QueryFramebufferUqPtr& getRenderFramebuffer() { return msFramebufferPtr; }
+  QueryFramebufferShPtr& getRenderFramebuffer() { return msFramebufferPtr; }
   QueryFramebufferShPtr& getAntiAliasingFramebuffer() { return aaFramebufferPtr; }
   bool hasCompositor() const { return compositorPtr != nullptr; }
   QueryRenderCompositorShPtr& getCompositor() { return compositorPtr; }
@@ -65,6 +66,10 @@ struct RootPerGpuData {
   QueryAccumTxPoolUqPtr& getAccumTxPool();
 
   QueryRenderSMAAPassShPtr getSMAAPassPtr() const { return smaaPassPtr; }
+
+ private:
+  DistributedRenderBufferCompositorShPtr getDistributedCompositorPtr(const bool supportsInt64);
+  friend struct RootCache;
 };
 
 struct inorder {};
@@ -109,7 +114,7 @@ struct BasePerGpuData {
 
   virtual void resize(size_t width, size_t height);
 
-  QueryFramebufferUqPtr& getRenderFramebuffer();
+  QueryFramebufferShPtr& getRenderFramebuffer();
   QueryFramebufferShPtr& getAntiAliasingFramebuffer();
   bool hasCompositor() const;
   std::shared_ptr<QueryRenderCompositor>& getCompositor();

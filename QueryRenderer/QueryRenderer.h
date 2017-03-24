@@ -64,7 +64,9 @@ class QueryRenderer {
   void unsetQueryExecutionParams();
 
   void render(bool inactivateRendererOnThread = true);
+  RawPixelData renderRawData();
   PngData renderToPng(int compressionLevel = -1);
+  PngData compositeRenderBuffersToPng(const std::vector<RawPixelData>& buffers, int compressionLevel);
 
   HitInfo getIdAt(size_t x, size_t y, size_t pixelRadius = 0);
   std::string getVegaTableNameFromIndex(const int8_t dataId) const;
@@ -78,11 +80,11 @@ class QueryRenderer {
       const std::set<GpuId>& usedGpus,
       bool clearFboEveryPass,
       std::function<
-          void(::Rendering::GL::GLRenderer*, QueryFramebufferUqPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
+          void(::Rendering::GL::GLRenderer*, QueryFramebufferShPtr&, size_t, size_t, bool, bool, int, ScaleShPtr&, int)>
           perPassGpuCB,
       std::function<void(const std::set<GpuId>&, size_t, size_t, bool, bool, int, ScaleShPtr&)> passCompleteCB);
 
-  static QueryFramebufferUqPtr& renderGpu(GpuId gpuId,
+  static QueryFramebufferShPtr& renderGpu(GpuId gpuId,
                                           const std::shared_ptr<RootPerGpuDataMap>& qrmPerGpuData,
                                           QueryRendererContext* ctx,
                                           int r = -1,
@@ -96,13 +98,14 @@ class QueryRenderer {
   GpuId _pboGpu;
   QueryIdMapPixelBufferUIntShPtr _pbo1A;  // need a pbo for each of the id buffers
   QueryIdMapPixelBufferUIntWkPtr _pbo1Awk;
-  QueryIdMapPixelBufferUIntShPtr _pbo1B;    // The row id is a 64-bit int, so its packed into 2 32-bit textures
-  QueryIdMapPixelBufferUIntWkPtr _pbo1Bwk;  // The row id is a 64-bit int, so its packed into 2 32-bit textures
-  QueryIdMapPixelBufferIntShPtr _pbo2;      // 2 id buffers - one for the row id, the other for table id
-  QueryIdMapPixelBufferIntWkPtr _pbo2wk;    // 2 id buffers - one for the row id, the other for table id
+  QueryIdMapPixelBufferUIntShPtr _pbo1B;  // The row id is a 64-bit int, so its packed into 2 32-bit textures
+  QueryIdMapPixelBufferUIntWkPtr _pbo1Bwk;
+  QueryIdMapPixelBufferIntShPtr _pbo2;  // id buffers - this is for the table id
+  QueryIdMapPixelBufferIntWkPtr _pbo2wk;
 
-  typedef ::Rendering::Objects::Array2d<unsigned int> Array2dui;
-  typedef ::Rendering::Objects::Array2d<int> Array2di;
+  typedef ::Rendering::Objects::Array2d<uint32_t> Array2dui;
+  typedef ::Rendering::Objects::Array2d<int32_t> Array2di;
+
   bool _idPixelsDirty;
   std::shared_ptr<Array2dui> _id1APixels;
   std::shared_ptr<Array2dui> _id1BPixels;
@@ -111,16 +114,6 @@ class QueryRenderer {
   void _clear(bool preserveDimensions = false);
   void _clearGpuResources();
   void _clearAll(bool preserveDimensions = false);
-
-  // std::unordered_set<GpuId> _initUnusedGpus();
-  // void _initGpuResources(RootPerGpuDataMap* qrmPerGpuData,
-  //                        const std::vector<GpuId>& gpuIds,
-  //                        std::unordered_set<GpuId>& unusedGpus);
-  // void _updateGpuData(const GpuId& gpuId,
-  //                     RootPerGpuDataMap* qrmPerGpuData,
-  //                     std::unordered_set<GpuId>& unusedGpus,
-  //                     size_t width,
-  //                     size_t height);
 
   void _initFromJSON(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr, bool forceUpdate = false);
   void _initFromJSON(const std::string& configJSON, bool forceUpdate = false);
@@ -132,6 +125,19 @@ class QueryRenderer {
   void _updatePbo();
 
   void _render(const std::set<GpuId>& usedGpus, bool inactivateRendererOnThread = true);
+
+  struct RenderedPixels {
+    std::shared_ptr<unsigned char> pixels;
+    bool isEmptyRender;
+
+    RenderedPixels(const std::shared_ptr<unsigned char> pixels, const bool isEmptyRender)
+        : pixels(pixels), isEmptyRender(isEmptyRender) {}
+  };
+  RenderedPixels _renderAndGetPixels();
+
+  bool _updateIdBuffers();
+  std::tuple<std::shared_ptr<Array2dui>, std::shared_ptr<Array2dui>, std::shared_ptr<Array2di>> _getIdBuffers();
+
   QueryFramebufferShPtr& _runAntialiasingPass(const RootPerGpuDataShPtr& gpuData, QueryFramebuffer* rndrFbo);
 
   friend class QueryRendererContext;

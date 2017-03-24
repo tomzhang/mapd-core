@@ -54,7 +54,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
   void _resizeImpl(size_t width, size_t height) final;
 
   void _postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
-                         QueryFramebufferUqPtr& framebufferPtr,
+                         QueryFramebufferShPtr& framebufferPtr,
                          size_t width,
                          size_t height,
                          bool doHitTest,

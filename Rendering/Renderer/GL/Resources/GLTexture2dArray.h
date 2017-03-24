@@ -50,6 +50,15 @@ class GLTexture2dArray : public GLResource {
    */
   void updateFromTextures();
 
+  void uploadPixelsToBufferIndex(const size_t width,
+                                 const size_t height,
+                                 const GLenum pixelFormat,
+                                 const GLenum pixelType,
+                                 const GLvoid* pixelData,
+                                 const int arrayIdx = -1,
+                                 const size_t startx = 0,
+                                 const size_t starty = 0);
+
  private:
   GLTexture2dArray(const RendererWkPtr& rendererPtr,
                    size_t width,
