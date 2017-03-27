@@ -3181,6 +3181,7 @@ void MapDHandler::insert_data(const TSessionId session, const TInsertData& thrif
   }
 }
 
+#ifdef HAVE_RENDERING
 namespace {
 
 void convert_raw_pixel_data(TRawPixelDataResult& thrift_raw_pixel_data,
@@ -3200,6 +3201,7 @@ void convert_raw_pixel_data(TRawPixelDataResult& thrift_raw_pixel_data,
 }
 
 }  // namespace
+#endif  // HAVE_RENDERING
 
 /*
  * There's a lot of code duplication between this endpoint and render_vega,
