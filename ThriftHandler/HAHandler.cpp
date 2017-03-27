@@ -167,6 +167,11 @@ void HAHandler::broadcast_serialized_rows(const std::string& serialized_rows,
 
 void HAHandler::insert_data(const TSessionId session, const TInsertData& insert_data){};
 
+void HAHandler::render_vega_raw_pixels(TRawPixelDataResult& _return,
+                                       const TSessionId session,
+                                       const int64_t widget_id,
+                                       const std::string& vega_json) {}
+
 void HAHandler::checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id){};
 
 void HAHandler::get_table_details(TTableDetails& _return, const TSessionId session, const std::string& table_name){};
