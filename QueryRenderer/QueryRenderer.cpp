@@ -1153,14 +1153,15 @@ PngData QueryRenderer::compositeRenderBuffersToPng(const std::vector<RawPixelDat
     // update everything marked dirty before rendering
     _update();
 
-    if (_ctx->doHitTest() && ((!_pbo1A || !_pbo2) || (_ctx->supportsInt64() && !_pbo1B))) {
-      auto usedGpus = _ctx->getUsedGpus();
-      _createPbo(usedGpus);
-    }
-
     std::shared_ptr<unsigned char> pixelsPtr = nullptr;
     auto gpuCache = _ctx->getRootGpuCache();
     auto distCompositorPtr = gpuCache->getDistributedCompositorPtr();
+    auto renderer = distCompositorPtr->getGLRenderer();
+    CHECK(renderer);
+
+    if (_ctx->doHitTest() && ((!_pbo1A || !_pbo2) || (_ctx->supportsInt64() && !_pbo1B))) {
+      _createPbo({renderer->getGpuId()});
+    }
 
     size_t width = getWidth(), height = getHeight();
     if (buffers.size()) {
@@ -1171,7 +1172,6 @@ PngData QueryRenderer::compositeRenderBuffersToPng(const std::vector<RawPixelDat
     if (width > 0 && height > 0) {
       setWidthHeight(width, height);
       if (buffers.size()) {
-        auto renderer = distCompositorPtr->getGLRenderer();
         renderer->makeActiveOnCurrentThread();
         distCompositorPtr->render(buffers);
 
