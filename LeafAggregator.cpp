@@ -122,7 +122,7 @@ void PersistentLeafClient::sql_execute(TQueryResult& _return,
                                        const std::string& nonce) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
-  client_->sql_execute(_return, session, query_str, column_format, nonce);
+  client_->sql_execute(_return, session, query_str, column_format, nonce, -1);
 }
 
 void PersistentLeafClient::set_execution_mode(const TSessionId session, const TExecuteMode::type mode) {

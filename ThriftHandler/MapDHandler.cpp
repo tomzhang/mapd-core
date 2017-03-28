@@ -590,18 +590,19 @@ void MapDHandler::sql_execute(TQueryResult& _return,
                               const TSessionId session,
                               const std::string& query_str,
                               const bool column_format,
-                              const std::string& nonce) {
+                              const std::string& nonce,
+                              const int32_t first_n) {
   const auto session_info = MapDHandler::get_session(session);
   if (leaf_aggregator_.leafCount() > 0) {
 #ifdef HAVE_RAVM
-    cluster_execute(_return, session_info, query_str, column_format, nonce);
+    cluster_execute(_return, session_info, query_str, column_format, nonce, first_n);
     _return.nonce = nonce;
 #else
     CHECK(false);
 #endif  // HAVE_RAVM
   } else {
     MapDHandler::sql_execute_impl(
-        _return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
+        _return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type(), first_n);
   }
 }
 
@@ -648,7 +649,8 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
                                   const Catalog_Namespace::SessionInfo& session_info,
                                   const std::string& query_str,
                                   const bool column_format,
-                                  const std::string& nonce) {
+                                  const std::string& nonce,
+                                  const int32_t first_n) {
   try {
     ParserWrapper pw{query_str};
     if (!pw.is_ddl && !pw.is_update_dml && !pw.is_other_explain) {
@@ -671,7 +673,7 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
       const auto result = leaf_aggregator_.execute(session_info, query_ra, eo);
       _return.total_time_ms = timer_stop(clock_begin);
       _return.execution_time_ms = _return.total_time_ms - result.rs->getQueueTime();
-      MapDHandler::convert_rows(_return, result.targets_meta, *(result.rs), column_format);
+      convert_rows(_return, result.targets_meta, *(result.rs), column_format, first_n);
     } else if (pw.is_update_dml) {
       std::unique_ptr<Planner::RootPlan> plan_ptr(
           parse_to_plan_legacy(apply_copy_to_shim(query_str), session_info, "validate"));
@@ -693,14 +695,19 @@ void MapDHandler::cluster_execute(TQueryResult& _return,
     } else {
       if (pw.is_copy) {
         MapDHandler::sql_execute_impl(
-            _return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
+            _return, session_info, query_str, column_format, nonce, session_info.get_executor_device_type(), first_n);
         return;
       }
       std::future<TQueryResult> aggregator_future{
-          std::async(std::launch::async, [column_format, &nonce, &query_str, &session_info, this] {
+          std::async(std::launch::async, [column_format, first_n, &nonce, &query_str, &session_info, this] {
             TQueryResult result;
-            MapDHandler::sql_execute_impl(
-                result, session_info, query_str, column_format, nonce, session_info.get_executor_device_type());
+            MapDHandler::sql_execute_impl(result,
+                                          session_info,
+                                          query_str,
+                                          column_format,
+                                          nonce,
+                                          session_info.get_executor_device_type(),
+                                          first_n);
             return result;
           })};
       auto all_results = leaf_aggregator_.forwardQueryToLeaves(session_info, query_str);
@@ -768,7 +775,7 @@ void MapDHandler::validate_rel_alg(TTableDescriptor& _return,
   try {
     const auto query_ra = parse_to_ra(query_str, session_info);
     TQueryResult result;
-    MapDHandler::execute_rel_alg(result, query_ra, true, session_info, ExecutorDeviceType::CPU, false, true);
+    MapDHandler::execute_rel_alg(result, query_ra, true, session_info, ExecutorDeviceType::CPU, -1, false, true);
     const auto& row_desc = fixup_row_descriptor(result.row_set.row_desc, session_info.get_catalog());
     for (const auto& col_desc : row_desc) {
       const auto it_ok = _return.insert(std::make_pair(col_desc.col_name, col_desc));
@@ -822,7 +829,7 @@ void MapDHandler::get_rows_for_pixels(TPixelResult& _return,
     const auto query_str =
         "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(rowid) + ";";
     TQueryResult ret;
-    sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
+    sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU, -1);
     TPixelRows pixel_rows;
     pixel_rows.pixel = pixel;
     pixel_rows.row_set = ret.row_set;
@@ -868,7 +875,7 @@ void MapDHandler::get_row_for_pixel(TPixelRowResult& _return,
     const auto query_str =
         "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(rowid) + ";";
     TQueryResult ret;
-    sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
+    sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU, -1);
     _return.row_set = ret.row_set;
   }
 #endif  // HAVE_RENDERING
@@ -1139,7 +1146,8 @@ void MapDHandler::get_result_row_for_pixel(TPixelTableRowResult& _return,
               const auto query_str = "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " +
                                      std::to_string(poly_row_id) + ";";
               TQueryResult tmpResult;
-              sql_execute_impl(tmpResult, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
+              sql_execute_impl(
+                  tmpResult, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU, -1);
 
               CHECK(tmpResult.row_set.row_desc.size() == unusedProjIdx.size() &&
                     (column_format || tmpResult.row_set.rows.size() == 1));
@@ -1192,7 +1200,7 @@ void MapDHandler::get_result_row_for_pixel(TPixelTableRowResult& _return,
         // TODO(croot): what about poly tables?
         const auto query_str =
             "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " + std::to_string(row_id) + ";";
-        sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU);
+        sql_execute_impl(ret, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU, -1);
       }
       _return.row_set = ret.row_set;
     }
@@ -1272,7 +1280,7 @@ void MapDHandler::get_row_descriptor(TRowDescriptor& _return, const TSessionId s
     try {
       const auto query_ra = parse_to_ra(td->viewSQL, session_info);
       TQueryResult result;
-      execute_rel_alg(result, query_ra, true, session_info, ExecutorDeviceType::CPU, false, true);
+      execute_rel_alg(result, query_ra, true, session_info, ExecutorDeviceType::CPU, false, true, -1);
       _return = fixup_row_descriptor(result.row_set.row_desc, cat);
       return;
     } catch (std::exception& e) {
@@ -2100,7 +2108,7 @@ void MapDHandler::create_table(const TSessionId session,
   stmt.append(" (" + boost::algorithm::join(col_stmts, ", ") + ");");
 
   TQueryResult ret;
-  sql_execute(ret, session, stmt, true, "");
+  sql_execute(ret, session, stmt, true, "", -1);
 }
 
 void MapDHandler::import_table(const TSessionId session,
@@ -2332,6 +2340,7 @@ void MapDHandler::execute_rel_alg(TQueryResult& _return,
                                   const bool column_format,
                                   const Catalog_Namespace::SessionInfo& session_info,
                                   const ExecutorDeviceType executor_device_type,
+                                  const int32_t first_n,
                                   const bool just_explain,
                                   const bool just_validate) const {
   const auto& cat = session_info.get_catalog();
@@ -2356,7 +2365,7 @@ void MapDHandler::execute_rel_alg(TQueryResult& _return,
   if (just_explain) {
     convert_explain(_return, result.getRows(), column_format);
   } else {
-    convert_rows(_return, result.getTargetsMeta(), result.getRows(), column_format);
+    convert_rows(_return, result.getTargetsMeta(), result.getRows(), column_format, first_n);
   }
 }
 #endif  // HAVE_RAVM
@@ -2365,7 +2374,8 @@ void MapDHandler::execute_root_plan(TQueryResult& _return,
                                     const Planner::RootPlan* root_plan,
                                     const bool column_format,
                                     const Catalog_Namespace::SessionInfo& session_info,
-                                    const ExecutorDeviceType executor_device_type) const {
+                                    const ExecutorDeviceType executor_device_type,
+                                    const int32_t first_n) const {
   auto executor = Executor::getExecutor(root_plan->get_catalog().get_currentDB().dbId,
                                         jit_debug_ ? "/tmp" : "",
                                         jit_debug_ ? "mapdquery" : "",
@@ -2394,7 +2404,7 @@ void MapDHandler::execute_root_plan(TQueryResult& _return,
   const auto plan = root_plan->get_plan();
   CHECK(plan);
   const auto& targets = plan->get_targetlist();
-  convert_rows(_return, getTargetMetaInfo(targets), results, column_format);
+  convert_rows(_return, getTargetMetaInfo(targets), results, column_format, -1);
 }
 
 #ifdef HAVE_RENDERING
@@ -2717,16 +2727,19 @@ template <class R>
 void MapDHandler::convert_rows(TQueryResult& _return,
                                const std::vector<TargetMetaInfo>& targets,
                                const R& results,
-                               const bool column_format) const {
+                               const bool column_format,
+                               const int32_t first_n) const {
   _return.row_set.row_desc = convert_target_metainfo(targets);
+  int32_t fetched{0};
   if (column_format) {
     _return.row_set.is_columnar = true;
     std::vector<TColumn> tcolumns(results.colCount());
-    while (true) {
+    while (first_n == -1 || fetched < first_n) {
       const auto crt_row = results.getNextRow(true, true);
       if (crt_row.empty()) {
         break;
       }
+      ++fetched;
       for (size_t i = 0; i < results.colCount(); ++i) {
         const auto agg_result = crt_row[i];
         value_to_thrift_column(agg_result, targets[i].get_type_info(), tcolumns[i]);
@@ -2737,11 +2750,12 @@ void MapDHandler::convert_rows(TQueryResult& _return,
     }
   } else {
     _return.row_set.is_columnar = false;
-    while (true) {
+    while (first_n == -1 || fetched < first_n) {
       const auto crt_row = results.getNextRow(true, true);
       if (crt_row.empty()) {
         break;
       }
+      ++fetched;
       TRow trow;
       trow.cols.reserve(results.colCount());
       for (size_t i = 0; i < results.colCount(); ++i) {
@@ -2818,7 +2832,8 @@ void MapDHandler::sql_execute_impl(TQueryResult& _return,
                                    const std::string& query_str,
                                    const bool column_format,
                                    const std::string& nonce,
-                                   const ExecutorDeviceType executor_device_type) {
+                                   const ExecutorDeviceType executor_device_type,
+                                   const int32_t first_n) {
   _return.nonce = nonce;
   _return.execution_time_ms = 0;
   auto& cat = session_info.get_catalog();
@@ -2842,7 +2857,7 @@ void MapDHandler::sql_execute_impl(TQueryResult& _return,
           return;
         }
         execute_rel_alg(
-            _return, query_ra, column_format, session_info, executor_device_type, pw.is_select_explain, false);
+            _return, query_ra, column_format, session_info, executor_device_type, first_n, pw.is_select_explain, false);
         return;
       }
 #else
@@ -2850,7 +2865,7 @@ void MapDHandler::sql_execute_impl(TQueryResult& _return,
       _return.execution_time_ms +=
           measure<>::execution([&]() { plan_ptr.reset(parse_to_plan(query_str, session_info)); });
       if (plan_ptr) {
-        execute_root_plan(_return, plan_ptr.get(), column_format, session_info, executor_device_type);
+        execute_root_plan(_return, plan_ptr.get(), column_format, session_info, executor_device_type, first_n);
         return;
       }
 #endif  // HAVE_RAVM
@@ -2915,7 +2930,7 @@ void MapDHandler::sql_execute_impl(TQueryResult& _return,
           if (explain_stmt != nullptr) {
             root_plan->set_plan_dest(Planner::RootPlan::Dest::kEXPLAIN);
           }
-          execute_root_plan(_return, root_plan, column_format, session_info, executor_device_type);
+          execute_root_plan(_return, root_plan, column_format, session_info, executor_device_type, first_n);
         }
       } catch (std::exception& e) {
         TMapDException ex;

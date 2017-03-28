@@ -30,7 +30,8 @@ class HAHandler : public MapDIf {
                    const TSessionId session,
                    const std::string& query,
                    const bool column_format,
-                   const std::string& nonce);
+                   const std::string& nonce,
+                   const int32_t first_n);
   void sql_validate(TTableDescriptor& _return, const TSessionId session, const std::string& query);
   void get_table_descriptor(TTableDescriptor& _return, const TSessionId session, const std::string& table_name);
   void get_row_descriptor(TRowDescriptor& _return, const TSessionId session, const std::string& table_name);

@@ -33,7 +33,8 @@ void HAHandler::sql_execute(TQueryResult& _return,
                             const TSessionId session,
                             const std::string& query,
                             const bool column_format,
-                            const std::string& nonce){};
+                            const std::string& nonce,
+                            const int32_t first_n){};
 
 void HAHandler::sql_validate(TTableDescriptor& _return, const TSessionId session, const std::string& query){};
 
