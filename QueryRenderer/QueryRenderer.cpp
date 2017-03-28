@@ -1159,18 +1159,18 @@ PngData QueryRenderer::compositeRenderBuffersToPng(const std::vector<RawPixelDat
     auto renderer = distCompositorPtr->getGLRenderer();
     CHECK(renderer);
 
-    if (_ctx->doHitTest() && ((!_pbo1A || !_pbo2) || (_ctx->supportsInt64() && !_pbo1B))) {
-      _createPbo({renderer->getGpuId()});
-    }
-
     size_t width = getWidth(), height = getHeight();
     if (buffers.size()) {
       width = buffers[0].width;
       height = buffers[0].height;
     }
 
+    setWidthHeight(width, height);
+    if (_ctx->doHitTest() && ((!_pbo1A || !_pbo2) || (_ctx->supportsInt64() && !_pbo1B))) {
+      _createPbo({renderer->getGpuId()}, width, height);
+    }
+
     if (width > 0 && height > 0) {
-      setWidthHeight(width, height);
       if (buffers.size()) {
         renderer->makeActiveOnCurrentThread();
         distCompositorPtr->render(buffers);
