@@ -7,6 +7,7 @@
 #include "gen-cpp/MapD.h"
 #include <boost/make_shared.hpp>
 #include <boost/make_unique.hpp>
+#include <boost/range/adaptor/reversed.hpp>
 #include <glog/logging.h>
 #include <thrift/transport/TSocket.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -90,15 +91,13 @@ void PersistentLeafClient::checkpoint(const TSessionId session, const int32_t db
   client_->checkpoint(session, db_id, table_id);
 }
 
-void PersistentLeafClient::render_vega(TRenderResult& _return,
-                                       const TSessionId session,
-                                       const int64_t widget_id,
-                                       const std::string& vega_json,
-                                       const int compressionLevel,
-                                       const std::string& nonce) {
+void PersistentLeafClient::render_vega_raw_pixels(TRawPixelDataResult& _return,
+                                                  const TSessionId session,
+                                                  const int64_t widget_id,
+                                                  const std::string& vega_json) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
-  client_->render_vega(_return, session, widget_id, vega_json, compressionLevel, nonce);
+  client_->render_vega_raw_pixels(_return, session, widget_id, vega_json);
 }
 
 void PersistentLeafClient::get_result_row_for_pixel(
@@ -635,33 +634,70 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   return {nullptr, {}};
 }
 
+#ifdef HAVE_RENDERING
+namespace {
+
+QueryRenderer::RawPixelData unserialize_raw_pixel_data(const TRawPixelDataResult& thrift_raw_pixel_data) {
+  const size_t num_elems = static_cast<size_t>(thrift_raw_pixel_data.width) * thrift_raw_pixel_data.height;
+  std::shared_ptr<unsigned char> pixels(new unsigned char[num_elems * thrift_raw_pixel_data.num_channels],
+                                        std::default_delete<unsigned char[]>());
+  std::shared_ptr<uint32_t> rowIdsA(new uint32_t[num_elems], std::default_delete<uint32_t[]>());
+  std::shared_ptr<uint32_t> rowIdsB(new uint32_t[num_elems], std::default_delete<uint32_t[]>());
+  std::shared_ptr<int32_t> tableIds(new int32_t[num_elems], std::default_delete<int32_t[]>());
+  CHECK_EQ(num_elems * thrift_raw_pixel_data.num_channels, thrift_raw_pixel_data.pixels.size());
+  CHECK_EQ(num_elems * sizeof(*rowIdsA), thrift_raw_pixel_data.row_ids_A.size());
+  CHECK_EQ(num_elems * sizeof(*rowIdsB), thrift_raw_pixel_data.row_ids_B.size());
+  CHECK_EQ(num_elems * sizeof(*tableIds), thrift_raw_pixel_data.table_ids.size());
+  memcpy(pixels.get(), thrift_raw_pixel_data.pixels.data(), thrift_raw_pixel_data.pixels.size());
+  memcpy(rowIdsA.get(), thrift_raw_pixel_data.row_ids_A.data(), thrift_raw_pixel_data.row_ids_A.size());
+  memcpy(rowIdsB.get(), thrift_raw_pixel_data.row_ids_B.data(), thrift_raw_pixel_data.row_ids_B.size());
+  memcpy(tableIds.get(), thrift_raw_pixel_data.table_ids.data(), thrift_raw_pixel_data.table_ids.size());
+  return {thrift_raw_pixel_data.width,
+          thrift_raw_pixel_data.height,
+          thrift_raw_pixel_data.num_channels,
+          pixels,
+          rowIdsA,
+          rowIdsB,
+          tableIds};
+}
+
+}  // namespace
+
 std::string LeafAggregator::render(const Catalog_Namespace::SessionInfo& parent_session_info,
                                    const std::string& vega_json,
                                    const int64_t widget_id,
-                                   const int compressionLevel) {
+                                   const int compressionLevel,
+                                   QueryRenderer::QueryRenderManager* render_manager) {
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   auto& leaf_session_ids = session_it->second;
-  std::vector<std::future<std::string>> leaf_futures;
+  std::vector<std::future<TRawPixelDataResult>> leaf_futures;
   for (size_t leaf_idx = 0; leaf_idx < leaves_.size(); ++leaf_idx) {
     leaf_futures.emplace_back(
         std::async(std::launch::async, [&leaf_session_ids, &vega_json, leaf_idx, widget_id, compressionLevel, this] {
-          TRenderResult render_result;
-          leaves_[leaf_idx]->render_vega(
-              render_result, leaf_session_ids[leaf_idx], widget_id, vega_json, compressionLevel, "");
-          return render_result.image;
+          TRawPixelDataResult render_result;
+          leaves_[leaf_idx]->render_vega_raw_pixels(render_result, leaf_session_ids[leaf_idx], widget_id, vega_json);
+          return render_result;
         }));
   }
   for (auto& leaf_future : leaf_futures) {
     leaf_future.wait();
   }
+  std::vector<QueryRenderer::RawPixelData> leaf_pixel_buffers;
   for (auto& leaf_future : leaf_futures) {
-    // TODO(alex): composite
-    return leaf_future.get();
+    leaf_pixel_buffers.push_back(unserialize_raw_pixel_data(leaf_future.get()));
   }
-  CHECK(false);
-  return "";
+
+  CHECK(render_manager);
+  const auto png_data = render_manager->compositeRenderBuffersToPng(
+      parent_session_info.get_session_id(), widget_id, leaf_pixel_buffers, compressionLevel);
+
+  CHECK(png_data.pngDataPtr);
+  CHECK(png_data.pngSize);
+
+  return std::string(png_data.pngDataPtr.get(), png_data.pngSize);
 }
+#endif  // HAVE_RENDERING
 
 TPixelTableRowResult LeafAggregator::getResultRowForPixel(
     const Catalog_Namespace::SessionInfo& parent_session_info,
@@ -693,12 +729,17 @@ TPixelTableRowResult LeafAggregator::getResultRowForPixel(
   for (auto& leaf_future : leaf_futures) {
     leaf_future.wait();
   }
-  for (auto& leaf_future : leaf_futures) {
-    // TODO(alex): composite
-    return leaf_future.get();
+  // iterate in reverse order to be consistent with compositing
+  for (auto& leaf_future : boost::adaptors::reverse(leaf_futures)) {
+    const auto lookup_result = leaf_future.get();
+    if (lookup_result.row_id != -1) {
+      return lookup_result;
+    }
   }
-  CHECK(false);
-  return {};
+  TPixelTableRowResult not_found;
+  not_found.table_id = -1;
+  not_found.row_id = -1;
+  return not_found;
 }
 
 std::vector<TQueryResult> LeafAggregator::forwardQueryToLeaves(

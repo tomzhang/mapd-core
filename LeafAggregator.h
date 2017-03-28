@@ -3,6 +3,9 @@
 
 #include "LeafHostInfo.h"
 #include "QueryEngine/TargetMetaInfo.h"
+#ifdef HAVE_RENDERING
+#include "QueryRenderer/QueryRenderManager.h"
+#endif  // HAVE_RENDERING
 #include "Shared/mapd_shared_mutex.h"
 #include "gen-cpp/MapD.h"
 
@@ -40,12 +43,10 @@ class PersistentLeafClient {
                                  const TQueryId query_id);
   void insert_data(const TSessionId session, const TInsertData& thrift_insert_data);
   void checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id);
-  void render_vega(TRenderResult& _return,
-                   const TSessionId session,
-                   const int64_t widget_id,
-                   const std::string& vega_json,
-                   const int compressionLevel,
-                   const std::string& nonce);
+  void render_vega_raw_pixels(TRawPixelDataResult& _return,
+                              const TSessionId session,
+                              const int64_t widget_id,
+                              const std::string& vega_json);
   void get_result_row_for_pixel(TPixelTableRowResult& _return,
                                 const TSessionId session,
                                 const int64_t widget_id,
@@ -81,10 +82,13 @@ class LeafAggregator {
                            const std::string& query_ra,
                            const ExecutionOptions& eo);
 
+#ifdef HAVE_RENDERING
   std::string render(const Catalog_Namespace::SessionInfo& parent_session_info,
                      const std::string& vega_json,
                      const int64_t widget_id,
-                     const int compressionLevel);
+                     const int compressionLevel,
+                     QueryRenderer::QueryRenderManager* render_manager);
+#endif  // HAVE_RENDERING
 
   TPixelTableRowResult getResultRowForPixel(const Catalog_Namespace::SessionInfo& parent_session_info,
                                             const int64_t widget_id,

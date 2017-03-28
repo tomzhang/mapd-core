@@ -1791,16 +1791,19 @@ void MapDHandler::render_vega(TRenderResult& _return,
                               const std::string& vega_json,
                               const int compressionLevel,
                               const std::string& nonce) {
+#ifdef HAVE_RENDERING
   if (leaf_aggregator_.leafCount() > 0) {
 #ifdef HAVE_RAVM
     const auto session_info = MapDHandler::get_session(session);
-    _return.image = leaf_aggregator_.render(session_info, vega_json, widget_id, compressionLevel);
+    _return.image =
+        leaf_aggregator_.render(session_info, vega_json, widget_id, compressionLevel, render_manager_.get());
     _return.nonce = nonce;
     return;
 #else
     CHECK(false);
 #endif  // HAVE_RAVM
   }
+#endif  // HAVE_RENDERING
   _return.total_time_ms = measure<>::execution([&]() {
     _return.execution_time_ms = 0;
     _return.render_time_ms = 0;
@@ -3328,7 +3331,6 @@ void MapDHandler::render_vega_raw_pixels(TRawPixelDataResult& _return,
       convert_raw_pixel_data(_return, std::get<0>(pixel_data_and_timing));
       _return.execution_time_ms = std::get<1>(pixel_data_and_timing);
       _return.render_time_ms = std::get<2>(pixel_data_and_timing);
-      CHECK(false);
     } catch (std::exception& e) {
       TMapDException ex;
       ex.error_msg = std::string("Exception: ") + e.what();
