@@ -57,7 +57,7 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
                 const bool is_simple,
                 const std::string& escape,
                 const int64_t generation,
-                const int32_t dict_id) {
+                const int32_t dict_id) override {
     CHECK_EQ(size_t(1), escape.size());
     _return = getStringDictionary(dict_id)->getLike(pattern, icase, is_simple, escape.front(), generation);
   }
@@ -66,12 +66,14 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
                        const std::string& pattern,
                        const std::string& escape,
                        const int64_t generation,
-                       const int32_t dict_id) {
+                       const int32_t dict_id) override {
     CHECK_EQ(size_t(1), escape.size());
     _return = getStringDictionary(dict_id)->getRegexpLike(pattern, escape.front(), generation);
   }
 
-  void get_or_add_bulk(std::vector<int32_t>& _return, const std::vector<std::string>& strings, const int32_t dict_id) {
+  void get_or_add_bulk(std::vector<int32_t>& _return,
+                       const std::vector<std::string>& strings,
+                       const int32_t dict_id) override {
     if (strings.empty()) {
       return;
     }
@@ -79,7 +81,7 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
     getStringDictionary(dict_id)->getOrAddBulk(strings, &_return[0]);
   }
 
-  bool checkpoint(const int32_t dict_id) { return getStringDictionary(dict_id)->checkpoint(); }
+  bool checkpoint(const int32_t dict_id) override { return getStringDictionary(dict_id)->checkpoint(); }
 
  private:
   StringDictionary* getStringDictionary(const int32_t dict_id) const {
