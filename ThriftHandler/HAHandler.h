@@ -130,6 +130,7 @@ class HAHandler : public MapDIf {
   void checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id);
   void get_table_details(TTableDetails& _return, const TSessionId session, const std::string& table_name);
   void clear_gpu_memory(const TSessionId session);
+  void clear_cpu_memory(const TSessionId session);
 };
 
 #endif /* HAHANDLER_H */

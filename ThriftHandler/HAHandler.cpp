@@ -178,3 +178,5 @@ void HAHandler::checkpoint(const TSessionId session, const int32_t db_id, const 
 void HAHandler::get_table_details(TTableDetails& _return, const TSessionId session, const std::string& table_name){};
 
 void HAHandler::clear_gpu_memory(const TSessionId session){};
+
+void HAHandler::clear_cpu_memory(const TSessionId session){};
