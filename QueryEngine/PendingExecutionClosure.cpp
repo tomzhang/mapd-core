@@ -12,9 +12,15 @@ PendingExecutionClosure::PendingExecutionClosure(std::shared_ptr<const RelAlgNod
       crt_subquery_idx_(-1),
       ra_executor_(std::move(ra_executor)),
       rel_alg_eo_(rel_alg_eo),
+      executor_lock_(new std::lock_guard<std::mutex>(ra_executor_->getExecutor()->execute_mutex_)),
       col_range_cache_(ra_executor_->computeColRangesCache(ra.get())),
       string_dictionary_generations_(ra_executor_->computeStringDictionaryGenerations(ra.get())),
-      table_generations_(ra_executor_->computeTableGenerations(ra.get())) {}
+      table_generations_(ra_executor_->computeTableGenerations(ra.get())) {
+  leaf_execution_cleanup_.reset(new ScopeGuard([this] {
+    ra_executor_->getExecutor()->row_set_mem_owner_ = nullptr;
+    ra_executor_->getExecutor()->clearMetaInfoCache();
+  }));
+}
 
 PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const RelAlgNode> ra,
                                                          std::unique_ptr<RelAlgExecutor>& ra_executor,

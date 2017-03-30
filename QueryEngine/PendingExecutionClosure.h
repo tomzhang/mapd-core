@@ -65,9 +65,11 @@ class PendingExecutionClosure {
   ssize_t crt_subquery_idx_;
   std::unique_ptr<RelAlgExecutor> ra_executor_;
   RelAlgExecutionOptions rel_alg_eo_;
+  std::unique_ptr<std::lock_guard<std::mutex>> executor_lock_;
   AggregatedColRange col_range_cache_;
   StringDictionaryGenerations string_dictionary_generations_;
   TableGenerations table_generations_;
+  std::unique_ptr<ScopeGuard> leaf_execution_cleanup_;
 
   static std::unordered_map<int64_t, std::unique_ptr<PendingExecutionClosure>> pending_queries_;
   static int64_t pending_query_next_id_;

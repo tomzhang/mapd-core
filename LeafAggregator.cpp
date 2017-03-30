@@ -493,6 +493,7 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
   TMergeType::type merge_type = TMergeType::REDUCE;
   const auto& cat = parent_session_info.get_catalog();
   auto executor = Executor::getExecutor(cat.get_currentDB().dbId);
+  std::lock_guard<std::mutex> lock(executor->execute_mutex_);
   RelAlgExecutor ra_executor(executor.get(), cat);
   ra_executor.prepareLeafExecution(column_ranges_from_thrift(column_ranges),
                                    string_dictionary_generations_from_thrift(string_dictionary_generations),
