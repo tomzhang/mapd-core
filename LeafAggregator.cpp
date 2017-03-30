@@ -669,6 +669,7 @@ std::string LeafAggregator::render(const Catalog_Namespace::SessionInfo& parent_
                                    const int64_t widget_id,
                                    const int compressionLevel,
                                    QueryRenderer::QueryRenderManager* render_manager) {
+  std::lock_guard<std::mutex> execution_lock(execution_mutex_);
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   auto& leaf_session_ids = session_it->second;
@@ -707,6 +708,7 @@ TPixelTableRowResult LeafAggregator::getResultRowForPixel(
     const std::map<std::string, std::vector<std::string>>& table_col_names,
     const bool column_format,
     const int32_t pixel_radius) {
+  std::lock_guard<std::mutex> execution_lock(execution_mutex_);
   mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
   const auto session_it = getSessionIterator(parent_session_info.get_session_id());
   auto& leaf_session_ids = session_it->second;
