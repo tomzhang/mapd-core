@@ -134,9 +134,9 @@ void PersistentLeafClient::set_execution_mode(const TSessionId session, const TE
 void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
   if (with_timeout_) {
-    socket->setConnTimeout(5000);
-    socket->setRecvTimeout(10000);
-    socket->setSendTimeout(10000);
+    socket->setConnTimeout(20000);
+    socket->setRecvTimeout(300000);
+    socket->setSendTimeout(300000);
   }
   const auto transport = boost::make_shared<TBufferedTransport>(socket);
   transport->open();
