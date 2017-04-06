@@ -50,14 +50,6 @@ void RootPerGpuData::makeInactive() const {
 void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) {
   CHECK(msFramebufferPtr);
 
-  width = std::max(width, msFramebufferPtr->getWidth());
-  height = std::max(height, msFramebufferPtr->getHeight());
-  msFramebufferPtr->resize(width, height);
-
-  if (accumTxPoolPtr) {
-    accumTxPoolPtr->resize(width, height);
-  }
-
   ::Rendering::GL::GLRenderer* prevRenderer = ::Rendering::GL::GLRenderer::getCurrentThreadRenderer();
   ::Rendering::Window* prevWindow = ::Rendering::GL::GLRenderer::getCurrentThreadWindow();
   bool reset = false;
@@ -70,10 +62,21 @@ void RootPerGpuData::resize(size_t width, size_t height, bool resizeCompositor) 
     }
   };
 
+  width = std::max(width, msFramebufferPtr->getWidth());
+  height = std::max(height, msFramebufferPtr->getHeight());
+
   // TODO(croot): only resize the compositor if we're on the same gpu unless specified otherwise?
+
+  // need to resize the compositor first
   if (resizeCompositor && compositorPtr && (compositorPtr->getWidth() < width || compositorPtr->getHeight() < height)) {
     setRenderer(compositorPtr->getGLRenderer());
     compositorPtr->resize(width, height);
+  }
+
+  msFramebufferPtr->resize(width, height);
+
+  if (accumTxPoolPtr) {
+    accumTxPoolPtr->resize(width, height);
   }
 
   if (aaFramebufferPtr && (aaFramebufferPtr->getWidth() < width || aaFramebufferPtr->getHeight() < height)) {

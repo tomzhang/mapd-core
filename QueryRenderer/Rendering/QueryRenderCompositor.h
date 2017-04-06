@@ -115,10 +115,12 @@ class QueryRenderCompositorImpl {
   virtual void unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex,
                                             size_t accumIdx) = 0;
 
+  virtual void unregisterAllAccumulatorTextures() = 0;
+
   void resize(size_t width, size_t height) {
     CHECK(_framebufferPtr);
-    _framebufferPtr->resize(width, height);
     _resizeImpl(width, height);
+    _framebufferPtr->resize(width, height);
   }
 
   virtual void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) = 0;
@@ -131,12 +133,13 @@ class QueryRenderCompositorImpl {
                             const size_t numSamples,
                             const bool doHitTest,
                             const bool doDepthTest)
-      : _framebufferPtr(nullptr) {
+      : _renderManager(prnt), _framebufferPtr(nullptr) {
     CHECK(rendererPtr);
     ::Rendering::GL::GLRenderer* renderer = dynamic_cast<::Rendering::GL::GLRenderer*>(rendererPtr.get());
     CHECK(renderer);
     _framebufferPtr.reset(new QueryFramebuffer(renderer, width, height, doHitTest, doDepthTest, numSamples));
   }
+  QueryRenderManager* _renderManager;
   QueryFramebufferUqPtr _framebufferPtr;
 
   virtual void _resizeImpl(size_t width, size_t height) = 0;
@@ -186,6 +189,7 @@ class QueryRenderCompositor {
                                   size_t numTexturesInArray);
 
   void unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex, size_t accumIdx);
+  void unregisterAllAccumulatorTextures();
 
  private:
   QueryRenderCompositor(QueryRenderManager* prnt,

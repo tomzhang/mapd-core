@@ -59,6 +59,8 @@ class GLTexture2dArray : public GLResource {
                                  const size_t startx = 0,
                                  const size_t starty = 0);
 
+  void getPixels(const GLenum pixelFormat, const GLenum pixelType, GLvoid* pixelData);
+
  private:
   GLTexture2dArray(const RendererWkPtr& rendererPtr,
                    size_t width,

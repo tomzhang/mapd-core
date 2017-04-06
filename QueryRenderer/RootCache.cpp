@@ -562,8 +562,12 @@ PolyCudaHandles SqlPolyQueryCacheMap::getCudaHandlesPreQuery(const RootCacheShPt
   std::tie(found, polyitr, sqlitr) = _getSqlItr(&(itr->second), polyTableName, queryStr);
   RUNTIME_EX_ASSERT(found, "Cannot find poly cached data for table " + polyTableName + " with sql " + queryStr);
 
-  // TODO(croot): update the last update time?
+// TODO(croot): update the last update time?
+#ifdef HAVE_CUDA
   return sqlitr->sqlPolyDataTablePtr->getCudaHandlesPreQuery(gpuId);
+#else
+  return PolyCudaHandles();
+#endif
 }
 
 void SqlPolyQueryCacheMap::updateCachePostQuery(GpuId gpuId,

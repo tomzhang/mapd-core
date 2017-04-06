@@ -153,4 +153,9 @@ void QueryRenderCompositor::unregisterAccumulatorTexture(const ::Rendering::GL::
   return _implPtr->unregisterAccumulatorTexture(tex, accumIdx);
 }
 
+void QueryRenderCompositor::unregisterAllAccumulatorTextures() {
+  CHECK(_implPtr);
+  return _implPtr->unregisterAllAccumulatorTextures();
+}
+
 }  // namespace QueryRenderer

@@ -32,11 +32,7 @@ QueryAccumTxPool::QueryAccumTxPool(GLRendererShPtr& renderer, QueryRenderComposi
 QueryAccumTxPool::~QueryAccumTxPool() {
   if (_accumTxMap.size() || clearPboPtr) {
     if (_compositorPtr) {
-      for (auto& item : _accumTxMap) {
-        auto accumItem = dynamic_cast<const AccumTxContainer*>(item.get());
-        CHECK(accumItem);
-        _compositorPtr->unregisterAccumulatorTexture(accumItem->tx, accumItem->accumTxIdx);
-      }
+      _compositorPtr->unregisterAllAccumulatorTextures();
     }
     GLRendererShPtr renderer = _rendererPtr.lock();
     if (renderer) {
@@ -94,30 +90,6 @@ void QueryAccumTxPool::_initialize(size_t width, size_t height, size_t numTextur
       itr++;
     }
   }
-
-  // int diff = static_cast<int>(numTextures) - static_cast<int>(_inactiveAccumTxQueue.size());
-  // if (diff > 0) {
-  //   GLRendererShPtr renderer = _rendererPtr.lock();
-  //   CHECK(renderer);
-  //   auto rsrcMgr = renderer->getResourceManager();
-
-  //   if (!clearPboPtr) {
-  //     ::Rendering::Objects::Array2d<unsigned int> clearData(width, height, 0);
-  //     clearPboPtr =
-  //         rsrcMgr->createPixelBuffer2d(width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, clearData.getDataPtr());
-  //   }
-
-  //   // NOTE: the accumulation buffer must have only 1 sample due to the
-  //   // EGLImage restriction
-  //   GLTexture2dShPtr txPtr;
-  //   for (int i = 0; i < diff; ++i) {
-  //     // NOTE: the accumulation buffer must have only 1 sample due to the
-  //     // EGLImage restriction
-  //     txPtr = rsrcMgr->createTexture2d(width, height, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, 1);
-  //     _accumTxMap.emplace(txPtr);
-  //     _inactiveAccumTxQueue.push_back(txPtr);
-  //   }
-  // }
 }
 
 void QueryAccumTxPool::_cleanupUnusedTxs() {

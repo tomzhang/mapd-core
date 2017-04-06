@@ -33,6 +33,7 @@ class GlxQueryRenderCompositorImpl : public QueryRenderCompositorImpl {
                                   size_t numTexturesInArray) final;
 
   void unregisterAccumulatorTexture(const ::Rendering::GL::Resources::GLTexture2dShPtr& tex, size_t accumIdx) final;
+  void unregisterAllAccumulatorTextures() final;
 
   void render(QueryRenderer* queryRenderer, const std::set<GpuId>& usedGpus) final;
 

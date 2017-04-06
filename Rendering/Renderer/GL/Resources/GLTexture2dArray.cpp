@@ -369,6 +369,30 @@ void GLTexture2dArray::uploadPixelsToBufferIndex(const size_t width,
   }
 }
 
+void GLTexture2dArray::getPixels(const GLenum pixelFormat, const GLenum pixelType, GLvoid* pixelData) {
+  // TODO(croot): check that the pixel format/type compatible with
+  // the internal format of the GLTexture2dArray
+
+  // TODO(croot): should we templatize this function so that the pixelFormat/type are
+  // implied? Doing so could also indicate size. Otherwise it's up to the user
+  // here to make sure pixelData is properly allocated to handle the pixel transfer.
+  // If not, a crash will likely ensue.
+
+  // TODO(croot): Should we take into account GL_PACK_ALIGNMENT parameters?
+  RUNTIME_EX_ASSERT(_numSamples == 1, "Cannot get pixels from a multi-sampled 2d texture");
+
+  CHECK(_target == GL_TEXTURE_2D_ARRAY);
+  GLint currTex;
+  MAPD_CHECK_GL_ERROR(glGetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY, &currTex));
+  MAPD_CHECK_GL_ERROR(glBindTexture(_target, _textureArrayId));
+  MAPD_CHECK_GL_ERROR(glGetTexImage(_target, 0, pixelFormat, pixelType, pixelData));
+
+  if (currTex != static_cast<GLint>(_textureArrayId)) {
+    // now reset the context bound state back
+    MAPD_CHECK_GL_ERROR(glBindTexture(_target, currTex));
+  }
+}
+
 }  // namespace Resources
 }  // namespace GL
 }  // namespace Rendering

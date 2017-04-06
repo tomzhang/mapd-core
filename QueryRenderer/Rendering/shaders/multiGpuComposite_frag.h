@@ -1,17 +1,15 @@
-#ifndef QUERYRENDERER_GLX_COMPOSITORFRAG_H_
-#define QUERYRENDERER_GLX_COMPOSITORFRAG_H_
+#ifndef QUERYRENDERER_MULTIGPUCOMPOSITEFRAG_H_
+#define QUERYRENDERER_MULTIGPUCOMPOSITEFRAG_H_
 
 #include <string>
 
 namespace QueryRenderer {
-namespace Impl {
-namespace GLX {
 
-struct Compositor_frag {
+struct MultiGpuComposite_frag {
   static const std::string source;
 };
 
-const std::string Compositor_frag::source =
+const std::string MultiGpuComposite_frag::source =
     "#version 450 core\n"
     "\n"
     "layout(location = 0) out vec4 color;\n"
@@ -162,8 +160,6 @@ const std::string Compositor_frag::source =
     "    Compositor();\n"
     "}\n";
 
-}  // namespace GLX
-}  // namespace Impl
 }  // namespace QueryRenderer
 
-#endif  // QUERYRENDERER_GLX_COMPOSITORFRAG_H_
+#endif  // QUERYRENDERER_MULTIGPUCOMPOSITEFRAG_H_

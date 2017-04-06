@@ -124,8 +124,7 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
   CHECK(qrmPerGpuDataPtr != nullptr);
 
   // for EGL compositing to work, the compositor needs to be
-  // resized last, so we'll force the resize of the non-compositor
-  // framebuffers first.
+  // resized first
   // We're keeping this logic for the other window manager
   // libraries (i.e. GLX) as it will work there too.
 
@@ -135,18 +134,16 @@ void QueryRenderer::_resizeFramebuffers(int width, int height) {
     qrmItr = qrmPerGpuDataPtr->find((*qrmItr)->getCompositorGpuId());
     CHECK(qrmItr != qrmPerGpuDataPtr->end());
 
-    // resize the non-compositor gpu framebuffers first
+    (*qrmItr)->makeActiveOnCurrentThread();
+    (*qrmItr)->resize(width, height, true);
+
+    // resize the non-compositor gpu framebuffers last
     for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
       if (gpuDataItr->gpuId != (*qrmItr)->gpuId) {
         gpuDataItr->makeActiveOnCurrentThread();
         gpuDataItr->resize(width, height, false);
       }
     }
-
-    // now resize the compositor gpu framebuffers, make sure to resize
-    // the scale accumulation textures before the compositor too.
-    (*qrmItr)->makeActiveOnCurrentThread();
-    (*qrmItr)->resize(width, height, true);
   } else {
     for (auto& gpuDataItr : (*qrmPerGpuDataPtr)) {
       gpuDataItr->makeActiveOnCurrentThread();
@@ -163,8 +160,8 @@ void QueryRenderer::_initFromJSON(const std::string& configJSON, bool forceUpdat
   // TODO(croot): this can be removed if the executor will handle the initial parse.
   RUNTIME_EX_ASSERT(
       !objPtr->HasParseError(),
-      RapidJSONUtils::getJsonParseErrorStr("json offset: " + std::to_string(objPtr->GetErrorOffset()) + ", error: " +
-                                           rapidjson::GetParseError_En(objPtr->GetParseError())));
+      RapidJSONUtils::getJsonParseErrorStr("json offset: " + std::to_string(objPtr->GetErrorOffset()) +
+                                           ", error: " + rapidjson::GetParseError_En(objPtr->GetParseError())));
 
   _initFromJSON(objPtr);
 }

@@ -1,17 +1,15 @@
-#ifndef QUERYRENDERER_GLX_ACCUMULATORFRAG_H_
-#define QUERYRENDERER_GLX_ACCUMULATORFRAG_H_
+#ifndef QUERYRENDERER_MULTIGPUCOMPOSITEACCUMULATORFRAG_H_
+#define QUERYRENDERER_MULTIGPUCOMPOSITEACCUMULATORFRAG_H_
 
 #include <string>
 
 namespace QueryRenderer {
-namespace Impl {
-namespace GLX {
 
-struct Accumulator_frag {
+struct MultiGpuCompositeAccumulator_frag {
   static const std::string source;
 };
 
-const std::string Accumulator_frag::source =
+const std::string MultiGpuCompositeAccumulator_frag::source =
     "#version 450 core\n"
     "\n"
     "layout(location = 0) out vec4 color;\n"
@@ -33,8 +31,6 @@ const std::string Accumulator_frag::source =
     "  }\n"
     "}\n";
 
-}  // namespace GLX
-}  // namespace Impl
 }  // namespace QueryRenderer
 
-#endif  // QUERYRENDERER_GLX_ACCUMULATORFRAG_H_
+#endif  // QUERYRENDERER_MULTIGPUCOMPOSITEACCUMULATORFRAG_H_

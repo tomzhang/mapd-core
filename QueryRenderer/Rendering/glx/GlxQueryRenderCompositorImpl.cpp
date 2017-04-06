@@ -5,9 +5,9 @@
 #include <Rendering/Renderer/GL/glx/GlxGLRenderer.h>
 #include "../QueryFramebuffer.h"
 #include "GlxQueryRenderCompositorImpl.h"
-#include "shaders/compositor_vert.h"
-#include "shaders/compositor_frag.h"
-#include "shaders/accumulator_frag.h"
+#include "../shaders/multiGpuComposite_vert.h"
+#include "../shaders/multiGpuComposite_frag.h"
+#include "../shaders/multiGpuCompositeAccumulator_frag.h"
 #include <Rendering/RenderError.h>
 #include <Rendering/Renderer/GL/GLResourceManager.h>
 #include <Rendering/Renderer/GL/Resources/GLBufferLayout.h>
@@ -76,12 +76,12 @@ void GlxQueryRenderCompositorImpl::_initResources(QueryRenderManager* queryRende
   bufferLayout->addAttribute<float, 2>("pos");
   _rectvbo = rsrcMgr->createVertexBuffer<float>({-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, bufferLayout);
 
-  std::string fragSrc(Compositor_frag::source);
+  std::string fragSrc(MultiGpuComposite_frag::source);
   bool doMultiSample = (getNumSamples() > 1);
   boost::replace_first(fragSrc, "<doMultiSample>", std::to_string(doMultiSample));
   boost::replace_first(fragSrc, "<maxAccumColors>", std::to_string(maxAccumColors));
 
-  _shader = rsrcMgr->createShader(Compositor_vert::source, fragSrc);
+  _shader = rsrcMgr->createShader(MultiGpuComposite_vert::source, fragSrc);
   _renderer->bindShader(_shader);
 
   // TODO(croot): automate the texture image unit binding
@@ -220,26 +220,20 @@ void GlxQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t heig
 
     _accumulationCpTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI);
     _accumulationTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI);
-    _accumulatorShader = rsrcMgr->createShader(Compositor_vert::source, Accumulator_frag::source);
+    _accumulatorShader =
+        rsrcMgr->createShader(MultiGpuComposite_vert::source, MultiGpuCompositeAccumulator_frag::source);
     ::Rendering::Objects::Array2d<unsigned int> clearData(width, height, 0);
     _clearPboPtr = rsrcMgr->createPixelBuffer2d(width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, clearData.getDataPtr());
   } else if (depth > _accumulationCpTextureArray->getDepth()) {
     _renderer->makeActiveOnCurrentThread();
     _accumulationCpTextureArray->resize(depth);
+    _accumulationTextureArray->resize(depth);
   }
 
   CHECK(_accumulationCpTextureArray && _accumulationTextureArray && _accumulatorShader && _clearPboPtr &&
         _accumulationCpTextureArray->getWidth() == _accumulationTextureArray->getWidth() &&
         _accumulationCpTextureArray->getHeight() == _accumulationTextureArray->getHeight() &&
         _accumulationCpTextureArray->getDepth() == _accumulationTextureArray->getDepth());
-
-  if (depth > _accumulationTextureArray->getDepth()) {
-    currRenderer = GLRenderer::getCurrentThreadRenderer();
-    if ((resetRenderer = (currRenderer != _renderer))) {
-      _renderer->makeActiveOnCurrentThread();
-    }
-    _accumulationTextureArray->resize(depth);
-  }
 
   if (resetRenderer) {
     currRenderer->makeActiveOnCurrentThread();
@@ -323,6 +317,14 @@ void GlxQueryRenderCompositorImpl::unregisterAccumulatorTexture(const ::Renderin
   map.erase(itr);
 
   _cleanupAccumResources();
+}
+
+void GlxQueryRenderCompositorImpl::unregisterAllAccumulatorTextures() {
+  // TODO(croot): This should currently only be called when the server is shutting down,
+  // But if that were to ever change, and be called in some other way, then we'll need to
+  // clean up the proper resources here.
+  //
+  // Until then, this is a noop as this object's destructor will clean up the resources
 }
 
 void GlxQueryRenderCompositorImpl::_postPassPerGpuCB(::Rendering::GL::GLRenderer* renderer,
@@ -553,11 +555,6 @@ void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
     _framebufferPtr->setHitTest(doHitTest);
     _framebufferPtr->setDepthTest(doDepthTest);
     _framebufferPtr->bindToRenderer(_renderer);
-
-    // auto fbo = _framebufferPtr->getGLFramebuffer();
-    // fbo->disableAttachment(GL_COLOR_ATTACHMENT0);  // disable color buffer
-    // fbo->enableAttachment(GL_COLOR_ATTACHMENT1);   // but enable id buffer
-    // fbo->activateEnabledAttachmentsForDrawing();
   }
 
   _renderer->bindShader(_shader);
@@ -591,34 +588,6 @@ void GlxQueryRenderCompositorImpl::_compositePass(const std::set<GpuId>& usedGpu
   }
 
   _shader->setUniformAttribute("passIdx", passCnt);
-
-  // if (accumulatorScalePtr) {
-  //   // std::string accumulator;
-  //   // switch (accumulatorScalePtr->getAccumulatorType()) {
-  //   //   case AccumulatorType::MIN:
-  //   //     accumulator = "getMinColor";
-  //   //     break;
-  //   //   case AccumulatorType::MAX:
-  //   //     accumulator = "getMaxColor";
-  //   //     break;
-  //   //   case AccumulatorType::BLEND:
-  //   //     accumulator = "getBlendColor";
-  //   //     break;
-  //   //   default:
-  //   //     THROW_RUNTIME_EX("Accumulator type " +
-  //   //                      std::to_string(static_cast<int>(accumulatorScalePtr->getAccumulatorType())) +
-  //   //                      " is not currently supported in the composite.");
-  //   // }
-
-  //   // _shader->setSubroutines({{"Compositor", "compositeAccumulator"}, {"Accumulator", accumulator}});
-  //   // accumulatorScalePtr->bindAccumulatorColors(_shader, "inColors", false);
-  //   // _shader->setUniformAttribute("numAccumColors", accumulatorScalePtr->getNumAccumulatorValues());
-
-  //   // _shader->setImageLoadStoreAttribute("inTxPixelCounter", _accumulationTextureArray);
-  //   accumulatorScalePtr->renderAccumulation(_renderer, _renderer->getGpuId(), _accumulationTextureArray.get());
-  // } else {
-  //   _shader->setSubroutine("Compositor", "compositeColor");
-  // }
 
   _shader->setSubroutine("Compositor", (accumulatorScalePtr ? "compositeAccumulatorIds" : "compositeColor"));
   _renderer->drawVertexBuffers(GL_TRIANGLE_STRIP);

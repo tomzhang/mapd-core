@@ -52,6 +52,9 @@ class QueryRenderManager {
                               size_t numSamples = 1);
   ~QueryRenderManager();
 
+  GpuId getStartGpuId() const;
+  const CudaMgr_Namespace::CudaMgr* getCudaMgr() const { return _cudaMgr; }
+
   bool hasUser(int userId) const;
   bool hasUserWidget(int userId, int widgetId) const;
   bool hasUserWidget(const UserWidgetPair& userWidgetPair) const;
@@ -217,6 +220,7 @@ class QueryRenderManager {
     ~ActiveRendererGuard();
   };
 
+  CudaMgr_Namespace::CudaMgr* _cudaMgr;
   RendererMap _rendererMap;
 
   mutable RendererMap::iterator _activeItr;
@@ -225,7 +229,6 @@ class QueryRenderManager {
   std::shared_ptr<QueryRenderCompositor> _compositorPtr;
 
   void _initialize(Rendering::WindowManager& windowMgr,
-                   CudaMgr_Namespace::CudaMgr* cudaMgr,
                    int numGpus,
                    int startGpu,
                    size_t queryResultBufferSize,

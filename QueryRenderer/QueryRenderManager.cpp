@@ -70,7 +70,8 @@ QueryRenderManager::QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
                                        size_t queryResultBufferSize,
                                        size_t renderCacheLimit,
                                        size_t numSamples)
-    : _rendererMap(),
+    : _cudaMgr(cudaMgr),
+      _rendererMap(),
       _activeItr(_rendererMap.end()),
       _gpuCache(new RootCache(numSamples)),
       _compositorPtr(nullptr),
@@ -78,7 +79,7 @@ QueryRenderManager::QueryRenderManager(CudaMgr_Namespace::CudaMgr* cudaMgr,
   // NOTE: this constructor needs to be used on the main thread as that is a requirement
   // for a window manager instance.
   ::Rendering::WindowManager windowMgr;
-  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
+  _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
 }
 
 QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
@@ -88,24 +89,24 @@ QueryRenderManager::QueryRenderManager(Rendering::WindowManager& windowMgr,
                                        size_t queryResultBufferSize,
                                        size_t renderCacheLimit,
                                        size_t numSamples)
-    : _rendererMap(),
+    : _cudaMgr(cudaMgr),
+      _rendererMap(),
       _activeItr(_rendererMap.end()),
       _gpuCache(new RootCache(numSamples)),
       _compositorPtr(nullptr),
       _renderCacheLimit(renderCacheLimit) {
-  _initialize(windowMgr, cudaMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
+  _initialize(windowMgr, numGpus, startGpu, queryResultBufferSize, numSamples);
 }
 
 QueryRenderManager::~QueryRenderManager() {}
 
 void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
-                                     CudaMgr_Namespace::CudaMgr* cudaMgr,
                                      int numGpus,
                                      int startGpu,
                                      size_t queryResultBufferSize,
                                      size_t numSamples) {
 #ifdef HAVE_CUDA
-  CHECK(cudaMgr);
+  CHECK(_cudaMgr);
 #endif
 
   int maxNumGpus = windowMgr.getNumGpus();
@@ -201,9 +202,9 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
   // now build the global gpu resources. This is done after all contexts have been built
   // so we know what extensions are supported on all.
   for (size_t i = startDevice; i < endDevice; ++i) {
-    if (cudaMgr) {
+    if (_cudaMgr) {
       // need to set a cuda context before creating gl/cuda interop buffers
-      cudaMgr->setContext(i - startDevice);
+      _cudaMgr->setContext(i - startDevice);
     }
 
     auto itr = _gpuCache->perGpuData->find(i);
@@ -304,8 +305,8 @@ bool QueryRenderManager::_hasUserWidgetInternal(int userId, int widgetId) const 
 
 void QueryRenderManager::_addUserWidgetInternal(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
   RUNTIME_EX_ASSERT(_rendererMap.find(std::make_tuple(userId, widgetId)) == _rendererMap.end(),
-                    "Cannot add user widget. User id: " + std::to_string(userId) + " with widget id: " +
-                        std::to_string(widgetId) + " already exists.");
+                    "Cannot add user widget. User id: " + std::to_string(userId) +
+                        " with widget id: " + std::to_string(widgetId) + " already exists.");
 
   ActiveRendererGuard activeRendererGuard;
 
@@ -370,6 +371,12 @@ void QueryRenderManager::_removeUserInternal(int userId) {
   }
 
   userIdMap.erase(startEndItr.first, startEndItr.second);
+}
+
+GpuId QueryRenderManager::getStartGpuId() const {
+  RootPerGpuDataMap_in_order& inOrder = _gpuCache->perGpuData->get<inorder>();
+  CHECK(inOrder.size());
+  return inOrder[0]->gpuId;
 }
 
 void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
