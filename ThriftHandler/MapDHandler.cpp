@@ -1474,8 +1474,7 @@ void MapDHandler::load_table_binary(const TSessionId session,
       LOG(WARNING) << "load_table exception thrown: " << e.what() << ". Row discarded.";
     }
   }
-  if (loader.load(import_buffers, rows.size()))
-    loader.checkpoint(loader.get_catalog().get_currentDB().dbId, loader.get_table_desc()->tableId);
+  loader.load(import_buffers, rows.size());
 }
 
 void MapDHandler::load_table(const TSessionId session,
@@ -1519,8 +1518,7 @@ void MapDHandler::load_table(const TSessionId session,
       LOG(WARNING) << "load_table exception thrown: " << e.what() << ". Row discarded.";
     }
   }
-  if (loader.load(import_buffers, rows.size()))
-    loader.checkpoint(loader.get_catalog().get_currentDB().dbId, loader.get_table_desc()->tableId);
+  loader.load(import_buffers, rows.size());
 }
 
 char MapDHandler::unescape_char(std::string str) {
