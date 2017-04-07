@@ -22,8 +22,7 @@ using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
 PersistentLeafClient::PersistentLeafClient(const LeafHostInfo& leaf_host, const bool with_timeout) noexcept
-    : leaf_host_(leaf_host),
-      with_timeout_(with_timeout) {
+    : leaf_host_(leaf_host), with_timeout_(with_timeout) {
   try {
     setupClient();
   } catch (const TTransportException&) {
@@ -36,12 +35,15 @@ TSessionId PersistentLeafClient::connect(const std::string& user,
                                          const std::string& dbname) {
   std::lock_guard<std::mutex> lock(client_mutex_);
   setupClientIfNull();
+  TSessionId tsid;
   try {
-    return client_->connect(user, passwd, dbname);
+    client_->connect(tsid, user, passwd, dbname);
+    return tsid;
   } catch (const TTransportException&) {
     setupClient();
   }
-  return client_->connect(user, passwd, dbname);
+  client_->connect(tsid, user, passwd, dbname);
+  return tsid;
 }
 
 void PersistentLeafClient::disconnect(const TSessionId session) {

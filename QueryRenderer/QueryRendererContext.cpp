@@ -15,7 +15,7 @@
 
 namespace QueryRenderer {
 
-QueryRendererContext::QueryRendererContext(int userId,
+QueryRendererContext::QueryRendererContext(const std::string& userId,
                                            int widgetId,
                                            const std::shared_ptr<RootCache>& qrmGpuCache,
                                            bool doHitTest,
@@ -31,7 +31,7 @@ QueryRendererContext::QueryRendererContext(int userId,
       _jsonCache(nullptr),
       _currCbId(0) {}
 
-QueryRendererContext::QueryRendererContext(int userId,
+QueryRendererContext::QueryRendererContext(const std::string& userId,
                                            int widgetId,
                                            const std::shared_ptr<RootCache>& qrmGpuCache,
                                            int width,

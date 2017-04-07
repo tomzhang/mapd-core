@@ -32,7 +32,7 @@ struct RenderInfo;
 
 namespace QueryRenderer {
 
-typedef std::pair<int, int> UserWidgetPair;
+typedef std::pair<const std::string&, int> UserWidgetPair;
 
 class QueryRenderManager {
  public:
@@ -55,20 +55,20 @@ class QueryRenderManager {
   GpuId getStartGpuId() const;
   const CudaMgr_Namespace::CudaMgr* getCudaMgr() const { return _cudaMgr; }
 
-  bool hasUser(int userId) const;
-  bool hasUserWidget(int userId, int widgetId) const;
+  bool hasUser(const std::string& userId) const;
+  bool hasUserWidget(const std::string& userId, int widgetId) const;
   bool hasUserWidget(const UserWidgetPair& userWidgetPair) const;
 
-  void addUserWidget(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
+  void addUserWidget(const std::string& userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
   void addUserWidget(const UserWidgetPair& userWidgetPair, bool doHitTest = false, bool doDepthTest = false);
 
-  void removeUserWidget(int userId, int widgetId);
+  void removeUserWidget(const std::string& userId, int widgetId);
   void removeUserWidget(const UserWidgetPair& userWidgetPair);
 
   // Removes all widgets/sessions for a particular user id.
-  void removeUser(int userId);
+  void removeUser(const std::string& userId);
 
-  void setActiveUserWidget(int userId, int widgetId);
+  void setActiveUserWidget(const std::string& userId, int widgetId);
   void setActiveUserWidget(const UserWidgetPair& userWidgetPair);
 
   size_t getNumGpus() const;
@@ -126,7 +126,7 @@ class QueryRenderManager {
   RawPixelData renderAndGetPixelData();
   PngData renderToPng(int compressionLevel = -1);
 
-  std::tuple<RawPixelData, int64_t, int64_t> runPixelDataRenderRequest(const int userId,
+  std::tuple<RawPixelData, int64_t, int64_t> runPixelDataRenderRequest(const std::string& userId,
                                                                        const int widgetId,
                                                                        const std::string& jsonStr,
                                                                        Executor* executor,
@@ -143,7 +143,7 @@ class QueryRenderManager {
                                                                        bool doHitTest = false,
                                                                        bool doDepthTest = false);
 
-  std::tuple<std::string, int64_t, int64_t> runRenderRequest(const int userId,
+  std::tuple<std::string, int64_t, int64_t> runRenderRequest(const std::string& userId,
                                                              const int widgetId,
                                                              const std::string& jsonStr,
                                                              Executor* executor,
@@ -156,7 +156,7 @@ class QueryRenderManager {
   PngData compositeRenderBuffersToPng(const UserWidgetPair& userWidgetPair,
                                       const std::vector<RawPixelData>& buffers,
                                       int compressionLevel = -1);
-  PngData compositeRenderBuffersToPng(const int userId,
+  PngData compositeRenderBuffersToPng(const std::string& userId,
                                       const int widgetId,
                                       const std::vector<RawPixelData>& buffers,
                                       int compressionLevel = -1);
@@ -170,19 +170,17 @@ class QueryRenderManager {
   std::pair<const ResultRows*, const std::vector<TargetMetaInfo>*> getQueryCacheResults(const TableId tableId) const;
 
  private:
-  static const UserWidgetPair _emptyUserWidget;
-
   struct UserId {};
   struct UserWidgetIds {};
   struct LastRenderTime {};
 
   struct SessionData {
-    int userId;
+    std::string userId;
     int widgetId;
     QueryRendererUqPtr renderer;
     std::chrono::milliseconds lastRenderTime;
 
-    SessionData(int userId, int widgetId, QueryRenderer* newRenderer);
+    SessionData(const std::string& userId, int widgetId, QueryRenderer* newRenderer);
   };
 
   struct ChangeLastRenderTime {
@@ -195,18 +193,19 @@ class QueryRenderManager {
 
   typedef ::boost::multi_index_container<
       SessionData,
-      ::boost::multi_index::indexed_by<::boost::multi_index::hashed_unique<
-                                           ::boost::multi_index::tag<UserWidgetIds>,
-                                           ::boost::multi_index::composite_key<
-                                               SessionData,
-                                               ::boost::multi_index::member<SessionData, int, &SessionData::userId>,
-                                               ::boost::multi_index::member<SessionData, int, &SessionData::widgetId>>>,
+      ::boost::multi_index::indexed_by<
+          ::boost::multi_index::hashed_unique<
+              ::boost::multi_index::tag<UserWidgetIds>,
+              ::boost::multi_index::composite_key<
+                  SessionData,
+                  ::boost::multi_index::member<SessionData, std::string, &SessionData::userId>,
+                  ::boost::multi_index::member<SessionData, int, &SessionData::widgetId>>>,
 
-                                       ::boost::multi_index::ordered_non_unique<
-                                           ::boost::multi_index::tag<UserId>,
-                                           ::boost::multi_index::member<SessionData, int, &SessionData::userId>>,
+          ::boost::multi_index::ordered_non_unique<
+              ::boost::multi_index::tag<UserId>,
+              ::boost::multi_index::member<SessionData, std::string, &SessionData::userId>>,
 
-                                       ::boost::multi_index::sequenced<::boost::multi_index::tag<LastRenderTime>>>>
+          ::boost::multi_index::sequenced<::boost::multi_index::tag<LastRenderTime>>>>
       RendererMap;
 
   typedef RendererMap::index<UserId>::type RendererMap_by_UserId;
@@ -235,20 +234,23 @@ class QueryRenderManager {
                    size_t numSamples);
   void _resetQueryResultBuffers() noexcept;
 
-  void _setActiveUserWidget(int userId, int widgetId) const;
-  QueryRenderer* _getRendererForUserWidget(int userId, int widgetId) const;
+  void _setActiveUserWidget(const std::string& userId, int widgetId) const;
+  QueryRenderer* _getRendererForUserWidget(const std::string& userId, int widgetId) const;
 
   static const std::chrono::milliseconds maxWidgetIdleTime;
   void _clearActiveUserWidget();
   void _purgeUnusedWidgets();
   void _updateActiveLastRenderTime();
 
-  bool _hasUserInternal(int userId) const;
-  bool _hasUserWidgetInternal(int userId, int widgetId) const;
-  void _addUserWidgetInternal(int userId, int widgetId, bool doHitTest = false, bool doDepthTest = false);
-  void _removeUserWidgetInternal(int userId, int widgetId);
-  void _removeUserInternal(int userId);
-  void _setActiveUserWidgetInternal(int userId, int widgetId);
+  bool _hasUserInternal(const std::string& userId) const;
+  bool _hasUserWidgetInternal(const std::string& userId, int widgetId) const;
+  void _addUserWidgetInternal(const std::string& userId,
+                              int widgetId,
+                              bool doHitTest = false,
+                              bool doDepthTest = false);
+  void _removeUserWidgetInternal(const std::string& userId, int widgetId);
+  void _removeUserInternal(const std::string& userId);
+  void _setActiveUserWidgetInternal(const std::string& userId, int widgetId);
   void _configureRenderInternal(const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr);
   void _configureRenderInternal(const std::string& jsonDocumentStr);
   void _renderInternal();

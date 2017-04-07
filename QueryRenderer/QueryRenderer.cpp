@@ -71,7 +71,7 @@ static bool idCounterCompare(const std::pair<unsigned int, float>& a, const std:
   return (a.second < b.second);
 }
 
-QueryRenderer::QueryRenderer(int userId,
+QueryRenderer::QueryRenderer(const std::string& userId,
                              int widgetId,
                              const std::shared_ptr<RootCache>& qrmGpuCache,
                              bool doHitTest,
@@ -80,7 +80,7 @@ QueryRenderer::QueryRenderer(int userId,
       _pboGpu(EMPTY_GPUID),
       _idPixelsDirty(false) {}
 
-QueryRenderer::QueryRenderer(int userId,
+QueryRenderer::QueryRenderer(const std::string& userId,
                              int widgetId,
                              const std::shared_ptr<RootCache>& qrmGpuCache,
                              const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
@@ -90,7 +90,7 @@ QueryRenderer::QueryRenderer(int userId,
   _initFromJSON(jsonDocumentPtr);
 }
 
-QueryRenderer::QueryRenderer(int userId,
+QueryRenderer::QueryRenderer(const std::string& userId,
                              int widgetId,
                              const std::shared_ptr<RootCache>& qrmGpuCache,
                              const std::string& configJSON,

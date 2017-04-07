@@ -28,12 +28,10 @@ using ::Rendering::GL::GLRenderer;
 using ::Rendering::GL::GLRendererShPtr;
 using ::Rendering::GL::GLResourceManagerShPtr;
 
-const UserWidgetPair QueryRenderManager::_emptyUserWidget = std::make_pair(-1, -1);
-
 const std::chrono::milliseconds QueryRenderManager::maxWidgetIdleTime =
     std::chrono::milliseconds(300000);  // 5 minutes, in ms
 
-QueryRenderManager::SessionData::SessionData(int userId, int widgetId, QueryRenderer* newRenderer)
+QueryRenderManager::SessionData::SessionData(const std::string& userId, int widgetId, QueryRenderer* newRenderer)
     : userId(userId), widgetId(widgetId), renderer(newRenderer) {
   lastRenderTime = getCurrentTimeMS();
 }
@@ -274,14 +272,13 @@ void QueryRenderManager::_resetQueryResultBuffers() noexcept {
   _gpuCache->polyCacheMap->clearOverflowBuffers();
 }
 
-void QueryRenderManager::_setActiveUserWidgetInternal(int userId, int widgetId) {
+void QueryRenderManager::_setActiveUserWidgetInternal(const std::string& userId, int widgetId) {
   // purge any idle users
   if (_activeItr == _rendererMap.end() || (userId != _activeItr->userId || widgetId != _activeItr->widgetId)) {
     auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
-    RUNTIME_EX_ASSERT(
-        itr != _rendererMap.end(),
-        "User id: " + std::to_string(userId) + ", Widget Id: " + std::to_string(widgetId) + " does not exist.");
+    RUNTIME_EX_ASSERT(itr != _rendererMap.end(),
+                      "User id: " + userId + ", Widget Id: " + std::to_string(widgetId) + " does not exist.");
 
     _activeItr = itr;
     LOG(INFO) << "Active render session [userId: " << _activeItr->userId << ", widgetId: " << _activeItr->widgetId
@@ -293,20 +290,23 @@ void QueryRenderManager::_setActiveUserWidgetInternal(int userId, int widgetId) 
   _purgeUnusedWidgets();
 }
 
-bool QueryRenderManager::_hasUserInternal(int userId) const {
+bool QueryRenderManager::_hasUserInternal(const std::string& userId) const {
   auto& userIdMap = _rendererMap.get<UserId>();
 
   return (userIdMap.find(userId) != userIdMap.end());
 }
 
-bool QueryRenderManager::_hasUserWidgetInternal(int userId, int widgetId) const {
+bool QueryRenderManager::_hasUserWidgetInternal(const std::string& userId, int widgetId) const {
   return (_rendererMap.find(std::make_tuple(userId, widgetId)) != _rendererMap.end());
 }
 
-void QueryRenderManager::_addUserWidgetInternal(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
+void QueryRenderManager::_addUserWidgetInternal(const std::string& userId,
+                                                int widgetId,
+                                                bool doHitTest,
+                                                bool doDepthTest) {
   RUNTIME_EX_ASSERT(_rendererMap.find(std::make_tuple(userId, widgetId)) == _rendererMap.end(),
-                    "Cannot add user widget. User id: " + std::to_string(userId) +
-                        " with widget id: " + std::to_string(widgetId) + " already exists.");
+                    "Cannot add user widget. User id: " + userId + " with widget id: " + std::to_string(widgetId) +
+                        " already exists.");
 
   ActiveRendererGuard activeRendererGuard;
 
@@ -341,12 +341,12 @@ void QueryRenderManager::_addUserWidgetInternal(int userId, int widgetId, bool d
   _rendererMap.emplace(userId, widgetId, new QueryRenderer(userId, widgetId, _gpuCache, doHitTest, doDepthTest));
 }
 
-void QueryRenderManager::_removeUserWidgetInternal(int userId, int widgetId) {
+void QueryRenderManager::_removeUserWidgetInternal(const std::string& userId, int widgetId) {
   auto itr = _rendererMap.find(std::make_tuple(userId, widgetId));
 
-  RUNTIME_EX_ASSERT(itr != _rendererMap.end(),
-                    "User id: " + std::to_string(userId) + "Widget id: " + std::to_string(widgetId) +
-                        " does not exist. Cannot remove their caches.");
+  RUNTIME_EX_ASSERT(
+      itr != _rendererMap.end(),
+      "User id: " + userId + "Widget id: " + std::to_string(widgetId) + " does not exist. Cannot remove their caches.");
 
   ActiveRendererGuard activeRendererGuard;
 
@@ -357,12 +357,12 @@ void QueryRenderManager::_removeUserWidgetInternal(int userId, int widgetId) {
   }
 }
 
-void QueryRenderManager::_removeUserInternal(int userId) {
+void QueryRenderManager::_removeUserInternal(const std::string& userId) {
   auto& userIdMap = _rendererMap.get<UserId>();
 
   auto startEndItr = userIdMap.equal_range(userId);
   RUNTIME_EX_ASSERT(startEndItr.first != userIdMap.end(),
-                    "User id " + std::to_string(userId) + " does not exist. Cannot remove its caches.");
+                    "User id " + userId + " does not exist. Cannot remove its caches.");
 
   ActiveRendererGuard activeRendererGuard;
 
@@ -379,7 +379,7 @@ GpuId QueryRenderManager::getStartGpuId() const {
   return inOrder[0]->gpuId;
 }
 
-void QueryRenderManager::setActiveUserWidget(int userId, int widgetId) {
+void QueryRenderManager::setActiveUserWidget(const std::string& userId, int widgetId) {
   // DEPRECATED
 
   // purge any idle users
@@ -393,12 +393,12 @@ void QueryRenderManager::setActiveUserWidget(const UserWidgetPair& userWidgetPai
   setActiveUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
 }
 
-bool QueryRenderManager::hasUser(int userId) const {
+bool QueryRenderManager::hasUser(const std::string& userId) const {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
   return _hasUserInternal(userId);
 }
 
-bool QueryRenderManager::hasUserWidget(int userId, int widgetId) const {
+bool QueryRenderManager::hasUserWidget(const std::string& userId, int widgetId) const {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
   return _hasUserWidgetInternal(userId, widgetId);
 }
@@ -407,7 +407,7 @@ bool QueryRenderManager::hasUserWidget(const UserWidgetPair& userWidgetPair) con
   return hasUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair));
 }
 
-void QueryRenderManager::addUserWidget(int userId, int widgetId, bool doHitTest, bool doDepthTest) {
+void QueryRenderManager::addUserWidget(const std::string& userId, int widgetId, bool doHitTest, bool doDepthTest) {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
   return _addUserWidgetInternal(userId, widgetId, doHitTest, doDepthTest);
 }
@@ -416,7 +416,7 @@ void QueryRenderManager::addUserWidget(const UserWidgetPair& userWidgetPair, boo
   addUserWidget(std::get<0>(userWidgetPair), std::get<1>(userWidgetPair), doHitTest, doDepthTest);
 }
 
-void QueryRenderManager::removeUserWidget(int userId, int widgetId) {
+void QueryRenderManager::removeUserWidget(const std::string& userId, int widgetId) {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
   return _removeUserWidgetInternal(userId, widgetId);
 }
@@ -426,7 +426,7 @@ void QueryRenderManager::removeUserWidget(const UserWidgetPair& userWidgetPair) 
 }
 
 // Removes all widgets/sessions for a particular user id.
-void QueryRenderManager::removeUser(int userId) {
+void QueryRenderManager::removeUser(const std::string& userId) {
   std::lock_guard<std::mutex> render_lock(_renderMtx);
   return _removeUserInternal(userId);
 }
@@ -840,7 +840,7 @@ std::tuple<RawPixelData, int64_t, int64_t> QueryRenderManager::runPixelDataRende
                                    doDepthTest);
 }
 
-std::tuple<RawPixelData, int64_t, int64_t> QueryRenderManager::runPixelDataRenderRequest(const int userId,
+std::tuple<RawPixelData, int64_t, int64_t> QueryRenderManager::runPixelDataRenderRequest(const std::string& userId,
                                                                                          const int widgetId,
                                                                                          const std::string& jsonStr,
                                                                                          Executor* executor,
@@ -890,7 +890,7 @@ std::tuple<RawPixelData, int64_t, int64_t> QueryRenderManager::runPixelDataRende
   }
 }
 
-std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(const int userId,
+std::tuple<std::string, int64_t, int64_t> QueryRenderManager::runRenderRequest(const std::string& userId,
                                                                                const int widgetId,
                                                                                const std::string& jsonStr,
                                                                                Executor* executor,
@@ -952,7 +952,7 @@ PngData QueryRenderManager::compositeRenderBuffersToPng(const UserWidgetPair& us
   return compositeRenderBuffersToPng(userWidgetPair.first, userWidgetPair.second, buffers, compressionLevel);
 }
 
-PngData QueryRenderManager::compositeRenderBuffersToPng(const int userId,
+PngData QueryRenderManager::compositeRenderBuffersToPng(const std::string& userId,
                                                         const int widgetId,
                                                         const std::vector<RawPixelData>& buffers,
                                                         int compressionLevel) {

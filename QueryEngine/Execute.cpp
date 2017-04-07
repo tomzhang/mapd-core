@@ -670,7 +670,7 @@ namespace {
 }
 
 void set_render_widget(::QueryRenderer::QueryRenderManager* render_manager,
-                       const int session_id,
+                       const std::string& session_id,
                        const int render_widget_id) {
   CHECK(render_manager);
   if (!render_manager->hasUserWidget(session_id, render_widget_id)) {
@@ -751,7 +751,7 @@ std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::Tar
 
 int64_t Executor::getRowidForPixel(const int64_t x,
                                    const int64_t y,
-                                   const int session_id,
+                                   const std::string& session_id,
                                    const int render_widget_id,
                                    const int pixelRadius) {
   // DEPRECATED
@@ -827,7 +827,7 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
   ScopeGuard restore_metainfo_cache = [this] { clearMetaInfoCache(); };
   int64_t queue_time_ms = timer_stop(clock_begin);
   clock_begin = timer_start();
-  const int session_id = session.get_session_id();
+  const auto session_id = session.get_session_id();
 
   std::string polyTableName = poly_table_name;
   if (data_desc.HasMember("dbTableName")) {

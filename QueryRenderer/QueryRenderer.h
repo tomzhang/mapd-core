@@ -28,20 +28,20 @@ namespace QueryRenderer {
 
 class QueryRenderer {
  public:
-  explicit QueryRenderer(int userId,
+  explicit QueryRenderer(const std::string& userId,
                          int widgetId,
                          const std::shared_ptr<RootCache>& qrmGpuCache,
                          bool doHitTest = false,
                          bool doDepthTest = false) noexcept;
 
-  explicit QueryRenderer(int userId,
+  explicit QueryRenderer(const std::string& userId,
                          int widgetId,
                          const std::shared_ptr<RootCache>& qrmGpuCache,
                          const std::shared_ptr<rapidjson::Document>& jsonDocumentPtr,
                          bool doHitTest = false,
                          bool doDepthTest = false);
 
-  explicit QueryRenderer(int userId,
+  explicit QueryRenderer(const std::string& userId,
                          int widgetId,
                          const std::shared_ptr<RootCache>& qrmGpuCache,
                          const std::string& configJSON,

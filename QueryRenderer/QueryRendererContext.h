@@ -12,13 +12,13 @@ namespace QueryRenderer {
 
 class QueryRendererContext {
  public:
-  explicit QueryRendererContext(int userId,
+  explicit QueryRendererContext(const std::string& userId,
                                 int widgetId,
                                 const RootCacheShPtr& qrmGpuCache,
                                 bool doHitTest = false,
                                 bool doDepthTest = false);
 
-  explicit QueryRendererContext(int userId,
+  explicit QueryRendererContext(const std::string& userId,
                                 int widgetId,
                                 const RootCacheShPtr& qrmGpuCache,
                                 int width,
@@ -31,7 +31,7 @@ class QueryRendererContext {
   size_t getWidth() const { return _width; }
   size_t getHeight() const { return _height; }
 
-  int getUserId() const { return _userWidget.userId; }
+  const std::string& getUserId() const { return _userWidget.userId; }
   int getWidgetId() const { return _userWidget.widgetId; }
   const UserWidgetIdPair& getUserWidgetIds() const { return _userWidget; }
 
