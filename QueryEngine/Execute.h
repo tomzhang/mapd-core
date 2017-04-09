@@ -622,6 +622,7 @@ class Executor {
     int32_t* error_code_;
     RenderAllocatorMap* render_allocator_map_;
     std::vector<std::pair<ResultPtr, std::vector<size_t>>> all_fragment_results_;
+    std::atomic_flag dynamic_watchdog_set_;
     static std::mutex reduce_mutex_;
 
     typedef std::vector<int> CacheKey;
@@ -650,6 +651,7 @@ class Executor {
 
     void runImpl(const ExecutorDeviceType chosen_device_type,
                  int chosen_device_id,
+                 const ExecutionOptions& options,
                  const std::vector<std::pair<int, std::vector<size_t>>>& frag_ids,
                  const size_t ctx_idx,
                  const int64_t rowid_lookup_key);
@@ -681,6 +683,7 @@ class Executor {
 
     void run(const ExecutorDeviceType chosen_device_type,
              int chosen_device_id,
+             const ExecutionOptions& options,
              const std::vector<std::pair<int, std::vector<size_t>>>& frag_ids,
              const size_t ctx_idx,
              const int64_t rowid_lookup_key) noexcept;
