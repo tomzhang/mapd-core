@@ -976,7 +976,7 @@ void GLShader::_initResource(const std::string& vertSrc, const std::string& frag
   }
 
   MAPD_CHECK_GL_ERROR((_programId = glCreateProgram()));
-  RUNTIME_EX_ASSERT(_programId != 0, "An error occured trying to create a shader program");
+  RUNTIME_EX_ASSERT(_programId != 0, "An error occurred trying to create a shader program");
 
   MAPD_CHECK_GL_ERROR(glAttachShader(_programId, _vertShaderId));
   if (_geomShaderId) {
