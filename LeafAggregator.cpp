@@ -303,6 +303,16 @@ TColumnRanges aggregate_two_leaf_ranges(const TColumnRanges& acc_ranges,
       }
       case TExpressionRangeType::FLOAT:
       case TExpressionRangeType::DOUBLE:
+        // handle empty lhs range
+        if (lhs_column_range.fp_min > lhs_column_range.fp_max) {
+          column_range = rhs_column_range;
+          break;
+        }
+        // handle empty rhs range
+        if (rhs_column_range.fp_min > rhs_column_range.fp_max) {
+          column_range = lhs_column_range;
+          break;
+        }
         column_range.fp_min = std::min(lhs_column_range.fp_min, rhs_column_range.fp_min);
         column_range.fp_max = std::max(lhs_column_range.fp_max, rhs_column_range.fp_max);
         column_range.has_nulls = lhs_column_range.has_nulls || rhs_column_range.has_nulls;
