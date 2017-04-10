@@ -17,8 +17,6 @@ class DistributedLoader : public Importer_NS::Loader {
   bool load(const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
             size_t row_count) override;
 
-  void checkpoint(const int db_id, const int tb_id) override;
-
  private:
   const Catalog_Namespace::SessionInfo& parent_session_info_;
   LeafAggregator* aggregator_;

@@ -85,12 +85,6 @@ void PersistentLeafClient::insert_data(const TSessionId session, const TInsertDa
   client_->insert_data(session, thrift_insert_data);
 }
 
-void PersistentLeafClient::checkpoint(const TSessionId session, const int32_t db_id, const int32_t table_id) {
-  std::lock_guard<std::mutex> lock(client_mutex_);
-  setupClientIfNull();
-  client_->checkpoint(session, db_id, table_id);
-}
-
 void PersistentLeafClient::render_vega_raw_pixels(TRawPixelDataResult& _return,
                                                   const TSessionId session,
                                                   const int64_t widget_id,
@@ -799,17 +793,6 @@ void LeafAggregator::insertDataToLeaf(const Catalog_Namespace::SessionInfo& pare
   auto& leaf_session_ids = session_it->second;
   CHECK_LT(leaf_idx, leaves_no_timeout_.size());
   leaves_no_timeout_[leaf_idx]->insert_data(leaf_session_ids[leaf_idx], thrift_insert_data);
-}
-
-void LeafAggregator::checkpointLeaf(const Catalog_Namespace::SessionInfo& parent_session_info,
-                                    const size_t leaf_idx,
-                                    const int32_t db_id,
-                                    const int32_t table_id) {
-  mapd_shared_lock<mapd_shared_mutex> read_lock(leaf_sessions_mutex_);
-  const auto session_it = getSessionIterator(parent_session_info.get_session_id());
-  auto& leaf_session_ids = session_it->second;
-  CHECK_LT(leaf_idx, leaves_no_timeout_.size());
-  leaves_no_timeout_[leaf_idx]->checkpoint(leaf_session_ids[leaf_idx], db_id, table_id);
 }
 
 std::vector<TPendingQuery> LeafAggregator::startQueryOnLeaves(const Catalog_Namespace::SessionInfo& parent_session_info,

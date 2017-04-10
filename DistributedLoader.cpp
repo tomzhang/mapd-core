@@ -94,15 +94,3 @@ bool DistributedLoader::load(const std::vector<std::unique_ptr<Importer_NS::Type
   }
   return true;
 }
-
-void DistributedLoader::checkpoint(const int db_id, const int tb_id) {
-  std::unordered_set<size_t> leaves_pending_checkpoint_snapshot;
-  {
-    std::lock_guard<std::mutex> lock(leaves_pending_checkpoint_mutex_);
-    leaves_pending_checkpoint_snapshot.swap(leaves_pending_checkpoint_);
-  }
-  for (const auto leaf_idx : leaves_pending_checkpoint_snapshot) {
-    aggregator_->checkpointLeaf(
-        parent_session_info_, leaf_idx, parent_session_info_.get_catalog().get_currentDB().dbId, table_desc->tableId);
-  }
-}
