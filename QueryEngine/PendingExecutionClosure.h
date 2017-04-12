@@ -70,6 +70,7 @@ class PendingExecutionClosure {
   StringDictionaryGenerations string_dictionary_generations_;
   TableGenerations table_generations_;
   std::unique_ptr<ScopeGuard> leaf_execution_cleanup_;
+  std::mutex current_step_mutex_;  // a closure cannot be safely destroyed during executeNextStep
 
   static std::unordered_map<int64_t, std::unique_ptr<PendingExecutionClosure>> pending_queries_;
   static int64_t pending_query_next_id_;

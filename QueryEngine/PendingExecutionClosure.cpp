@@ -30,6 +30,9 @@ PendingExecutionClosure* PendingExecutionClosure::create(std::shared_ptr<const R
   if (!pending_queries_.empty()) {
     std::vector<std::string> orphaned_ids;
     for (const auto& kv : pending_queries_) {
+      // We can't safely destroy a closure while it's still running since destruction
+      // releases the execution mutex, need to wait for the execution to finish.
+      std::lock_guard<std::mutex> current_step_lock(kv.second->current_step_mutex_);
       orphaned_ids.push_back(std::to_string(kv.first));
     }
     LOG(INFO) << "Orphaned queries " << boost::algorithm::join(orphaned_ids, ", ")
@@ -89,6 +92,7 @@ FirstStepExecutionResult PendingExecutionClosure::executeNextStep(
     const AggregatedColRange& col_ranges,
     const StringDictionaryGenerations& string_dictionary_generations,
     const TableGenerations& table_generations) {
+  std::lock_guard<std::mutex> current_step_lock(current_step_mutex_);
   ++crt_subquery_idx_;
   if (crt_subquery_idx_ == 0) {
     ra_executor_->prepareLeafExecution(col_ranges, string_dictionary_generations, table_generations);
