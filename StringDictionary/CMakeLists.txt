@@ -17,4 +17,4 @@ target_link_libraries(StringDictionary Utils ${Glog_LIBRARIES} ${Thrift_LIBRARIE
 add_executable(StringDictionaryServer StringDictionaryServer.cpp)
 target_link_libraries(StringDictionaryServer StringDictionary)
 
-#install(TARGETS StringDictionaryServer DESTINATION bin)
+install(TARGETS StringDictionaryServer DESTINATION bin)
