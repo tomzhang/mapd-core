@@ -1,6 +1,7 @@
 #include "StringDictionary.h"
 #include "gen-cpp/RemoteStringDictionary.h"
 
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include <boost/range/iterator_range.hpp>
@@ -13,6 +14,7 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TServerSocket.h>
 
+#include <fstream>
 #include <string>
 #include <unordered_map>
 
@@ -110,17 +112,26 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
 int main(int argc, char** argv) {
   int port = 10301;
   std::string base_path;
+  std::string config_file("mapd-sds.conf");
 
   namespace po = boost::program_options;
 
   po::options_description desc("Options");
+  desc.add_options()("config", po::value<std::string>(&config_file), "Path to mapd-sds.conf");
   desc.add_options()("path", po::value<std::string>(&base_path), "Base path for dictionary storage");
   desc.add_options()("port", po::value<int>(&port)->default_value(port), "Port number");
   po::variables_map vm;
 
   po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
   po::notify(vm);
+  if (vm.count("config")) {
+    std::ifstream settings_file(config_file);
+    po::store(po::parse_config_file(settings_file, desc, true), vm);
+    po::notify(vm);
+    settings_file.close();
+  }
 
+  boost::algorithm::trim_if(base_path, boost::is_any_of("\"'"));
   auto handler = boost::make_shared<RemoteStringDictionary>(base_path);
 
   auto processor = boost::make_shared<RemoteStringDictionaryProcessor>(handler);
