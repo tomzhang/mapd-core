@@ -206,7 +206,7 @@ void GlxQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t heig
   GLResourceManagerShPtr rsrcMgr = nullptr;
   CHECK(!_rendererPtr.expired());
 
-  GLRenderer* currRenderer;
+  GLRenderer* currRenderer{nullptr};
   bool resetRenderer = false;
 
   if (!_accumulationCpTextureArray) {
