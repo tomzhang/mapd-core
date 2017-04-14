@@ -3,7 +3,6 @@
 
 #include "CompilationOptions.h"
 #include "ThrustAllocator.h"
-#include "../DataMgr/DataMgr.h"
 
 #ifdef HAVE_RENDERING
 #include "../QueryRenderer/QueryRenderManager.h"
@@ -23,8 +22,22 @@ typedef void QueryDataLayout;
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
+
+namespace CudaMgr_Namespace {
+
+class CudaMgr;
+
+}  // CudaMgr_Namespace
+
+namespace Data_Namespace {
+
+class AbstractBuffer;
+class DataMgr;
+
+}  // Data_Namespace
 
 class OutOfRenderMemory : public std::runtime_error {
  public:
