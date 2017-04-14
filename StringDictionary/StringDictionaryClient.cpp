@@ -16,7 +16,7 @@ using apache::thrift::transport::TTransportException;
 StringDictionaryClient::StringDictionaryClient(const LeafHostInfo& server_host,
                                                const int dict_id,
                                                const bool with_timeout)
-    : server_host_(server_host), dict_id_(dict_id), with_timeout_(with_timeout) {
+    : server_host_(server_host), id_to_string_cache_(1000000), dict_id_(dict_id), with_timeout_(with_timeout) {
   setupClient();
 }
 
@@ -46,9 +46,15 @@ int32_t StringDictionaryClient::get(const std::string& str) {
 
 void StringDictionaryClient::get_string(std::string& _return, const int32_t string_id) {
   std::lock_guard<std::mutex> lock(client_mutex_);
+  const auto cached_result = id_to_string_cache_.get(string_id);
+  if (cached_result) {
+    _return = *cached_result;
+    return;
+  }
   CHECK(client_);
   try {
     client_->get_string(_return, string_id, dict_id_);
+    id_to_string_cache_.put(string_id, _return);
     return;
   } catch (const TTransportException&) {
     setupClient();

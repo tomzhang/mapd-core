@@ -2,6 +2,7 @@
 #define STRINGDICTIONARY_STRINGDICTIONARYCLIENT_H
 
 #include "gen-cpp/RemoteStringDictionary.h"
+#include "LruCache.hpp"
 #include "../LeafHostInfo.h"
 
 #include <memory>
@@ -35,6 +36,7 @@ class StringDictionaryClient {
   void setupClient();
 
   const LeafHostInfo server_host_;
+  LruCache<int32_t, std::string> id_to_string_cache_;
   const int dict_id_;
   const bool with_timeout_;
   std::unique_ptr<RemoteStringDictionaryClient> client_;
