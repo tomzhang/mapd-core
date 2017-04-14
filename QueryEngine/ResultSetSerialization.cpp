@@ -217,6 +217,9 @@ TResultSetBufferDescriptor query_mem_desc_to_thrift(const QueryMemoryDescriptor&
   for (const auto group_col_width : query_mem_desc.group_col_widths) {
     thrift_query_mem_desc.group_col_widths.push_back(group_col_width);
   }
+#ifdef ENABLE_KEY_COMPACTION
+  thrift_query_mem_desc.key_bytewidth = query_mem_desc.group_col_compact_width;
+#endif  // ENABLE_KEY_COMPACTION
   for (const auto& agg_col_width : query_mem_desc.agg_col_widths) {
     TColWidths col_widths;
     col_widths.actual = agg_col_width.actual;
@@ -248,6 +251,9 @@ QueryMemoryDescriptor query_mem_desc_from_thrift(const TResultSetBufferDescripto
   for (const auto group_col_width : thrift_query_mem_desc.group_col_widths) {
     query_mem_desc.group_col_widths.push_back(group_col_width);
   }
+#ifdef ENABLE_KEY_COMPACTION
+  query_mem_desc.group_col_compact_width = thrift_query_mem_desc.key_bytewidth;
+#endif  // ENABLE_KEY_COMPACTION
   for (const auto& agg_col_width : thrift_query_mem_desc.agg_col_widths) {
     query_mem_desc.agg_col_widths.emplace_back(
         ColWidths{static_cast<int8_t>(agg_col_width.actual), static_cast<int8_t>(agg_col_width.compact)});

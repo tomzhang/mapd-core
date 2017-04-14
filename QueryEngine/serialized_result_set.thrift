@@ -44,9 +44,10 @@ struct TResultSetBufferDescriptor {
   7: i64 max_val,
   8: i64 bucket,
   9: list<i16> group_col_widths,
-  10: list<TColWidths> agg_col_widths,
-  11: list<i32> target_groupby_indices,
-  12: TCountDistinctDescriptors count_distinct_descriptors
+  10: i16 key_bytewidth,
+  11: list<TColWidths> agg_col_widths,
+  12: list<i32> target_groupby_indices,
+  13: TCountDistinctDescriptors count_distinct_descriptors
 }
 
 enum TAggKind {
