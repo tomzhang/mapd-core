@@ -12,7 +12,11 @@ list(APPEND ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_CURRENT_BINARY_DIR}/gen-cpp/)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 add_library(StringDictionary StringDictionary.cpp StringDictionaryClient.cpp StringDictionaryProxy.cpp ${CMAKE_SOURCE_DIR}/LeafHostInfo.cpp ${string_dictionary_service_thrift_files})
-target_link_libraries(StringDictionary Utils ${Glog_LIBRARIES} ${Thrift_LIBRARIES})
+if(ENABLE_FOLLY)
+  target_link_libraries(StringDictionary Utils ${Glog_LIBRARIES} ${Thrift_LIBRARIES} ${Folly_LIBRARIES})
+else()
+  target_link_libraries(StringDictionary Utils ${Glog_LIBRARIES} ${Thrift_LIBRARIES})
+endif()
 
 add_executable(StringDictionaryServer StringDictionaryServer.cpp)
 target_link_libraries(StringDictionaryServer StringDictionary)
