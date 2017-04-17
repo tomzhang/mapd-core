@@ -415,6 +415,9 @@ void check_leaf_layout_consistency(const std::vector<std::shared_ptr<ResultSet>>
     CHECK_EQ(ref_layout.idx_target_as_key, layout.idx_target_as_key);
     CHECK_EQ(ref_layout.init_val, layout.init_val);
     CHECK(ref_layout.group_col_widths == layout.group_col_widths);
+#ifdef ENABLE_KEY_COMPACTION
+    CHECK_EQ(ref_layout.group_col_compact_width, layout.group_col_compact_width);
+#endif  // ENABLE_KEY_COMPACTION
     CHECK(ref_layout.agg_col_widths == layout.agg_col_widths);
     CHECK(ref_layout.target_groupby_indices == layout.target_groupby_indices);
     if (layout.hash_type != GroupByColRangeType::MultiCol &&
