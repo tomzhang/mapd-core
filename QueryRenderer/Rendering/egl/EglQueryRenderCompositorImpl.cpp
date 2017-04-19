@@ -487,17 +487,23 @@ void EglQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t heig
   GLRenderer* currRenderer;
   bool resetRenderer = false;
 
+  auto gpuId = _rendererPtr->getGpuId();
+  auto gpuIdx = gpuId - _startGpuId;
+  auto& cudaCtxVector = _cudaMgr->getDeviceContexts();
+
+  currRenderer = GLRenderer::getCurrentThreadRenderer();
+  if ((resetRenderer = (currRenderer != _rendererPtr.get()))) {
+    _rendererPtr->makeActiveOnCurrentThread();
+  }
+  CudaStateGuard cudaStateGuard(cudaCtxVector[gpuIdx], gpuId);
+
   if (!_accumulationCpTextureArray) {
     CHECK(!_accumulationTextureArray && !_accumulatorShader && !_clearPboPtr);
 
-    currRenderer = GLRenderer::getCurrentThreadRenderer();
-    if ((resetRenderer = (currRenderer != _rendererPtr.get()))) {
-      _rendererPtr->makeActiveOnCurrentThread();
-    }
     rsrcMgr = _rendererPtr->getResourceManager();
 
     _accumulationCpTextureArray = rsrcMgr->createTexture2dArray(width, height, depth, GL_R32UI);
-    _accumulationCpRsrc = initCudaGraphicsResource(_rendererPtr->getGpuId(),
+    _accumulationCpRsrc = initCudaGraphicsResource(gpuId,
                                                    _accumulationCpTextureArray->getId(),
                                                    _accumulationCpTextureArray->getTarget(),
                                                    CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD);
@@ -507,12 +513,9 @@ void EglQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t heig
     ::Rendering::Objects::Array2d<unsigned int> clearData(width, height, 0);
     _clearPboPtr = rsrcMgr->createPixelBuffer2d(width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, clearData.getDataPtr());
   } else if (depth > _accumulationCpTextureArray->getDepth()) {
-    auto gpuId = _rendererPtr->getGpuId();
-    _rendererPtr->makeActiveOnCurrentThread();
-
     destroyCudaGraphicsResource(gpuId, _accumulationCpRsrc);
     _accumulationCpTextureArray->resize(depth);
-    _accumulationCpRsrc = initCudaGraphicsResource(_rendererPtr->getGpuId(),
+    _accumulationCpRsrc = initCudaGraphicsResource(gpuId,
                                                    _accumulationCpTextureArray->getId(),
                                                    _accumulationCpTextureArray->getTarget(),
                                                    CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD);
@@ -526,7 +529,11 @@ void EglQueryRenderCompositorImpl::_initAccumResources(size_t width, size_t heig
         _accumulationCpTextureArray->getDepth() == _accumulationTextureArray->getDepth());
 
   if (resetRenderer) {
-    currRenderer->makeActiveOnCurrentThread();
+    if (currRenderer) {
+      currRenderer->makeActiveOnCurrentThread();
+    } else {
+      _rendererPtr->makeInactive();
+    }
   }
 #endif
 }
@@ -594,7 +601,11 @@ void EglQueryRenderCompositorImpl::_cleanupAccumResources() {
   }
 
   if (resetRenderer) {
-    currRenderer->makeActiveOnCurrentThread();
+    if (currRenderer) {
+      currRenderer->makeActiveOnCurrentThread();
+    } else {
+      _rendererPtr->makeInactive();
+    }
   }
 #endif
 }
