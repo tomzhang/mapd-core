@@ -1931,20 +1931,16 @@ void MapDHandler::render_vega(TRenderResult& _return,
                                                     is_poly_query);
 #endif  // HAVE_RAVM
 
-            auto& usedTables = std::get<3>(rtnData);
-            CHECK(usedTables.size() > 0);
+            CHECK(rtnData.referenced_tables.size() > 0);
 
-            if (is_poly_query) {
-            } else if (render_info->render_allocator_map_ptr && render_info->vbo_result_query_data_layout) {
+            if (!is_poly_query && render_info->render_allocator_map_ptr && render_info->vbo_result_query_data_layout) {
               render_info->render_allocator_map_ptr->setDataLayout(render_info->vbo_result_query_data_layout);
             }
 
-            return std::make_tuple(std::move(std::get<0>(rtnData)),
-                                   std::move(std::get<1>(rtnData)),
-                                   std::get<2>(rtnData),
-                                   std::move(usedTables),
-                                   render_info->vbo_result_query_data_layout,
-                                   render_info->ubo_result_query_data_layout);
+            rtnData.vbo_data_layout = render_info->vbo_result_query_data_layout;
+            rtnData.ubo_data_layout = render_info->ubo_result_query_data_layout;
+
+            return rtnData;
           },
           compressionLevel,
           true);
@@ -2436,23 +2432,24 @@ void MapDHandler::execute_root_plan(TQueryResult& _return,
 }
 
 #ifdef HAVE_RENDERING
-std::tuple<std::shared_ptr<ResultRows>,
-           std::vector<TargetMetaInfo>,
-           int64_t,
-           std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
-MapDHandler::execute_render_root_plan(QueryRenderer::RenderQueryExecuteTimer& render_timer,
-                                      Planner::RootPlan* root_plan,
-                                      const std::string& query_str,
-                                      const Catalog_Namespace::SessionInfo& session_info,
-                                      Executor* executor,
-                                      const rapidjson::Value* data_desc,
-                                      RenderInfo* render_info,
-                                      bool is_poly_query = false) {
+QueryRenderer::RenderQueryExecuteData MapDHandler::execute_render_root_plan(
+    QueryRenderer::RenderQueryExecuteTimer& render_timer,
+    Planner::RootPlan* root_plan,
+    const std::string& query_str,
+    const Catalog_Namespace::SessionInfo& session_info,
+    Executor* executor,
+    const rapidjson::Value* data_desc,
+    RenderInfo* render_info,
+    bool is_poly_query = false) {
+  CHECK(render_info);
+  QueryRenderer::RenderQueryExecuteData rndrExecuteData;
+
   if (!is_poly_query) {
     root_plan->set_plan_dest(Planner::RootPlan::Dest::kRENDER);
   }
 
   auto clock_begin = timer_start();
+
   auto results = executor->execute(root_plan,
                                    session_info,
                                    true,
@@ -2504,11 +2501,13 @@ MapDHandler::execute_render_root_plan(QueryRenderer::RenderQueryExecuteTimer& re
 
   render_timer.execution_time_ms += execute_time_ms;
 
-  return std::make_tuple(
-      std::shared_ptr<ResultRows>(new ResultRows(results)),
-      std::move(targetMetaInfo),
-      execute_time_ms,
-      std::vector<std::pair<decltype(TableDescriptor::tableId), std::string>>({std::make_pair(tableId, tableName)}));
+  rndrExecuteData.in_situ_data = render_info->in_situ_data;
+  rndrExecuteData.result_rows = std::shared_ptr<ResultRows>(new ResultRows(results));
+  rndrExecuteData.target_meta_info = std::move(targetMetaInfo);
+  rndrExecuteData.referenced_tables = {std::make_pair(tableId, tableName)};
+  rndrExecuteData.execute_time_ms = execute_time_ms;
+
+  return rndrExecuteData;
 }
 #endif  // HAVE_RENDERING
 
@@ -2577,18 +2576,16 @@ void MapDHandler::render_root_plan(TRenderResult& _return,
 #ifdef HAVE_RAVM
 
 #ifdef HAVE_RENDERING
-std::tuple<std::shared_ptr<ResultRows>,
-           std::vector<TargetMetaInfo>,
-           int64_t,
-           std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
-MapDHandler::execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& render_timer,
-                                    const std::string& query_ra,
-                                    const std::string& query_str,
-                                    const Catalog_Namespace::SessionInfo& session_info,
-                                    Executor* executor,
-                                    const rapidjson::Value* data_desc,
-                                    RenderInfo* render_info,
-                                    bool is_poly_query = false) {
+QueryRenderer::RenderQueryExecuteData MapDHandler::execute_render_rel_alg(
+    QueryRenderer::RenderQueryExecuteTimer& render_timer,
+    const std::string& query_ra,
+    const std::string& query_str,
+    const Catalog_Namespace::SessionInfo& session_info,
+    Executor* executor,
+    const rapidjson::Value* data_desc,
+    RenderInfo* render_info,
+    bool is_poly_query = false) {
+  CHECK(render_info);
   const auto& cat = session_info.get_catalog();
 
   RelAlgExecutor ra_executor(executor, cat);
@@ -2612,20 +2609,47 @@ MapDHandler::execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& rend
   int64_t execute_time_ms = timer_stop(clock_begin) - results.getQueueTime();
   render_timer.queue_time_ms += results.getQueueTime();
 
+  QueryRenderer::RenderQueryExecuteData rndrExecuteData;
+  auto& referenced_tables = rndrExecuteData.referenced_tables;
+
   auto tables = ra_executor.getScanTableNamesInRelAlgSeq();
-  std::vector<std::pair<decltype(TableDescriptor::tableId), std::string>> rtn(tables.size());
+  referenced_tables.resize(tables.size());
+
   size_t cnt = 0;
   for (auto& tableName : tables) {
-    rtn[cnt++] = std::make_pair(cat.getMetadataForTable(tableName)->tableId, std::move(tableName));
+    referenced_tables[cnt++] = std::make_pair(cat.getMetadataForTable(tableName)->tableId, std::move(tableName));
   }
 
   if (is_poly_query) {
-    CHECK(is_poly_table(rtn[0].first, cat))
-        << "Table: " << rtn[0].second << ", id: " << rtn[0].first
-        << " is not a poly table but the query is part of a poly render query. sql: " << query_str;
+    int polyTableIdx = -1;
+    for (size_t i = 0; i < referenced_tables.size(); ++i) {
+      if (is_poly_table(referenced_tables[i].first, cat)) {
+        // NOTE: throwing std::runtime_erros, as this will be caught further up the
+        // call stack and a TMapDException thrown instead
+        if (polyTableIdx >= 0) {
+          throw std::runtime_error("There are multiple poly tables referenced in the sql: \"" + query_str +
+                                   "\". This is not yet supported");
+        }
+        polyTableIdx = i;
+      }
+    }
 
-    // TODO(croot): is the number of tables in a query enough to determine if its a projection query
-    // or not?
+    if (polyTableIdx < 0) {
+      throw std::runtime_error("There are no poly tables referenced in the sql: \"" + query_str +
+                               "\". Cannot render poly.");
+    }
+
+    if (polyTableIdx > 0) {
+      // make sure the primary rendered table is in the first slot. This is necessary for
+      // proper render validation
+
+      // TODO(croot): rather than making this a requirement, pass the primary rendered
+      // table name and id in the RenderQueryExecuteData instance.
+      auto swapitem = referenced_tables[0];
+      referenced_tables[0] = referenced_tables[polyTableIdx];
+      referenced_tables[polyTableIdx] = swapitem;
+    }
+
     auto rendered_results = executor->renderPolygons(query_str,
                                                      results,
                                                      exe_result.getTargetsMeta(),
@@ -2634,7 +2658,7 @@ MapDHandler::execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& rend
                                                      *data_desc,
                                                      nullptr,
                                                      tables.size() == 1,
-                                                     rtn[0].second,
+                                                     referenced_tables[0].second,
                                                      render_info);
     render_timer.render_time_ms += rendered_results.getRenderTime();
     render_timer.queue_time_ms += rendered_results.getQueueTime();
@@ -2646,10 +2670,12 @@ MapDHandler::execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& rend
 
   render_timer.execution_time_ms += execute_time_ms;
 
-  return std::make_tuple(std::shared_ptr<ResultRows>(new ResultRows(results)),
-                         std::move(exe_result.getTargetsMeta()),
-                         execute_time_ms,
-                         rtn);
+  rndrExecuteData.in_situ_data = render_info->in_situ_data;
+  rndrExecuteData.result_rows.reset(new ResultRows(results));
+  rndrExecuteData.target_meta_info = std::move(exe_result.getTargetsMeta());
+  rndrExecuteData.execute_time_ms = execute_time_ms;
+
+  return rndrExecuteData;
 }
 #endif  // HAVE_RENDERING
 
@@ -3353,20 +3379,16 @@ void MapDHandler::render_vega_raw_pixels(TRawPixelDataResult& _return,
             CHECK(false);
 #endif  // HAVE_RAVM
 
-            auto& usedTables = std::get<3>(rtnData);
-            CHECK(usedTables.size() > 0);
+            CHECK(rtnData.referenced_tables.size() > 0);
 
-            if (is_poly_query) {
-            } else if (render_info->render_allocator_map_ptr && render_info->vbo_result_query_data_layout) {
+            if (!is_poly_query && render_info->render_allocator_map_ptr && render_info->vbo_result_query_data_layout) {
               render_info->render_allocator_map_ptr->setDataLayout(render_info->vbo_result_query_data_layout);
             }
 
-            return std::make_tuple(std::move(std::get<0>(rtnData)),
-                                   std::move(std::get<1>(rtnData)),
-                                   std::get<2>(rtnData),
-                                   std::move(usedTables),
-                                   render_info->vbo_result_query_data_layout,
-                                   render_info->ubo_result_query_data_layout);
+            rtnData.vbo_data_layout = render_info->vbo_result_query_data_layout;
+            rtnData.ubo_data_layout = render_info->ubo_result_query_data_layout;
+
+            return rtnData;
           },
           true);
 

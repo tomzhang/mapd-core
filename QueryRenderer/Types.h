@@ -120,16 +120,19 @@ struct HitInfo {
       : tableId(tableId), rowId(rowId), vegaDataId(vegaDataId) {}
 };
 typedef std::pair<TableId, decltype(TableDescriptor::tableName)> TableIdNamePair;
-typedef std::function<std::tuple<std::shared_ptr<ResultRows>,
-                                 std::vector<TargetMetaInfo>,
-                                 int64_t,
-                                 std::vector<TableIdNamePair>,
-                                 std::shared_ptr<QueryDataLayout>,
-                                 std::shared_ptr<QueryDataLayout>>(RenderQueryExecuteTimer&,
-                                                                   Executor*,
-                                                                   const std::string&,
-                                                                   const rapidjson::Value*,
-                                                                   bool)>
+
+struct RenderQueryExecuteData {
+  std::shared_ptr<ResultRows> result_rows;
+  std::vector<TargetMetaInfo> target_meta_info;
+  std::vector<TableIdNamePair> referenced_tables;
+  int64_t execute_time_ms;
+  bool in_situ_data;  // true if the results of the query are written directly to opengl buffers without going to CPU.
+  std::shared_ptr<QueryDataLayout> vbo_data_layout;
+  std::shared_ptr<QueryDataLayout> ubo_data_layout;
+};
+
+typedef std::function<
+    RenderQueryExecuteData(RenderQueryExecuteTimer&, Executor*, const std::string&, const rapidjson::Value*, bool)>
     QueryExecCB;
 
 std::string to_string(const UserWidgetIdPair& value);

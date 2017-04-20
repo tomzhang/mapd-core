@@ -111,9 +111,9 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
           obj = _ctx->getJSONObj(_jsonPath);
         }
         CHECK(obj);
-        auto render_info = executeCB(*renderTimerPtr, executor, sqlQueryToUse, obj, _isPolyQuery);
+        auto render_execute_info = executeCB(*renderTimerPtr, executor, sqlQueryToUse, obj, _isPolyQuery);
 
-        auto& tables = std::get<3>(render_info);
+        auto& tables = render_execute_info.referenced_tables;
         CHECK(tables.size() > 0);
 
         LOG_IF(WARNING, !_tableName.empty() && _tableName != tables[0].second)
@@ -124,12 +124,11 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
         _tableName = tables[0].second;
         _tableId = tables[0].first;
 
-        // avoid a superfluous copy
-        _vboQueryDataLayoutPtr = (std::get<4>(render_info) ? std::move(std::get<4>(render_info)) : nullptr);
-        _uboQueryDataLayoutPtr = (std::get<5>(render_info) ? std::move(std::get<5>(render_info)) : nullptr);
+        _vboQueryDataLayoutPtr = render_execute_info.vbo_data_layout;
+        _uboQueryDataLayoutPtr = render_execute_info.ubo_data_layout;
 
-        _resultRows = std::get<0>(render_info);
-        if (tables.size() > 1) {
+        _resultRows = render_execute_info.result_rows;
+        if (tables.size() > 1 && !render_execute_info.in_situ_data) {
           // TODO(croot): is the number of table names used in a query good enough
           // in determining whether a query is a non-projection query?
 
@@ -142,20 +141,20 @@ bool BaseQueryDataTableSQLJSON::_executeQuery(const rapidjson::Value* dataObj, c
           CHECK(rootCache);
           auto& queryCacheMap = rootCache->renderQueryCacheMap;
 
-          if (std::get<2>(render_info) > NonProjectionRenderQueryCacheMap::maxQueryTime) {
+          if (render_execute_info.execute_time_ms > NonProjectionRenderQueryCacheMap::maxQueryTime) {
             // cache query results if it took more than a max time
             // and there's enough memory to store the cache
 
             if (!queryCacheMap.hasQueryCache(sqlQueryToUse)) {
               if (queryCacheMap.canFitResults(_resultRows)) {
                 _queryCachePtr = queryCacheMap.addQueryResultToCache(
-                    sqlQueryToUse, _resultRows, std::move(std::get<1>(render_info)), std::move(tables));
+                    sqlQueryToUse, _resultRows, std::move(render_execute_info.target_meta_info), std::move(tables));
               } else {
                 _queryCachePtr = queryCacheMap.addQueryOnlyToCache(sqlQueryToUse, std::move(tables));
               }
             } else if (queryCacheMap.canFitUpdatedResults(sqlQueryToUse, _resultRows)) {
               _queryCachePtr = queryCacheMap.updateQueryResultsInCache(
-                  sqlQueryToUse, _resultRows, std::move(std::get<1>(render_info)));
+                  sqlQueryToUse, _resultRows, std::move(render_execute_info.target_meta_info));
             } else {
               // cannot store the results in the cache, so we need to force
               // the query to run on hit-testing. That means removing the cached results

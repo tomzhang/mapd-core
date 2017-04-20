@@ -684,6 +684,7 @@ void set_render_widget(::QueryRenderer::QueryRenderManager* render_manager,
 std::string Executor::renderRows(const std::vector<std::shared_ptr<Analyzer::TargetEntry>>& targets,
                                  RenderInfo* render_info) {
   CHECK(render_info);
+  render_info->in_situ_data = true;  // this function is only be called in in-situ rendering cases
 
   std::vector<std::string> attr_names{"key"};
   std::vector<::QueryRenderer::QueryDataLayout::AttrType> attr_types{::QueryRenderer::QueryDataLayout::AttrType::INT64};
@@ -978,6 +979,7 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
       render_manager_->createPolyTableCache(polyTableName, queryStr, gpuId, polyByteData, vertLayout, rowData);
 
       if (render_query_data) {
+        render_query_data->in_situ_data = false;
         render_query_data->vbo_result_query_data_layout = vertLayout;
       }
 
@@ -1023,6 +1025,7 @@ ResultRows Executor::renderPolygons(const std::string& queryStr,
         polyTableName, queryStr, gpuId, data_query_result.poly_render_data_layout);
 
     if (render_query_data) {
+      render_query_data->in_situ_data = false;
       render_query_data->ubo_result_query_data_layout = data_query_result.poly_render_data_layout;
     }
   }

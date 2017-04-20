@@ -310,18 +310,14 @@ class MapDHandler : public MapDIf {
                       const bool is_projection_query);
 #ifdef HAVE_RENDERING
 #ifdef HAVE_RAVM
-  std::tuple<std::shared_ptr<ResultRows>,
-             std::vector<TargetMetaInfo>,
-             int64_t,
-             std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
-  execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& render_timer,
-                         const std::string& query_ra,
-                         const std::string& query_str,
-                         const Catalog_Namespace::SessionInfo& session_info,
-                         Executor* executor,
-                         const rapidjson::Value* data_desc,
-                         RenderInfo* render_info,
-                         bool is_poly_query);
+  QueryRenderer::RenderQueryExecuteData execute_render_rel_alg(QueryRenderer::RenderQueryExecuteTimer& render_timer,
+                                                               const std::string& query_ra,
+                                                               const std::string& query_str,
+                                                               const Catalog_Namespace::SessionInfo& session_info,
+                                                               Executor* executor,
+                                                               const rapidjson::Value* data_desc,
+                                                               RenderInfo* render_info,
+                                                               bool is_poly_query);
 #endif
 #endif
 
@@ -354,18 +350,14 @@ class MapDHandler : public MapDIf {
       const std::vector<std::shared_ptr<Analyzer::TargetEntry>>& targets) const;
 
 #ifdef HAVE_RENDERING
-  std::tuple<std::shared_ptr<ResultRows>,
-             std::vector<TargetMetaInfo>,
-             int64_t,
-             std::vector<std::pair<decltype(TableDescriptor::tableId), decltype(TableDescriptor::tableName)>>>
-  execute_render_root_plan(QueryRenderer::RenderQueryExecuteTimer& render_timer,
-                           Planner::RootPlan* root_plan,
-                           const std::string& query_str,
-                           const Catalog_Namespace::SessionInfo& session_info,
-                           Executor* executor,
-                           const rapidjson::Value* data_desc,
-                           RenderInfo* render_info,
-                           bool is_poly_query);
+  QueryRenderer::RenderQueryExecuteData execute_render_root_plan(QueryRenderer::RenderQueryExecuteTimer& render_timer,
+                                                                 Planner::RootPlan* root_plan,
+                                                                 const std::string& query_str,
+                                                                 const Catalog_Namespace::SessionInfo& session_info,
+                                                                 Executor* executor,
+                                                                 const rapidjson::Value* data_desc,
+                                                                 RenderInfo* render_info,
+                                                                 bool is_poly_query);
 #endif
 
   void render_root_plan(TRenderResult& _return,
