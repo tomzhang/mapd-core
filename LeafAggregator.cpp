@@ -628,8 +628,8 @@ AggregatedResult LeafAggregator::execute(const Catalog_Namespace::SessionInfo& p
       RelAlgExecutor subquery_executor(executor.get(), cat);
       subquery_executor.addLeafResult(node_id, leaves_result);
       auto current_subquery = subqueries[crt_subquery_idx];
-      auto aggregated_result = std::make_shared<ExecutionResult>(
-          subquery_executor.executeRelAlgSubQuery(current_subquery->getRelAlg(), co, eo));
+      auto aggregated_result =
+          std::make_shared<ExecutionResult>(subquery_executor.executeRelAlgSubQuery(current_subquery, co, eo));
       current_subquery->setExecutionResult(aggregated_result);
       const auto& aggregated_result_rows = aggregated_result->getRows();
       auto aggregated_rs =
