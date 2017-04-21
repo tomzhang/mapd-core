@@ -30,6 +30,12 @@ class StringDictionaryClient {
 
   void get_or_add_bulk(std::vector<int32_t>& string_ids, const std::vector<std::string>& strings);
 
+  void translate_string_ids(std::vector<int32_t>& dest_ids,
+                            const int32_t dest_dict_id,
+                            const std::vector<int32_t>& source_ids,
+                            const int32_t source_dict_id,
+                            const int32_t dest_generation);
+
   bool checkpoint();
 
  private:
