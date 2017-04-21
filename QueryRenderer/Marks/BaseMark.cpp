@@ -93,6 +93,13 @@ void BaseMark::_initFromJSONObj(const rapidjson::Value& obj,
 
       _dataPtr = _ctx->getDataTable(mitr->value.GetString());
 
+      RUNTIME_EX_ASSERT(
+          _dataPtr,
+          RapidJSONUtils::getJsonParseErrorStr(
+              _ctx->getUserWidgetIds(),
+              fromObj,
+              "Data reference \"" + std::string(mitr->value.GetString()) + "\" does not exist in the vega."));
+
       RUNTIME_EX_ASSERT(_dataPtr->getBaseType() == baseType,
                         RapidJSONUtils::getJsonParseErrorStr(_ctx->getUserWidgetIds(),
                                                              fromObj,
