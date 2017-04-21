@@ -27,7 +27,7 @@ if(${RENDERER_TYPE} STREQUAL "OpenGL")
   list(APPEND RENDERING_SOURCES Renderer/GL/Resources/Enums.cpp Renderer/GL/Resources/GLResource.cpp Renderer/GL/Resources/GLBaseBuffer.cpp Renderer/GL/Resources/GLBufferLayout.cpp Renderer/GL/Resources/GLFramebuffer.cpp Renderer/GL/Resources/GLIndexBuffer.cpp Renderer/GL/Resources/GLIndirectDrawBuffer.cpp Renderer/GL/Resources/GLPixelBuffer2d.cpp Renderer/GL/Resources/GLRenderbuffer.cpp Renderer/GL/Resources/GLShader.cpp Renderer/GL/Resources/GLShaderBlockLayout.cpp Renderer/GL/Resources/GLTexture2d.cpp Renderer/GL/Resources/GLTexture2dArray.cpp Renderer/GL/Resources/GLUniformBuffer.cpp Renderer/GL/Resources/GLVertexArray.cpp Renderer/GL/Resources/GLVertexBuffer.cpp Renderer/GL/Resources/GLLayoutBuffer.cpp)
 
   list(APPEND RENDERING_INCLUDE_DIRS "${GL_INCLUDE_DIR}")
-  list(APPEND RENDERING_LIBS "${OPENGL_LIBRARIES}")
+  list(APPEND RENDERING_LIBS "${OPENGL_gl_LIBRARY}")
   list(APPEND RENDERING_DEFS "-DMAPDGL")
 
   find_package(GLEW_MX REQUIRED)
