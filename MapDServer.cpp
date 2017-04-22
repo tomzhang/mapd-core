@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
   desc.add_options()("cpu", "Run on CPU only");
   desc.add_options()("gpu", "Run on GPUs (Default)");
   desc.add_options()("read-only",
-                     po::bool_switch(&read_only)->default_value(read_only)->implicit_value(true),
+                     po::value<bool>(&read_only)->default_value(read_only)->implicit_value(true),
                      "Enable read-only mode");
   desc.add_options()("port,p", po::value<int>(&port)->default_value(port), "Port number");
   desc.add_options()(
@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
                      "ldap DN Distinguished Name");
   desc.add_options()("http-port", po::value<int>(&http_port)->default_value(http_port), "HTTP port number");
   desc.add_options()("flush-log",
-                     po::bool_switch(&flush_log)->default_value(flush_log)->implicit_value(true),
+                     po::value<bool>(&flush_log)->default_value(flush_log)->implicit_value(true),
                      "Immediately flush logs to disk. Set to false if this is a performance bottleneck.");
 #ifdef HAVE_RENDERING
   desc.add_options()("rendering",
@@ -211,13 +211,13 @@ int main(int argc, char** argv) {
       "calcite-port", po::value<int>(&calcite_port)->default_value(calcite_port), "Calcite port number");
 #endif  // HAVE_CALCITE
   desc_adv.add_options()("jit-debug",
-                         po::bool_switch(&jit_debug)->default_value(jit_debug)->implicit_value(true),
+                         po::value<bool>(&jit_debug)->default_value(jit_debug)->implicit_value(true),
                          "Enable debugger support for the JIT. The generated code can be found at /tmp/mapdquery");
   desc_adv.add_options()("disable-multifrag",
-                         po::bool_switch(&allow_multifrag)->default_value(allow_multifrag)->implicit_value(false),
+                         po::value<bool>(&allow_multifrag)->default_value(allow_multifrag)->implicit_value(false),
                          "Disable execution over multiple fragments in a single round-trip to GPU");
   desc_adv.add_options()("allow-loop-joins",
-                         po::bool_switch(&allow_loop_joins)->default_value(allow_loop_joins)->implicit_value(true),
+                         po::value<bool>(&allow_loop_joins)->default_value(allow_loop_joins)->implicit_value(true),
                          "Enable loop joins");
   desc_adv.add_options()("res-gpu-mem",
                          po::value<size_t>(&reserved_gpu_mem)->default_value(reserved_gpu_mem),
@@ -225,12 +225,12 @@ int main(int argc, char** argv) {
 #ifdef HAVE_RENDERING
   // Deprecated on 2017-04-09
   desc_adv.add_options()("disable-rendering",
-                         po::bool_switch(&enable_rendering)->default_value(enable_rendering)->implicit_value(false),
+                         po::value<bool>(&enable_rendering)->default_value(enable_rendering)->implicit_value(false),
                          "Deprecated, use --rendering=false");
 #endif  // HAVE_RENDERING
   desc_adv.add_options()(
       "disable-legacy-syntax",
-      po::bool_switch(&enable_legacy_syntax)->default_value(enable_legacy_syntax)->implicit_value(false),
+      po::value<bool>(&enable_legacy_syntax)->default_value(enable_legacy_syntax)->implicit_value(false),
       "Enable legacy syntax");
   desc_adv.add_options()("tthreadpool-size",
                          po::value<int>(&tthreadpool_size)->default_value(tthreadpool_size),
@@ -280,7 +280,7 @@ int main(int argc, char** argv) {
                          po::value<bool>(&g_use_result_set)->default_value(g_use_result_set)->implicit_value(true),
                          "Use the new result set");
   desc_adv.add_options()("allow-cpu-retry",
-                         po::bool_switch(&g_allow_cpu_retry)->default_value(g_allow_cpu_retry)->implicit_value(true),
+                         po::value<bool>(&g_allow_cpu_retry)->default_value(g_allow_cpu_retry)->implicit_value(true),
                          "Allow the queries which failed on GPU to retry on CPU, even when watchdog is enabled");
 
   po::positional_options_description positionalOptions;
