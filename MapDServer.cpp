@@ -187,13 +187,13 @@ int main(int argc, char** argv) {
   desc.add_options()("flush-log",
                      po::value<bool>(&flush_log)->default_value(flush_log)->implicit_value(true),
                      "Immediately flush logs to disk. Set to false if this is a performance bottleneck.");
+  desc.add_options()("cpu-buffer-mem-bytes",
+                     po::value<size_t>(&cpu_buffer_mem_bytes)->default_value(cpu_buffer_mem_bytes),
+                     "Size of memory reserved for CPU buffers [bytes]");
 #ifdef HAVE_RENDERING
   desc.add_options()("rendering",
                      po::value<bool>(&enable_rendering)->default_value(enable_rendering)->implicit_value(true),
                      "Enable/disable backend rendering");
-  desc.add_options()("cpu-buffer-mem-bytes",
-                     po::value<size_t>(&cpu_buffer_mem_bytes)->default_value(cpu_buffer_mem_bytes),
-                     "Size of memory reserved for rendering [bytes]");
   desc.add_options()("render-mem-bytes",
                      po::value<size_t>(&render_mem_bytes)->default_value(render_mem_bytes),
                      "Size of memory reserved for rendering [bytes]");
