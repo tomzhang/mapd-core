@@ -53,7 +53,7 @@ typedef decltype(TableDescriptor::tableId) TableId;
 struct PngData;
 
 struct UserWidgetIdPair {
-  const std::string& userId;
+  const std::string userId;
   const int widgetId;
 
   UserWidgetIdPair(const std::string& userId, int widgetId) : userId(userId), widgetId(widgetId) {}
