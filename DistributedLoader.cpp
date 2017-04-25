@@ -8,8 +8,21 @@ DistributedLoader::DistributedLoader(const Catalog_Namespace::SessionInfo& paren
       aggregator_(aggregator),
       load_call_count_(0) {}
 
+bool DistributedLoader::loadNoCheckpoint(
+    const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
+    size_t row_count) {
+  // actually it does do commit as it is off on leaf and we are kind of stuck with that for now as we have no uncommit
+  // operation
+  return loadDistImpl(import_buffers, row_count);
+}
+
 bool DistributedLoader::load(const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
                              size_t row_count) {
+  return loadDistImpl(import_buffers, row_count);
+}
+
+bool DistributedLoader::loadDistImpl(const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
+                                     size_t row_count) {
   TInsertData thrift_insert_data;
   thrift_insert_data.db_id = insert_data.databaseId;
   thrift_insert_data.table_id = insert_data.tableId;

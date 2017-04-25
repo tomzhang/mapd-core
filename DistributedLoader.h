@@ -16,8 +16,12 @@ class DistributedLoader : public Importer_NS::Loader {
 
   bool load(const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
             size_t row_count) override;
+  bool loadNoCheckpoint(const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
+                        size_t row_count) override;
 
  private:
+  bool loadDistImpl(const std::vector<std::unique_ptr<Importer_NS::TypedImportBuffer>>& import_buffers,
+                    size_t row_count);
   const Catalog_Namespace::SessionInfo& parent_session_info_;
   LeafAggregator* aggregator_;
   std::atomic<uint64_t> load_call_count_;
