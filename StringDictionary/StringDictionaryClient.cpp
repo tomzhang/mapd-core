@@ -123,24 +123,6 @@ void StringDictionaryClient::get_or_add_bulk(std::vector<int32_t>& string_ids,
   client_->get_or_add_bulk(string_ids, strings, dict_id_);
 }
 
-void StringDictionaryClient::translate_string_ids(std::vector<int32_t>& dest_ids,
-                                                  const int32_t dest_dict_id,
-                                                  const std::vector<int32_t>& source_ids,
-                                                  const int32_t source_dict_id,
-                                                  const int32_t dest_generation) {
-  CHECK_EQ(-1, dict_id_);
-  std::lock_guard<std::mutex> lock(client_mutex_);
-  CHECK(client_);
-  dest_ids.reserve(source_ids.size());
-  try {
-    client_->translate_string_ids(dest_ids, dest_dict_id, source_ids, source_dict_id, dest_generation);
-    return;
-  } catch (const TTransportException&) {
-    setupClient();
-  }
-  client_->translate_string_ids(dest_ids, dest_dict_id, source_ids, source_dict_id, dest_generation);
-}
-
 bool StringDictionaryClient::checkpoint() {
   std::lock_guard<std::mutex> lock(client_mutex_);
   CHECK(client_);

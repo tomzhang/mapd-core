@@ -83,21 +83,6 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
     getStringDictionary(dict_id)->getOrAddBulk(strings, &_return[0]);
   }
 
-  void translate_string_ids(std::vector<int32_t>& dest_ids,
-                            const int32_t dest_dict_id,
-                            const std::vector<int32_t>& source_ids,
-                            const int32_t source_dict_id,
-                            const int32_t dest_generation) {
-    auto dest_dict = getStringDictionary(dest_dict_id);
-    auto source_dict = getStringDictionary(source_dict_id);
-    dest_ids.reserve(source_ids.size());
-    for (const int32_t source_id : source_ids) {
-      CHECK_GE(source_id, 0);
-      dest_ids.push_back(
-          truncate_to_generation(dest_dict->getIdOfString(source_dict->getString(source_id)), dest_generation));
-    }
-  }
-
   bool checkpoint(const int32_t dict_id) override { return getStringDictionary(dict_id)->checkpoint(); }
 
  private:
