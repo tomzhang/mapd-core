@@ -232,9 +232,9 @@ MapDHandler::MapDHandler(const std::vector<LeafHostInfo>& db_leaves,
       mapd_parameters_(mapd_parameters),
 #ifdef HAVE_CALCITE
       enable_rendering_(enable_rendering),
-      legacy_syntax_(legacy_syntax), 
+      legacy_syntax_(legacy_syntax),
 #else
-      enable_rendering_(enable_rendering), 
+      enable_rendering_(enable_rendering),
 #endif  // HAVE_CALCITE
       super_user_rights_(false) {
   LOG(INFO) << "MapD Server " << MapDRelease;
@@ -414,7 +414,7 @@ void MapDHandler::connect(TSessionId& session,
   } else
     sessions_[session].reset(
         new Catalog_Namespace::SessionInfo(cat_it->second, user_meta, executor_device_type_, session));
-  if (!super_user_rights_) { // no need to connect to leaf_aggregator_ at this time while doing warmup
+  if (!super_user_rights_) {  // no need to connect to leaf_aggregator_ at this time while doing warmup
     if (leaf_aggregator_.leafCount() > 0) {
       const auto parent_session_info_ptr = sessions_[session];
       CHECK(parent_session_info_ptr);
@@ -1167,8 +1167,8 @@ void MapDHandler::get_result_row_for_pixel(TPixelTableRowResult& _return,
 
               // TODO(croot): what about non-projection queries?
               // TODO(croot): what about poly tables?
-              const auto query_str = "SELECT " + projection + " FROM " + table_name +
-                                     " WHERE rowid = " + std::to_string(poly_row_id) + ";";
+              const auto query_str = "SELECT " + projection + " FROM " + table_name + " WHERE rowid = " +
+                                     std::to_string(poly_row_id) + ";";
               TQueryResult tmpResult;
               sql_execute_impl(
                   tmpResult, *session_info_ptr, query_str, column_format, nonce, ExecutorDeviceType::CPU, -1);
@@ -1205,8 +1205,8 @@ void MapDHandler::get_result_row_for_pixel(TPixelTableRowResult& _return,
       } else {
         auto td = cat.getMetadataForTable(table_id);
         CHECK(td) << "Table doesn't exist for table_id: " << table_id;
-        CHECK(!isCache || td->tableName == table_name)
-            << "Table names don't match for table_id " << table_id << ", " << table_name << " != " << td->tableName;
+        CHECK(!isCache || td->tableName == table_name) << "Table names don't match for table_id " << table_id << ", "
+                                                       << table_name << " != " << td->tableName;
 
         if (!table_name.size()) {
           table_name = td->tableName;
@@ -1394,7 +1394,7 @@ void MapDHandler::clear_cpu_memory(const TSessionId& session) {
   sys_cat_->get_dataMgr().clearMemory(MemoryLevel::CPU_LEVEL);
 }
 
-TSessionId MapDHandler::getInvalidSessionId() const { 
+TSessionId MapDHandler::getInvalidSessionId() const {
   return INVALID_SESSION_ID;
 }
 
