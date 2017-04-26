@@ -121,7 +121,11 @@ PendingExecutionClosure* PendingExecutionClosure::getClosureById(const int64_t q
   {
     std::lock_guard<std::mutex> pending_queries_lock(pending_queries_mutex_);
     const auto it = pending_queries_.find(query_id);
-    CHECK(it != pending_queries_.end());
+    if (it == pending_queries_.end()) {
+      std::string orphaned_error{"Tried to retrieve orphaned query " + std::to_string(query_id)};
+      LOG(ERROR) << orphaned_error;
+      throw std::runtime_error(orphaned_error);
+    }
     closure = it->second.get();
   }
   CHECK(closure);
