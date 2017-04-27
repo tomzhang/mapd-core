@@ -36,6 +36,10 @@ using namespace ::apache::thrift::transport;
 using boost::make_shared;
 using boost::shared_ptr;
 
+extern unsigned g_connect_timeout;
+extern unsigned g_recv_timeout;
+extern unsigned g_send_timeout;
+
 AggregatedColRange column_ranges_from_thrift(const std::vector<TColumnRange>& thrift_column_ranges) {
   AggregatedColRange column_ranges;
   for (const auto& thrift_column_range : thrift_column_ranges) {
@@ -349,6 +353,18 @@ int main(int argc, char** argv) {
                          "Allow the queries which failed on GPU to retry on CPU, even when watchdog is enabled");
   desc_adv.add_options()(
       "db-query-list", po::value<std::string>(&db_query_file), "Path to file containing mapd queries");
+  desc_adv.add_options()(
+      "leaf-conn-timeout",
+      po::value<unsigned>(&g_connect_timeout)->default_value(g_connect_timeout)->implicit_value(g_connect_timeout),
+      "Leaf connect timeout, in milliseconds");
+  desc_adv.add_options()(
+      "leaf-recv-timeout",
+      po::value<unsigned>(&g_recv_timeout)->default_value(g_recv_timeout)->implicit_value(g_recv_timeout),
+      "Leaf receive timeout, in milliseconds");
+  desc_adv.add_options()(
+      "leaf-send-timeout",
+      po::value<unsigned>(&g_send_timeout)->default_value(g_send_timeout)->implicit_value(g_send_timeout),
+      "Leaf send timeout, in milliseconds");
 
   po::positional_options_description positionalOptions;
   positionalOptions.add("data", 1);

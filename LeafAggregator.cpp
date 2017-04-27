@@ -21,8 +21,13 @@ using apache::thrift::transport::TBufferedTransport;
 using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
+unsigned g_connect_timeout{20000};
+unsigned g_recv_timeout{300000};
+unsigned g_send_timeout{300000};
+
 PersistentLeafClient::PersistentLeafClient(const LeafHostInfo& leaf_host, const bool with_timeout) noexcept
-    : leaf_host_(leaf_host), with_timeout_(with_timeout) {
+    : leaf_host_(leaf_host),
+      with_timeout_(with_timeout) {
   try {
     setupClient();
   } catch (const TTransportException&) {
@@ -130,9 +135,9 @@ void PersistentLeafClient::set_execution_mode(const TSessionId session, const TE
 void PersistentLeafClient::setupClient() {
   const auto socket = boost::make_shared<TSocket>(leaf_host_.getHost(), leaf_host_.getPort());
   if (with_timeout_) {
-    socket->setConnTimeout(20000);
-    socket->setRecvTimeout(300000);
-    socket->setSendTimeout(300000);
+    socket->setConnTimeout(g_connect_timeout);
+    socket->setRecvTimeout(g_recv_timeout);
+    socket->setSendTimeout(g_send_timeout);
   }
   const auto transport = boost::make_shared<TBufferedTransport>(socket);
   transport->open();
