@@ -189,9 +189,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     cuGLGetDevices(&cudaDeviceCount, &cudaDevices[0], 32, CU_GL_DEVICE_LIST_ALL);
     CHECK(cudaDeviceCount == 1) << "Expected 1 compatible cuda device for gl context " << i << " but got "
                                 << cudaDeviceCount;
-    RUNTIME_EX_ASSERT(cudaDevices[0] == _cudaMgr->deviceProperties[i].device,
+    RUNTIME_EX_ASSERT(cudaDevices[0] == _cudaMgr->deviceProperties[i - startDevice].device,
                       "There's a synchronization issue between CUDA/OpenGL devices");
-    CHECK(cudaDevices[0] == _cudaMgr->deviceProperties[i].device);
 #endif
 
     // now check extensions
