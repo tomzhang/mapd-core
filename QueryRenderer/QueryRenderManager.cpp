@@ -15,6 +15,12 @@
 
 #include "rapidjson/error/en.h"
 
+#ifdef HAVE_CUDA
+#include <cuda.h>
+#else
+#include <Shared/nocuda.h>
+#endif  // HAVE_CUDA
+
 namespace QueryRenderer {
 
 using ::Rendering::Settings::WindowSettings;
@@ -105,6 +111,8 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                                      size_t numSamples) {
 #ifdef HAVE_CUDA
   CHECK(_cudaMgr);
+  unsigned int cudaDeviceCount;
+  std::vector<CUdevice> cudaDevices(32);
 #endif
 
   int maxNumGpus = windowMgr.getNumGpus();
@@ -122,6 +130,11 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
                           (maxNumGpus > 1 ? "s" : "") + " but only " + std::to_string(maxNumGpus) +
                           " are available for rendering.");
   }
+
+  RUNTIME_EX_ASSERT(numGpus == static_cast<int>(_cudaMgr->deviceProperties.size()),
+                    "There's a synchronization issue between CUDA/GL devices. CudaMgr num devices: " +
+                        std::to_string(_cudaMgr->deviceProperties.size()) + ", num GL devices: " +
+                        std::to_string(numGpus));
 
 #ifdef MAPDGL_EGL
   if (numSamples > 1 && numGpus > 1) {
@@ -171,6 +184,15 @@ void QueryRenderManager::_initialize(Rendering::WindowManager& windowMgr,
     CHECK(renderer != nullptr);
 
     gpuDataPtr->makeActiveOnCurrentThread();
+
+#if defined(HAVE_CUDA) && defined(MAPDGL)
+    cuGLGetDevices(&cudaDeviceCount, &cudaDevices[0], 32, CU_GL_DEVICE_LIST_ALL);
+    CHECK(cudaDeviceCount == 1) << "Expected 1 compatible cuda device for gl context " << i << " but got "
+                                << cudaDeviceCount;
+    RUNTIME_EX_ASSERT(cudaDevices[0] == _cudaMgr->deviceProperties[i].device,
+                      "There's a synchronization issue between CUDA/OpenGL devices");
+    CHECK(cudaDevices[0] == _cudaMgr->deviceProperties[i].device);
+#endif
 
     // now check extensions
     if (i == startDevice) {
