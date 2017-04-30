@@ -87,7 +87,7 @@ class RemoteStringDictionary : virtual public RemoteStringDictionaryIf {
                             const int32_t dest_dict_id,
                             const std::vector<int32_t>& source_ids,
                             const int32_t source_dict_id,
-                            const int32_t dest_generation) {
+                            const int32_t dest_generation) override {
     auto dest_dict = getStringDictionary(dest_dict_id);
     auto source_dict = getStringDictionary(source_dict_id);
     dest_ids.reserve(source_ids.size());
