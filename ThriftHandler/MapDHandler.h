@@ -102,6 +102,7 @@ class MapDHandler : public MapDIf {
               const int start_gpu,
               const size_t reserved_gpu_mem,
               const size_t num_reader_threads,
+              const std::string& start_epoch_table_name,
               const int start_epoch,
               const LdapMetadata ldapMetadata,
               const MapDParameters& mapd_parameters,
@@ -385,7 +386,12 @@ class MapDHandler : public MapDIf {
                                           const Catalog_Namespace::SessionInfo& session_info,
                                           const std::string& action /* render or validate */);
 
+  void set_table_start_epoch(const Catalog_Namespace::SessionInfo& sessionInfo);
+
+  std::string start_epoch_table_name_;
+  int start_epoch_;
   bool super_user_rights_;  // default is "false"; setting to "true" ignores passwd checks in "connect(..)" method
+
   friend void run_warmup_queries(std::string base_path, std::string query_file_path);
 };
 
